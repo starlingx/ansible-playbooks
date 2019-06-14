@@ -29,7 +29,7 @@
     name: www
     uid: 1877
     group: www
-    groups: wrs_protected
+    groups: sys_protected
     shell: /sbin/nologin
     state: present
 
@@ -143,14 +143,14 @@
     helm init --skip-refresh --service-account tiller --node-selectors
     "node-role.kubernetes.io/master"="" --tiller-image={{ tiller_img }}
     --override spec.template.spec.hostNetwork=true
-  become_user: wrsroot
+  become_user: sysadmin
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
-    HOME: /home/wrsroot
+    HOME: /home/sysadmin
   when: inventory_hostname == 'localhost'
 
 # Workaround for helm init remotely. Not sure why the task cannot be executed
-# successfully as wrsroot on remote host.
+# successfully as sysadmin on remote host.
 - block:
   - name: Initialize Helm (remote host)
     command: >-
@@ -159,13 +159,13 @@
       --override spec.template.spec.hostNetwork=true
     environment:
       KUBECONFIG: /etc/kubernetes/admin.conf
-      HOME: /home/wrsroot
+      HOME: /home/sysadmin
 
   - name: Change helm directory ownership (remote host)
     file:
-      dest: /home/wrsroot/.helm
-      owner: wrsroot
-      group: wrs
+      dest: /home/sysadmin/.helm
+      owner: sysadmin
+      group: sys_protected
       mode: 0755
       recurse: yes
   when: inventory_hostname != 'localhost'
@@ -202,10 +202,10 @@
 
 - name: Add Helm repos (local host)
   command: helm repo add "{{ item }}" "http://127.0.0.1:$PORT/helm_charts/{{ item }}"
-  become_user: wrsroot
+  become_user: sysadmin
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
-    HOME: /home/wrsroot
+    HOME: /home/sysadmin
     PORT: 80
   with_items:
     - "{{ helm_repo_name_apps }}"
@@ -218,7 +218,7 @@
     command: helm repo add "{{ item }}" "http://127.0.0.1:$PORT/helm_charts/{{ item }}"
     environment:
       KUBECONFIG: /etc/kubernetes/admin.conf
-      HOME: /home/wrsroot
+      HOME: /home/sysadmin
       PORT: 80
     with_items:
       - "{{ helm_repo_name_apps }}"
@@ -226,31 +226,31 @@
 
   - name: Change helm directory ownership to pick up newly generated files (remote host)
     file:
-      dest: /home/wrsroot/.helm
-      owner: wrsroot
-      group: wrs
+      dest: /home/sysadmin/.helm
+      owner: sysadmin
+      group: sys_protected
       mode: 0755
       recurse: yes
   when: inventory_hostname != 'localhost'
 
 - name: Update info of available charts locally from chart repos
   command: helm repo update
-  become_user: wrsroot
+  become_user: sysadmin
   when: inventory_hostname == 'localhost'
 
 # Workaround for helm update remotely. Not sure why the task cannot be executed
-# successfully as wrsroot on remote host.
+# successfully as sysadmin on remote host.
 - block:
   - name: Update info of available charts locally from chart repos (remote host)
     command: helm repo update
     environment:
-      HOME: /home/wrsroot
+      HOME: /home/sysadmin
 
   - name: Change helm directory ownership (remote host)
     file:
-      dest: /home/wrsroot/.helm
-      owner: wrsroot
-      group: wrs
+      dest: /home/sysadmin/.helm
+      owner: sysadmin
+      group: sys_protected
       mode: 0755
       recurse: yes
   when: inventory_hostname != 'localhost'

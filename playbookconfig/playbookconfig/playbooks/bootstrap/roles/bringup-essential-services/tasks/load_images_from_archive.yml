@@ -11,7 +11,7 @@
 
 - name: Set default directory for image files copy
   set_fact:
-    images_dir: /home/wrsroot
+    images_dir: /home/sysadmin
   when: (images_dir is not defined) or (images_dir is none)
 
 - name: Copy Docker images to remote host

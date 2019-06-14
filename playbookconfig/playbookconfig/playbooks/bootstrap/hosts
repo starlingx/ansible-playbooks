@@ -16,13 +16,13 @@ bootstrap:
       ansible_connection: local
 
   vars:
-    ansible_ssh_user: wrsroot
+    ansible_ssh_user: sysadmin
     ansible_ssh_pass: St8rlingX*
     ansible_become_pass: St8rlingX*
     ansible_become: true
     password_change_responses:
       yes/no: 'yes'
-      wrsroot*: 'wrsroot'
-      \(current\) UNIX password: 'wrsroot'
+      sysadmin*: 'sysadmin'
+      \(current\) UNIX password: 'sysadmin'
       (?i)New password: 'St8rlingX*'
       (?i)Retype new password: 'St8rlingX*'

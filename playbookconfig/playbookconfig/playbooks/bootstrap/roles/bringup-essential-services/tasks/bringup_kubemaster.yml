@@ -156,7 +156,7 @@
   file:
     path: /etc/kubernetes/admin.conf
     mode: 0640
-    group: wrs_protected
+    group: sys_protected
 
 - name: Set up k8s environment variable
   copy:
