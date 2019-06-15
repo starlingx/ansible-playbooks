@@ -1,5 +1,5 @@
-==========
-stx-config
-==========
+=====================
+stx-ansible-playbooks
+=====================
 
-StarlingX Configuration Management
+StarlingX Bootstrap and Deployment Playbooks

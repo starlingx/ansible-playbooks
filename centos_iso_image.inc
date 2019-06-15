@@ -2,36 +2,6 @@
 # If these have dependencies, they will be pulled in automatically
 #
 
-# worker-utils
-worker-utils
-
-# workerconfig
-workerconfig
-workerconfig-standalone
-workerconfig-subfunction
-
-# controllerconfig
-controllerconfig
-
-# storageconfig
-storageconfig
-
-# cgts-client
-cgts-client
-
-# sysinv-agent
-sysinv-agent
-
-# sysinv
-sysinv
-
-# config-gate
-config-gate
-config-gate-worker
-
-# puppet-manifests
-puppet-manifests
-
 # ansible
 sshpass
 python2-ptyprocess
@@ -40,9 +10,3 @@ ansible
 
 # playbookconfig
 playbookconfig
-
-# Platform helm charts
-stx-platform-helm
-
-# PM QoS cpu latency manager
-pm-qos-mgr
