@@ -186,6 +186,34 @@
 
   when: save_config
 
+- block:
+  - name: Copy ssl_ca certificate
+    copy:
+     src: "{{ ssl_ca_cert }}"
+     dest: "{{ temp_ssl_ca }}"
+
+  - name: Remove ssl_ca complete flag
+    file:
+      path: "{{ ssl_ca_complete_flag }}"
+      state: absent
+
+  - name: Add ssl_ca certificate
+    shell: source /etc/platform/openrc; system certificate-install -m ssl_ca {{ temp_ssl_ca }}
+
+  - name: Wait for certificate install
+    wait_for:
+      path: "{{ ssl_ca_complete_flag }}"
+      state: present
+      timeout: 360
+      msg: Timeout waiting for ssl_ca certificate install
+
+  - name: Cleanup temporary certificate
+    file:
+      path: "{{ temp_ssl_ca }}"
+      state: absent
+
+  when: ssl_ca_cert is defined and ssl_ca_cert
+
 # PXE boot files
 - name: Set pxeboot files source if address allocation is dynamic
   set_fact:
