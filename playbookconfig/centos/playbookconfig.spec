@@ -31,8 +31,8 @@ This package contains playbooks used for configuring StarlingX.
 make install DESTDIR=%{buildroot}%{local_stx_ansible_dir}
 
 %post
-cp %{local_stx_ansible_dir}/playbooks/bootstrap/ansible.cfg %{local_etc_ansible}
-cp %{local_stx_ansible_dir}/playbooks/bootstrap/hosts %{local_etc_ansible}
+cp %{local_stx_ansible_dir}/playbooks/ansible.cfg %{local_etc_ansible}
+cp %{local_stx_ansible_dir}/playbooks/hosts %{local_etc_ansible}
 chmod 644 %{local_etc_ansible}/ansible.cfg
 chmod 644 %{local_etc_ansible}/hosts
 

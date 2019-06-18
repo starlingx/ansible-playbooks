@@ -10,7 +10,7 @@
 
 # Ex 1: Ungrouped hosts, specify before any group headers.
 ---
-bootstrap:
+all:
   hosts:
     localhost:
       ansible_connection: local
@@ -19,10 +19,3 @@ bootstrap:
     ansible_ssh_user: sysadmin
     ansible_ssh_pass: St8rlingX*
     ansible_become_pass: St8rlingX*
-    ansible_become: true
-    password_change_responses:
-      yes/no: 'yes'
-      sysadmin*: 'sysadmin'
-      \(current\) UNIX password: 'sysadmin'
-      (?i)New password: 'St8rlingX*'
-      (?i)Retype new password: 'St8rlingX*'

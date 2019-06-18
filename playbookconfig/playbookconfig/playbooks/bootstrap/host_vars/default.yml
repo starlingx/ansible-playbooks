@@ -133,13 +133,31 @@ docker_registries:
 # ADMIN CREDENTIALS
 # =================
 #
-# WARNING: It is strongly reconmmended to save this info in Ansible vault
+# WARNING: It is strongly recommended to store these settings in Ansible vault
 # file named "secret" under override files directory. Configuration parameters
 # stored in vault must start with vault_ prefix (i.e. vault_admin_username,
 # vault_admin_password).
 #
 admin_username: admin
 admin_password: St8rlingX*
+
+# INITIAL PASSWORD CHANGE RESPONSE SEQUENCE
+# =========================================
+#
+# This parameter is only relevant when the target host is bootstrapped remotely
+# and the user wishes to change the initial sysadmin password as part of the
+# bootstrap.
+#
+# WARNING: It is strongly recommended to store this setting in Ansible vault
+# file named "secret" under override files directory. Configuration parameters
+# stored in vault must start with vault_ prefix (i.e. vault_password_change_responses)
+#
+password_change_responses:
+  yes/no: 'yes'
+  sysadmin*: 'sysadmin'
+  \(current\) UNIX password: 'sysadmin'
+  (?i)New password: 'St8rlingX*'
+  (?i)Retype new password: 'St8rlingX*'
 
 # OVERRIDE FILES DIRECTORY
 # ========================
