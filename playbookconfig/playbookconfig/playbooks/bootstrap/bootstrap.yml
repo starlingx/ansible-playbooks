@@ -13,12 +13,18 @@
     - host_vars/default.yml
 
   pre_tasks:
-    - include_vars: "{{ override_files_dir }}/secret"
-      failed_when: false
-    - include_vars: "{{ override_files_dir }}/site.yml"
-      failed_when: false
-    - include_vars: "{{ override_files_dir }}/{{ inventory_hostname }}.yml"
-      failed_when: false
+    - stat:
+        path: "{{ item }}"
+      register: files_to_import
+      with_items:
+        - "{{ override_files_dir }}/secret"
+        - "{{ override_files_dir }}/site.yml"
+        - "{{ override_files_dir }}/{{ inventory_hostname }}.yml"
+      delegate_to: localhost
+
+    - include_vars: "{{ item.item }}"
+      when: item.stat.exists
+      with_items: "{{ files_to_import.results }}"
 
   # Main play
   roles:
