@@ -1,0 +1,103 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to check the target host environment before proceeding to
+#   the next step.
+#
+
+# Check host connectivity
+- block:
+  - name: Update SSH known hosts
+    lineinfile:
+      path: ~/.ssh/known_hosts
+      state: absent
+      regexp: '^{{ ansible_host }}|^\[{{ ansible_host }}\]:{{ ansible_port }}'
+    delegate_to: localhost
+
+  - name: Check connectivity
+    local_action: command ping -c 1 {{ ansible_host }}
+    failed_when: false
+    register: ping_result
+
+  - name: Fail if host is unreachable
+    fail: msg='Host {{ ansible_host }} is unreachable!'
+    with_items:
+      - "{{ ping_result.stdout_lines|list }}"
+    when: ping_result.rc != 0 and item is search('100% packet loss')
+
+  when: inventory_hostname != 'localhost'
+
+- name: Check archive dir
+  stat:
+    path: "{{ backup_dir }}"
+  register: backup_dir_result
+
+- name: Fail if archive dir does not exist
+  fail:
+    msg: " Archive directory {{ backup_dir }} does not exist!"
+  when: backup_dir_result.stat.exists == false
+
+- name: Check if backup is in progress
+  stat:
+    path: "{{ backup_in_progress_flag }}"
+  register: backup_in_progress
+
+- name: Fail if backup is already in progress
+  fail:
+    msg: " Backup is already in progress!"
+  when: backup_in_progress.stat.exists
+
+- name: Check if it is the active controller
+  shell: source /etc/platform/openrc; system host-show $(cat /etc/hostname) | grep -i "Controller-Active"
+  register: active_ctlr
+
+- name: Fail if it is not an active controller
+  fail:
+    msg: "Backup can only be done on the active controller."
+  when: active_ctlr.rc != 0
+
+- name: Retrieve software version number
+  # lookup module does not work with /etc/build.info as it does not have ini
+  # format. Resort to shell source.
+  shell: source /etc/build.info; echo $SW_VERSION
+  register: sw_version_result
+
+- name: Fail if software version is not defined
+  fail:
+    msg: "SW_VERSION is missing in /etc/build.info"
+  when: sw_version_result.stdout_lines|length == 0
+
+- name: Retrieve system type
+  shell: source /etc/platform/platform.conf; echo $system_type
+  register: system_type_result
+
+- name: Fail if system type is not defined
+  fail:
+    msg: "system_type is missing in /etc/platform/platform.conf"
+  when: system_type_result.stdout_lines|length == 0
+
+- name: Set software version fact
+  set_fact:
+    software_version: "{{ sw_version_result.stdout_lines[0] }}"
+    system_type: "{{ system_type_result.stdout_lines[0] }}"
+
+- name: Set config path facts
+  set_fact:
+    keyring_permdir: "{{ platform_path }}/.keyring/{{ software_version }}"
+    config_permdir: "{{ platform_path }}/config/{{ software_version }}"
+    puppet_permdir: "{{ platform_path }}/puppet/{{ software_version }}"
+    armada_permdir: "{{ platform_path }}/armada/{{ software_version }}"
+    helm_charts_permdir: "{{ cgcs_path }}/helm_charts"
+    patching_permdir: "/opt/patching"
+    patching_repo_permdir: "/www/pages/updates"
+    extension_permdir: "/opt/extension"
+    patch_vault_permdir: "/opt/patch-vault"
+
+- name: Create backup in progress flag file
+  file:
+    path: "{{ backup_in_progress_flag }}"
+    state: touch

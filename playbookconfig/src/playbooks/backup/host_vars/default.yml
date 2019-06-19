@@ -1,0 +1,22 @@
+---
+#
+# Default directory where user override file(s) can be found
+#
+override_files_dir: "{{ lookup('env', 'HOME') }}"
+
+#
+# Default directory where the system backup tarball can be found
+#
+backup_dir: /opt/backups
+
+#
+# The system backup tarball will be named in this format:
+# <backup_filename_prefix>_<timestamp>.tgz
+#
+backup_filename_prefix: "{{ inventory_hostname }}_system_backup"
+
+#
+# Default directory where the system backup tarball fetched from the
+# target host can be found
+#
+host_backup_dir: "{{ lookup('env', 'HOME') }}"

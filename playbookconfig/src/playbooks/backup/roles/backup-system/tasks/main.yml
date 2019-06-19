@@ -1,0 +1,431 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to backup system data.
+#
+# TODO:
+# 1. Check required disk size for backup
+# 2. Generate an alarm during backup
+#
+- name: do backup
+  block:
+    - debug:
+        msg:
+          - override_files_dir is {{ override_files_dir }}
+          - inventory_hostname is {{ inventory_hostname }}
+
+    - name: Create temp dir
+      tempfile:
+        path: /opt/backups
+        state: directory
+      register: tempdir
+
+    - name: Create ldap temp dir
+      file:
+        path: "{{ tempdir.path }}/ldap"
+        state: directory
+      register: ldap_dir
+
+    - name: Name ldap db backup
+      set_fact:
+        ldap_db_backup: "{{ ldap_dir.path }}/ldap.db"
+
+    - name: Backup ldap db
+      command: "slapcat -d 0 -F /etc/openldap/schema -l {{ ldap_db_backup }}"
+
+    - name: Create postgres temp dir
+      file:
+        path: "{{ tempdir.path }}/postgres"
+        state: directory
+      register: postgres_dir
+
+    - name: Backup roles, table spaces and schemas for databases.
+      shell: >-
+        sudo -u postgres pg_dumpall
+        --clean --schema-only > {{ postgres_dir.path }}/postgres.postgreSql.config
+      args:
+        warn: false
+
+    - name: Backup postgres, template1, sysinv, barbican db data
+      shell: >-
+        sudo -u postgres pg_dump --format=plain --inserts --disable-triggers --data-only
+        {{ item }} > {{ postgres_dir.path }}/{{ item }}.postgreSql.data
+      args:
+        warn: false
+      with_items:
+        - postgres
+        - template1
+        - sysinv
+        - barbican
+
+    - name: Backup fm db data
+      shell: >-
+        sudo -u postgres pg_dump --format=plain --inserts --disable-triggers
+        --data-only fm --exclude-table=alarm > {{ postgres_dir.path }}/fm.postgreSql.data
+      args:
+        warn: false
+
+    - name: Check if it is the primary region
+      command: grep -i "region_config\s*=\s*no" {{ platform_conf_path }}/platform.conf
+      register: check_region
+      failed_when: false
+
+    - name: Backup keystone db for primary region
+      shell: >-
+        sudo -u postgres pg_dump --format=plain --inserts --disable-triggers
+        --data-only keystone > {{ postgres_dir.path }}/keystone.postgreSql.data
+      args:
+        warn: false
+      when: check_region.rc == 0
+
+    - name: Check if it is dc controller
+      command: >-
+        grep -i "distributed_cloud_role\s*=\s*systemcontroller"
+        {{ platform_conf_path }}/platform.conf
+      register: check_dc_controller
+      failed_when: false
+
+    - block:
+      - name: Backup dcmanager db for dc controller
+        shell: >-
+          sudo -u postgres pg_dump --format=plain --inserts --disable-triggers
+          --data-only dcmanager > {{ postgres_dir.path }}/dcmanager.postgreSql.data
+        args:
+          warn: false
+
+      - name: Backup dcorch db for dc controller
+        set_fact:
+          dcorch_db: "sudo -u postgres pg_dump --format=plain --inserts --disable-triggers --data-only dcorch "
+
+      - name: Update dcorch tables that will be excluded from backup
+        set_fact:
+          dcorch_db: "{{ dcorch_db }} --exclude-table={{ item }}"
+        with_items:
+          - orch_job
+          - orch_request
+          - resource
+          - subcloud_resource
+
+      - name: Backup dcorch db
+        shell: "{{ dcorch_db }} > {{ postgres_dir.path }}/dcorch.postgreSql.data"
+
+      when: check_dc_controller.rc == 0
+
+    - name: Create mariadb temp dir
+      file:
+        path: "{{ tempdir.path }}/mariadb"
+        state: directory
+      register: mariadb_dir
+
+    - name: Check if mariadb pod is running
+      shell: >-
+        kubectl --kubeconfig={{ kube_config_dir }} get pods -n openstack | grep {{ mariadb_pod }} | grep -i 'running'
+      failed_when: false
+      register: check_mariadb_pod
+
+    - block:
+      - name: Set k8s cmd prefix
+        set_fact:
+          kube_cmd_prefix: "kubectl --kubeconfig={{ kube_config_dir }} exec -i {{ mariadb_pod }} -n openstack -- bash -c "
+
+      - name: Show databases
+        shell: "{{ kube_cmd_prefix }} 'exec mysql -uroot -p\"$MYSQL_DBADMIN_PASSWORD\" -e\"show databases\"'"
+        register: databases
+
+      - name: Backup mariadb
+        shell: >-
+          {{ kube_cmd_prefix }} 'exec mysqldump -uroot -p"$MYSQL_DBADMIN_PASSWORD" {{ item }}' >
+          {{ mariadb_dir.path }}/{{ item }}.mariadb.data
+        with_items: "{{ databases.stdout_lines | difference(skip_os_dbs) }}"
+
+      when: check_mariadb_pod.rc == 0
+
+    - block:
+      - name: Check if stx-openstack is applied
+        shell: >-
+          source /etc/platform/openrc; system application-list | grep stx-openstack | grep applied
+        failed_when: false
+        register: check_openstack
+
+      - name: Fail the backup if maridb is not running
+        fail:
+          msg: "WARNING: {{ mariadb_pod }} is not running. Cannot backup mariadb data."
+        when: check_openstack.rc == 0
+      when: check_mariadb_pod.rc != 0
+
+    - name: Create ceph temp dir
+      file:
+        path: "{{ tempdir.path }}/ceph"
+        state: directory
+      register: ceph_dir
+
+    - name: Name ceph crushmap backup
+      set_fact:
+        crushmap_file: "{{ ceph_dir.path }}/crushmap.bin.backup"
+
+    - name: Create ceph crushmap backup
+      command: "ceph osd getcrushmap -o {{ crushmap_file }}"
+
+    - name: Create temp dir for override backup file
+      file:
+        path: "{{ tempdir.path }}/override"
+        state: directory
+      register: override_dir
+
+    - name: Name override backup file
+      set_fact:
+        override_backup_file: "{{ override_dir.path }}/{{ host_override_backup_file }}"
+
+    - name: Retrieve dns_servers from sysinv db
+      shell: "source /etc/platform/openrc; system dns-show | grep nameservers | awk '{print $4}'"
+      register: dns_servers
+
+    - name: Create and write dns_servers into override backup file
+      lineinfile:
+        dest: "{{ override_backup_file }}"
+        line: "dns_servers:"
+        create: yes
+
+    - name: Write each dns server into override backup file
+      lineinfile:
+        dest: "{{ override_backup_file }}"
+        line: "  - {{ item }}"
+      with_items: "{{ dns_servers.stdout.split(',') }}"
+
+    - name: Query addrpool in sysinv db
+      shell:
+        source /etc/platform/openrc; system addrpool-list --nowrap > {{ tempdir.path }}/addrpool.txt
+
+    - name: Retrieve pxeboot_subnet from sysinv db
+      shell: "grep pxeboot {{ tempdir.path }}/addrpool.txt | awk '{print $6\"/\"$8}'"
+      register: pxeboot_subnet
+
+    - name: Retrieve management_subnet from sysinv db
+      shell: "grep management {{ tempdir.path }}/addrpool.txt | awk '{print $6\"/\"$8}'"
+      register: management_subnet
+
+    - name: Retrieve management_start_address from sysinv db
+      shell:
+        "grep management {{ tempdir.path }}/addrpool.txt | awk 'match($12, /-/) {print substr($12, 3, RSTART-3)}'"
+      register: management_start_address
+
+    - name: Retrieve cluster_host_subnet from sysinv db
+      shell:
+        "grep cluster-host-subnet {{ tempdir.path }}/addrpool.txt | awk '{print $6\"/\"$8}'"
+      register: cluster_host_subnet
+
+    - name: Retrieve cluster_pod_subnet from sysinv db
+      shell: "grep cluster-pod-subnet {{ tempdir.path }}/addrpool.txt | awk '{print $6\"/\"$8}'"
+      register: cluster_pod_subnet
+
+    - name: Retrieve cluster_service_subnet from sysinv db
+      shell: "grep cluster-service-subnet {{ tempdir.path }}/addrpool.txt | awk '{print $6\"/\"$8}'"
+      register: cluster_service_subnet
+
+    - name: Retrieve external_oam_subnet from sysinv db
+      shell: "grep oam {{ tempdir.path }}/addrpool.txt | awk '{print $6\"/\"$8}'"
+      register: external_oam_subnet
+
+    - name: Retrieve external_oam_gateway_address from sysinv db
+      shell: "grep oam {{ tempdir.path }}/addrpool.txt | awk '{print $20}'"
+      register: external_oam_gateway_address
+
+    - name: Retrieve external_oam_floating_address from sysinv db
+      shell: "grep oam {{ tempdir.path }}/addrpool.txt | awk '{print $14}'"
+      register: external_oam_floating_address
+
+    - name: Write entries to override backup file
+      lineinfile:
+        dest: "{{ override_backup_file }}"
+        line: "{{ item }}"
+      with_items:
+        - "pxeboot_subnet: {{ pxeboot_subnet.stdout }}"
+        - "management_subnet: {{ management_subnet.stdout }}"
+        - "management_start_address: {{ management_start_address.stdout }}"
+        - "cluster_host_subnet: {{ cluster_host_subnet.stdout }}"
+        - "cluster_pod_subnet: {{ cluster_pod_subnet.stdout }}"
+        - "cluster_service_subnet: {{ cluster_service_subnet.stdout }}"
+        - "external_oam_subnet: {{ external_oam_subnet.stdout }}"
+        - "external_oam_gateway_address: {{ external_oam_gateway_address.stdout }}"
+        - "external_oam_floating_address: {{ external_oam_floating_address.stdout }}"
+
+    - name: Query service parameters for docker
+      shell: >-
+        source /etc/platform/openrc; system service-parameter-list --nowrap |
+        grep -w docker | awk '{if ($4=="docker") print $line}' > {{ tempdir.path }}/docker.txt
+
+    - name: Check if there is a unified docker registry
+      shell: grep -w insecure_registry {{ tempdir.path }}/docker.txt
+      register: check_unified
+      failed_when: false
+
+    - block:
+      - name: Get insecure_registry value
+        shell: grep -w insecure_registry {{ tempdir.path }}/docker.txt | awk '{print $10}'
+        register: insecure
+
+      - name: Retrieve unified docker registry from sysinv
+        shell: grep -w k8s {{ tempdir.path }}/docker.txt | awk '{if ($8=="k8s") print $10}'
+        register: unified_docker_registry
+
+      - name: Write unified docker registry to override backup file
+        lineinfile:
+          dest: "{{ override_backup_file }}"
+          line: "{{ item }}"
+        with_items:
+          - "is_secure_registry: {{ not (insecure.stdout|bool) }}"
+          - "docker_registries:"
+          - "  unified: {{ unified_docker_registry.stdout }}"
+      when: check_unified.rc == 0
+
+    - block:
+      - name: Search for docker registries
+        shell: >-
+          grep -w registry {{ tempdir.path }}/docker.txt |
+          awk '{if ($6=="registry") print $8 ".io: " $10}'
+        failed_when: false
+        register: docker_registries
+
+      - block:
+        - name: Write docker_registries
+          lineinfile:
+            dest: "{{ override_backup_file }}"
+            line: "docker_registries:"
+
+        - name: Write docker_registry to override backup file
+          lineinfile:
+            dest: "{{ override_backup_file }}"
+            line: "  {{ item }}"
+          with_items: "{{ docker_registries.stdout_lines }}"
+
+        - name: Replace k8s.io with k8s.gcr.io in the override backup file
+          replace:
+            path: "{{ override_backup_file }}"
+            regexp: 'k8s\.io'
+            replace: 'k8s.gcr.io'
+
+        when: docker_registries.stdout != ""
+      when: check_unified.rc != 0
+
+    - name: Check if docker no-proxy exists
+      shell: >-
+        grep -w no_proxy {{ tempdir.path }}/docker.txt |
+        awk '{if ($8=="no_proxy") print $10}'
+      register: docker_no_proxy
+      failed_when: false
+
+    - block:
+      - name: Write no_proxy into override backup file
+        lineinfile:
+          dest: "{{ override_backup_file }}"
+          line: "docker_no_proxy:"
+
+      - name: Write each no_proxy address into override backup file
+        lineinfile:
+          dest: "{{ override_backup_file }}"
+          line: "  - {{ item }}"
+        with_items: "{{ docker_no_proxy.stdout.split(',') }}"
+
+      when: docker_no_proxy.stdout != ""
+
+    - name: Look for docker proxy entries
+      shell: >-
+        grep -w proxy {{ tempdir.path }}/docker.txt | grep -w -v no_proxy |
+        awk '{if ($6=="proxy") print "docker_" $8 ": " $10}'
+      register: check_docker_proxy
+      failed_when: false
+
+    - block:
+      - name: Write docker proxy to override backup file
+        lineinfile:
+          dest: "{{ override_backup_file }}"
+          line: "{{ item }}"
+        with_items: "{{ check_docker_proxy.stdout }}"
+      when: check_docker_proxy.stdout != ""
+
+    # Archive fails when symbolic link points to non-existent file.
+    # Issue was raised in May 2018 and it is still not fixed yet.
+    # Leave this code here for now. Will remove it when the story is completed.
+    # - name: Create a tgz archive
+    #   archive:
+    #     path:
+    #       - "{{ override_backup_file }}"
+    #       - /etc
+    #       - /home
+    #       - "{{ config_permdir }}"
+    #       - "{{ puppet_permdir }}/hieradata"
+    #       - "{{ keyring_permdir }}"
+    #       - "{{ patching_permdir }}"
+    #       - "{{ patching_repo_permdir }}"
+    #       - "{{ extension_permdir }}"
+    #       - "{{ patch_vault_permdir }}"
+    #       - "{{ crushmap_file }}"
+    #       - "{{ ldap_db_backup }}"
+    #       - "{{ postgres_dir.path }}"
+    #       - "{{ armada_permdir }}"
+    #       - "{{ helm_charts_permdir }}"
+    #       - "{{ mariadb_dir.path }}"
+    #     dest: "{{ backup_dir }}/{{ backup_filename }}.tgz"
+    #     unsafe_writes: no
+
+    - name: Attach timestamp to the backup filename
+      set_fact:
+        backup_file: "{{ backup_filename_prefix }}_{{ lookup('pipe', 'date +%Y_%m_%d_%H_%M_%S') }}.tgz"
+
+    - name: Set backup file absolute path
+      set_fact:
+        backup_file_path: "{{ backup_dir }}/{{ backup_file }}"
+
+    - name: Create a tgz archive
+      shell: "tar -czf {{ backup_file_path }} $(ls -d \
+           {{ override_backup_file }} \
+           /etc \
+           /home \
+           {{ config_permdir }} \
+           {{ puppet_permdir }}/hieradata \
+           {{ keyring_permdir }} \
+           {{ patching_permdir }} \
+           {{ patching_repo_permdir }} \
+           {{ extension_permdir }} \
+           {{ patch_vault_permdir }} \
+           {{ crushmap_file }} \
+           {{ ldap_db_backup }} \
+           {{ postgres_dir.path }} \
+           {{ armada_permdir }} \
+           {{ helm_charts_permdir }} \
+           {{ mariadb_dir.path }} 2>/dev/null)"
+      args:
+        warn: false
+
+    - name: Notify user where the backup tarball is stored
+      debug:
+        msg: "Backup tarball {{ backup_file_path }} is stored on active controller."
+
+    - block:
+      - name: Transfer the backup tarball to the local machine
+        fetch:
+          src: "{{ backup_file_path }}"
+          dest: "{{ host_backup_dir }}/"
+          flat: yes
+
+      - name: Notify user where the backup tarball is downloaded
+        debug:
+          msg: >-
+            "Backup tarball {{ backup_file }} is downloaded to
+            {{ host_backup_dir }} on local machine."
+      when: inventory_hostname != 'localhost'
+
+  always:
+    - name: Remove the temp dir
+      file:
+        path: "{{ tempdir.path }}"
+        state: absent
+
+    - name: Remove the backup in progress flag file
+      file:
+        path: "{{ backup_in_progress_flag }}"
+        state: absent

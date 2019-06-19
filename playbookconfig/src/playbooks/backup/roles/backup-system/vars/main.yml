@@ -1,0 +1,6 @@
+---
+kube_config_dir: "{{ lookup('env', 'KUBECONFIG') }}"
+
+skip_os_dbs: ['Database', 'information_schema', 'performance_schema', 'mysql', 'horizon', 'panko', 'gnocchi']
+
+mariadb_pod: mariadb-server-0
