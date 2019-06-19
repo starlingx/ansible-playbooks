@@ -232,6 +232,11 @@
       software_version: "{{ sw_version_result.stdout_lines[0] }}"
       system_type: "{{ system_type_result.stdout_lines[0] }}"
 
+  - name: Fail if host software version is not supported by this playbook
+    fail:
+      msg: "This playbook is not compatible with StarlingX software version {{ software_version }}."
+    when: software_version not in supported_release_versions
+
   - name: Set config path facts
     set_fact:
       keyring_permdir: "{{ platform_path + '/.keyring/' + software_version }}"

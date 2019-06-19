@@ -1,0 +1,15 @@
+---
+all:
+  hosts:
+    hostname1:
+      # Ansible host IP is the IP of the controller host that is externally
+      # accessible for controller bootstrap and system deployment purposes.
+      # This IP can be created via DHCP or statically.
+      ansible_host: 172.16.0.17
+    hostname2:
+      ansible_host: 172.16.0.144
+
+  vars:
+    ansible_ssh_user: sysadmin
+    ansible_ssh_pass: St8rlingX*
+    ansible_become_pass: St8rlingX*

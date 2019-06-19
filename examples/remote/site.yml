@@ -1,0 +1,7 @@
+# Configuration parameters in this file will apply to all
+# hosts in the hosts file unless they are overwritten in the
+# inventory_hostname.yml file or at the command line.
+external_oam_subnet: 172.16.0.0/12
+external_oam_gateway_address: 172.16.0.1
+dns_servers:
+  - 1.1.1.1

@@ -17,7 +17,8 @@
         path: "{{ item }}"
       register: files_to_import
       with_items:
-        - "{{ override_files_dir }}/secret"
+        - "{{ override_files_dir }}/secrets.yml"
+        - "{{ override_files_dir }}/{{ inventory_hostname }}_secrets.yml"
         - "{{ override_files_dir }}/site.yml"
         - "{{ override_files_dir }}/{{ inventory_hostname }}.yml"
       delegate_to: localhost
