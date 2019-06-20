@@ -130,6 +130,22 @@ docker_registries:
 
 #is_secure_registry: True
 
+# Certificates
+# =================
+#
+# These values provide a means to install certificates onto the system.
+# For example the ssl_ca_cert parameter may be used to install a trusted CA to
+# the system. A trusted CA certificate will be required if the end user
+# configures a private docker registry that is signed by an unknown Certificate
+# Authority.
+#
+# The certificate value is the absolute path of the certificate file.
+# The certificate must be in PEM format.
+# The supported certificates are:
+#   - ssl_ca_cert
+#
+#ssl_ca_cert: /path/to/ssl_ca_cert_file
+
 # ADMIN CREDENTIALS
 # =================
 #

@@ -389,6 +389,12 @@
           (docker_images_archive_source is not none)
 
 
+- name: Check for ssl_ca_cert file
+  fail:
+    msg: "ssl_ca_cert file not found. ({{ ssl_ca_cert }})"
+  when: ssl_ca_cert is defined and (not ssl_ca_cert is file)
+
+
 # bootstrap_config ini file generation
 - block:
   - name: Create config workdir
