@@ -12,10 +12,11 @@
   - name: Check if the supplied proxy is a valid URL
     vars:
       script_content: |
-        # Use this utility to be consistent with the current config_controller
-        # and sysinv
-        from controllerconfig.utils import is_valid_url
-        if not is_valid_url( "{{ input_url }}" ):
+        # Make use of django URL Validator
+        from django.core.validators import URLValidator
+        try:
+          URLValidator()( "{{ input_url }}" )
+        except Exception:
           raise Exception("Invalid url format!")
     shell: "{{ script_content }}"
     args:

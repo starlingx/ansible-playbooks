@@ -13,6 +13,7 @@ Requires: python-netaddr
 Requires: sshpass
 Requires: python2-ptyprocess
 Requires: python2-pexpect
+Requires: python2-django
 Requires: ansible
 
 %description
