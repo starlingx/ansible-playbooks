@@ -181,3 +181,18 @@ password_change_responses:
 # Default directory where user override file(s) can be found
 #
 override_files_dir: "{{ lookup('env', 'HOME') }}"
+
+
+# BACKUP AND RESTORE
+# ==================
+#
+#  Default directory on the host where the backup tarball
+#  can be found for remote play.
+#
+host_backup_dir: "{{ lookup('env', 'HOME') }}"
+
+#
+# System backup tarball filename. User must provide the filename either
+# in the override file or via -e option at the command line.
+#
+backup_filename:

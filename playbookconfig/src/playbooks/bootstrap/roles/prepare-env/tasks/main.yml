@@ -79,6 +79,12 @@
   register: initial_config_complete
 
 - block:
+  # Restore doesn't support replay
+  - name: Fail if bootstrap is in restore mode and the host has been unlocked
+    fail:
+      msg: "Host {{ ansible_host }} has been unlocked. Cannot perform restore."
+    when: mode == 'restore'
+
   - name: Set skip_play flag for host
     set_fact:
       skip_play: true
@@ -92,9 +98,20 @@
 
   when: initial_config_complete.stat.exists
 
-
 # Proceed only if skip_play flag is not turned on
 - block:
+  - block:
+    - name: Check if restore is in progress if bootstrap is with restore mode
+      stat:
+        path: "{{ restore_in_progress_flag }}"
+      register: restore_in_progress
+
+    - name: Fail if restore is already in progress
+      fail:
+        msg: " Restore is already in progress!"
+      when: restore_in_progress.stat.exists
+    when: mode == 'restore'
+
   # The following parameters should exist in default.yml. If any of them is
   # not available, the file is invalid.
   - name: Fail if any of the mandatory configurations are not defined
@@ -459,6 +476,10 @@
          less than the standard size of {{ standard_root_disk_size }}GB. Please consult
          the Software Installation Guide for details.
     when: disk_size_check_result.rc != 0
+
+  # Do restore related preparation
+  - include_tasks: restore_prep_tasks.yml
+    when: mode == 'restore'
 
   - name: Look for branding tar file
     find:

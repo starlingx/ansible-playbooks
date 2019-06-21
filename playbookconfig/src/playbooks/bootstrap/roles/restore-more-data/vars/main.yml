@@ -1,0 +1,13 @@
+---
+platform_conf_path: /etc/platform
+helm_charts_permdir: /opt/cgcs/helm_charts
+patching_permdir: /opt/patching
+patching_repo_permdir: /www/pages/updates
+extension_permdir: /opt/extension
+patch_vault_permdir: /opt/patch-vault
+ldap_permdir: /var/lib/openldap-data
+kube_config_dir: "{{ lookup('env', 'KUBECONFIG') }}"
+
+# Default directory where the backup info (e.g. mariadb data, ceph crushmap)
+# can be found during restore.
+backup_dir: /opt/backups

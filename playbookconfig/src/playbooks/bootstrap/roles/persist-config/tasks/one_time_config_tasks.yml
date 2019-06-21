@@ -22,7 +22,7 @@
     msg: >-
       postgres_config_dir: {{ postgres_config_dir }}
       pxe_config_dir: {{ pxe_config_dir }}
-      branding_config_dir: {{ pxe_config_dir }}
+      branding_config_dir: {{ branding_config_dir }}
 
 - name: Ensure Postres, PXE config directories exist
   file:

@@ -40,3 +40,4 @@
     change_password: false
     skip_play: false
     replayed: false
+    mode: 'bootstrap'

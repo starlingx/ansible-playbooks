@@ -16,15 +16,59 @@
     group: root
     mode: 0755
 
-- name: Generating static config data
-  command: "/usr/bin/sysinv-puppet create-static-config {{ hieradata_workdir }}"
-  failed_when: false
-  register: static_config_result
+- block:
+  - name: Generating static config data
+    command: "/usr/bin/sysinv-puppet create-static-config {{ hieradata_workdir }}"
+    failed_when: false
+    register: static_config_result
 
-- name: Fail if static hieradata cannot be generated
-  fail:
-    msg: "Failed to create puppet hiera static config."
-  when: static_config_result.rc != 0
+  - name: Fail if static hieradata cannot be generated
+    fail:
+      msg: "Failed to create puppet hiera static config."
+    when: static_config_result.rc != 0
+
+  when: mode == 'bootstrap'
+
+- block:
+  - name: Set ssh_config tmp dir fact
+    set_fact:
+      temp_ssh_config_dir: /tmp/config/ssh_config
+
+  # To work around an ansible quirk that regex_replace filter
+  # is ignored when it is applied to variables in the command module
+  - name: Strip the leading '/' from directories and assign them to new variables
+    set_fact:
+      short_puppet_permdir: "{{ puppet_permdir | regex_replace('^\\/', '') }}/hieradata"
+      short_ssh_config_permdir: "{{ ssh_config_permdir | regex_replace('^\\/', '') }}"
+
+  - name: Prefetch static hieradata
+    command: >-
+      tar -C {{ hieradata_workdir }} -xpf {{ staging_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+      '{{ short_puppet_permdir }}/*static.yaml'
+    args:
+      warn: false
+
+  - name: Create temp ssh_config dir
+    file:
+      path: "{{ temp_ssh_config_dir }}"
+      state: directory
+      owner: root
+      group: root
+      mode: 0755
+
+  - name: Prefetch ssh_config
+    command: >-
+      tar -C {{ temp_ssh_config_dir }} -xpf {{ staging_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+      {{ short_ssh_config_permdir }}
+    args:
+      warn: false
+
+  - name: Remove the unwanted directory
+    file:
+      path: "{{ temp_ssh_config_dir }}/ssh_config"
+      state: absent
+
+  when: mode == 'restore'
 
 - name: Applying puppet bootstrap manifest
   command: >

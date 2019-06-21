@@ -15,30 +15,54 @@
     path: /etc/hosts
     state: absent
 
-- name: Populate /etc/hosts
-  lineinfile:
-    path: /etc/hosts
-    line: "{{ item }}"
-    create: yes
-  with_items:
-    - "{{ localhost_name_ip_mapping }}"
-    - "{{ controller_floating_address }}\tcontroller"
-    # May not need this entry
-    - "{{ controller_0_cluster_host }}\tcontroller-0-infra"
-    - "{{ controller_pxeboot_floating_address }}\tpxecontroller"
-    - "{{ external_oam_floating_address }}\toamcontroller"
-    - "{{ derived_network_params.nfs_management_address_1 }}\tcontroller-platform-nfs"
-    - "{{ derived_network_params.controller_1_address }}\tcontroller-1"
-    - "{{ derived_network_params.controller_0_address }}\tcontroller-0"
-    # May not need this entry
-    - "{{ controller_1_cluster_host }}\tcontroller-1-infra"
-    - "{{ derived_network_params.nfs_management_address_2 }}\tcontroller-nfs"
+- block:
+  - name: Populate /etc/hosts
+    lineinfile:
+      path: /etc/hosts
+      line: "{{ item }}"
+      create: yes
+    with_items:
+      - "{{ localhost_name_ip_mapping }}"
+      - "{{ controller_floating_address }}\tcontroller"
+      # May not need this entry
+      - "{{ controller_0_cluster_host }}\tcontroller-0-infra"
+      - "{{ controller_pxeboot_floating_address }}\tpxecontroller"
+      - "{{ external_oam_floating_address }}\toamcontroller"
+      - "{{ derived_network_params.nfs_management_address_1 }}\tcontroller-platform-nfs"
+      - "{{ derived_network_params.controller_1_address }}\tcontroller-1"
+      - "{{ derived_network_params.controller_0_address }}\tcontroller-0"
+      # May not need this entry
+      - "{{ controller_1_cluster_host }}\tcontroller-1-infra"
+      - "{{ derived_network_params.nfs_management_address_2 }}\tcontroller-nfs"
 
-- name: Save hosts file to permanent location
-  copy:
-    src: /etc/hosts
-    dest: "{{ config_permdir }}"
-    remote_src: yes
+  - name: Save hosts file to permanent location
+    copy:
+      src: /etc/hosts
+      dest: "{{ config_permdir }}"
+      remote_src: yes
+
+  when: mode == 'bootstrap'
+
+- block:
+  - name: Strip the leading slash from config_permdir and assign it to a new variable
+    set_fact:
+      short_config_permdir: "{{ config_permdir | regex_replace('^\\/', '') }}"
+
+  - name: restore /etc/hosts file
+    command: tar -C /etc -xpf {{ staging_dir }}/{{ backup_filename }} --transform='s,.*/,,' etc/hosts
+    args:
+      warn: false
+
+  - name: restore hosts in config permdir
+    command: >-
+      tar -C {{ config_permdir }} -xpf {{ staging_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+      {{ short_config_permdir }}/hosts
+    args:
+      warn: false
+
+  # Wei: I noticed that /etc/hosts and /opt/platform/config/<version>/hosts are always different
+
+  when: mode == 'restore'
 
 - name: Update name service caching server
   command: nscd -i hosts

@@ -1,0 +1,336 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to restore the remaining data in the backup tarball
+#   during platform restore.
+#
+
+# These hieradata were generated after persist-config role was run. They
+# will be re-generated when sysinv is restarted after postgres db is restored
+- name: Remove newly generated hieradata data
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - "{{ puppet_permdir }}/hieradata/{{ controller_floating_address|ipmath(1) }}.yaml"
+    - "{{ puppet_permdir }}/hieradata/system.yaml"
+    - "{{ puppet_permdir }}/hieradata/secure_system.yaml"
+
+# To work around an ansible quirk that regex_replace filter
+# is ignored when it is applied to variables in the command module
+- name: Remove leading '/' from dir name
+  set_fact:
+    short_platform_conf_path: "{{ platform_conf_path | regex_replace('^\\/', '') }}"
+    short_config_permdir: "{{ config_permdir | regex_replace('^\\/', '') }}"
+
+- name: Extract platform.conf from the backup tarball
+  command: >-
+    tar -C {{ staging_dir }} -xpf {{ staging_dir }}/{{ backup_filename }}  --transform='s,.*/,,'
+    {{ short_platform_conf_path }}/platform.conf
+  args:
+    warn: false
+
+- name: Search for the new INSTALL_UUID in /etc/platform/platform.conf
+  shell: grep INSTALL_UUID {{ platform_conf_path }}/platform.conf
+  register: result
+
+- name: Replace INSTALL_UUID with the new one
+  lineinfile:
+    dest: "{{ staging_dir }}/platform.conf"
+    regexp: 'INSTALL_UUID'
+    line: "{{ result.stdout }}"
+
+- name: Strip out entries that are host specific
+  lineinfile:
+    dest: "{{ staging_dir }}/platform.conf"
+    regexp: "{{ item }}"
+    state: absent
+  with_items:
+    - '^oam_interface='
+    - '^cluster_host_interface='
+    - '^UUID='
+
+- name: Search for the management_interface in /etc/platform/platform.conf
+  shell: grep management_interface {{ platform_conf_path }}/platform.conf
+  failed_when: false
+  register: result
+
+- name: Replace management_interface with the new one
+  lineinfile:
+    dest: "{{ staging_dir }}/platform.conf"
+    regexp: '^management_interface='
+    line: "{{ result.stdout }}"
+  when: result.rc == 0
+
+- name: Replace platform config file
+  command: mv -f {{ staging_dir }}/platform.conf {{ platform_conf_path}}/platform.conf
+
+# Restore resolv.conf and dnsmaq
+- name: Extract resolv.conf from backup tarball
+  command: >-
+    tar -C /etc -xpf {{ staging_dir }}/{{ backup_filename }} --overwrite
+    --transform='s,.*/,,' etc/resolv.conf
+  args:
+    warn: false
+
+- name: Restore resolv.conf in config permdir (/opt/platform/config/...)
+  command: >-
+    tar -C {{ config_permdir }} -xpf {{ staging_dir }}/{{ backup_filename }}
+    --overwrite --transform='s,.*/,,' '{{ short_config_permdir }}/resolv.conf'
+  args:
+    warn: false
+
+- name: Restore dnsmaq in config permdir (/opt/platform/config/...)
+  command: >-
+    tar -C {{ config_permdir }} -xpf {{ staging_dir }}/{{ backup_filename }}
+    --overwrite --transform='s,.*/,,' '{{ short_config_permdir }}/dnsmasq*'
+  args:
+    warn: false
+
+- name: Remove leading '/' from directory name
+  set_fact:
+    short_pxe_config_permdir: "{{ pxe_config_permdir | regex_replace('^\\/', '') }}"
+
+- name: Restore boot files in pxelinux.cfg dir
+  command: >-
+    tar -C {{ pxe_config_permdir }} -xpf {{ staging_dir }}/{{ backup_filename }}
+    --overwrite --transform='s,.*/,,' '{{ short_pxe_config_permdir }}/*-*-*'
+  args:
+    warn: false
+
+- name: Extract ldap.db to staging directory
+  command: >-
+    tar -C {{ staging_dir }} -xpf {{ staging_dir }}/{{ backup_filename }}
+    --transform='s,.*/,,' '*/ldap.db'
+  args:
+    warn: false
+
+- name: Stop openldap service
+  shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap stop"
+
+- name: Delete ldap directory
+  file:
+    path: "{{ ldap_permdir }}"
+    state: absent
+
+- name: Recreate ldap directory
+  file:
+    path: "{{ ldap_permdir }}"
+    state: directory
+    recurse: yes
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Restore ldap
+  shell: slapadd -F /etc/openldap/schema -l {{ staging_dir }}/ldap.db
+
+- name: Start openldap service
+  shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap start"
+
+- name: Delete file from staging dir
+  file:
+    path: "{{ staging_dir }}/ldap.db"
+    state: absent
+
+- name: Restore home directory
+  shell: tar -C / --overwrite -xpf {{ staging_dir }}/{{ backup_filename }} 'home/*'
+  args:
+    warn: false
+  become_user: root
+
+- name: Restore Helm charts, armada manifests and extension filesystem
+  command: tar -C / --overwrite -xpf {{ staging_dir }}/{{ backup_filename }} {{ item }}
+  args:
+    warn: false
+  become_user: root
+  with_items:
+    - "{{ helm_charts_permdir | regex_replace('^\\/', '') }}"
+    - "{{ armada_permdir | regex_replace('^\\/', '') }}"
+    - "{{ extension_permdir | regex_replace('^\\/', '') }}"
+
+# Can't store ceph crushmap at sysinv_config_permdir (/opt/platform/sysinv/)
+# because when unlocking controller-0 for the first time, the crushmap is
+# set thru ceph puppet when /opt/platform is not mounted yet.
+- name: Restore ceph crush map
+  command: >-
+    tar -C {{ backup_dir }} -xpf {{ staging_dir }}/{{ backup_filename }}
+    --transform='s,.*/,,' '*/crushmap.bin.backup'
+  args:
+    warn: false
+
+- name: Remove leading '/' from patch-vault directory
+  set_fact:
+    short_patch_vault_permdir: "{{ patch_vault_permdir | regex_replace('^\\/', '') }}"
+
+- name: Look for patch-vault filesystem
+  shell: "tar -tf {{ staging_dir }}/{{ backup_filename }} | grep 'patch-vault'"
+  args:
+    warn: false
+  failed_when: false
+  register: search_result
+
+- name: Restore patch-vault filesystem
+  command: >-
+    tar -C / --overwrite -xpf {{ staging_dir }}/{{ backup_filename }}
+    {{ short_patch_vault_permdir }}
+  args:
+    warn: false
+  when: search_result.rc == 0
+
+# TODO: Restore ceph_external when it is supported
+
+- name: Create Helm overrides directory
+  file:
+    path: "{{ helm_overrides_permdir }}"
+    state: directory
+    recurse: yes
+    owner: root
+    group: root
+    mode: 0755
+
+- block:
+  - name: Shutdown mtce
+    command: /usr/lib/ocf/resource.d/platform/mtcAgent stop
+    environment:
+      OCF_ROOT: "/usr/lib/ocf"
+      OCF_RESKEY_state: "active"
+
+  - name: Stop services
+    systemd:
+      name: "{{ item }}"
+      state: stopped
+    with_items:
+      - openstack-keystone
+      - fminit
+      - fm-api
+      - sysinv-api
+      - sysinv-conductor
+      - sysinv-agent
+      - openstack-barbican-api
+
+  - name: Create staging directory for postgres data
+    file:
+      path: "{{ staging_dir }}/postgres"
+      state: directory
+      recurse: yes
+      owner: root
+      group: root
+      mode: 0755
+
+  - name: Extract postgres db to staging directory
+    command: >-
+      tar -C {{ staging_dir }}/postgres -xpf {{ staging_dir }}/{{ backup_filename }}
+      --transform='s,.*/,,' '*/*\.postgreSql\.*'
+    args:
+      warn: false
+
+  - name: Restore postgres db
+    shell: "psql -f {{ item }} {{ (item|basename).split('.')[0] }}"
+    become_user: postgres
+    with_items:
+      - "{{ staging_dir }}/postgres/postgres.postgreSql.config"
+      - "{{ staging_dir }}/postgres/postgres.postgreSql.data"
+      - "{{ staging_dir }}/postgres/template1.postgreSql.data"
+      - "{{ staging_dir }}/postgres/sysinv.postgreSql.data"
+      - "{{ staging_dir }}/postgres/keystone.postgreSql.data"
+      - "{{ staging_dir }}/postgres/fm.postgreSql.data"
+      - "{{ staging_dir }}/postgres/barbican.postgreSql.data"
+
+  - name: Remove postgres staging directory
+    file:
+      path: "{{ staging_dir }}/postgres"
+      state: absent
+
+  # Set all the hosts including controller-0 to locked/disabled/offline state.
+  # After the services are restarted, mtce will update controller-0 to
+  # locked/disabled/online state. Setting controller-0 to offline state now
+  # will ensure that keystone, sysinv and mtcAgent are indeed in-service after being restated.
+  - name: Set all the hosts to locked/disabled/offline state
+    shell: >-
+      psql -c "update i_host set administrative='locked', operational='disabled',
+      availability='offline'" sysinv
+    become_user: postgres
+
+  # Set platform-integ-apps to "uploaded" state, so that once ceph is up after
+  # controller-0 is unlocked for the first time, the manifest will be applied.
+  - name: Set platform-integ-apps to "uploaded" state
+    shell: psql -c "update kube_app set status='uploaded' where name='platform-integ-apps'" sysinv
+    become_user: postgres
+
+  # If stx-openstack app is in "applied" state, set it to "uploaded" state to
+  # avoid confusion. stx-openstack app will be brought up in stages after the
+  # platform is restored.
+  - name: Check stx-openstack app state
+    shell: psql -c "select status from kube_app where name='stx-openstack'" sysinv
+    become_user: postgres
+    register: app_res
+
+  - name: Set stx-openstack app to "uploaded" state
+    shell: psql -c "update kube_app set status='uploaded' where name='stx-openstack'" sysinv
+    become_user: postgres
+    when: app_res.stdout is search('applied')
+
+  - name: Restart services
+    systemd:
+      name: "{{ item }}"
+      state: restarted
+    with_items:
+      - openstack-keystone
+      - fminit
+      - fm-api
+      - sysinv-api
+      - sysinv-conductor
+      - sysinv-agent
+      - openstack-barbican-api
+
+  - name: Bring up Maintenance Agent
+    command: /usr/lib/ocf/resource.d/platform/mtcAgent start
+    environment:
+      OCF_ROOT: "/usr/lib/ocf"
+      OCF_RESKEY_state: "active"
+
+  - name: Wait for 90 secs before check if services come up
+    wait_for: timeout=90
+
+  # admin-keystone is always the very last to be ready,
+  # So we just wait and check for admin-keystone to come up.
+  - name: Make sure admin-keystone is ready
+    shell: "ps -ef | grep admin-keystone | grep -v grep"
+    register: result
+    until: result.stdout.find("keystone") != -1
+    retries: 6
+    delay: 10
+
+  # Run "system host-list" to verify that controller-0 is in
+  # "online" state. This will ensure that keystone, sysinv and
+  # mtcAgent are indeed in-service after being restated.
+  - name: Check controller-0 is in online state
+    shell: source /etc/platform/openrc; system host-list | grep online
+    register: check_online
+    failed_when: false
+    retries: 30
+    delay: 10
+
+  - name: Inform user that restore_platform is run successfully
+    debug:
+      msg: >-
+        Controller-0 is now online. The next step is to unlock this controller.
+        Please refer to the system administration guide for more details.
+    when: check_online.rc == 0
+
+  - name: Inform user that restore_platform is not successful
+    debug:
+      msg: >-
+        Platform restore was unsuccessful. Please refer to the system administration
+        guide for next step.
+    when: check_online.rc != 0
+
+  # restore_openstack still needs the backup tarball to restore
+  # mariadb data
+  - name: Move backup tarball from /scratch to /opt/backups
+    command: mv {{ staging_dir }}/{{ backup_filename }} {{ backup_dir }}/{{ backup_filename }}

@@ -31,69 +31,106 @@
   when: not use_vault_credentials
 
 # Validating password per configured rules
-- name: Look for password rules file
-  stat:
-    path: "{{ password_rules_file }}"
-  register: password_rules
+# This block is for bootstrap only
+- block:
+  - name: Look for password rules file
+    stat:
+      path: "{{ password_rules_file }}"
+    register: password_rules
 
-- name: Fail if password rules file is missing
-  fail: msg="Password rules file {{ password_rules_file }} is missing."
-  when: not password_rules.stat.exists
+  - name: Fail if password rules file is missing
+    fail: msg="Password rules file {{ password_rules_file }} is missing."
+    when: not password_rules.stat.exists
 
-- name: Get password rules
-  shell: grep -w password_regex {{ password_rules_file }} | awk '{print $3}'
-  register: pattern_result
+  - name: Get password rules
+    shell: grep -w password_regex {{ password_rules_file }} | awk '{print $3}'
+    register: pattern_result
 
-- name: Get password rules description
-  shell: >
-    grep -w password_regex_description {{  password_rules_file }} |
-    cut -d'=' -f2
-  register: description_result
+  - name: Get password rules description
+    shell: >
+      grep -w password_regex_description {{  password_rules_file }} |
+      cut -d'=' -f2
+    register: description_result
 
-- name: Set password regex facts
-  set_fact:
-    password_regex: "{{ pattern_result.stdout }}"
-    password_regex_desc: "{{ 'ADMIN_PASSWORD: ' + description_result.stdout }}"
+  - name: Set password regex facts
+    set_fact:
+      password_regex: "{{ pattern_result.stdout }}"
+      password_regex_desc: "{{ 'ADMIN_PASSWORD: ' + description_result.stdout }}"
 
-- name: Fail if password regex cannot be found
-  fail: msg="Required option password_regex not found in {{ password_rules_file }}."
-  when: pattern_result.stdout == ""
+  - name: Fail if password regex cannot be found
+    fail: msg="Required option password_regex not found in {{ password_rules_file }}."
+    when: pattern_result.stdout == ""
 
-- name: Set password regex description fact
-  set_fact:
-    password_regex_desc: "ADMIN_PASSWORD: Password does not meet complexity criteria."
-  when: description_result.stdout == ""
+  - name: Set password regex description fact
+    set_fact:
+      password_regex_desc: "ADMIN_PASSWORD: Password does not meet complexity criteria."
+    when: description_result.stdout == ""
 
-- name: Validate admin password
-  # Have to use a small python script, Ansible regex_search filter does not accept the
-  # keystone regex pattern.
-  vars:
-    script_content: |
-      import re
-      prx = "{{ password_regex }}"
-      prx = prx.strip('"')
-      if not re.match(prx, "{{ password }}"):
-        raise Exception()
-  shell: "{{ script_content }}"
-  args:
-    executable: /usr/bin/python
-  failed_when: false
-  register: password_validation_result
+  - name: Validate admin password
+    # Have to use a small python script, Ansible regex_search filter does not accept the
+    # keystone regex pattern.
+    vars:
+      script_content: |
+        import re
+        prx = "{{ password_regex }}"
+        prx = prx.strip('"')
+        if not re.match(prx, "{{ password }}"):
+          raise Exception()
+    shell: "{{ script_content }}"
+    args:
+      executable: /usr/bin/python
+    failed_when: false
+    register: password_validation_result
 
-- name: Fail if provided admin password does not meet required complexity
-  fail:
-    msg: "{{ password_regex_desc }}"
-  when: password_validation_result.rc != 0
+  - name: Fail if provided admin password does not meet required complexity
+    fail:
+      msg: "{{ password_regex_desc }}"
+    when: password_validation_result.rc != 0
 
-- name: Store admin password
-  vars:
-    script_content: |
-      import keyring
-      import os
-      os.environ['XDG_DATA_HOME'] = '/tmp'
-      keyring.set_password("CGCS", "{{ username }}", "{{ password }}")
-      del os.environ['XDG_DATA_HOME']
-  shell: "{{ script_content }}"
-  args:
-    executable: /usr/bin/python
-  no_log: true
+  - name: Store admin password
+    vars:
+      script_content: |
+        import keyring
+        import os
+        os.environ['XDG_DATA_HOME'] = '/tmp'
+        keyring.set_password("CGCS", "{{ username }}", "{{ password }}")
+        del os.environ['XDG_DATA_HOME']
+    shell: "{{ script_content }}"
+    args:
+      executable: /usr/bin/python
+    no_log: true
+
+  when: mode == 'bootstrap'
+
+- block:
+  - name: Set temp keyring directory fact
+    set_fact:
+      temp_keyring_dir: /tmp/python_keyring
+
+  - name: Create temp keyring directory
+    file:
+      path: "{{ temp_keyring_dir }}"
+      state: directory
+      owner: root
+      group: root
+      mode: 0755
+
+  # To work around an ansible quirk that regex_replace filter
+  # is ignored when it is applied to variables in the command module
+  - name: Strip the leading '/' from keyring directory and assign it to a new variable
+    set_fact:
+      short_keyring_permdir: "{{ keyring_permdir | regex_replace('^\\/', '') }}/python_keyring"
+
+  - name: Prefetch the keyring from the tarball
+    command: >-
+      tar -C {{ temp_keyring_dir }} -xpf {{ staging_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+      {{ short_keyring_permdir }}
+    args:
+      warn: false
+
+  - name: Remove the unwanted directory
+    file:
+      path: "{{ temp_keyring_dir }}/python_keyring"
+      state: absent
+
+  when: mode == 'restore'

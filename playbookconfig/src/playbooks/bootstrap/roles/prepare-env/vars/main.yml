@@ -5,3 +5,4 @@ puppet_path: /opt/platform/puppet
 standard_root_disk_size: 500
 supported_release_versions:
   - "19.01"
+restore_in_progress_flag: /etc/platform/.restore_in_progress

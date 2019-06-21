@@ -1,0 +1,60 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   These tasks do the preparation specifically for the platform restore
+#
+- block:
+  - name: Create restore in progress flag file
+    file:
+      path: "{{ restore_in_progress_flag }}"
+      state: touch
+
+  # Put the backup tarball in /scratch
+  - name: Set staging dir fact
+    set_fact:
+      staging_dir: /scratch
+
+  - name: Transfer backup tarball to remote controller-0
+    copy:
+      src: "{{ host_backup_dir }}/{{ backup_filename }}"
+      dest: "{{ staging_dir }}"
+      owner: root
+      group: root
+      mode: 0644
+
+  # TODO(Wei): Need to do patching stuff here
+
+  - name: Set config path facts for restore
+    set_fact:
+      branding_permdir: "{{ config_permdir }}/branding"
+      ssh_config_permdir: "{{ config_permdir }}/ssh_config"
+      pxe_config_permdir: "{{ config_permdir }}/pxelinux.cfg"
+      armada_permdir: "{{ platform_path }}/armada/"
+      helm_overrides_permdir: "{{ platform_path + '/helm/' + software_version }}"
+
+  # To work around an ansible quirk that regex_replace filter
+  # is ignored when it is applied to variables in the command module
+  - name: Strip the leading slash in branding dirname and assign it to a new variable
+    set_fact:
+      short_branding_permdir: "{{ branding_permdir | regex_replace('^\\/', '') }}"
+
+  - name: Restore branding tar file
+    command: >-
+      tar -C /opt/branding -xpf {{ staging_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+      {{ short_branding_permdir }}
+    args:
+      warn: false
+
+  - name: Remove unwanted directory
+    file:
+      path: /opt/branding/branding
+      state: absent
+
+  # TODO (Wei): Need to backup /opt/banner if it exists and restore it
+  #             before banner optimization is done in persist-config.
+  become: yes
+  become_user: root
