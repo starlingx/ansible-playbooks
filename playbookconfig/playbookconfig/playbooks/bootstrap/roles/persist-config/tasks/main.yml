@@ -189,8 +189,8 @@
 - block:
   - name: Copy ssl_ca certificate
     copy:
-     src: "{{ ssl_ca_cert }}"
-     dest: "{{ temp_ssl_ca }}"
+      src: "{{ ssl_ca_cert }}"
+      dest: "{{ temp_ssl_ca }}"
 
   - name: Remove ssl_ca complete flag
     file:

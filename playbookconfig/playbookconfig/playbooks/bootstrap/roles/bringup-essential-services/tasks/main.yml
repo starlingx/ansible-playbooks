@@ -70,7 +70,9 @@
       timeout: "{{ pods_wait_time }}"
 
   - name: Start parallel tasks to wait for Kubernetes component, Networking and Tiller pods to reach ready state
-    command: kubectl --kubeconfig=/etc/kubernetes/admin.conf wait  --namespace=kube-system --for=condition=Ready pods --selector {{ item }} --timeout=30s
+    command: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf wait  --namespace=kube-system
+      --for=condition=Ready pods --selector {{ item }} --timeout=30s
     async: 30
     poll: 0
     with_items:

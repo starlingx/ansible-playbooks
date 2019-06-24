@@ -190,55 +190,110 @@
     set_fact:
       address_pairs:
         pxeboot:
-          start: "{{ pxeboot_start_address if pxeboot_start_address != 'derived' else default_pxeboot_start_address }}"
-          end: "{{ pxeboot_end_address if pxeboot_end_address != 'derived' else default_pxeboot_end_address }}"
+          start:
+            "{{ pxeboot_start_address if pxeboot_start_address != 'derived'
+            else default_pxeboot_start_address }}"
+          end:
+            "{{ pxeboot_end_address if pxeboot_end_address != 'derived'
+            else default_pxeboot_end_address }}"
           subnet: "{{ network_params.pxeboot_subnet }}"
-          use_default: "{{ true if pxeboot_start_address == 'derived' and pxeboot_end_address == 'derived' else false }}"
+          use_default:
+            "{{ true if pxeboot_start_address == 'derived' and
+            pxeboot_end_address == 'derived' else false }}"
         management:
-          start: "{{ management_start_address if management_start_address != 'derived' else default_management_start_address }}"
-          end: "{{ management_end_address if management_end_address != 'derived' else default_management_end_address }}"
+          start:
+            "{{ management_start_address if management_start_address != 'derived'
+            else default_management_start_address }}"
+          end:
+            "{{ management_end_address if management_end_address != 'derived'
+            else default_management_end_address }}"
           subnet: "{{ network_params.management_subnet }}"
-          use_default: "{{ true if management_start_address == 'derived' and management_end_address == 'derived' else false }}"
+          use_default:
+            "{{ true if management_start_address == 'derived' and
+            management_end_address == 'derived' else false }}"
         cluster_host:
-          start: "{{ cluster_host_start_address if cluster_host_start_address != 'derived' else default_cluster_host_start_address }}"
-          end: "{{ cluster_host_end_address if cluster_host_end_address != 'derived' else default_cluster_host_end_address}}"
+          start:
+            "{{ cluster_host_start_address if cluster_host_start_address != 'derived'
+            else default_cluster_host_start_address }}"
+          end:
+            "{{ cluster_host_end_address if cluster_host_end_address != 'derived'
+            else default_cluster_host_end_address}}"
           subnet: "{{ network_params.cluster_host_subnet }}"
-          use_default: "{{ true if cluster_host_start_address == 'derived' and cluster_host_end_address == 'derived' else false }}"
+          use_default:
+            "{{ true if cluster_host_start_address == 'derived' and
+            cluster_host_end_address == 'derived' else false }}"
         cluster_pod:
-          start: "{{ cluster_pod_start_address if cluster_pod_start_address != 'derived' else default_cluster_pod_start_address }}"
-          end: "{{ cluster_pod_end_address if cluster_pod_end_address != 'derived' else default_cluster_pod_end_address }}"
+          start:
+            "{{ cluster_pod_start_address if cluster_pod_start_address != 'derived'
+            else default_cluster_pod_start_address }}"
+          end:
+            "{{ cluster_pod_end_address if cluster_pod_end_address != 'derived'
+            else default_cluster_pod_end_address }}"
           subnet: "{{ network_params.cluster_pod_subnet }}"
-          use_default: "{{ true if cluster_pod_start_address == 'derived' and cluster_pod_end_address == 'derived' else false }}"
+          use_default:
+            "{{ true if cluster_pod_start_address == 'derived' and
+            cluster_pod_end_address == 'derived' else false }}"
         cluster_service:
-          start: "{{ cluster_service_start_address if cluster_service_start_address != 'derived' else default_cluster_service_start_address }}"
-          end: "{{ cluster_service_end_address if cluster_service_end_address != 'derived' else default_cluster_service_end_address }}"
+          start:
+            "{{ cluster_service_start_address if cluster_service_start_address != 'derived'
+            else default_cluster_service_start_address }}"
+          end:
+            "{{ cluster_service_end_address if cluster_service_end_address != 'derived'
+            else default_cluster_service_end_address }}"
           subnet: "{{ network_params.cluster_service_subnet }}"
-          use_default: "{{ true if cluster_service_start_address == 'derived' and cluster_service_end_address == 'derived' else false }}"
+          use_default:
+            "{{ true if cluster_service_start_address == 'derived' and
+            cluster_service_end_address == 'derived' else false }}"
         oam:
-          start: "{{ external_oam_start_address if external_oam_start_address != 'derived' else default_external_oam_start_address }}"
-          end: "{{ external_oam_end_address if external_oam_end_address != 'derived' else default_external_oam_end_address }}"
+          start:
+            "{{ external_oam_start_address if external_oam_start_address != 'derived'
+            else default_external_oam_start_address }}"
+          end:
+            "{{ external_oam_end_address if external_oam_end_address != 'derived'
+            else default_external_oam_end_address }}"
           subnet: "{{ network_params.external_oam_subnet }}"
-          use_default: "{{ true if external_oam_start_address == 'derived' and external_oam_end_address == 'derived' else false }}"
+          use_default:
+            "{{ true if external_oam_start_address == 'derived' and
+            external_oam_end_address == 'derived' else false }}"
         multicast:
-          start: "{{ management_multicast_start_address if management_multicast_start_address != 'derived' else default_management_multicast_start_address }}"
-          end: "{{ management_multicast_end_address if management_multicast_end_address != 'derived' else default_management_multicast_end_address }}"
+          start:
+            "{{ management_multicast_start_address if management_multicast_start_address != 'derived'
+            else default_management_multicast_start_address }}"
+          end:
+            "{{ management_multicast_end_address if management_multicast_end_address != 'derived'
+            else default_management_multicast_end_address }}"
           subnet: "{{ network_params.management_multicast_subnet }}"
-          use_default: "{{ true if management_multicast_start_address == 'derived' and management_multicast_end_address == 'derived' else false }}"
+          use_default:
+            "{{ true if management_multicast_start_address == 'derived' and
+            management_multicast_end_address == 'derived' else false }}"
         oam_node:
-          start: "{{ external_oam_node_0_address if external_oam_node_0_address != 'derived' else default_external_oam_node_0_address }}"
-          end: "{{ external_oam_node_1_address if external_oam_node_1_address != 'derived' else default_external_oam_node_1_address }}"
+          start:
+            "{{ external_oam_node_0_address if external_oam_node_0_address != 'derived'
+            else default_external_oam_node_0_address }}"
+          end:
+            "{{ external_oam_node_1_address if external_oam_node_1_address != 'derived'
+            else default_external_oam_node_1_address }}"
           subnet: "{{ network_params.external_oam_subnet }}"
-          use_default: "{{ true if external_oam_node_0_address == 'derived' and external_oam_node_1_address == 'derived' else false }}"
+          use_default:
+            "{{ true if external_oam_node_0_address == 'derived' and
+            external_oam_node_1_address == 'derived' else false }}"
 
   - include: validate_address_range.yml
     with_dict: "{{ address_pairs }}"
 
   - name: Set floating addresses based on subnets or start addresses
     set_fact:
-      # Not sure why ipaddr('address') and ipsubnet filter did not extract the IP from CIDR input. Resort to string split for now.
-      controller_floating_address: "{{ (management_subnet | ipaddr(2)).split('/')[0] if management_start_address == 'derived' else management_start_address }}"
-      controller_pxeboot_floating_address: "{{ (pxeboot_subnet | ipaddr(2)).split('/')[0] if pxeboot_start_address == 'derived' else  pxeboot_start_address }}"
-      cluster_floating_address: "{{ (cluster_host_subnet | ipaddr(2)).split('/')[0] if cluster_host_start_address == 'derived' else cluster_host_start_address }}"
+      # Not sure why ipaddr('address') and ipsubnet filter did not extract
+      # the IP from CIDR input. Resort to string split for now.
+      controller_floating_address:
+        "{{ (management_subnet | ipaddr(2)).split('/')[0] if management_start_address == 'derived'
+        else management_start_address }}"
+      controller_pxeboot_floating_address:
+        "{{ (pxeboot_subnet | ipaddr(2)).split('/')[0] if pxeboot_start_address == 'derived'
+        else  pxeboot_start_address }}"
+      cluster_floating_address:
+        "{{ (cluster_host_subnet | ipaddr(2)).split('/')[0] if cluster_host_start_address == 'derived'
+        else cluster_host_start_address }}"
 
   - name: Set derived facts for subsequent tasks/roles
     set_fact:
@@ -280,10 +335,18 @@
 - block:
   - set_fact:
       use_default_registries: true
-      k8s_registry: "{{ docker_registries[default_k8s_registry] if docker_registries[default_k8s_registry] is not none else default_k8s_registry }}"
-      gcr_registry: "{{ docker_registries[default_gcr_registry] if docker_registries[default_gcr_registry] is not none else default_gcr_registry }}"
-      quay_registry: "{{ docker_registries[default_quay_registry] if docker_registries[default_quay_registry] is not none else default_quay_registry }}"
-      docker_registry: "{{ docker_registries[default_docker_registry] if docker_registries[default_docker_registry] is not none else default_docker_registry }}"
+      k8s_registry:
+        "{{ docker_registries[default_k8s_registry] if docker_registries[default_k8s_registry] is not none
+        else default_k8s_registry }}"
+      gcr_registry:
+        "{{ docker_registries[default_gcr_registry] if docker_registries[default_gcr_registry] is not none
+        else default_gcr_registry }}"
+      quay_registry:
+        "{{ docker_registries[default_quay_registry] if docker_registries[default_quay_registry] is not none
+        else default_quay_registry }}"
+      docker_registry:
+        "{{ docker_registries[default_docker_registry] if docker_registries[default_docker_registry] is not none
+        else default_docker_registry }}"
       default_no_proxy:
         - localhost
         - 127.0.0.1
@@ -331,13 +394,13 @@
 
     - name: Default the unified registry to secure if not specified
       set_fact:
-        is_secure_registry: True
+        is_secure_registry: true
       when: is_secure_registry is not defined
 
     - name: Turn on use_unified_registry flag
       set_fact:
         use_unified_registry: true
-        k8s_registry: "{{ docker_registries['unified'] }}" 
+        k8s_registry: "{{ docker_registries['unified'] }}"
         gcr_registry: "{{ docker_registries['unified'] }}"
         quay_registry: "{{ docker_registries['unified'] }}"
         docker_registry: "{{ docker_registries['unified'] }}"

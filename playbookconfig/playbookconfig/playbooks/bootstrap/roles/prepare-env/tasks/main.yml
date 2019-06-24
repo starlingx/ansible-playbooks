@@ -266,7 +266,7 @@
       failed_when: false
       register: host_check
 
-    - block: # system has been configured
+    - block:  # system has been configured
       - name: Set flag to indicate that this host has been previously configured
         set_fact:
           reconfigured: true
@@ -396,7 +396,7 @@
 
         when: last_config_file.stat.exists
       when: host_check.rc == 0
-    when: replayed # bootstrap manifest has been applied
+    when: replayed  # bootstrap manifest has been applied
 
   - name: Check volume groups
     command: vgdisplay cgts-vg

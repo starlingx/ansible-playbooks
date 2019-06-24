@@ -70,8 +70,8 @@ management_multicast_subnet: 239.1.1.0/28
 # mangement_multicast_start_address:
 # management_multicast_end_address:
 
-# Management network address allocation (True = dynamic, False = static)
-dynamic_address_allocation: True
+# Management network address allocation (true = dynamic, false = static)
+dynamic_address_allocation: true
 
 # DOCKER PROXIES
 # ==============
@@ -128,7 +128,7 @@ docker_registries:
   docker.io:
   # unified: example.domain
 
-#is_secure_registry: True
+# is_secure_registry: True
 
 # Certificates
 # =================
@@ -144,7 +144,7 @@ docker_registries:
 # The supported certificates are:
 #   - ssl_ca_cert
 #
-#ssl_ca_cert: /path/to/ssl_ca_cert_file
+# ssl_ca_cert: /path/to/ssl_ca_cert_file
 
 # ADMIN CREDENTIALS
 # =================

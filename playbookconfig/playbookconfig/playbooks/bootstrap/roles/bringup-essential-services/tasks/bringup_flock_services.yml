@@ -48,6 +48,6 @@
   - name: Restart Maintenance Client
     command: /etc/init.d/mtcClient restart
 
-  environment: # block environment
+  environment:  # block environment
     OCF_ROOT: "/usr/lib/ocf"
     OCF_RESKEY_state: "active"

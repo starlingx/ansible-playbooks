@@ -40,7 +40,7 @@
     recurse: yes
     owner: www
     group: root
-    #mode: 1700
+    # mode: 1700
 
 - name: Ensure /www/var exists
   file:

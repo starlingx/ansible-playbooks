@@ -1,0 +1,12 @@
+extends: default
+
+rules:
+  braces:
+    min-spaces-inside: 1
+    max-spaces-inside: 1
+  indentation:
+    indent-sequences: whatever
+  line-length:
+    max: 125
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no']

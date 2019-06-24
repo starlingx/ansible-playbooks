@@ -9,7 +9,7 @@
 #   against loopback interface upon network/docker config changes.
 #
 
-- block: # Shut down essential flock services
+- block:  # Shut down essential flock services
   - name: Shutdown Maintenance services
     command: /usr/lib/ocf/resource.d/platform/mtcAgent stop
 
@@ -24,7 +24,7 @@
     OCF_RESKEY_state: "active"
 
 
-- block: # Revert changes done by kubeadm init, clear data cache
+- block:  # Revert changes done by kubeadm init, clear data cache
   - name: Shut down and remove Kubernetes components
     command: kubeadm reset -f
 
@@ -43,10 +43,16 @@
   - name: Set facts derived from previous network configurations
     set_fact:
       prev_management_subnet_prefix: "{{ prev_management_subnet | ipaddr('prefix') }}"
-      prev_controller_floating_address: "{{ (prev_management_subnet | ipaddr(2)).split('/')[0] if prev_management_start_address == 'derived' else prev_management_start_address }}"
-      prev_cluster_floating_address: "{{ (prev_cluster_host_subnet | ipaddr(2)).split('/')[0] if prev_cluster_host_start_address == 'derived' else prev_cluster_host_start_address }}"
+      prev_controller_floating_address:
+        "{{ (prev_management_subnet | ipaddr(2)).split('/')[0]
+        if prev_management_start_address == 'derived' else prev_management_start_address }}"
+      prev_cluster_floating_address:
+        "{{ (prev_cluster_host_subnet | ipaddr(2)).split('/')[0]
+        if prev_cluster_host_start_address == 'derived' else prev_cluster_host_start_address }}"
       prev_cluster_subnet_prefix: "{{ prev_cluster_host_subnet | ipaddr('prefix') }}"
-      prev_controller_pxeboot_floating_address: "{{ (prev_pxeboot_subnet | ipaddr(2)).split('/')[0] if prev_pxeboot_start_address == 'derived' else prev_pxeboot_start_address }}"
+      prev_controller_pxeboot_floating_address:
+        "{{ (prev_pxeboot_subnet | ipaddr(2)).split('/')[0]
+        if prev_pxeboot_start_address == 'derived' else prev_pxeboot_start_address }}"
       prev_pxe_subnet_prefix: "{{ prev_pxeboot_subnet | ipaddr('prefix') }}"
 
   - name: Set facts derived from previous floating addresses

@@ -1,3 +1,9 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 - name: 'Fail if cgts-vg group is not found'
   fail: msg='Volume groups not configured.'
   when: vg_result.rc != 0

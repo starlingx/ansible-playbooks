@@ -30,8 +30,8 @@
     paths: "{{ images_dir }}"
     patterns: "*.tar"
   register: archive_find_output
-  #run_once: true
-  #delegate_to: localhost
+  # run_once: true
+  # delegate_to: localhost
 
 - name: Load system images
   # Due to docker_image module deficiency, resort to shell

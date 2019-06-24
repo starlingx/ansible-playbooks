@@ -61,7 +61,7 @@
 
 - name: Set password regex description fact
   set_fact:
-     password_regex_desc: "ADMIN_PASSWORD: Password does not meet complexity criteria."
+    password_regex_desc: "ADMIN_PASSWORD: Password does not meet complexity criteria."
   when: description_result.stdout == ""
 
 - name: Validate admin password
