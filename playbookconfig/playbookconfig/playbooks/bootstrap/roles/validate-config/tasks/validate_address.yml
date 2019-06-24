@@ -11,21 +11,17 @@
 - name: Check if the supplied address is a valid domain name or ip address
   vars:
     script_content: |
-      # Use this utility to be consistent with the current config_controller
-      # though the underlying regex used is not flexible.
-      from controllerconfig.utils import is_valid_domain_or_ip
+      # Make use of sysinv Address Validator
+      from sysinv.common.utils import is_valid_domain_or_ip
       if not is_valid_domain_or_ip( "{{ input_address }}" ):
-        raise Exception("Invalid domain name!")
+        raise Exception("Invalid address format!")
   shell: "{{ script_content }}"
   args:
     executable: /usr/bin/python
   failed_when: false
   register: domain_name_ip_check
 
-# Do the final catch-all check using Ansible ipaddr filter to pick up
-# addresses with CIDR notation and whatever future valid formats will be.
 - name: Fail if the supplied address is not a valid domain name or ip address
   fail:
-    msg: "{{ input_address }} is an invalid address!."
-  when: (domain_name_ip_check.rc != 0) and
-        (input_address | ipaddr == false)
+    msg: "{{ input_address }} is an invalid address."
+  when: domain_name_ip_check.rc != 0
