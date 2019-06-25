@@ -8,13 +8,13 @@ License: Apache-2.0
 URL: unknown
 Source0: %{name}-%{version}.tar.gz
 
+Requires: ansible
 Requires: python
 Requires: python-netaddr
-Requires: sshpass
 Requires: python2-ptyprocess
 Requires: python2-pexpect
-Requires: python2-django
-Requires: ansible
+Requires: sshpass
+Requires: sysinv
 
 %description
 This package contains playbooks used for configuring StarlingX.
