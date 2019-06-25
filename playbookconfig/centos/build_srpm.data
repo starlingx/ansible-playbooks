@@ -1,2 +1,2 @@
-SRC_DIR="playbookconfig"
-TIS_PATCH_VER=3
+SRC_DIR="src"
+TIS_PATCH_VER=4
