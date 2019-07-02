@@ -33,8 +33,8 @@
     - { role: validate-config, when: not skip_play, become: yes }
     - { role: store-passwd, when: not skip_play and save_password, become: yes }
     - { role: apply-bootstrap-manifest, when: not skip_play and not replayed, become: yes }
-    - { role: persist-config, when: not skip_play and save_config, become: yes }
-    - { role: bringup-essential-services, when: not skip_play and save_config, become: yes }
+    - { role: persist-config, when: not skip_play, become: yes }
+    - { role: bringup-essential-services, when: not skip_play, become: yes }
 
   vars:
     change_password: false

@@ -11,13 +11,20 @@
 
 # Keyring config
 - block:
-  - name: Delete the previous python_keyring directory if exists
-    file:
-      path: "{{ keyring_permdir + '/' + keyring_workdir | basename }}"
-      state: absent
+  - name: Check if keyring data has been persisted
+    stat:
+      path: "{{ keyring_workdir }}"
+    register: tmp_keyring
 
-  - name: Persist keyring data
-    command: "mv {{ keyring_workdir }} {{ keyring_permdir }}"
+  - block:
+    - name: Delete the previous python_keyring directory if exists
+      file:
+        path: "{{ keyring_permdir + '/' + keyring_workdir | basename }}"
+        state: absent
+
+    - name: Persist keyring data
+      command: "mv {{ keyring_workdir }} {{ keyring_permdir }}"
+    when: tmp_keyring.stat.exists
   when: save_password
 
 - name: Ensure replicated config parent directory exists
@@ -35,143 +42,92 @@
     file_type: any
   register: config_find
 
-- name: Remove existing config files from permanent location
-  file:
-    path: "{{ config_permdir }}/{{ item.path | basename}}"
-    state: absent
-  with_items: "{{ config_find.files }}"
+- block:
+  - name: Remove existing config files from permanent location
+    file:
+      path: "{{ config_permdir }}/{{ item.path | basename}}"
+      state: absent
+    with_items: "{{ config_find.files }}"
 
-- name: Move new config files to permanent location
-  # Can't use command module due to wildcard
-  shell: mv {{ config_workdir }}/* {{ config_permdir }}
+  - name: Move new config files to permanent location
+    # Can't use command module due to wildcard
+    shell: mv {{ config_workdir }}/* {{ config_permdir }}
 
-- name: Delete working config directory
-  file:
-    path: "{{ config_workdir }}"
-    state: absent
+  - name: Delete working config directory
+    file:
+      path: "{{ config_workdir }}"
+      state: absent
+  when: config_find.matched != 0
 
 # Postgres, PXE, Branding, Grub config tasks and filesystem resizing are
-# moved to a separate file as they don't need to be executed again on replay.
+# moved to a separate file as they don't need to be executed again once the
+# controller-0 host has been created.
 - include: one_time_config_tasks.yml
-  when: not reconfigured
+  when: not initial_db_populated
 
+# Shut down services if there are services impacting config changes in
+# this replay or previous bootstrap did not complete for whatever reason.
+- name: Shuting down services for reconfiguration as required
+  include: shutdown_services.yml
+  when: restart_services
+
+- include: update_sysinv_database.yml
+  when: save_config_to_db
+
+
+# Update docker config file and restart docker if docker proxy is
+# configured
 - block:
-  - name: Set input parameters to populate config script
-    set_fact:
-      script_input: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
-
-  - name: Update input parameters with reconfigure system flag
-    set_fact:
-      script_input: "{{ script_input + ' --system' }}"
-    when: system_config_update
-
-  - name: Update input parameters with reconfigure network flag
-    set_fact:
-      script_input: "{{ script_input + ' --network' }}"
-    when: network_config_update
-
-  - name: Update input parameters with reconfigure service flag
-    set_fact:
-      script_input: "{{ script_input + ' --service' }}"
-    when: docker_config_update
-
-  - name: Update input parameters if config from previous play is missing
-    set_fact:
-      script_input: "{{ script_input + ' --system --network --service' }}"
-    when: reconfigured and not last_config_file.stat.exists
-
-  - debug: var=script_input
-
-  - name: Remove the endpoint reconfig flag before reconfiguring the service endpoints
+  - name: Ensure docker config directory exists
     file:
-      path: /etc/platform/.service_endpoint_reconfigured
-      state: absent
-    when: reconfigure_endpoints
+      path: /etc/systemd/system/docker.service.d
+      state: directory
+      owner: root
+      group: root
+      mode: 0755
 
-  - name: Shuting down services for reconfiguration
-    include: shutdown_services.yml
-    when: restart_services
+  - name: Ensure docker proxy config exists
+    copy:
+      content: ""
+      dest: "{{ docker_proxy_conf }}"
+      force: no
+      owner: root
+      group: root
+      mode: 0644
+      remote_src: yes
 
-  - name: Saving config in sysinv database
-    script: populate_initial_config.py {{ script_input }}
-    register: populate_result
-    failed_when: false
+  - name: Write header to docker proxy conf file
+    lineinfile:
+      path: "{{ docker_proxy_conf }}"
+      line: "[Service]"
 
-  - debug: var=populate_result
+  - name: Add http proxy URL to docker proxy conf file
+    lineinfile:
+      path: "{{ docker_proxy_conf }}"
+      line: "Environment='HTTP_PROXY={{ docker_http_proxy }}'"
+    when: docker_http_proxy != 'undef'
 
-  - name: Fail if populate config script throws an exception
-    fail:
-      msg: "Failed to provision initial system configuration."
-    when: populate_result.rc != 0
+  - name: Add https proxy URL to docker proxy conf file
+    lineinfile:
+      path: "{{ docker_proxy_conf }}"
+      line: "Environment='HTTPS_PROXY={{ docker_https_proxy }}'"
+    when: docker_https_proxy != 'undef'
 
-  - block:
-    - name: Add management floating address if this is the initial play
-      command: ip addr add {{ mgmt_floating_virtual }} dev lo scope host
-      when: not replayed
+  - name: Add no proxy address list to docker proxy config file
+    lineinfile:
+      path: "{{ docker_proxy_conf }}"
+      line: "Environment='NO_PROXY={{ docker_no_proxy_combined | join(',') }}'"
 
-    # If this is initial play or replay with management and/or oam network config change, must
-    # wait for the keystone endpoint runtime manifest to complete and restart
-    # sysinv agent and api.
-    - name: Wait for service endpoints reconfiguration to complete
-      wait_for:
-        path: /etc/platform/.service_endpoint_reconfigured
-        state: present
-        timeout: 360
-        msg: Timeout waiting for service endpoints reconfiguration to complete
+  - name: Restart Docker
+    systemd:
+      state: restarted
+      daemon_reload: yes
+      name: docker
 
-    when: not replayed or reconfigure_endpoints
+  when: use_docker_proxy
 
-  - block:
-    - name: Ensure docker config directory exists
-      file:
-        path: /etc/systemd/system/docker.service.d
-        state: directory
-        owner: root
-        group: root
-        mode: 0755
 
-    - name: Ensure docker proxy config exists
-      copy:
-        content: ""
-        dest: "{{ docker_proxy_conf }}"
-        force: no
-        owner: root
-        group: root
-        mode: 0644
-        remote_src: yes
-
-    - name: Write header to docker proxy conf file
-      lineinfile:
-        path: "{{ docker_proxy_conf }}"
-        line: "[Service]"
-
-    - name: Add http proxy URL to docker proxy conf file
-      lineinfile:
-        path: "{{ docker_proxy_conf }}"
-        line: "Environment='HTTP_PROXY={{ docker_http_proxy }}'"
-      when: docker_http_proxy != 'undef'
-
-    - name: Add https proxy URL to docker proxy conf file
-      lineinfile:
-        path: "{{ docker_proxy_conf }}"
-        line: "Environment='HTTPS_PROXY={{ docker_https_proxy }}'"
-      when: docker_https_proxy != 'undef'
-
-    - name: Add no proxy address list to docker proxy config file
-      lineinfile:
-        path: "{{ docker_proxy_conf }}"
-        line: "Environment='NO_PROXY={{ docker_no_proxy_combined | join(',') }}'"
-
-    - name: Restart Docker
-      systemd:
-        state: restarted
-        daemon_reload: yes
-        name: docker
-
-    when: use_docker_proxy
-
-  when: save_config
-
+# Install certificate if SSL CA certifcate is configured
 - block:
   - name: Copy ssl_ca certificate
     copy:

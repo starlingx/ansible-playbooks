@@ -519,10 +519,12 @@
       - "USE_DEFAULT_REGISTRIES={{ use_default_registries }}"
       - "IS_SECURE_REGISTRY={{ is_secure_registry | default(True) }}"
       - "RECONFIGURE_ENDPOINTS={{ reconfigure_endpoints }}"
+      - "INITIAL_DB_POPULATED={{ initial_db_populated }}"
+      - "INCOMPLETE_BOOTSTRAP={{ incomplete_bootstrap }}"
 
   - name: Write simplex flag
     file:
       path: /etc/platform/simplex
       state: touch
 
-  when: save_config
+  when: save_config_to_db

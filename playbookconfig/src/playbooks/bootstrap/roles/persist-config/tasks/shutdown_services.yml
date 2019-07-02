@@ -33,13 +33,20 @@
     args:
       warn: false
 
-  - name: Restart etcd
-    systemd:
-      name: etcd
-      state: restarted
+  - block:
+    - name: Restart etcd
+      systemd:
+        name: etcd
+        state: restarted
 
-# Revert configuration to loopback interface
-- block:
+    rescue:
+      - name: Etcd failed to restart, try one more time
+        systemd:
+          name: etcd
+          state: restarted
+
+
+- block:  # Revert configuration to loopback interface
   - name: Set facts derived from previous network configurations
     set_fact:
       prev_management_subnet_prefix: "{{ prev_management_subnet | ipaddr('prefix') }}"
@@ -75,6 +82,8 @@
   # are reconfigured.
   - name: Remove loopback interface in sysinv db and associated addresses
     shell: "{{ item }}"
+    register: remove_addresses
+    failed_when: false
     with_items:
       - source /etc/platform/openrc; system host-if-delete controller-0 lo
       - "ip addr delete {{ prev_mgmt_nfs_2_virtual }} dev lo scope host"
@@ -84,11 +93,21 @@
       - "ip addr delete {{ prev_mgmt_virtual }} brd {{ management_broadcast }} dev lo:1 scope host"
       - "ip addr delete {{ prev_cluster_virtual }}  brd {{ cluster_broadcast }} dev lo:5 scope host"
 
+  - name: Fail if removing interface addresses failed for reason other than it has been done already
+    fail:
+      msg: "{{ item.item }} failed for reason: {{ item.stderr }}."
+    when: item.rc != 0 and not incomplete_bootstrap
+    with_items: "{{ remove_addresses.results }}"
+
+  when: last_config_file_exists
+
 - block:
   # Enable the new management floating address so that sysinv-api is reachable at this IP when
   # service endpoints have been reconfigured and sysinv-api restarted.
   - name: Add the new management address for service endpoints reconfiguration
     command: ip addr add {{ mgmt_floating_virtual }} dev lo scope host
+    register: add_mgmt_address
+    failed_when: add_mgmt_address.rc != 0 and not incomplete_bootstrap
     when: mgmt_floating_virtual != prev_mgmt_floating_virtual
 
   when: reconfigure_endpoints

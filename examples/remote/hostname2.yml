@@ -1,3 +1,4 @@
+---
 system_mode: duplex
 management_subnet: 192.168.204.0/24
 external_oam_floating_address: 172.16.0.144

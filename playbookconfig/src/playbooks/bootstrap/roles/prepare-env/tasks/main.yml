@@ -120,93 +120,6 @@
       - admin_password
       - override_files_dir
 
-  - name: Set initial address facts if not defined. They will be updated later
-    set_fact:
-      pxeboot_start_address: "{{ pxeboot_start_address | default('derived') }}"
-      pxeboot_end_address: "{{ pxeboot_end_address | default('derived') }}"
-      management_start_address: "{{ management_start_address | default('derived') }}"
-      management_end_address: "{{ management_end_address | default('derived') }}"
-      cluster_host_start_address: "{{ cluster_host_start_address | default('derived') }}"
-      cluster_host_end_address: "{{ cluster_host_end_address | default('derived') }}"
-      cluster_pod_start_address: "{{ cluster_pod_start_address | default('derived') }}"
-      cluster_pod_end_address: "{{ cluster_pod_end_address | default('derived') }}"
-      cluster_service_start_address: "{{ cluster_service_start_address | default('derived') }}"
-      cluster_service_end_address: "{{ cluster_service_end_address | default('derived') }}"
-      external_oam_start_address: "{{ external_oam_start_address | default('derived') }}"
-      external_oam_end_address: "{{ external_oam_end_address | default('derived') }}"
-      management_multicast_start_address: "{{ management_multicast_start_address | default('derived') }}"
-      management_multicast_end_address: "{{ management_multicast_end_address | default('derived') }}"
-      external_oam_node_0_address: "{{ external_oam_node_0_address | default('derived') }}"
-      external_oam_node_1_address: "{{ external_oam_node_1_address | default('derived') }}"
-
-  - name: Set default registries dictionary
-    set_fact:
-      default_docker_registries:
-        k8s.gcr.io: k8s.gcr.io
-        gcr.io: gcr.io
-        quay.io: quay.io
-        docker.io: docker.io
-
-  - name: Merge user and default registries dictionaries
-    set_fact:
-      docker_registries: "{{ default_docker_registries | combine(docker_registries) }}"
-
-  - name: Initialize some flags to be used in subsequent roles/tasks
-    set_fact:
-      reconfigured: false
-      system_config_update: false
-      network_config_update: false
-      docker_config_update: false
-      save_password: true
-      save_config: true
-      use_docker_proxy: false
-      use_unified_registry: false
-      restart_services: false
-      reconfigure_endpoints: false
-
-  - name: Set initial facts
-    set_fact:
-      system_params:
-        'system_mode': "{{ system_mode }}"
-        'timezone': "{{ timezone }}"
-      root_disk_size: "{{ standard_root_disk_size }}"
-      root_disk_idx: 0
-      localhost_name_ip_mapping: "127.0.0.1\tlocalhost\tlocalhost.localdomain localhost4 localhost4.localdomain4"
-      network_params:
-        'pxeboot_subnet': "{{ pxeboot_subnet }}"
-        'management_subnet': "{{ management_subnet }}"
-        'cluster_host_subnet': "{{ cluster_host_subnet }}"
-        'cluster_pod_subnet': "{{ cluster_pod_subnet }}"
-        'cluster_service_subnet': "{{ cluster_service_subnet }}"
-        'external_oam_subnet': "{{ external_oam_subnet }}"
-        'external_oam_gateway_address': "{{ external_oam_gateway_address }}"
-        'external_oam_floating_address': "{{ external_oam_floating_address }}"
-        'management_multicast_subnet': "{{ management_multicast_subnet }}"
-      # Set this placeholder here to workaround an Ansible quirk
-      derived_network_params:
-        place_holder: place_holder
-      ansible_remote_tmp: "{{ ansible_remote_tmp | default('/tmp/.ansible-${USER}/tmp') }}"
-      pods_wait_time: "{{ pods_wait_time | default(120) }}"
-
-  - name: Turn on use_docker_proxy flag
-    set_fact:
-      use_docker_proxy: true
-    when: (docker_http_proxy is defined and docker_http_proxy is not none) or
-          (docker_https_proxy is defined and docker_https_proxy is not none)
-
-  - name: Set default values for platform registries
-    set_fact:
-      default_k8s_registry: k8s.gcr.io
-      default_gcr_registry: gcr.io
-      default_quay_registry: quay.io
-      default_docker_registry: docker.io
-
-  - name: Set default values for docker proxies if not defined
-    set_fact:
-      docker_http_proxy: "{{ docker_http_proxy | default('undef') }}"
-      docker_https_proxy: "{{ docker_https_proxy | default('undef') }}"
-      docker_no_proxy: "{{ docker_no_proxy | default([]) }}"
-
   - name: Retrieve software version number
     # lookup module does not work with /etc/build.info as it does not have ini
     # format. Resort to shell source.
@@ -243,6 +156,99 @@
       config_permdir: "{{ platform_path + '/config/' + software_version }}"
       puppet_permdir: "{{ platform_path + '/puppet/' + software_version }}"
 
+  - name: Set initial address facts if not defined. They will be updated later
+    set_fact:
+      pxeboot_start_address: "{{ pxeboot_start_address | default('derived') }}"
+      pxeboot_end_address: "{{ pxeboot_end_address | default('derived') }}"
+      management_start_address: "{{ management_start_address | default('derived') }}"
+      management_end_address: "{{ management_end_address | default('derived') }}"
+      cluster_host_start_address: "{{ cluster_host_start_address | default('derived') }}"
+      cluster_host_end_address: "{{ cluster_host_end_address | default('derived') }}"
+      cluster_pod_start_address: "{{ cluster_pod_start_address | default('derived') }}"
+      cluster_pod_end_address: "{{ cluster_pod_end_address | default('derived') }}"
+      cluster_service_start_address: "{{ cluster_service_start_address | default('derived') }}"
+      cluster_service_end_address: "{{ cluster_service_end_address | default('derived') }}"
+      external_oam_start_address: "{{ external_oam_start_address | default('derived') }}"
+      external_oam_end_address: "{{ external_oam_end_address | default('derived') }}"
+      management_multicast_start_address: "{{ management_multicast_start_address | default('derived') }}"
+      management_multicast_end_address: "{{ management_multicast_end_address | default('derived') }}"
+      external_oam_node_0_address: "{{ external_oam_node_0_address | default('derived') }}"
+      external_oam_node_1_address: "{{ external_oam_node_1_address | default('derived') }}"
+
+  - name: Set default registries dictionary
+    set_fact:
+      default_docker_registries:
+        k8s.gcr.io: k8s.gcr.io
+        gcr.io: gcr.io
+        quay.io: quay.io
+        docker.io: docker.io
+
+  - name: Merge user and default registries dictionaries
+    set_fact:
+      docker_registries: "{{ default_docker_registries | combine(docker_registries) }}"
+
+  - name: Initialize some flags to be used in subsequent roles/tasks
+    set_fact:
+      system_config_update: false
+      network_config_update: false
+      docker_config_update: false
+      save_password: true
+      save_config_to_db: true
+      use_docker_proxy: false
+      use_unified_registry: false
+      restart_services: false
+      reconfigure_endpoints: false
+
+      # Replay related flags
+      last_config_file_exists: false
+      incomplete_bootstrap: false
+      initial_db_populated: false
+
+  - name: Set initial facts
+    set_fact:
+      system_params:
+        'system_mode': "{{ system_mode }}"
+        'timezone': "{{ timezone }}"
+      root_disk_size: "{{ standard_root_disk_size }}"
+      root_disk_idx: 0
+      localhost_name_ip_mapping: "127.0.0.1\tlocalhost\tlocalhost.localdomain localhost4 localhost4.localdomain4"
+      network_params:
+        'pxeboot_subnet': "{{ pxeboot_subnet }}"
+        'management_subnet': "{{ management_subnet }}"
+        'cluster_host_subnet': "{{ cluster_host_subnet }}"
+        'cluster_pod_subnet': "{{ cluster_pod_subnet }}"
+        'cluster_service_subnet': "{{ cluster_service_subnet }}"
+        'external_oam_subnet': "{{ external_oam_subnet }}"
+        'external_oam_gateway_address': "{{ external_oam_gateway_address }}"
+        'external_oam_floating_address': "{{ external_oam_floating_address }}"
+        'management_multicast_subnet': "{{ management_multicast_subnet }}"
+      # Set this placeholder here to workaround an Ansible quirk
+      derived_network_params:
+        place_holder: place_holder
+      ansible_remote_tmp: "{{ ansible_remote_tmp | default('/tmp/.ansible-${USER}/tmp') }}"
+      pods_wait_time: "{{ pods_wait_time | default(120) }}"
+      bootstrap_completed_flag: "{{ config_permdir }}/.bootstrap_completed"
+      initial_db_populated_flag: "{{ config_permdir }}/.initial_db_population_completed"
+
+  - name: Turn on use_docker_proxy flag
+    set_fact:
+      use_docker_proxy: true
+    when: (docker_http_proxy is defined and docker_http_proxy is not none) or
+          (docker_https_proxy is defined and docker_https_proxy is not none)
+
+  - name: Set default values for platform registries
+    set_fact:
+      default_k8s_registry: k8s.gcr.io
+      default_gcr_registry: gcr.io
+      default_quay_registry: quay.io
+      default_docker_registry: docker.io
+
+  - name: Set default values for docker proxies if not defined
+    set_fact:
+      docker_http_proxy: "{{ docker_http_proxy | default('undef') }}"
+      docker_https_proxy: "{{ docker_https_proxy | default('undef') }}"
+      docker_no_proxy: "{{ docker_no_proxy | default([]) }}"
+
   # Give the bootstrap config output file on the host a generic name so the
   # same file is referenced if the host is bootstrapped locally and remotely
   # in whatever order.
@@ -265,29 +271,61 @@
       replayed: true
     when: openrc_file.stat.exists and docker.rc == 0
 
-  - block:
-    - name: Check if the controller-0 host has been successfully provisioned
-      shell: source /etc/platform/openrc; system host-list|grep controller-0
-      failed_when: false
-      register: host_check
+  - block:  # executed if it is a replay
+    - name: Check the overall status of the previous play
+      stat:
+        path: "{{ bootstrap_completed_flag }}"
+      register: bootstrap_completed
 
-    - block:  # system has been configured
-      - name: Set flag to indicate that this host has been previously configured
+    - block:  # executed when previous play did not complete
+      - name: Turn on incomplete_bootstrap flag if the previous play did not complete
         set_fact:
-          reconfigured: true
+          incomplete_bootstrap: true
+          restart_services: true
 
+      - name: Check the initial database population status
+        stat:
+          path: "{{ initial_db_populated_flag }}"
+        register: initial_db_population_completed
+
+      - name: Turn on initial_db_populated and restart_services flags if initial db population did complete
+        set_fact:
+          initial_db_populated: true
+        when: initial_db_population_completed.stat.exists
+
+      when: not bootstrap_completed.stat.exists
+
+    - block:  # executed when previous play completed
+      - name: Remove bootstrap_completed flag for the current play if the previous play succeeded
+        file:
+          path: "{{ bootstrap_completed_flag }}"
+          state: absent
+        become: yes
+
+      - name: Turn on initial_db_populated flag
+        set_fact:
+          initial_db_populated: true
+      when: not incomplete_bootstrap
+
+    # The previous play failed but the one before that did. Execute the following
+    # block if initial db population completed.
+    - block:
       - name: Find previous config file for this host
         stat:
           path: "{{ last_bootstrap_config_file }}"
         register: last_config_file
 
-      - block:
+      - block:  # exexcuted if the last config file exists
+        - name: Turn on last_config_file_exists flag
+          set_fact:
+            last_config_file_exists: true
+
         - name: Set last config file to import (local)
           set_fact:
             last_config: "{{ last_bootstrap_config_file }}"
           when: inventory_hostname == 'localhost'
 
-        # Currently Ansible include_vars only works with local file
+        # Currently Ansible include_vars only works with local file.
         - block:
           # Give a host specific name in case the playbook is used to bootstrap
           # multiple remote hosts simultaneously
@@ -313,6 +351,11 @@
                 (prev_timezone != timezone) or
                 (prev_dns_servers.split(',') | sort != dns_servers | sort)
 
+        - name: Convert previous docker no proxy config value for comparison
+          set_fact:
+            prev_docker_no_proxy:
+              "{{ (prev_docker_no_proxy.split(',') | sort) if prev_docker_no_proxy else [] }}"
+
         - name: Turn on docker reconfiguration flag if docker config is changed
           set_fact:
             docker_config_update: true
@@ -320,7 +363,7 @@
                 ((use_docker_proxy) and
                  (prev_docker_http_proxy != docker_http_proxy or
                   prev_docker_https_proxy != docker_https_proxy or
-                  prev_docker_no_proxy != docker_no_proxy))
+                  prev_docker_no_proxy != docker_no_proxy | sort))
 
         - name: Turn on service endpoints reconfiguration flag if management and/or oam network config is changed
           set_fact:
@@ -370,37 +413,22 @@
         - name: Turn off save_password flag if admin password has not changed
           set_fact:
             save_password: false
-            username: "{{ prev_admin_username }}"
-            password: "{{ prev_admin_password }}"
           # TODO(tngo): there seems to be a puppet/sysinv limitation that prevents password
           # reconfiguration to work without an extra boot. Temporarily disable
           # it for replay for now.
-          when: prev_admin_password == admin_password|hash('sha1')
-                or replayed
+          when: replayed
 
-        # Re-evaluate condition to persist config data to sysinv database
-        - name: Turn off save_config flag if system, network, and docker configurations have not changed
+        # Re-evaluate the condition to persist config data to sysinv database
+        - name: Turn off save_config_to_db flag
           set_fact:
-            save_config: false
+            save_config_to_db: false
           when: not system_config_update and
                 not network_config_update and
-                not docker_config_update
-
-        - block:
-          - debug:
-              msg: "Configurations are unchanged. There's nothing to play!"
-
-          - name: Stop playing if this is the only target host
-            meta: end_play
-            when: play_hosts|length == 1
-
-          - name: Turn on skip_play flag
-            set_fact:
-              skip_play: true
-          when: not save_password and not save_config
+                not docker_config_update and
+                not incomplete_bootstrap
 
         when: last_config_file.stat.exists
-      when: host_check.rc == 0
+      when: initial_db_populated
     when: replayed  # bootstrap manifest has been applied
 
   - name: Check volume groups
@@ -483,7 +511,9 @@
         restart_services flag:  {{ restart_services }},
         endpoints_reconfiguration_flag: {{ reconfigure_endpoints }},
         save_password flag: {{ save_password }},
-        save_config flag: {{ save_config }},
-        skip_play flag: {{ skip_play }}
+        save_config_to_db flag: {{ save_config_to_db }},
+        skip_play flag: {{ skip_play }},
+        incomplete_bootstrap flag: {{ incomplete_bootstrap }},
+        initial_db_populated_flag: {{ initial_db_populated }}
 
   when: not skip_play

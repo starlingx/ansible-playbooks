@@ -50,11 +50,7 @@
     owner: postgres
     group: postgres
     remote_src: yes
-  # with_fileglob can only be used for local lookup
-  # with_fileglob:
-  #   - /etc/postgresql/*
-  with_items:
-    - "{{ postgres_result.files }}"
+  with_items: "{{ postgres_result.files }}"
 
 - name: Create a symlink to PXE config files
   file:
@@ -105,6 +101,8 @@
 
 - name: Resize filesystems (default)
   command: "{{ item }}"
+  register: resize_result
+  failed_when: false
   with_items:
     - lvextend -L20G /dev/cgts-vg/pgsql-lv
     - lvextend -L10G /dev/cgts-vg/cgcs-lv
@@ -115,13 +113,31 @@
     - resize2fs /dev/drbd3
     - resize2fs /dev/drbd8
 
-- name: Further resize if root disk size is larger than 240G
-  command: "{{ item }}"
-  with_items:
-    - lvextend -L40G /dev/cgts-vg/pgsql-lv
-    - lvextend -L20G /dev/cgts-vg/cgcs-lv
-    - lvextend -L50G /dev/cgts-vg/backup-lv
-    - drbdadm -- --assume-peer-has-space resize all
-    - resize2fs /dev/drbd0
-    - resize2fs /dev/drbd3
+- name: Fail if file system resizing failed for a reason other than it has been done already
+  fail:
+    msg: "{{ item.item }} failed for the following reason: {{ item.stderr }}."
+  when: item.rc !=0 and item.stderr is not search('matches existing size') and
+        item.stderr is not search('not larger than existing size')
+  with_items: "{{ resize_result.results }}"
+
+
+- block:
+  - name: Further resize if root disk size is larger than 240G
+    command: "{{ item }}"
+    register: resize_result
+    failed_when: false
+    with_items:
+      - lvextend -L40G /dev/cgts-vg/pgsql-lv
+      - lvextend -L20G /dev/cgts-vg/cgcs-lv
+      - lvextend -L50G /dev/cgts-vg/backup-lv
+      - drbdadm -- --assume-peer-has-space resize all
+      - resize2fs /dev/drbd0
+      - resize2fs /dev/drbd3
+
+  - name: Fail if additional resizing failed for a reason other than it has been done already
+    fail:
+      msg: "{{ item.item }} failed for the following reason: {{ item.stderr }}."
+    when: item.rc !=0 and item.stderr is not search('matches existing size') and
+          item.stderr is not search('Nothing to do!')
+    with_items: "{{ resize_result.results }}"
   when: root_disk_size|int > minimum_root_disk_size

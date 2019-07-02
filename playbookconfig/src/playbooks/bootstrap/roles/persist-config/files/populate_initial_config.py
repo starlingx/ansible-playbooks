@@ -38,7 +38,13 @@ RECONFIGURE_SYSTEM = False
 RECONFIGURE_NETWORK = False
 RECONFIGURE_SERVICE = False
 INITIAL_POPULATION = True
+INCOMPLETE_BOOTSTRAP = False
 CONF = ConfigParser()
+
+
+def touch(fname):
+    with open(fname, 'a'):
+        os.utime(fname, None)
 
 
 def wait_system_config(client):
@@ -59,6 +65,7 @@ def wait_system_config(client):
 def populate_system_config(client):
     if not INITIAL_POPULATION and not RECONFIGURE_SYSTEM:
         return
+
     # Wait for pre-populated system
     system = wait_system_config(client)
 
@@ -87,17 +94,78 @@ def populate_system_config(client):
         )
 
     patch = sysinv.dict_to_patch(values)
-    client.sysinv.isystem.update(system.uuid, patch)
+    try:
+        client.sysinv.isystem.update(system.uuid, patch)
+    except Exception as e:
+        if INCOMPLETE_BOOTSTRAP:
+            # The previous bootstrap might have been interrupted while
+            # it was in the middle of persisting the initial system
+            # config.
+            isystem = client.sysinv.isystem.list()[0]
+            print("System type is %s" % isystem.system_type)
+            if isystem.system_type != "None":
+                # System update in previous play went through
+                pass
+            else:
+                raise e
+        else:
+            raise e
+    print("System config completed.")
 
 
 def populate_load_config(client):
     if not INITIAL_POPULATION:
         return
+
     print("Populating load config...")
     patch = {'software_version': CONF.get('BOOTSTRAP_CONFIG', 'SW_VERSION'),
              'compatible_version': "N/A",
              'required_patches': "N/A"}
-    client.sysinv.load.create(**patch)
+    try:
+        client.sysinv.load.create(**patch)
+    except Exception as e:
+        if INCOMPLETE_BOOTSTRAP:
+            loads = client.sysinv.load.list()
+            if len(loads) > 0:
+                # Load config in previous play went through
+                pass
+            else:
+                raise e
+        else:
+            raise e
+    print("Load config completed.")
+
+
+def create_addrpool(client, addrpool_data, network_name):
+    try:
+        pool = client.sysinv.address_pool.create(**addrpool_data)
+        return pool
+    except Exception as e:
+        if INCOMPLETE_BOOTSTRAP:
+            # The previous bootstrap might have been interrupted while
+            # it was in the middle of persisting this network config data
+            # and the controller host has not been created.
+            pools = client.sysinv.address_pool.list()
+            if pools:
+                for pool in pools:
+                    if network_name in pool.name:
+                        return pool
+        raise e
+
+
+def create_network(client, network_data, network_name):
+    try:
+        client.sysinv.network.create(**network_data)
+    except Exception as e:
+        if INCOMPLETE_BOOTSTRAP:
+            # The previous bootstrap might have been interrupted while
+            # it was in the middle of persisting this network config data
+            # and the controller host has not been created.
+            networks = client.sysinv.network.list()
+            for network in networks:
+                if network.name == network_name:
+                    return
+        raise e
 
 
 def delete_network_and_addrpool(client, network_name):
@@ -113,7 +181,6 @@ def delete_network_and_addrpool(client, network_name):
         host = client.sysinv.ihost.get('controller-0')
         host_addresses = client.sysinv.address.list_by_host(host.uuid)
         for addr in host_addresses:
-            print("Deleting address %s" % addr.uuid)
             client.sysinv.address.delete(addr.uuid)
         client.sysinv.network.delete(network_uuid)
         client.sysinv.address_pool.delete(addrpool_uuid)
@@ -128,9 +195,10 @@ def populate_mgmt_network(client):
                            'MANAGEMENT_END_ADDRESS')
     dynamic_allocation = CONF.getboolean(
         'BOOTSTRAP_CONFIG', 'DYNAMIC_ADDRESS_ALLOCATION')
+    network_name = 'mgmt'
 
     if RECONFIGURE_NETWORK:
-        delete_network_and_addrpool(client, 'mgmt')
+        delete_network_and_addrpool(client, network_name)
         print("Updating management network...")
     else:
         print("Populating management network...")
@@ -142,7 +210,7 @@ def populate_mgmt_network(client):
         'prefix': management_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
-    pool = client.sysinv.address_pool.create(**values)
+    pool = create_addrpool(client, values, 'management')
 
     # create the network for the pool
     values = {
@@ -151,8 +219,7 @@ def populate_mgmt_network(client):
         'dynamic': dynamic_allocation,
         'pool_uuid': pool.uuid,
     }
-
-    client.sysinv.network.create(**values)
+    create_network(client, values, network_name)
 
 
 def populate_pxeboot_network(client):
@@ -161,9 +228,10 @@ def populate_pxeboot_network(client):
                              'PXEBOOT_START_ADDRESS')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'PXEBOOT_END_ADDRESS')
+    network_name = 'pxeboot'
 
     if RECONFIGURE_NETWORK:
-        delete_network_and_addrpool(client, 'pxeboot')
+        delete_network_and_addrpool(client, network_name)
         print("Updating pxeboot network...")
     else:
         print("Populating pxeboot network...")
@@ -175,7 +243,7 @@ def populate_pxeboot_network(client):
         'prefix': pxeboot_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
-    pool = client.sysinv.address_pool.create(**values)
+    pool = create_addrpool(client, values, network_name)
 
     # create the network for the pool
     values = {
@@ -184,11 +252,7 @@ def populate_pxeboot_network(client):
         'dynamic': True,
         'pool_uuid': pool.uuid,
     }
-    client.sysinv.network.create(**values)
-
-
-def populate_infra_network(client):
-    return
+    create_network(client, values, network_name)
 
 
 def populate_oam_network(client):
@@ -198,9 +262,10 @@ def populate_oam_network(client):
                              'EXTERNAL_OAM_START_ADDRESS')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'EXTERNAL_OAM_END_ADDRESS')
+    network_name = 'oam'
 
     if RECONFIGURE_NETWORK:
-        delete_network_and_addrpool(client, 'oam')
+        delete_network_and_addrpool(client, network_name)
         print("Updating oam network...")
     else:
         print("Populating oam network...")
@@ -227,7 +292,7 @@ def populate_oam_network(client):
         'gateway_address': CONF.get(
             'BOOTSTRAP_CONFIG', 'EXTERNAL_OAM_GATEWAY_ADDRESS'),
     })
-    pool = client.sysinv.address_pool.create(**values)
+    pool = create_addrpool(client, values, network_name)
 
     # create the network for the pool
     values = {
@@ -236,8 +301,7 @@ def populate_oam_network(client):
         'dynamic': False,
         'pool_uuid': pool.uuid,
     }
-
-    client.sysinv.network.create(**values)
+    create_network(client, values, network_name)
 
 
 def populate_multicast_network(client):
@@ -247,9 +311,10 @@ def populate_multicast_network(client):
                              'MANAGEMENT_MULTICAST_START_ADDRESS')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'MANAGEMENT_MULTICAST_END_ADDRESS')
+    network_name = 'multicast'
 
     if RECONFIGURE_NETWORK:
-        delete_network_and_addrpool(client, 'multicast')
+        delete_network_and_addrpool(client, network_name)
         print("Updating multicast network...")
     else:
         print("Populating multicast network...")
@@ -261,7 +326,7 @@ def populate_multicast_network(client):
         'prefix': management_multicast_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
-    pool = client.sysinv.address_pool.create(**values)
+    pool = create_addrpool(client, values, network_name)
 
     # create the network for the pool
     values = {
@@ -270,7 +335,7 @@ def populate_multicast_network(client):
         'dynamic': False,
         'pool_uuid': pool.uuid,
     }
-    client.sysinv.network.create(**values)
+    create_network(client, values, network_name)
 
 
 def populate_cluster_host_network(client):
@@ -280,9 +345,10 @@ def populate_cluster_host_network(client):
                              'CLUSTER_HOST_START_ADDRESS')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'CLUSTER_HOST_END_ADDRESS')
+    network_name = 'cluster-host'
 
     if RECONFIGURE_NETWORK:
-        delete_network_and_addrpool(client, 'cluster-host')
+        delete_network_and_addrpool(client, network_name)
         print("Updating cluster host network...")
     else:
         print("Populating cluster host network...")
@@ -294,7 +360,7 @@ def populate_cluster_host_network(client):
         'prefix': cluster_host_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
-    pool = client.sysinv.address_pool.create(**values)
+    pool = create_addrpool(client, values, network_name)
 
     # create the network for the pool
     values = {
@@ -303,7 +369,7 @@ def populate_cluster_host_network(client):
         'dynamic': True,
         'pool_uuid': pool.uuid,
     }
-    client.sysinv.network.create(**values)
+    create_network(client, values, network_name)
 
 
 def populate_cluster_pod_network(client):
@@ -313,9 +379,10 @@ def populate_cluster_pod_network(client):
                              'CLUSTER_POD_START_ADDRESS')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'CLUSTER_POD_END_ADDRESS')
+    network_name = 'cluster-pod'
 
     if RECONFIGURE_NETWORK:
-        delete_network_and_addrpool(client, 'cluster-pod')
+        delete_network_and_addrpool(client, network_name)
         print("Updating cluster pod network...")
     else:
         print("Populating cluster pod network...")
@@ -327,7 +394,7 @@ def populate_cluster_pod_network(client):
         'prefix': cluster_pod_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
-    pool = client.sysinv.address_pool.create(**values)
+    pool = create_addrpool(client, values, network_name)
 
     # create the network for the pool
     values = {
@@ -336,7 +403,7 @@ def populate_cluster_pod_network(client):
         'dynamic': False,
         'pool_uuid': pool.uuid,
     }
-    client.sysinv.network.create(**values)
+    create_network(client, values, network_name)
 
 
 def populate_cluster_service_network(client):
@@ -346,9 +413,10 @@ def populate_cluster_service_network(client):
                              'CLUSTER_SERVICE_START_ADDRESS')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'CLUSTER_SERVICE_END_ADDRESS')
+    network_name = 'cluster-service'
 
     if RECONFIGURE_NETWORK:
-        delete_network_and_addrpool(client, 'cluster-service')
+        delete_network_and_addrpool(client, network_name)
         print("Updating cluster service network...")
     else:
         print("Populating cluster service network...")
@@ -360,7 +428,7 @@ def populate_cluster_service_network(client):
         'prefix': cluster_service_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
-    pool = client.sysinv.address_pool.create(**values)
+    pool = create_addrpool(client, values, network_name)
 
     # create the network for the pool
     values = {
@@ -369,7 +437,7 @@ def populate_cluster_service_network(client):
         'dynamic': False,
         'pool_uuid': pool.uuid,
     }
-    client.sysinv.network.create(**values)
+    create_network(client, values, network_name)
 
 
 def populate_network_config(client):
@@ -377,7 +445,6 @@ def populate_network_config(client):
         return
     populate_mgmt_network(client)
     populate_pxeboot_network(client)
-    populate_infra_network(client)
     populate_oam_network(client)
     populate_multicast_network(client)
     populate_cluster_host_network(client)
@@ -390,11 +457,7 @@ def populate_dns_config(client):
     if not INITIAL_POPULATION and not RECONFIGURE_SYSTEM:
         return
 
-    if INITIAL_POPULATION:
-        print("Populating DNS config...")
-    else:
-        print("Updating DNS config...")
-
+    print("Populating/Updating DNS config...")
     nameservers = CONF.get('BOOTSTRAP_CONFIG', 'NAMESERVERS')
 
     dns_list = client.sysinv.idns.list()
@@ -405,20 +468,25 @@ def populate_dns_config(client):
     }
     patch = sysinv.dict_to_patch(values)
     client.sysinv.idns.update(dns_record.uuid, patch)
+    print("DNS config completed.")
 
 
 def populate_docker_config(client):
     if not INITIAL_POPULATION and not RECONFIGURE_SERVICE:
         return
 
-    if INITIAL_POPULATION:
-        print("Populating docker config...")
-    else:
-        print("Updating docker config...")
-
     http_proxy = CONF.get('BOOTSTRAP_CONFIG', 'DOCKER_HTTP_PROXY')
     https_proxy = CONF.get('BOOTSTRAP_CONFIG', 'DOCKER_HTTPS_PROXY')
     no_proxy = CONF.get('BOOTSTRAP_CONFIG', 'DOCKER_NO_PROXY')
+
+    # Get rid of the faulty docker proxy entries that might have
+    # been created in the previous failed run.
+    parameters = client.sysinv.service_parameter.list()
+    for parameter in parameters:
+        if (parameter.name == 'http_proxy' or
+                parameter.name == 'https_proxy' or
+                parameter.name == 'no_proxy'):
+            client.sysinv.service_parameter.delete(parameter.uuid)
 
     if http_proxy != 'undef' or https_proxy != 'undef':
         parameters = {}
@@ -435,27 +503,30 @@ def populate_docker_config(client):
             'resource': None,
             'parameters': parameters
         }
-        if RECONFIGURE_SERVICE:
-            parameters = client.sysinv.service_parameter.list()
-            for parameter in parameters:
-                if (parameter.name == 'http_proxy' or
-                        parameter.name == 'https_proxy' or
-                        parameter.name == 'no_proxy'):
-                    client.sysinv.service_parameter.delete(parameter.uuid)
+
+        print("Populating/Updating docker proxy config...")
         client.sysinv.service_parameter.create(**values)
         print("Docker proxy config completed.")
 
     use_default_registries = CONF.getboolean(
         'BOOTSTRAP_CONFIG', 'USE_DEFAULT_REGISTRIES')
 
+    # Get rid of any faulty docker registry entries that might have been
+    # created in the previous failed run.
+    parameters = client.sysinv.service_parameter.list()
+    for parameter in parameters:
+        if (parameter.name == 'k8s' or
+                parameter.name == 'gcr' or
+                parameter.name == 'quay' or
+                parameter.name == 'docker' or
+                parameter.name == 'insecure_registry'):
+            client.sysinv.service_parameter.delete(parameter.uuid)
+
     if not use_default_registries:
         secure_registry = CONF.getboolean('BOOTSTRAP_CONFIG',
                                           'IS_SECURE_REGISTRY')
         parameters = {}
 
-        # TODO(tngo): The following 4 service parameters will be removed when
-        # we switch to the long term solution using a single "registries"
-        # service parameter that is extensible.
         parameters['k8s'] = CONF.get('BOOTSTRAP_CONFIG', 'K8S_REGISTRY')
         parameters['gcr'] = CONF.get('BOOTSTRAP_CONFIG', 'GCR_REGISTRY')
         parameters['quay'] = CONF.get('BOOTSTRAP_CONFIG', 'QUAY_REGISTRY')
@@ -471,16 +542,8 @@ def populate_docker_config(client):
             'resource': None,
             'parameters': parameters
         }
-        if RECONFIGURE_SERVICE:
-            parameters = client.sysinv.service_parameter.list()
-            for parameter in parameters:
-                if (parameter.name == 'k8s' or
-                        parameter.name == 'gcr' or
-                        parameter.name == 'quay' or
-                        parameter.name == 'docker' or
-                        parameter.name == 'insecure_registry'):
-                    client.sysinv.service_parameter.delete(
-                        parameter.uuid)
+
+        print("Populating/Updating docker registry config...")
         client.sysinv.service_parameter.create(**values)
         print("Docker registry config completed.")
 
@@ -668,7 +731,20 @@ def populate_controller_config(client):
         'install_output': install_output,
     }
     print("Host values = %s" % values)
-    controller = client.sysinv.ihost.create(**values)
+    try:
+        controller = client.sysinv.ihost.create(**values)
+    except Exception as e:
+        if INCOMPLETE_BOOTSTRAP:
+            # The previous bootstrap might have been interrupted while
+            # it was in the middle of creating the controller-0 host.
+            controller = client.sysinv.ihost.get('controller-0')
+            if controller:
+                pass
+            else:
+                raise e
+        else:
+            raise e
+    print("Host controller-0 created.")
     return controller
 
 
@@ -729,7 +805,19 @@ def populate_default_storage_backend(client, controller):
 
     print("Populating ceph storage backend config...")
     values = {'confirmed': True}
-    client.sysinv.storage_ceph.create(**values)
+    try:
+        client.sysinv.storage_ceph.create(**values)
+    except Exception as e:
+        if INCOMPLETE_BOOTSTRAP:
+            storage_backends = client.sysinv.storage_backend.list()
+            for storage_backend in storage_backends:
+                if storage_backend.name == "ceph-store":
+                    break
+            else:
+                raise e
+        else:
+            raise e
+    print("Default storage backend provisioning completed.")
 
 
 def handle_invalid_input():
@@ -764,6 +852,8 @@ if __name__ == '__main__':
         raise Exception("Config file is not found!")
 
     CONF.read(config_file)
+    INCOMPLETE_BOOTSTRAP = CONF.getboolean('BOOTSTRAP_CONFIG',
+                                           'INCOMPLETE_BOOTSTRAP')
 
     # Puppet manifest might be applied as part of initial host
     # config, set INITIAL_CONFIG_PRIMARY variable just in case.
