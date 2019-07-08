@@ -576,7 +576,6 @@
     msg: "ssl_ca_cert file not found. ({{ ssl_ca_cert }})"
   when: ssl_ca_cert is defined and (not ssl_ca_cert is file)
 
-
 - name: Check OpenID Connect parameters
   fail:
     msg: "OpenID Connect parameters must all be specified or not at all:
@@ -585,6 +584,25 @@
         (apiserver_oidc.client_id is not defined or
          apiserver_oidc.issuer_url is not defined or
          apiserver_oidc.username_claim is not defined)
+
+# Wipe ceph osds
+- name: Check for Ceph data wipe flag
+  fail:
+    msg: "wipe_ceph_osds is misconfigured. Valid value is either 'true' or 'false'"
+  when: (mode == "restore") and (not wipe_ceph_osds | type_debug == 'bool')
+
+- block:
+  - name: Wipe ceph osds
+    script: wipe_osds.sh
+    register: results
+    become: yes
+    become_user: root
+
+  - name: Result of wiping ceph osds
+    debug: var=results.stdout_lines
+
+  when: (mode == "bootstrap") or
+        (mode == "restore" and wipe_ceph_osds|bool)
 
 # bootstrap_config ini file generation
 - block:
