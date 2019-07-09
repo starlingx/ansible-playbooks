@@ -65,6 +65,26 @@
 - include: one_time_config_tasks.yml
   when: not initial_db_populated
 
+# Banner customization is not part of one_time_config_task.yml as the user may
+# choose to change their banner look and feel and replay.
+- name: Check if custom banner exists
+  stat:
+    path: /opt/banner
+  register: banner_result
+
+- block:
+  - name: Apply custom banner
+    shell:
+      /usr/sbin/apply_banner_customization /opt/banner > /tmp/apply_banner_customization.log
+    failed_when: false
+    register: banner_apply
+
+  - name: Fail if banner customization failed
+    fail:
+      msg: "Failed to apply banner customization. See /tmp/apply_banner_customization.log for details."
+    when: banner_apply.rc != 0
+  when: banner_result.stat.exists and banner_result.stat.isdir
+
 # Shut down services if there are services impacting config changes in
 # this replay or previous bootstrap did not complete for whatever reason.
 - name: Shuting down services for reconfiguration as required
