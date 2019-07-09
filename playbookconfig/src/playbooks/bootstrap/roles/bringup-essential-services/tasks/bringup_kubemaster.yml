@@ -9,7 +9,6 @@
 #   - Update iptables
 #   - Create daemon.json for insecure unified registry if applicable
 #   - Create manifest directory
-#   - Set up pods cgroups for minimal set of controllers
 #   - Enable kubelet service (with default/custom registry)
 #   - Run kubeadm init
 #   - Prepare admin.conf
@@ -96,43 +95,6 @@
     with_dict: "{{ k8s_pki_files }}"
 
   when: k8s_pki_files is defined
-
-- name: Create kubelet cgroup for minimal set
-  file:
-    path: "{{ cgroup_root }}/{{ item }}/{{ k8s_cgroup_name }}"
-    state: directory
-    recurse: yes
-    owner: root
-    group: root
-    mode: 0700
-  with_items:
-    - cpuset
-    - cpu
-    - cpuacct
-    - memory
-    - systemd
-
-- name: Get default k8s cpuset
-  command: cat /sys/devices/system/cpu/online
-  register: k8s_cpuset
-
-- name: Get default k8s nodeset
-  command: cat /sys/devices/system/node/online
-  register: k8s_nodeset
-
-- name: Set mems for cpuset controller
-  shell: "echo {{ k8s_nodeset.stdout_lines[0] }} > {{ cgroup_root }}/cpuset/{{ k8s_cgroup_name }}/cpuset.mems || :"
-
-- name: Set cpus for cpuset controller
-  shell: "echo {{ k8s_cpuset.stdout_lines[0] }} > {{ cgroup_root }}/cpuset/{{ k8s_cgroup_name }}/cpuset.cpus || :"
-
-- name: Create a tasks file for cpuset controller
-  file:
-    path: "{{ cgroup_root }}/cpuset/{{ k8s_cgroup_name }}/tasks"
-    state: touch
-    owner: root
-    group: root
-    mode: 0644
 
 - name: Set kubelet node configuration
   set_fact:
