@@ -10,7 +10,7 @@ Source0: %{name}-%{version}.tar.gz
 
 Requires: ansible
 Requires: python
-Requires: python-netaddr
+Requires: python2-netaddr
 Requires: python2-ptyprocess
 Requires: python2-pexpect
 Requires: sshpass

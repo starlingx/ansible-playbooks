@@ -7,7 +7,7 @@ StarlingX Bootstrap and Deployment Playbooks
 Execution environment
 =====================
 
-- Linux like OS (recent Linux based distributions, MacOS, Cygwin)
+- Unix like OS (recent Linux based distributions, MacOS, Cygwin)
 - Python 2.7
 
 Additional Required Packages
@@ -18,6 +18,7 @@ and StarlingX playbooks dependencies:
 - sshpass 1.06
 - python2-ptyprocess 0.5
 - python2-pexpect 4.6
+- python2-netaddr 0.7
 - ``ansible`` 2.7.5
 
 Supported StarlingX Releases

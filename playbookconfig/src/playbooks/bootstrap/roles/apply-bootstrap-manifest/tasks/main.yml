@@ -35,6 +35,7 @@
   register: bootstrap_manifest
   environment:
     INITIAL_CONFIG_PRIMARY: "true"
+    LC_ALL: "en_US.UTF-8"
 
 - name: Fail if puppet manifest apply script returns an error
   fail:
