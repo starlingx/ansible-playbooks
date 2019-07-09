@@ -119,20 +119,6 @@
         timeout: 360
         msg: Timeout waiting for service endpoints reconfiguration to complete
 
-    - name: Update sysinv API bind host with new management floating IP
-      replace:
-        path: /etc/sysinv/sysinv.conf
-        regexp: "sysinv_api_bind_ip=.*$"
-        replace: "sysinv_api_bind_ip={{ controller_floating_address }}"
-
-    - name: Restart sysinv-agent and sysinv-api to pick up sysinv.conf update
-      command: "{{ item }}"
-      with_items:
-        - /etc/init.d/sysinv-agent restart
-        - /usr/lib/ocf/resource.d/platform/sysinv-api reload
-      environment:
-        OCF_ROOT: "/usr/lib/ocf"
-
     when: not replayed or reconfigure_endpoints
 
   - block:
