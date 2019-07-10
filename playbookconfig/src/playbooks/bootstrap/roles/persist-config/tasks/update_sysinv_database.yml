@@ -52,7 +52,9 @@
   - name: Add the management floating address
     command: ip addr add {{ mgmt_floating_virtual }} dev lo scope host
     register: add_mgmt_address
-    failed_when: add_mgmt_address.rc != 0 and not incomplete_bootstrap
+    failed_when: (add_mgmt_address.rc != 0) and
+                 (not incomplete_bootstrap) and
+                 (mgmt_floating_virtual != prev_mgmt_floating_virtual)
   when: (not replayed) or (not initial_db_populated) or (reconfigure_endpoints)
 
 - name: Saving config in sysinv database

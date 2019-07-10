@@ -100,14 +100,3 @@
     with_items: "{{ remove_addresses.results }}"
 
   when: last_config_file_exists
-
-- block:
-  # Enable the new management floating address so that sysinv-api is reachable at this IP when
-  # service endpoints have been reconfigured and sysinv-api restarted.
-  - name: Add the new management address for service endpoints reconfiguration
-    command: ip addr add {{ mgmt_floating_virtual }} dev lo scope host
-    register: add_mgmt_address
-    failed_when: add_mgmt_address.rc != 0 and not incomplete_bootstrap
-    when: mgmt_floating_virtual != prev_mgmt_floating_virtual
-
-  when: reconfigure_endpoints
