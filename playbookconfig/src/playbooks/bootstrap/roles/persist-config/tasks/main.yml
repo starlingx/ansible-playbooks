@@ -214,6 +214,19 @@
     - sw_version={{ software_version }}
     - vswitch_type=none
 
+- name: Ensure distributed cloud role is removed from platform.conf
+  lineinfile:
+    path: /etc/platform/platform.conf
+    regexp: '^distributed_cloud_role'
+    state: absent
+  when: distributed_cloud_role == 'none'
+
+- name: Add distributed cloud role to platform.conf
+  lineinfile:
+    path: /etc/platform/platform.conf
+    line: distributed_cloud_role={{ distributed_cloud_role }}
+  when: distributed_cloud_role != 'none'
+
 - name: Update resolv.conf with list of dns servers
   lineinfile:
     path: /etc/resolv.conf

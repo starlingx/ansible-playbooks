@@ -48,6 +48,12 @@
       state: absent
     when: reconfigure_endpoints
 
+  - name: Remove the system controller database config flag before reconfigure role
+    file:
+      path: /etc/platform/.sc_database_configured
+      state: absent
+    when: dc_role_changed
+
   # Make sure the management floating address is available
   - name: Add the management floating address
     command: ip addr add {{ mgmt_floating_virtual }} dev lo scope host
@@ -76,6 +82,14 @@
     state: present
     timeout: 360
     msg: Timeout waiting for service endpoints reconfiguration to complete
+
+- name: Wait for system controller database configuration to complete
+  wait_for:
+    path: /etc/platform/.sc_database_configured
+    state: present
+    timeout: 300
+    msg: Timeout waiting for system controller database configuration to complete
+  when: distributed_cloud_role == 'systemcontroller'
 
 - name: Set flag to mark the initial db population completed milestone
   file:

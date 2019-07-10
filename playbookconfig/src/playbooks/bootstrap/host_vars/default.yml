@@ -2,6 +2,8 @@
 # SYSTEM PROPERTIES
 # =================
 system_mode: simplex
+# configure distributed cloud role, valid values are 'none' and 'systemcontroller'
+distributed_cloud_role: none
 timezone: UTC
 
 # At least one DNS server is required and maximum 3 servers are allowed
