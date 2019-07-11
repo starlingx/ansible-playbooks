@@ -1,3 +1,7 @@
 ---
 use_vault_credentials: false
 password_rules_file: /etc/keystone/password-rules.conf
+
+# This is a dictionary of service users to be configured in the subcloud.  It
+# is set automatically by dcmanager during the subcloud add operation
+users: { }
