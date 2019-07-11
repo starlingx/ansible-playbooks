@@ -215,6 +215,7 @@
       use_unified_registry: false
       restart_services: false
       reconfigure_endpoints: false
+      dc_role_changed: false
 
       # Replay related flags
       last_config_file_exists: false
@@ -366,7 +367,8 @@
             system_config_update: true
           when: (prev_system_mode != system_mode) or
                 (prev_timezone != timezone) or
-                (prev_dns_servers.split(',') | sort != dns_servers | sort)
+                (prev_dns_servers.split(',') | sort != dns_servers | sort) or
+                (prev_distributed_cloud_role != distributed_cloud_role)
 
         - name: Convert previous docker no proxy config value for comparison
           set_fact:
@@ -394,6 +396,13 @@
                 (prev_external_oam_end_address != external_oam_end_address) or
                 (prev_external_oam_node_0_address != external_oam_node_0_address) or
                 (prev_external_oam_node_1_address != external_oam_node_1_address)
+
+        - name: Turn on service endpoints reconfiguration flag if distributed_cloud_role is changed
+          set_fact:
+            reconfigure_endpoints: true
+            dc_role_changed: true
+          when: distributed_cloud_role == 'systemcontroller' and
+                prev_distributed_cloud_role != distributed_cloud_role
 
         - name: Turn on network reconfiguration flag if any of the network related config is changed
           set_fact:
@@ -535,6 +544,7 @@
         save_config_to_db flag: {{ save_config_to_db }},
         skip_play flag: {{ skip_play }},
         incomplete_bootstrap flag: {{ incomplete_bootstrap }},
-        initial_db_populated_flag: {{ initial_db_populated }}
+        initial_db_populated_flag: {{ initial_db_populated }},
+        dc_role_changed_flag: {{ dc_role_changed }}
 
   when: not skip_play

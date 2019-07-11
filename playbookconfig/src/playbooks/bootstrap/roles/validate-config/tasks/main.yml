@@ -12,6 +12,7 @@
     msg:
       - System mode is {{ system_mode }}
       - Timezone is {{ timezone }}
+      - Distributed Cloud Role is {{ distributed_cloud_role }}
       - DNS servers is {{ dns_servers }}
       - PXE boot subnet is {{ pxeboot_subnet }}
       - Management subnet is {{ management_subnet }}
@@ -49,6 +50,20 @@
        system_mode != 'duplex' and
        system_mode != 'duplex-direct') and
       (system_type == 'All-in-one')
+
+  - name: Validate distributed cloud role
+    fail:
+      msg: "Invalid distributed cloud role. Valid values are: none or systemcontroller."
+    when: >
+      (distributed_cloud_role != 'none' and
+       distributed_cloud_role != 'systemcontroller')
+
+  - name: Validate system type if distributed cloud role is system controller
+    fail:
+      msg: "An All-in-one controller cannot be configured as Distributed Cloud System Controller"
+    when: >
+      (distributed_cloud_role == 'systemcontroller' and
+       system_type == 'All-in-one')
 
   - name: Checking registered timezones
     stat:
@@ -164,6 +179,16 @@
     fail:
       msg: "dynamic_address_allocation is misconfigured. Valid value is either 'True' or 'False'."
     when: not dynamic_address_allocation | type_debug == 'bool'
+
+  - name: Fail if management start or end address is not configured for System Controller
+    fail:
+      msg: >-
+           management_start_address and management_end_address are required
+           for System Controller as this configuration requires address space
+           left for gateway address(es).
+    when: >
+      (distributed_cloud_role == 'systemcontroller' and
+      (management_start_address == 'derived' or management_end_address == 'derived'))
 
   # The provided subnets have passed validation, set the default addresses
   # based on the subnet values
@@ -479,6 +504,7 @@
       - "SYSTEM_TYPE={{ system_type }}"
       - "SYSTEM_MODE={{ system_mode }}"
       - "TIMEZONE={{ timezone }}"
+      - "DISTRIBUTED_CLOUD_ROLE={{ distributed_cloud_role }}"
       - "SW_VERSION={{ software_version }}"
       - "NAMESERVERS={{ dns_servers| join(',') }}"
       - "PXEBOOT_SUBNET={{ pxeboot_subnet }}"

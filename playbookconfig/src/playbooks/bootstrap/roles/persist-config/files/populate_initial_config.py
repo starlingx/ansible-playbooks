@@ -80,12 +80,16 @@ def populate_system_config(client):
                     'sdn_enabled': False,
                     'https_enabled': False}
 
+    dc_role = CONF.get('BOOTSTRAP_CONFIG', 'DISTRIBUTED_CLOUD_ROLE')
+    if dc_role == 'none':
+        dc_role = None
     values = {
         'system_mode': CONF.get('BOOTSTRAP_CONFIG', 'SYSTEM_MODE'),
         'capabilities': capabilities,
         'timezone': CONF.get('BOOTSTRAP_CONFIG', 'TIMEZONE'),
         'region_name': 'RegionOne',
-        'service_project_name': 'services'
+        'service_project_name': 'services',
+        'distributed_cloud_role': dc_role
     }
 
     if INITIAL_POPULATION:
