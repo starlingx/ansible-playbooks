@@ -6,7 +6,7 @@
 #
 - hosts: all
   # If gathering facts is really necessary, run setup task AFTER host connectivity
-  # check block in prepare-env role.
+  # check block in common role.
   gather_facts: no
 
   vars_files:
@@ -31,5 +31,5 @@
 
   # Main play
   roles:
-    - { role: prepare-env, become: yes }
-    - { role: backup-system, become: yes }
+    - common
+    - { role: restore-openstack/restore, become: yes }
