@@ -169,6 +169,9 @@
     - "prev_management_multicast_end_address: {{ management_multicast_end_address }}"
     - "prev_external_oam_node_0_address: {{ external_oam_node_0_address }}"
     - "prev_external_oam_node_1_address: {{ external_oam_node_1_address }}"
+    - "prev_apiserver_cert_sans: {{ apiserver_cert_sans | to_yaml }}"
+    - "prev_k8s_root_ca_cert: {{ k8s_root_ca_cert }}"
+    - "prev_k8s_root_ca_key: {{ k8s_root_ca_key }}"
 
 # Need to save the dictionary this way for proper comparison during replay
 - name: Save previous docker registries header

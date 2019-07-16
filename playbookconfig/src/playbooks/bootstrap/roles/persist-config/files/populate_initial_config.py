@@ -602,6 +602,35 @@ def populate_docker_config(client):
         client.sysinv.service_parameter.create(**values)
         print("Docker registry config completed.")
 
+    # Remove any kubernetes entries that might have been created in the
+    # previous run.
+    parameters = client.sysinv.service_parameter.list()
+    for parameter in parameters:
+        if (parameter.name ==
+                sysinv_constants.SERVICE_PARAM_NAME_KUBERNETES_API_SAN_LIST):
+            client.sysinv.service_parameter.delete(parameter.uuid)
+
+    apiserver_san_list = CONF.get('BOOTSTRAP_CONFIG', 'APISERVER_SANS')
+    if apiserver_san_list:
+        parameters = {}
+
+        parameters[
+            sysinv_constants.SERVICE_PARAM_NAME_KUBERNETES_API_SAN_LIST] = \
+            apiserver_san_list
+
+        values = {
+            'service': sysinv_constants.SERVICE_TYPE_KUBERNETES,
+            'section':
+                sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_CERTIFICATES,
+            'personality': None,
+            'resource': None,
+            'parameters': parameters
+        }
+
+        print("Populating/Updating kubernetes config...")
+        client.sysinv.service_parameter.create(**values)
+        print("Kubernetes config completed.")
+
 
 def get_management_mac_address():
     ifname = CONF.get('BOOTSTRAP_CONFIG', 'MANAGEMENT_INTERFACE')
