@@ -1,0 +1,8 @@
+---
+- name: Create Intel GPU device plugin config file
+  template:
+    src: "intel-gpu-plugin.yaml.j2"
+    dest: /etc/kubernetes/intel-gpu-daemonset.yaml
+
+- name: Activate Intel GPU device plugin
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/intel-gpu-daemonset.yaml"

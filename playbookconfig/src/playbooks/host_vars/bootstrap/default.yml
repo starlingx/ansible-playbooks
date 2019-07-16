@@ -291,3 +291,18 @@ override_files_dir: "{{ lookup('env', 'HOME') }}"
 # When set to true, disk partitions that were previously used for Ceph data are
 # not wiped. Otherwise, all disks are wiped as part of the bootstrap.
 wipe_ceph_osds: false
+
+# K8S_PLUGINS
+# ===========
+#
+# The following parameters are used for enabling Kubernetes device
+# plugins implemented by hardware/software vendors. By default,
+# plugins are disabled.
+#
+# "k8s_plugins" is a list of selected vendor device plugins to be
+# enabled as part of the bootstrap. When a device plugin is enabled,
+# its pods will be deployed when the plugin label (e.g. intelgpu=enabled)
+# is assigned to the hosts in the cluster as part of system bring-up.
+
+k8s_plugins:
+#  intel-gpu-plugin: intelgpu=enabled
