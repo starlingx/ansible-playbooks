@@ -172,6 +172,7 @@
     - "prev_apiserver_cert_sans: {{ apiserver_cert_sans | to_yaml }}"
     - "prev_k8s_root_ca_cert: {{ k8s_root_ca_cert }}"
     - "prev_k8s_root_ca_key: {{ k8s_root_ca_key }}"
+    - "prev_apiserver_oidc: {{ apiserver_oidc | to_yaml }}"
 
 # Need to save the dictionary this way for proper comparison during replay
 - name: Save previous docker registries header

@@ -167,6 +167,16 @@ docker_registries:
 #   - hostname.domain
 #   - 198.51.100.75
 
+# These values are used to configure the Kubernetes cluster for authentication
+# with OpenID Connect. By default, apiserver_oidc is disabled. When the
+# required three fields of the apiserver_oidc parameter are defined, the
+# feature is considered active. Their values will be used to configure the
+# Kubernetes cluster for authentication with OpenID Connect.
+#
+# apiserver_oidc:
+#   client_id:
+#   issuer_url:
+#   username_claim:
 
 # ADMIN CREDENTIALS
 # =================

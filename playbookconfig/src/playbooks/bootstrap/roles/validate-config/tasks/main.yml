@@ -509,6 +509,15 @@
   when: ssl_ca_cert is defined and (not ssl_ca_cert is file)
 
 
+- name: Check OpenID Connect parameters
+  fail:
+    msg: "OpenID Connect parameters must all be specified or not at all:
+          apiserver_oidc: client_id, issuer_url, username_claim"
+  when: (apiserver_oidc|length != 0) and
+        (apiserver_oidc.client_id is not defined or
+         apiserver_oidc.issuer_url is not defined or
+         apiserver_oidc.username_claim is not defined)
+
 # bootstrap_config ini file generation
 - block:
   - name: Create config workdir

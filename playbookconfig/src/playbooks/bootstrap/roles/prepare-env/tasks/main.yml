@@ -261,6 +261,10 @@
       default_quay_registry: quay.io
       default_docker_registry: docker.io
 
+  - name: Set default values for OpenID connect
+    set_fact:
+      apiserver_oidc: "{{ apiserver_oidc | default({}) }}"
+
   - name: Set default values for docker proxies if not defined
     set_fact:
       docker_http_proxy: "{{ docker_http_proxy | default('undef') }}"
@@ -443,6 +447,11 @@
                 (prev_cluster_host_subnet != cluster_host_subnet) or
                 (prev_cluster_pod_subnet != cluster_pod_subnet) or
                 (prev_cluster_service_subnet != cluster_service_subnet)
+
+        - name: Turn on restart services flag if Kubernetes OpenID config is changed
+          set_fact:
+            restart_services: true
+          when: (prev_apiserver_oidc|default({})) != (apiserver_oidc)
 
         # Re-evaluate the condition to generate the python keyring
         - name: Turn off save_password flag if admin password has not changed
