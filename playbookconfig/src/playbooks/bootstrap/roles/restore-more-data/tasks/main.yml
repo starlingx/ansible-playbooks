@@ -154,11 +154,22 @@
     - "{{ extension_permdir | regex_replace('^\\/', '') }}"
 
 # Can't store ceph crushmap at sysinv_config_permdir (/opt/platform/sysinv/)
-# because when unlocking controller-0 for the first time, the crushmap is
-# set thru ceph puppet when /opt/platform is not mounted yet.
+# for AIO systems because when unlocking controller-0 for the first time,
+# the crushmap is set thru ceph puppet when /opt/platform is not mounted yet.
+# So for AIO systems store the crushmap at /etc/sysinv.
+- name: Set ceph crushmap directory to /etc/sysinv if it is AIO system
+  set_fact:
+    ceph_crushmap_dir: /etc/sysinv
+  when: system_type == 'All-in-one'
+
+- name: Set ceph crushmap directory to /opt/platform/sysinv if it is non-AIO system
+  set_fact:
+    ceph_crushmap_dir: sysinv_config_permdir
+  when: system_type != 'All-in-one'
+
 - name: Restore ceph crush map
   command: >-
-    tar -C {{ backup_dir }} -xpf {{ staging_dir }}/{{ backup_filename }}
+    tar -C {{ ceph_crushmap_dir }} -xpf {{ staging_dir }}/{{ backup_filename }}
     --transform='s,.*/,,' '*/crushmap.bin.backup'
   args:
     warn: false
