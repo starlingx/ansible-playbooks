@@ -5,3 +5,4 @@ minimum_root_disk_size: 240
 default_security_feature: "nopti nospectre_v2"
 temp_ssl_ca: /tmp/ca_cert.pem
 ssl_ca_complete_flag: /etc/platform/.ssl_ca_complete
+region_config: no

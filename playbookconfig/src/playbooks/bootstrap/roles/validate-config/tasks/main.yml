@@ -5,7 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
-#   This role is to validate amd save host (non secure) config.
+#   This role is to validate and save host (non secure) config.
 #
 
 - debug:
@@ -13,6 +13,7 @@
       - System mode is {{ system_mode }}
       - Timezone is {{ timezone }}
       - Distributed Cloud Role is {{ distributed_cloud_role }}
+      - Region name is {{ region_name }}
       - DNS servers is {{ dns_servers }}
       - PXE boot subnet is {{ pxeboot_subnet }}
       - Management subnet is {{ management_subnet }}
@@ -53,10 +54,11 @@
 
   - name: Validate distributed cloud role
     fail:
-      msg: "Invalid distributed cloud role. Valid values are: none or systemcontroller."
+      msg: "Invalid distributed cloud role. Valid values are: none, systemcontroller, or subcloud."
     when: >
       (distributed_cloud_role != 'none' and
-       distributed_cloud_role != 'systemcontroller')
+       distributed_cloud_role != 'systemcontroller' and
+       distributed_cloud_role != 'subcloud')
 
   - name: Validate system type if distributed cloud role is system controller
     fail:
@@ -505,6 +507,7 @@
       - "SYSTEM_MODE={{ system_mode }}"
       - "TIMEZONE={{ timezone }}"
       - "DISTRIBUTED_CLOUD_ROLE={{ distributed_cloud_role }}"
+      - "REGION_NAME={{ region_name }}"
       - "SW_VERSION={{ software_version }}"
       - "NAMESERVERS={{ dns_servers| join(',') }}"
       - "PXEBOOT_SUBNET={{ pxeboot_subnet }}"
@@ -535,6 +538,8 @@
       - "MANAGEMENT_MULTICAST_SUBNET={{ management_multicast_subnet }}"
       - "MANAGEMENT_MULTICAST_START_ADDRESS={{ address_pairs['multicast']['start'] }}"
       - "MANAGEMENT_MULTICAST_END_ADDRESS={{ address_pairs['multicast']['end'] }}"
+      - "SYSTEM_CONTROLLER_SUBNET={{ system_controller_subnet }}"
+      - "SYSTEM_CONTROLLER_FLOATING_ADDRESS={{ system_controller_floating_address }}"
       - "DOCKER_HTTP_PROXY={{ docker_http_proxy }}"
       - "DOCKER_HTTPS_PROXY={{ docker_https_proxy }}"
       - "DOCKER_NO_PROXY={{ docker_no_proxy_combined | join(',') }}"

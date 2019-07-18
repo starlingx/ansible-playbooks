@@ -34,6 +34,7 @@ except ImportError:
 
 
 COMBINED_LOAD = 'All-in-one'
+SUBCLOUD_ROLE = 'subcloud'
 RECONFIGURE_SYSTEM = False
 RECONFIGURE_NETWORK = False
 RECONFIGURE_SERVICE = False
@@ -45,6 +46,11 @@ CONF = ConfigParser()
 def touch(fname):
     with open(fname, 'a'):
         os.utime(fname, None)
+
+
+def is_subcloud():
+    cloud_role = CONF.get('BOOTSTRAP_CONFIG', 'DISTRIBUTED_CLOUD_ROLE', None)
+    return cloud_role == SUBCLOUD_ROLE
 
 
 def wait_system_config(client):
@@ -83,6 +89,11 @@ def populate_system_config(client):
     dc_role = CONF.get('BOOTSTRAP_CONFIG', 'DISTRIBUTED_CLOUD_ROLE')
     if dc_role == 'none':
         dc_role = None
+
+    if is_subcloud():
+        capabilities.update({'shared_services': "['identity', ]",
+                             'region_config': True})
+
     values = {
         'system_mode': CONF.get('BOOTSTRAP_CONFIG', 'SYSTEM_MODE'),
         'capabilities': capabilities,
@@ -91,6 +102,12 @@ def populate_system_config(client):
         'service_project_name': 'services',
         'distributed_cloud_role': dc_role
     }
+
+    if is_subcloud():
+        values.update(
+            {'region_name': CONF.get('BOOTSTRAP_CONFIG', 'REGION_NAME'),
+             'name': CONF.get('BOOTSTRAP_CONFIG', 'REGION_NAME')}
+        )
 
     if INITIAL_POPULATION:
         values.update(
@@ -376,6 +393,38 @@ def populate_cluster_host_network(client):
     create_network(client, values, network_name)
 
 
+def populate_system_controller_network(client):
+    system_controller_subnet = IPNetwork(CONF.get(
+        'BOOTSTRAP_CONFIG', 'SYSTEM_CONTROLLER_SUBNET'))
+    system_controller_floating_ip = CONF.get(
+        'BOOTSTRAP_CONFIG', 'SYSTEM_CONTROLLER_FLOATING_ADDRESS')
+    network_name = 'system-controller'
+
+    if RECONFIGURE_NETWORK:
+        delete_network_and_addrpool(client, 'system-controller')
+        print("Updating system controller network...")
+    else:
+        print("Populating system controller network...")
+
+    # create the address pool
+    values = {
+        'name': 'system-controller-subnet',
+        'network': str(system_controller_subnet.network),
+        'prefix': system_controller_subnet.prefixlen,
+        'floating_address': str(system_controller_floating_ip),
+    }
+    pool = create_addrpool(client, values, network_name)
+
+    # create the network for the pool
+    values = {
+        'type': sysinv_constants.NETWORK_TYPE_SYSTEM_CONTROLLER,
+        'name': sysinv_constants.NETWORK_TYPE_SYSTEM_CONTROLLER,
+        'dynamic': False,
+        'pool_uuid': pool.uuid,
+    }
+    create_network(client, values, network_name)
+
+
 def populate_cluster_pod_network(client):
     cluster_pod_subnet = IPNetwork(CONF.get(
         'BOOTSTRAP_CONFIG', 'CLUSTER_POD_SUBNET'))
@@ -454,6 +503,8 @@ def populate_network_config(client):
     populate_cluster_host_network(client)
     populate_cluster_pod_network(client)
     populate_cluster_service_network(client)
+    if is_subcloud():
+        populate_system_controller_network(client)
     print("Network config completed.")
 
 

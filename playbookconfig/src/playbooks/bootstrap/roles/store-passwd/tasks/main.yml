@@ -134,3 +134,19 @@
       state: absent
 
   when: mode == 'restore'
+
+- block:
+  - name: Store service passwords
+    vars:
+      script_content: |
+        import keyring
+        import os
+        os.environ['XDG_DATA_HOME'] = '/tmp'
+        keyring.set_password("{{ item.key }}", "services", "{{ item.value }}")
+        del os.environ['XDG_DATA_HOME']
+    shell: "{{ script_content }}"
+    args:
+      executable: /usr/bin/python
+    no_log: true
+    loop: "{{ users|dict2items }}"
+  when: distributed_cloud_role == "subcloud"
