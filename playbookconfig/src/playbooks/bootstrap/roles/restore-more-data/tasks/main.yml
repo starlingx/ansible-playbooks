@@ -164,7 +164,7 @@
 
 - name: Set ceph crushmap directory to /opt/platform/sysinv if it is non-AIO system
   set_fact:
-    ceph_crushmap_dir: sysinv_config_permdir
+    ceph_crushmap_dir: "{{ sysinv_config_permdir }}"
   when: system_type != 'All-in-one'
 
 - name: Restore ceph crush map
@@ -173,6 +173,17 @@
     --transform='s,.*/,,' '*/crushmap.bin.backup'
   args:
     warn: false
+
+# Need to remove osd info from the crushmap before it is loaded into ceph.
+# When osds are created they will be inserted into the crushmap by ceph.
+# TODO: There might be a better command to do this, like the rebuild option
+# with the ceph-monstore-tool.
+- name: Remove osds from the crushmap
+  shell: >-
+    crushtool -i {{ ceph_crushmap_dir }}/{{ crushmap_file }} --tree |
+    awk /osd/'{print $NF}' |
+    xargs -i crushtool -i {{ ceph_crushmap_dir }}/{{ crushmap_file }} --remove-item {}
+    -o {{ ceph_crushmap_dir }}/{{ crushmap_file }}
 
 - name: Remove leading '/' from patch-vault directory
   set_fact:

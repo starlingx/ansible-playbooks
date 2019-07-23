@@ -35,7 +35,7 @@
       pxe_config_permdir: "{{ config_permdir }}/pxelinux.cfg"
       armada_permdir: "{{ platform_path }}/armada/"
       helm_overrides_permdir: "{{ platform_path + '/helm/' + software_version }}"
-      sysinv_config_permdir: "{{ config_permdir + '/sysinv/' + software_version }}"
+      sysinv_config_permdir: "{{ platform_path + '/sysinv/' + software_version }}"
 
   # To work around an ansible quirk that regex_replace filter
   # is ignored when it is applied to variables in the command module
