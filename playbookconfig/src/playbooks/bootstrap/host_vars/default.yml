@@ -134,8 +134,8 @@ docker_registries:
 
 # is_secure_registry: True
 
-# Certificates
-# =================
+# CERTIFICATES
+# ============
 #
 # These values provide a means to install certificates onto the system.
 # For example the ssl_ca_cert parameter may be used to install a trusted CA to
@@ -147,8 +147,26 @@ docker_registries:
 # The certificate must be in PEM format.
 # The supported certificates are:
 #   - ssl_ca_cert
+#   - k8s_root_ca_cert
+#   - k8s_root_ca_key
 #
 # ssl_ca_cert: /path/to/ssl_ca_cert_file
+
+
+# KUBERNETES PARAMETERS
+# =====================
+#
+# These values provide a means to specify different configuration parameters
+# for kubernetes
+#
+# The apiserver_cert_sans is a list of Subject Alternative Names that will be
+# applied to apiserver certificate. This value must be a list and each entry
+# in the list must be a domain name or IP address.
+
+# apiserver_cert_sans:
+#   - hostname.domain
+#   - 198.51.100.75
+
 
 # ADMIN CREDENTIALS
 # =================
