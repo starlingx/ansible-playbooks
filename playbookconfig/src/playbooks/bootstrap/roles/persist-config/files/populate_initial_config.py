@@ -832,51 +832,27 @@ def populate_controller_config(client):
     return controller
 
 
-def wait_disk_config(client, host):
-    count = 0
+def wait_initial_inventory_complete(client, host):
     for _ in range(constants.SYSTEM_CONFIG_TIMEOUT / 10):
         try:
-            disks = client.sysinv.idisk.list(host.uuid)
-            if disks and count == len(disks):
-                return disks
-            count = len(disks)
+            host = client.sysinv.ihost.get('controller-0')
+            if host and (host.inv_state ==
+                         sysinv_constants.INV_STATE_INITIAL_INVENTORIED):
+                return host
         except Exception:
             pass
-        if disks:
-            time.sleep(1)  # We don't need to wait that long
-        else:
-            time.sleep(10)
+        time.sleep(10)
     else:
-        raise ConfigFail('Timeout waiting for controller disk '
-                         'configuration')
-
-
-def wait_pv_config(client, host):
-    count = 0
-    for _ in range(constants.SYSTEM_CONFIG_TIMEOUT / 10):
-        try:
-            pvs = client.sysinv.ipv.list(host.uuid)
-            if pvs and count == len(pvs):
-                return pvs
-            count = len(pvs)
-        except Exception:
-            pass
-        if pvs:
-            time.sleep(1)  # We don't need to wait that long
-        else:
-            time.sleep(10)
-    else:
-        raise ConfigFail('Timeout waiting for controller PV '
-                         'configuration')
+        raise ConfigFail('Timeout waiting for controller inventory '
+                         'completion')
 
 
 def inventory_config_complete_wait(client, controller):
-    # Wait for sysinv-agent to populate disks and PVs
+    # Wait for sysinv-agent to populate initial inventory
     if not INITIAL_POPULATION:
         return
 
-    wait_disk_config(client, controller)
-    wait_pv_config(client, controller)
+    wait_initial_inventory_complete(client, controller)
 
 
 def populate_default_storage_backend(client, controller):
