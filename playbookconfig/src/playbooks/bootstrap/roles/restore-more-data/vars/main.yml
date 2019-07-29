@@ -7,7 +7,9 @@ extension_permdir: /opt/extension
 patch_vault_permdir: /opt/patch-vault
 ldap_permdir: /var/lib/openldap-data
 kube_config_dir: "{{ lookup('env', 'KUBECONFIG') }}"
+crushmap_file: crushmap.bin.backup
 
-# Default directory where the backup info (e.g. mariadb data, ceph crushmap)
-# can be found during restore.
+# Default directory where the backup tarball is stored at the end
+# of the platform restore. As a continuation of the restore process,
+# this backup tarball is needed when restoring the openstack application.
 backup_dir: /opt/backups
