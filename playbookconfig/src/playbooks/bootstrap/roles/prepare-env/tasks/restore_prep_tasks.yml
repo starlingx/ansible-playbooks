@@ -31,6 +31,7 @@
   - name: Set config path facts for restore
     set_fact:
       branding_permdir: "{{ config_permdir }}/branding"
+      banner_permdir: "{{ config_permdir }}/banner/etc"
       ssh_config_permdir: "{{ config_permdir }}/ssh_config"
       pxe_config_permdir: "{{ config_permdir }}/pxelinux.cfg"
       armada_permdir: "{{ platform_path }}/armada/"
@@ -39,9 +40,10 @@
 
   # To work around an ansible quirk that regex_replace filter
   # is ignored when it is applied to variables in the command module
-  - name: Strip the leading slash in branding dirname and assign it to a new variable
+  - name: Strip the leading slash in dirname and assign it to a new variable
     set_fact:
       short_branding_permdir: "{{ branding_permdir | regex_replace('^\\/', '') }}"
+      short_banner_permdir: "{{ banner_permdir | regex_replace('^\\/', '') }}"
 
   - name: Restore branding tar file
     command: >-
@@ -55,7 +57,31 @@
       path: /opt/branding/branding
       state: absent
 
-  # TODO (Wei): Need to backup /opt/banner if it exists and restore it
-  #             before banner optimization is done in persist-config.
+  - name: Look for banner directory in the backup tarball
+    shell: "tar -tf {{ staging_dir }}/{{ backup_filename }} | grep -F 'banner/etc'"
+    args:
+      warn: false
+    failed_when: false
+    register: banner_result
+
+  - block:
+    - name: Create banner directory
+      file:
+        path: /opt/banner
+        state: directory
+
+    - name: Restore banner files if they exist in the backup tarball
+      command: >-
+        tar -C /opt/banner -xpf {{ staging_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+        {{ short_banner_permdir }}
+      args:
+        warn: false
+
+    - name: Remove unwanted directory
+      file:
+        path: /opt/banner/etc
+        state: absent
+    when: banner_result.rc == 0
+
   become: yes
   become_user: root

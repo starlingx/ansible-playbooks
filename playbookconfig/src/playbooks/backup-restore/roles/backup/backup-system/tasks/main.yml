@@ -8,10 +8,9 @@
 #   This role is to backup system data.
 #
 # TODO:
-# 1. Check required disk size for backup
-# 2. Generate an alarm during backup
+# 1. Generate an alarm during backup
 #
-- name: do backup
+- name: Do system backup
   block:
     - debug:
         msg:
@@ -20,22 +19,9 @@
 
     - name: Create temp dir
       tempfile:
-        path: /opt/backups
+        path: "{{ backup_dir }}"
         state: directory
       register: tempdir
-
-    - name: Create ldap temp dir
-      file:
-        path: "{{ tempdir.path }}/ldap"
-        state: directory
-      register: ldap_dir
-
-    - name: Name ldap db backup
-      set_fact:
-        ldap_db_backup: "{{ ldap_dir.path }}/ldap.db"
-
-    - name: Backup ldap db
-      command: "slapcat -d 0 -F /etc/openldap/schema -l {{ ldap_db_backup }}"
 
     - name: Create postgres temp dir
       file:
@@ -151,11 +137,62 @@
         failed_when: false
         register: check_openstack
 
-      - name: Fail the backup if maridb is not running
+      - name: Fail the backup if MariaDB is not running
         fail:
           msg: "WARNING: {{ mariadb_pod }} is not running. Cannot backup mariadb data."
         when: check_openstack.rc == 0
       when: check_mariadb_pod.rc != 0
+
+    # Now Postgres data and MariaDB data are stored in staging dir, we can estimate
+    # the disk size requirement for the backup archive.
+    - name: Check the size (in kilobyte) of directories that will be backed up
+      shell: "du -sh -k  {{ item }} | awk '{print $1}'"
+      with_items:
+        - /etc
+        - /home
+        - "{{ config_permdir }}"
+        - "{{ puppet_permdir }}/hieradata"
+        - "{{ keyring_permdir }}"
+        - "{{ patching_permdir }}"
+        - "{{ patching_repo_permdir }}"
+        - "{{ extension_permdir }}"
+        - "{{ patch_vault_permdir }}"
+        - "{{ postgres_dir.path }}"
+        - "{{ armada_permdir }}"
+        - "{{ helm_charts_permdir }}"
+        - "{{ mariadb_dir.path }}"
+      register: size_output
+
+    # Estimate the backup size. We add 128M overhead for things like ceph crushmap,
+    # ldap data, etc. that will be generated and stored in the staging dir later on.
+    - name: Estimate the total required disk size for backup archive
+      set_fact:
+        total_size_estimation: "{{ total_size_estimation|default(1024*128)|int + item.stdout|int }}"
+      with_items: "{{ size_output.results }}"
+
+    - name: Check if there is enough free space in the archive dir to create backup
+      shell: "df -k /opt/backups --output=avail | tail -1"
+      register: available_disk_size
+
+    - name: Fail if there is not enough free space in the archive dir to create backup
+      fail:
+        msg: >-
+           Not enough free space in {{ backup_dir }}. It has {{ available_disk_size }}K.
+           It needs at least {{ total_size_estimation }}K.
+      when: available_disk_size < total_size_estimation
+
+    - name: Create ldap temp dir
+      file:
+        path: "{{ tempdir.path }}/ldap"
+        state: directory
+      register: ldap_dir
+
+    - name: Name ldap db backup
+      set_fact:
+        ldap_db_backup: "{{ ldap_dir.path }}/ldap.db"
+
+    - name: Backup ldap db
+      command: "slapcat -d 0 -F /etc/openldap/schema -l {{ ldap_db_backup }}"
 
     - name: Create ceph temp dir
       file:
