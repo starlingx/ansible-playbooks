@@ -5,11 +5,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
-#   This role is to check the target host environment before proceeding to
-#   the next step.
-#
+#   This role contains common components (tasks, vars, etc.) that
+#   can be shared by all the backup and restore playbooks.
 
-# Check host connectivity
 - block:
   - name: Update SSH known hosts
     lineinfile:
@@ -41,25 +39,6 @@
     msg: " Archive directory {{ backup_dir }} does not exist!"
   when: backup_dir_result.stat.exists == false
 
-- name: Check if backup is in progress
-  stat:
-    path: "{{ backup_in_progress_flag }}"
-  register: backup_in_progress
-
-- name: Fail if backup is already in progress
-  fail:
-    msg: " Backup is already in progress!"
-  when: backup_in_progress.stat.exists
-
-- name: Check if it is the active controller
-  shell: source /etc/platform/openrc; system host-show $(cat /etc/hostname) | grep -i "Controller-Active"
-  register: active_ctlr
-
-- name: Fail if it is not an active controller
-  fail:
-    msg: "Backup can only be done on the active controller."
-  when: active_ctlr.rc != 0
-
 - name: Retrieve software version number
   # lookup module does not work with /etc/build.info as it does not have ini
   # format. Resort to shell source.
@@ -84,20 +63,3 @@
   set_fact:
     software_version: "{{ sw_version_result.stdout_lines[0] }}"
     system_type: "{{ system_type_result.stdout_lines[0] }}"
-
-- name: Set config path facts
-  set_fact:
-    keyring_permdir: "{{ platform_path }}/.keyring/{{ software_version }}"
-    config_permdir: "{{ platform_path }}/config/{{ software_version }}"
-    puppet_permdir: "{{ platform_path }}/puppet/{{ software_version }}"
-    armada_permdir: "{{ platform_path }}/armada/{{ software_version }}"
-    helm_charts_permdir: "{{ cgcs_path }}/helm_charts"
-    patching_permdir: "/opt/patching"
-    patching_repo_permdir: "/www/pages/updates"
-    extension_permdir: "/opt/extension"
-    patch_vault_permdir: "/opt/patch-vault"
-
-- name: Create backup in progress flag file
-  file:
-    path: "{{ backup_in_progress_flag }}"
-    state: touch
