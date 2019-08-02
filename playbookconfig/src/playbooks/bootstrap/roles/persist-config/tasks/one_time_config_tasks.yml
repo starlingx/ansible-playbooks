@@ -105,12 +105,10 @@
   failed_when: false
   with_items:
     - lvextend -L20G /dev/cgts-vg/pgsql-lv
-    - lvextend -L10G /dev/cgts-vg/cgcs-lv
     - lvextend -L16G /dev/cgts-vg/dockerdistribution-lv
     - lvextend -L40G /dev/cgts-vg/backup-lv
     - drbdadm -- --assume-peer-has-space resize all
     - resize2fs /dev/drbd0
-    - resize2fs /dev/drbd3
     - resize2fs /dev/drbd8
 
 - name: Fail if file system resizing failed for a reason other than it has been done already
@@ -128,11 +126,9 @@
     failed_when: false
     with_items:
       - lvextend -L40G /dev/cgts-vg/pgsql-lv
-      - lvextend -L20G /dev/cgts-vg/cgcs-lv
       - lvextend -L50G /dev/cgts-vg/backup-lv
       - drbdadm -- --assume-peer-has-space resize all
       - resize2fs /dev/drbd0
-      - resize2fs /dev/drbd3
 
   - name: Fail if additional resizing failed for a reason other than it has been done already
     fail:
