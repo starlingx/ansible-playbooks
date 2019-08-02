@@ -538,19 +538,21 @@ def populate_docker_config(client):
     # been created in the previous failed run.
     parameters = client.sysinv.service_parameter.list()
     for parameter in parameters:
-        if (parameter.name == 'http_proxy' or
-                parameter.name == 'https_proxy' or
-                parameter.name == 'no_proxy'):
+        if (parameter.name == sysinv_constants.SERVICE_PARAM_NAME_DOCKER_HTTP_PROXY or
+                parameter.name == sysinv_constants.SERVICE_PARAM_NAME_DOCKER_HTTPS_PROXY or
+                parameter.name == sysinv_constants.SERVICE_PARAM_NAME_DOCKER_NO_PROXY):
             client.sysinv.service_parameter.delete(parameter.uuid)
 
     if http_proxy != 'undef' or https_proxy != 'undef':
         parameters = {}
         if http_proxy != 'undef':
-            parameters['http_proxy'] = http_proxy
+            parameters[
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_HTTP_PROXY] = http_proxy
         if https_proxy != 'undef':
-            parameters['https_proxy'] = https_proxy
+            parameters[
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_HTTPS_PROXY] = https_proxy
 
-        parameters['no_proxy'] = no_proxy
+        parameters[sysinv_constants.SERVICE_PARAM_NAME_DOCKER_NO_PROXY] = no_proxy
         values = {
             'service': sysinv_constants.SERVICE_TYPE_DOCKER,
             'section': sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_PROXY,
@@ -570,11 +572,11 @@ def populate_docker_config(client):
     # created in the previous failed run.
     parameters = client.sysinv.service_parameter.list()
     for parameter in parameters:
-        if (parameter.name == 'k8s' or
-                parameter.name == 'gcr' or
-                parameter.name == 'quay' or
-                parameter.name == 'docker' or
-                parameter.name == 'insecure_registry'):
+        if (parameter.name == sysinv_constants.SERVICE_PARAM_NAME_DOCKER_INSECURE_REGISTRY or
+                parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_K8S_REGISTRY or
+                parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_GCR_REGISTRY or
+                parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_QUAY_REGISTRY or
+                parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_DOCKER_REGISTRY):
             client.sysinv.service_parameter.delete(parameter.uuid)
 
     if not use_default_registries:
@@ -582,24 +584,49 @@ def populate_docker_config(client):
                                           'IS_SECURE_REGISTRY')
         parameters = {}
 
-        parameters['k8s'] = CONF.get('BOOTSTRAP_CONFIG', 'K8S_REGISTRY')
-        parameters['gcr'] = CONF.get('BOOTSTRAP_CONFIG', 'GCR_REGISTRY')
-        parameters['quay'] = CONF.get('BOOTSTRAP_CONFIG', 'QUAY_REGISTRY')
-        parameters['docker'] = CONF.get('BOOTSTRAP_CONFIG', 'DOCKER_REGISTRY')
+        k8s_url = CONF.get('BOOTSTRAP_CONFIG', 'K8S_REGISTRY')
+        gcr_url = CONF.get('BOOTSTRAP_CONFIG', 'GCR_REGISTRY')
+        quay_url = CONF.get('BOOTSTRAP_CONFIG', 'QUAY_REGISTRY')
+        docker_url = CONF.get('BOOTSTRAP_CONFIG', 'DOCKER_REGISTRY')
 
-        if not secure_registry:
-            parameters['insecure_registry'] = "True"
-
-        values = {
-            'service': sysinv_constants.SERVICE_TYPE_DOCKER,
-            'section': sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_REGISTRY,
-            'personality': None,
-            'resource': None,
-            'parameters': parameters
-        }
+        parameters[
+            sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_K8S_REGISTRY] = \
+            {sysinv_constants.SERVICE_PARAM_NAME_DOCKER_URL: k8s_url}
+        parameters[
+            sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_GCR_REGISTRY] = \
+            {sysinv_constants.SERVICE_PARAM_NAME_DOCKER_URL: gcr_url}
+        parameters[
+            sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_QUAY_REGISTRY] = \
+            {sysinv_constants.SERVICE_PARAM_NAME_DOCKER_URL: quay_url}
+        parameters[
+            sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_DOCKER_REGISTRY] = \
+            {sysinv_constants.SERVICE_PARAM_NAME_DOCKER_URL: docker_url}
 
         print("Populating/Updating docker registry config...")
-        client.sysinv.service_parameter.create(**values)
+        for registry in parameters:
+            values = {
+                'service': sysinv_constants.SERVICE_TYPE_DOCKER,
+                'section': registry,
+                'personality': None,
+                'resource': None,
+                'parameters': parameters[registry]
+            }
+            client.sysinv.service_parameter.create(**values)
+
+        if not secure_registry:
+            parameters = {}
+            parameters[
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_INSECURE_REGISTRY] = "True"
+
+            values = {
+                'service': sysinv_constants.SERVICE_TYPE_DOCKER,
+                'section': sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_REGISTRY,
+                'personality': None,
+                'resource': None,
+                'parameters': parameters
+            }
+
+            client.sysinv.service_parameter.create(**values)
         print("Docker registry config completed.")
 
     # Remove any kubernetes entries that might have been created in the
