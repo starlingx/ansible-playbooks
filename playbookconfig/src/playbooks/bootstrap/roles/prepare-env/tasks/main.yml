@@ -294,9 +294,21 @@
       path: /etc/platform/openrc
     register: openrc_file
 
-  - name: Turn on replayed flag
-    set_fact:
-      replayed: true
+  - block:
+    - name: Turn on replayed flag
+      set_fact:
+        replayed: true
+
+    # If the bootstrap manifest has been applied, prevent password regeneration upon
+    # replay.
+    # TODO(tngo): Revise this logic once the decision has been made to continue
+    #             storing admin password using python keyring or switching to
+    #             barbican as the frontend and possibly backend changes to support password
+    #             regeneration in bootstrap replays differ considerably between the
+    #             two storage approaches.
+    - name: Turn off save_password flag
+      set_fact:
+        save_password: false
     when: openrc_file.stat.exists and docker.rc == 0
 
   - block:  # executed if it is a replay
@@ -452,15 +464,6 @@
           set_fact:
             restart_services: true
           when: (prev_apiserver_oidc|default({})) != (apiserver_oidc)
-
-        # Re-evaluate the condition to generate the python keyring
-        - name: Turn off save_password flag if admin password has not changed
-          set_fact:
-            save_password: false
-          # TODO(tngo): there seems to be a puppet/sysinv limitation that prevents password
-          # reconfiguration to work without an extra boot. Temporarily disable
-          # it for replay for now.
-          when: replayed
 
         # Re-evaluate the condition to persist config data to sysinv database
         - name: Turn off save_config_to_db flag
