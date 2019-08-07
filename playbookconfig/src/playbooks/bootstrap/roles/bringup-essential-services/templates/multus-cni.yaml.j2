@@ -8,6 +8,8 @@
 #   it has a lower lexographic order than the calico CNI configuration file.
 # - The configMap has been modified to work with Calico rather than Flannel
 # - The tuning plugin is used to update sysctl tcp_keepalive timers.
+# - The portmap plugin is enabled to allow forwarding from one or more ports
+#   on the host to the container
 ---
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
@@ -82,6 +84,9 @@ data:
     {
       "name": "multus-cni-network",
       "type": "multus",
+      "capabilities": {
+          "portMappings": true
+      },
       "delegates": [
         {
           "cniVersion": "0.3.0",
@@ -116,6 +121,11 @@ data:
                 "net.ipv4.tcp_keepalive_probes": "5",
                 "net.ipv4.tcp_keepalive_time": "5"
               }
+            },
+            {
+              "type": "portmap",
+              "snat": true,
+              "capabilities": {"portMappings": true}
             }
           ]
         }
