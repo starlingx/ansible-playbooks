@@ -75,7 +75,10 @@ management_multicast_subnet: 239.1.1.0/28
 # management_multicast_end_address:
 
 # Management network address allocation (true = dynamic, false = static)
-dynamic_address_allocation: true
+management_dynamic_address_allocation: true
+
+# Cluster-host network address allocation (true = dynamic, false = static)
+cluster_host_dynamic_address_allocation: true
 
 # DOCKER PROXIES
 # ==============
