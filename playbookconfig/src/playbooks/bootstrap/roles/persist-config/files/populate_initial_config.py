@@ -215,7 +215,7 @@ def populate_mgmt_network(client):
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'MANAGEMENT_END_ADDRESS')
     dynamic_allocation = CONF.getboolean(
-        'BOOTSTRAP_CONFIG', 'DYNAMIC_ADDRESS_ALLOCATION')
+        'BOOTSTRAP_CONFIG', 'MANAGEMENT_DYNAMIC_ADDRESS_ALLOCATION')
     network_name = 'mgmt'
 
     if RECONFIGURE_NETWORK:
@@ -366,6 +366,8 @@ def populate_cluster_host_network(client):
                              'CLUSTER_HOST_START_ADDRESS')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'CLUSTER_HOST_END_ADDRESS')
+    dynamic_allocation = CONF.getboolean(
+        'BOOTSTRAP_CONFIG', 'CLUSTER_HOST_DYNAMIC_ADDRESS_ALLOCATION')
     network_name = 'cluster-host'
 
     if RECONFIGURE_NETWORK:
@@ -387,7 +389,7 @@ def populate_cluster_host_network(client):
     values = {
         'type': sysinv_constants.NETWORK_TYPE_CLUSTER_HOST,
         'name': sysinv_constants.NETWORK_TYPE_CLUSTER_HOST,
-        'dynamic': True,
+        'dynamic': dynamic_allocation,
         'pool_uuid': pool.uuid,
     }
     create_network(client, values, network_name)

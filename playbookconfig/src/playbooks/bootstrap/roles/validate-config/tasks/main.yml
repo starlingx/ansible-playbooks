@@ -23,7 +23,8 @@
       - OAM subnet is {{ external_oam_subnet }}
       - OAM gateway is {{ external_oam_gateway_address }}
       - OAM floating ip is {{ external_oam_floating_address }}
-      - Dynamic address allocation is {{ dynamic_address_allocation }}
+      - Management dynamic address allocation is {{ management_dynamic_address_allocation }}
+      - Cluster host dynamic address allocation is {{ cluster_host_dynamic_address_allocation }}
       - Docker registries is {{ docker_registries }}
       - Docker HTTP proxy is {{ docker_http_proxy }}
       - Docker HTTPS proxy is {{ docker_https_proxy }}
@@ -177,10 +178,15 @@
 
     when: ipv6_addressing != False
 
-  - name: Fail if address allocation is misconfigured
+  - name: Fail if management address allocation is misconfigured
     fail:
-      msg: "dynamic_address_allocation is misconfigured. Valid value is either 'True' or 'False'."
-    when: not dynamic_address_allocation | type_debug == 'bool'
+      msg: "management_dynamic_address_allocation is misconfigured. Valid value is either 'True' or 'False'."
+    when: not management_dynamic_address_allocation | type_debug == 'bool'
+
+  - name: Fail if cluster-host address allocation is misconfigured
+    fail:
+      msg: "cluster_host_dynamic_address_allocation is misconfigured. Valid value is either 'True' or 'False'."
+    when: not cluster_host_dynamic_address_allocation | type_debug == 'bool'
 
   - name: Fail if management start or end address is not configured for System Controller
     fail:
@@ -549,12 +555,13 @@
       - "MANAGEMENT_SUBNET={{ management_subnet }}"
       - "MANAGEMENT_START_ADDRESS={{ address_pairs['management']['start'] }}"
       - "MANAGEMENT_END_ADDRESS={{ address_pairs['management']['end'] }}"
-      - "DYNAMIC_ADDRESS_ALLOCATION={{ dynamic_address_allocation }}"
+      - "MANAGEMENT_DYNAMIC_ADDRESS_ALLOCATION={{ management_dynamic_address_allocation }}"
       - "MANAGEMENT_INTERFACE=lo"
       - "CONTROLLER_0_ADDRESS={{ derived_network_params.controller_0_address }}"
       - "CLUSTER_HOST_SUBNET={{ cluster_host_subnet }}"
       - "CLUSTER_HOST_START_ADDRESS={{ address_pairs['cluster_host']['start'] }}"
       - "CLUSTER_HOST_END_ADDRESS={{ address_pairs['cluster_host']['end'] }}"
+      - "CLUSTER_HOST_DYNAMIC_ADDRESS_ALLOCATION={{ cluster_host_dynamic_address_allocation }}"
       - "CLUSTER_POD_SUBNET={{ cluster_pod_subnet }}"
       - "CLUSTER_POD_START_ADDRESS={{ address_pairs['cluster_pod']['start'] }}"
       - "CLUSTER_POD_END_ADDRESS={{ address_pairs['cluster_pod']['end'] }}"

@@ -130,7 +130,8 @@
       - external_oam_gateway_address
       - external_oam_floating_address
       - management_multicast_subnet
-      - dynamic_address_allocation
+      - management_dynamic_address_allocation
+      - cluster_host_dynamic_address_allocation
       - dns_servers
       - docker_registries
       - admin_username
@@ -421,7 +422,8 @@
           set_fact:
             network_config_update: true
           when: reconfigure_endpoints or
-                (prev_dynamic_address_allocation != dynamic_address_allocation) or
+                (prev_management_dynamic_address_allocation != management_dynamic_address_allocation) or
+                (prev_cluster_host_dynamic_address_allocation != cluster_host_dynamic_address_allocation) or
                 (prev_management_end_address != management_end_address) or
                 (prev_pxeboot_subnet != pxeboot_subnet) or
                 (prev_pxeboot_start_address != pxeboot_start_address) or
