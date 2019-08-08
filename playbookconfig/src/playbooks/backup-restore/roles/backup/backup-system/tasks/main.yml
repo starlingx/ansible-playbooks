@@ -169,6 +169,8 @@
       set_fact:
         total_size_estimation: "{{ total_size_estimation|default(1024*128)|int + item.stdout|int }}"
       with_items: "{{ size_output.results }}"
+      loop_control:
+        label: "{{ item.item }}"
 
     - name: Check if there is enough free space in the archive dir to create backup
       shell: "df -k /opt/backups --output=avail | tail -1"

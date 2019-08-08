@@ -8,7 +8,12 @@
 #   This role contains common components (tasks, vars, etc.) that
 #   can be shared by all the backup and restore playbooks.
 
+# Check host connectivity
 - block:
+  - name: Set SSH port
+    set_fact:
+      ansible_port: "{{ ansible_port | default(22) }}"
+
   - name: Update SSH known hosts
     lineinfile:
       path: ~/.ssh/known_hosts
