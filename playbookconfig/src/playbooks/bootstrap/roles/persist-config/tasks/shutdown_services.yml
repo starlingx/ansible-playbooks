@@ -28,6 +28,23 @@
   - name: Shut down and remove Kubernetes components
     command: kubeadm reset -f
 
+  # Cleanup kubelet-lv
+  # Due to https://github.com/kubernetes/kubeadm/issues/1294 kubeadm will
+  # unmount /var/lib/kubelet. We need to remount the kubelet-lv and remove its
+  # contents.
+  - block:
+    - name: Mount kubelet-lv
+      command: mount /var/lib/kubelet/
+      args:
+        warn: false
+
+    - name: Clear kubelet data
+      shell: /bin/rm -rf /var/lib/kubelet/*
+      args:
+        warn: false
+
+    when: '"/var/lib/kubelet/" is not mount'
+
   - name: Clear etcd data cache
     shell: /bin/rm -rf /opt/etcd/{{ software_version }}/controller.etcd/*
     args:
