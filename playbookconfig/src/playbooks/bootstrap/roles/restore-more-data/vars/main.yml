@@ -1,6 +1,6 @@
 ---
 platform_conf_path: /etc/platform
-helm_charts_permdir: /opt/cgcs/helm_charts
+helm_charts_permdir: /opt/platform/helm_charts
 patching_permdir: /opt/patching
 patching_repo_permdir: /www/pages/updates
 extension_permdir: /opt/extension

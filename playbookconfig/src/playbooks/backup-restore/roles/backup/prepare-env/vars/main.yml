@@ -6,7 +6,6 @@
 #
 
 platform_path: /opt/platform
-cgcs_path: /opt/cgcs
 platform_conf_path: /etc/platform
 backup_in_progress_flag: "{{ platform_conf_path }}/.backup_in_progress"
 host_override_backup_file: "{{ inventory_hostname }}_override_backup.yml"
