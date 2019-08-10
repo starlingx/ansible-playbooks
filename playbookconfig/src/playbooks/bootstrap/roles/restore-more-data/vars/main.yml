@@ -8,6 +8,7 @@ patch_vault_permdir: /opt/patch-vault
 ldap_permdir: /var/lib/openldap-data
 kube_config_dir: "{{ lookup('env', 'KUBECONFIG') }}"
 crushmap_file: crushmap.bin.backup
+staging_dir: /scratch/restore
 
 # Default directory where the backup tarball is stored at the end
 # of the platform restore. As a continuation of the restore process,

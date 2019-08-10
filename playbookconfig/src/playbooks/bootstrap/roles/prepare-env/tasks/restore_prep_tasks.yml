@@ -8,26 +8,6 @@
 #   These tasks do the preparation specifically for the platform restore
 #
 - block:
-  - name: Create restore in progress flag file
-    file:
-      path: "{{ restore_in_progress_flag }}"
-      state: touch
-
-  # Put the backup tarball in /scratch
-  - name: Set staging dir fact
-    set_fact:
-      staging_dir: /scratch
-
-  - name: Transfer backup tarball to remote controller-0
-    copy:
-      src: "{{ host_backup_dir }}/{{ backup_filename }}"
-      dest: "{{ staging_dir }}"
-      owner: root
-      group: root
-      mode: 0644
-
-  # TODO(Wei): Need to do patching stuff here
-
   - name: Set config path facts for restore
     set_fact:
       branding_permdir: "{{ config_permdir }}/branding"

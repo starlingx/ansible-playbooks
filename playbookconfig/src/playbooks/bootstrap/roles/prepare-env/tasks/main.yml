@@ -110,6 +110,10 @@
       fail:
         msg: " Restore is already in progress!"
       when: restore_in_progress.stat.exists
+
+    # Do load verification and patching if required
+    - include_tasks: load_patching_tasks.yml
+
     when: mode == 'restore'
 
   # The following parameters should exist in default.yml. If any of them is

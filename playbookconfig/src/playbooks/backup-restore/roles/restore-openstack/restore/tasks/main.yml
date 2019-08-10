@@ -44,7 +44,7 @@
 - name: Fail if restoring StarlingX Openstack is already in progress
   fail:
     msg: "Restoring StarlingX Openstack is already in progress!"
-  when: restore_openstack_in_progress.stat.exists == true
+  when: restore_openstack_in_progress.stat.exists
 
 - name: Search for stx-openstack application
   shell: source /etc/platform/openrc; system application-list | grep 'stx-openstack'
@@ -200,7 +200,7 @@
           and Cinder volumes.
 
     - meta: end_play
-    when: restore_ceph_data == true
+    when: restore_ceph_data
 
   - name: Continue to bring up the remaining StarlingX Openstack services
     shell: source /etc/platform/openrc; system application-apply --mode normal stx-openstack
