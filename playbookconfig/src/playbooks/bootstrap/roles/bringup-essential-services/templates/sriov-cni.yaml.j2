@@ -1,6 +1,10 @@
 # SRIOV-CNI Release v1
 # Based on:
 # https://github.com/intel/sriov-cni/blob/master/images/sriov-cni-daemonset.yaml
+#
+# The following modifications have been made:
+#
+# - The daemonset is modified to tolerate all NoSchedule taints
 ---
 apiVersion: extensions/v1beta1
 kind: DaemonSet
@@ -21,8 +25,7 @@ spec:
       nodeSelector:
         beta.kubernetes.io/arch: amd64
       tolerations:
-      - key: node-role.kubernetes.io/master
-        operator: Exists
+      - operator: Exists
         effect: NoSchedule
       containers:
       - name: kube-sriov-cni

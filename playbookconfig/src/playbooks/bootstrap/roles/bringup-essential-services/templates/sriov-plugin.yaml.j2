@@ -7,6 +7,7 @@
 # - A nodeSelector of 'sriovdp' has been added to ensure the sriov device plugin
 #   pods only run on appropriately labelled nodes.
 # - The config hostPath is explicitly set to 'File'
+# - The daemonset is modified to tolerate all NoSchedule taints
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -34,8 +35,7 @@ spec:
         beta.kubernetes.io/arch: amd64
         sriovdp: enabled
       tolerations:
-      - key: node-role.kubernetes.io/master
-        operator: Exists
+      - operator: Exists
         effect: NoSchedule
       serviceAccountName: sriov-device-plugin
       containers:
