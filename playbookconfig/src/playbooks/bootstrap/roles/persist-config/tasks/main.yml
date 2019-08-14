@@ -181,13 +181,13 @@
   set_fact:
     pxe_default: pxelinux.cfg.files/default
     pxe_grub_cfg: pxelinux.cfg.files/grub.cfg
-  when: dynamic_address_allocation
+  when: management_dynamic_address_allocation
 
 - name: Set pxeboot files source if address allocation is static
   set_fact:
     pxe_default: pxelinux.cfg.files/default.static
     pxe_grub_cfg: pxelinux.cfg.files/grub.cfg.static
-  when: not dynamic_address_allocation
+  when: not management_dynamic_address_allocation
 
 - name: Set pxeboot files symlinks
   file:
