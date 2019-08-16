@@ -173,18 +173,9 @@
     - "prev_k8s_root_ca_cert: {{ k8s_root_ca_cert }}"
     - "prev_k8s_root_ca_key: {{ k8s_root_ca_key }}"
     - "prev_apiserver_oidc: {{ apiserver_oidc | to_yaml }}"
-
-# Need to save the dictionary this way for proper comparison during replay
-- name: Save previous docker registries header
-  lineinfile:
-    path: "{{ last_bootstrap_config_file }}"
-    line: "prev_docker_registries:"
-
-- name: Save previous docker registries content
-  lineinfile:
-    path: "{{ last_bootstrap_config_file }}"
-    line: "  {{ item.key }}: {{ item.value }}"
-  with_dict: "{{ docker_registries }}"
+    # Nested dictionaries are picky about having things on the same line
+    - "prev_docker_registries: "
+    - "{{ docker_registries | to_yaml }}"
 
 - name: Mark the bootstrap as completed
   file:
