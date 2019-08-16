@@ -196,10 +196,14 @@
   - name: Set default registries dictionary
     set_fact:
       default_docker_registries:
-        k8s.gcr.io: k8s.gcr.io
-        gcr.io: gcr.io
-        quay.io: quay.io
-        docker.io: docker.io
+        k8s.gcr.io:
+          url: k8s.gcr.io
+        gcr.io:
+          url: gcr.io
+        quay.io:
+          url: quay.io
+        docker.io:
+          url: docker.io
 
   - name: Merge user and default registries dictionaries
     set_fact:
