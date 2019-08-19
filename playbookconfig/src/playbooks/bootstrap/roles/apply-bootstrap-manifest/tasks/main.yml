@@ -48,26 +48,35 @@
     args:
       warn: false
 
-  - name: Create temp ssh_config dir
-    file:
-      path: "{{ temp_ssh_config_dir }}"
-      state: directory
-      owner: root
-      group: root
-      mode: 0755
-
-  - name: Prefetch ssh_config
-    command: >-
-      tar -C {{ temp_ssh_config_dir }} -xpf {{ staging_dir }}/{{ backup_filename }} --transform='s,.*/,,'
-      {{ short_ssh_config_permdir }}
+  - name: Look for ssh_config dir in the backup tarball
+    shell: "tar -tf {{ staging_dir }}/{{ backup_filename }} | grep 'opt/platform/config/.*/ssh_config'"
     args:
       warn: false
+    failed_when: false
+    register: search_ssh_config
 
-  - name: Remove the unwanted directory
-    file:
-      path: "{{ temp_ssh_config_dir }}/ssh_config"
-      state: absent
+  - block:
+    - name: Create temp ssh_config dir
+      file:
+        path: "{{ temp_ssh_config_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: 0755
 
+    - name: Prefetch ssh_config
+      command: >-
+        tar -C {{ temp_ssh_config_dir }} -xpf {{ staging_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+        {{ short_ssh_config_permdir }}
+      args:
+        warn: false
+
+    - name: Remove the unwanted directory
+      file:
+        path: "{{ temp_ssh_config_dir }}/ssh_config"
+        state: absent
+
+    when: search_ssh_config.rc == 0
   when: mode == 'restore'
 
 - name: Applying puppet bootstrap manifest

@@ -1,5 +1,5 @@
 ---
-kube_config_dir: "{{ lookup('env', 'KUBECONFIG') }}"
+kube_config_dir: /etc/kubernetes/admin.conf
 
 skip_os_dbs: ['Database', 'information_schema', 'performance_schema', 'mysql', 'horizon', 'panko', 'gnocchi']
 
