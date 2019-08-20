@@ -369,16 +369,17 @@
   - set_fact:
       use_default_registries: true
       k8s_registry:
-        "{{ docker_registries[default_k8s_registry] if docker_registries[default_k8s_registry] is not none
+        "{{ docker_registries[default_k8s_registry]['url'] if docker_registries[default_k8s_registry]['url'] is not none
         else default_k8s_registry }}"
       gcr_registry:
-        "{{ docker_registries[default_gcr_registry] if docker_registries[default_gcr_registry] is not none
+        "{{ docker_registries[default_gcr_registry]['url'] if docker_registries[default_gcr_registry]['url'] is not none
         else default_gcr_registry }}"
       quay_registry:
-        "{{ docker_registries[default_quay_registry] if docker_registries[default_quay_registry] is not none
+        "{{ docker_registries[default_quay_registry]['url'] if docker_registries[default_quay_registry]['url'] is not none
         else default_quay_registry }}"
       docker_registry:
-        "{{ docker_registries[default_docker_registry] if docker_registries[default_docker_registry] is not none
+        "{{ docker_registries[default_docker_registry]['url']
+        if docker_registries[default_docker_registry]['url'] is not none
         else default_docker_registry }}"
       default_no_proxy:
         - localhost
@@ -433,10 +434,10 @@
     - name: Turn on use_unified_registry flag
       set_fact:
         use_unified_registry: true
-        k8s_registry: "{{ docker_registries['unified'] }}"
-        gcr_registry: "{{ docker_registries['unified'] }}"
-        quay_registry: "{{ docker_registries['unified'] }}"
-        docker_registry: "{{ docker_registries['unified'] }}"
+        k8s_registry: "{{ docker_registries['unified']['url'] }}"
+        gcr_registry: "{{ docker_registries['unified']['url'] }}"
+        quay_registry: "{{ docker_registries['unified']['url'] }}"
+        docker_registry: "{{ docker_registries['unified']['url'] }}"
 
     when: docker_registries['unified'] is defined and docker_registries['unified'] is not none
 
@@ -451,7 +452,7 @@
           docker_registry != default_docker_registry
 
   - block:
-    - include: validate_address.yml  input_address={{ item.value }}
+    - include: validate_address.yml  input_address={{ item.value.url }}
       with_dict: "{{ docker_registries }}"
     when: not use_default_registries
 
