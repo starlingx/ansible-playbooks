@@ -49,7 +49,7 @@
 - block:
   - name: Restore certificate and key files
     command: >-
-      tar -C /etc/ssl/private -xpf {{ staging_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+      tar -C /etc/ssl/private -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
       'etc/ssl/private/registry-cert*'
     args:
       warn: false

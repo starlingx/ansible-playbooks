@@ -123,7 +123,7 @@
 
   - name: Prefetch the keyring from the tarball
     command: >-
-      tar -C {{ temp_keyring_dir }} -xpf {{ staging_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+      tar -C {{ temp_keyring_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
       {{ short_keyring_permdir }}
     args:
       warn: false
