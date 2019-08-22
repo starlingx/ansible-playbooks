@@ -7,15 +7,17 @@
 # ROLE DESCRIPTION:
 #   This role is to backup system data.
 #
-# TODO:
-# 1. Generate an alarm during backup
-#
 - name: Do system backup
   block:
-    - debug:
-        msg:
-          - override_files_dir is {{ override_files_dir }}
-          - inventory_hostname is {{ inventory_hostname }}
+    - name: Generate backup_in_progress alarm
+      script: fm_alarm.py "--set" "--backup"
+      register: alarm_result
+      failed_when: false
+
+    - name: Fail if alarm script throws an exception
+      fail:
+        msg: "Failed to generate backup-in-progress alarm."
+      when: alarm_result.rc != 0
 
     - name: Create temp dir
       tempfile:
@@ -463,8 +465,19 @@
       file:
         path: "{{ tempdir.path }}"
         state: absent
+      when: tempdir is defined
 
     - name: Remove the backup in progress flag file
       file:
         path: "{{ backup_in_progress_flag }}"
         state: absent
+
+    - name: Clear backup_in_progress alarm
+      script: fm_alarm.py "--clear" "--backup"
+      register: alarm_result
+      failed_when: false
+
+    - name: Fail if alarm script throws an exception
+      fail:
+        msg: "Failed to clear backup-in-progress alarm."
+      when: alarm_result.rc != 0
