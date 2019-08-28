@@ -590,6 +590,10 @@ def populate_docker_config(client):
         gcr_url = CONF.get('BOOTSTRAP_CONFIG', 'GCR_REGISTRY')
         quay_url = CONF.get('BOOTSTRAP_CONFIG', 'QUAY_REGISTRY')
         docker_url = CONF.get('BOOTSTRAP_CONFIG', 'DOCKER_REGISTRY')
+        k8s_secret = CONF.get('BOOTSTRAP_CONFIG', 'K8S_REGISTRY_SECRET')
+        gcr_secret = CONF.get('BOOTSTRAP_CONFIG', 'GCR_REGISTRY_SECRET')
+        quay_secret = CONF.get('BOOTSTRAP_CONFIG', 'QUAY_REGISTRY_SECRET')
+        docker_secret = CONF.get('BOOTSTRAP_CONFIG', 'DOCKER_REGISTRY_SECRET')
 
         parameters[
             sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_K8S_REGISTRY] = \
@@ -603,6 +607,27 @@ def populate_docker_config(client):
         parameters[
             sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_DOCKER_REGISTRY] = \
             {sysinv_constants.SERVICE_PARAM_NAME_DOCKER_URL: docker_url}
+        if k8s_secret != "none":
+            parameters[
+                sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_K8S_REGISTRY][
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_AUTH_SECRET] = \
+                k8s_secret.split('/')[-1]
+            # we need the split because we want the Barbican UUID, not the secret href
+        if gcr_secret != "none":
+            parameters[
+                sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_GCR_REGISTRY][
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_AUTH_SECRET] = \
+                gcr_secret.split('/')[-1]
+        if quay_secret != "none":
+            parameters[
+                sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_QUAY_REGISTRY][
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_AUTH_SECRET] = \
+                quay_secret.split('/')[-1]
+        if docker_secret != "none":
+            parameters[
+                sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_DOCKER_REGISTRY][
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_AUTH_SECRET] = \
+                docker_secret.split('/')[-1]
 
         print("Populating/Updating docker registry config...")
         for registry in parameters:

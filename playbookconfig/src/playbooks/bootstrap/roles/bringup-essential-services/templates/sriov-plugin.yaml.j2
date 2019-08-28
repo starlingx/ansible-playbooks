@@ -38,9 +38,11 @@ spec:
       - operator: Exists
         effect: NoSchedule
       serviceAccountName: sriov-device-plugin
+      imagePullSecrets:
+        - name: docker-registry-secret
       containers:
       - name: kube-sriovdp
-        image: "{{ docker_registry }}/starlingx/k8s-plugins-sriov-network-device:master-centos-stable-latest"
+        image: "{{ docker_registry.url }}/starlingx/k8s-plugins-sriov-network-device:master-centos-stable-latest"
         args:
         - --log-level=10
         securityContext:

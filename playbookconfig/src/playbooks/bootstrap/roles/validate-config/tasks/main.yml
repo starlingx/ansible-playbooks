@@ -8,6 +8,63 @@
 #   This role is to validate and save host (non secure) config.
 #
 
+# error check the password section of docker registries
+# check password parameters before trying to hide the password
+# we need to do that here as opposed to with the other docker registry
+# stuff because of the debug log statement.
+# we need to do this all before the debug log statement to not log passwords.
+- name: Check k8s_registry credentials
+  fail:
+    msg: "k8s registry username and password must both be specified or not at all"
+  when: (docker_registries[default_k8s_registry.url].username is defined and
+         docker_registries[default_k8s_registry.url].password is not defined) or
+        (docker_registries[default_k8s_registry.url].username is not defined and
+         docker_registries[default_k8s_registry.url].password is defined)
+
+- name: Check gcr_registry credentials
+  fail:
+    msg: "gcr registry username and password must both be specified or not at all"
+  when: (docker_registries[default_gcr_registry.url].username is defined and
+         docker_registries[default_gcr_registry.url].password is not defined) or
+        (docker_registries[default_gcr_registry.url].username is not defined and
+         docker_registries[default_gcr_registry.url].password is defined)
+
+- name: Check quay_registry credentials
+  fail:
+    msg: "quay registry username and password must both be specified or not at all"
+  when: (docker_registries[default_quay_registry.url].username is defined and
+         docker_registries[default_quay_registry.url].password is not defined) or
+        (docker_registries[default_quay_registry.url].username is not defined and
+         docker_registries[default_quay_registry.url].password is defined)
+
+- name: Check docker_registry credentials
+  fail:
+    msg: "docker registry username and password must both be specified or not at all"
+  when: (docker_registries[default_docker_registry.url].username is defined and
+         docker_registries[default_docker_registry.url].password is not defined) or
+        (docker_registries[default_docker_registry.url].username is not defined and
+         docker_registries[default_docker_registry.url].password is defined)
+
+- name: Check unified registry credentials
+  fail:
+    msg: "unified registry username and password must both be specified or not at all"
+  when: docker_registries['unified'] is defined and
+        ((docker_registries['unified'].username is defined and
+         docker_registries['unified'].password is not defined) or
+        (docker_registries['unified'].username is not defined and
+         docker_registries['unified'].password is defined))
+
+# create a copy of docker_registries without passwords for debug logging
+- set_fact:
+    docker_registries_with_secrets: "{{ docker_registries }}"
+
+- set_fact:
+    docker_registries: "{{ docker_registries | combine(hide_pw, recursive=true) }}"
+  vars:
+    hide_pw: "{ '{{ item.key }}': { 'password': 'secret' } }"
+  with_dict: "{{ docker_registries }}"
+  no_log: true
+
 - debug:
     msg:
       - System mode is {{ system_mode }}
@@ -369,17 +426,20 @@
   - set_fact:
       use_default_registries: true
       k8s_registry:
-        "{{ docker_registries[default_k8s_registry]['url'] if docker_registries[default_k8s_registry]['url'] is not none
+        "{{ docker_registries_with_secrets[default_k8s_registry.url]
+        if docker_registries[default_k8s_registry.url]['url'] is not none
         else default_k8s_registry }}"
       gcr_registry:
-        "{{ docker_registries[default_gcr_registry]['url'] if docker_registries[default_gcr_registry]['url'] is not none
+        "{{ docker_registries_with_secrets[default_gcr_registry.url]
+        if docker_registries[default_gcr_registry.url]['url'] is not none
         else default_gcr_registry }}"
       quay_registry:
-        "{{ docker_registries[default_quay_registry]['url'] if docker_registries[default_quay_registry]['url'] is not none
+        "{{ docker_registries_with_secrets[default_quay_registry.url]
+        if docker_registries[default_quay_registry.url]['url'] is not none
         else default_quay_registry }}"
       docker_registry:
-        "{{ docker_registries[default_docker_registry]['url']
-        if docker_registries[default_docker_registry]['url'] is not none
+        "{{ docker_registries_with_secrets[default_docker_registry.url]
+        if docker_registries[default_docker_registry.url]['url'] is not none
         else default_docker_registry }}"
       default_no_proxy:
         - localhost
@@ -434,10 +494,10 @@
     - name: Turn on use_unified_registry flag
       set_fact:
         use_unified_registry: true
-        k8s_registry: "{{ docker_registries['unified']['url'] }}"
-        gcr_registry: "{{ docker_registries['unified']['url'] }}"
-        quay_registry: "{{ docker_registries['unified']['url'] }}"
-        docker_registry: "{{ docker_registries['unified']['url'] }}"
+        k8s_registry: "{{ docker_registries_with_secrets['unified'] }}"
+        gcr_registry: "{{ docker_registries_with_secrets['unified'] }}"
+        quay_registry: "{{ docker_registries_with_secrets['unified'] }}"
+        docker_registry: "{{ docker_registries_with_secrets['unified'] }}"
 
     when: docker_registries['unified'] is defined and docker_registries['unified'] is not none
 
@@ -584,10 +644,10 @@
       - "DOCKER_HTTP_PROXY={{ docker_http_proxy }}"
       - "DOCKER_HTTPS_PROXY={{ docker_https_proxy }}"
       - "DOCKER_NO_PROXY={{ docker_no_proxy_combined | join(',') }}"
-      - "K8S_REGISTRY={{ k8s_registry }}"
-      - "GCR_REGISTRY={{ gcr_registry }}"
-      - "QUAY_REGISTRY={{ quay_registry }}"
-      - "DOCKER_REGISTRY={{ docker_registry }}"
+      - "K8S_REGISTRY={{ k8s_registry.url }}"
+      - "GCR_REGISTRY={{ gcr_registry.url }}"
+      - "QUAY_REGISTRY={{ quay_registry.url }}"
+      - "DOCKER_REGISTRY={{ docker_registry.url }}"
       - "USE_DEFAULT_REGISTRIES={{ use_default_registries }}"
       - "IS_SECURE_REGISTRY={{ is_secure_registry | default(True) }}"
       - "RECONFIGURE_ENDPOINTS={{ reconfigure_endpoints }}"

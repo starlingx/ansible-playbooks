@@ -525,12 +525,14 @@ spec:
       # Minimize downtime during a rolling upgrade or deletion; tell Kubernetes to do a "force
       # deletion": https://kubernetes.io/docs/concepts/workloads/pods/pod/#termination-of-pods.
       terminationGracePeriodSeconds: 0
+      imagePullSecrets:
+        - name: quay-registry-secret
       initContainers:
         # This container performs upgrade from host-local IPAM to calico-ipam.
         # It can be deleted if this is a fresh installation, or if you have already
         # upgraded to use calico-ipam.
         - name: upgrade-ipam
-          image: "{{ quay_registry }}/calico/cni:v3.6.2"
+          image: "{{ quay_registry.url }}/calico/cni:v3.6.2"
           command: ["/opt/cni/bin/calico-ipam", "-upgrade"]
           env:
             - name: KUBERNETES_NODE_NAME
@@ -550,7 +552,7 @@ spec:
         # This container installs the Calico CNI binaries
         # and CNI network config file on each node.
         - name: install-cni
-          image: "{{ quay_registry }}/calico/cni:v3.6.2"
+          image: "{{ quay_registry.url }}/calico/cni:v3.6.2"
           command: ["/install-cni.sh"]
           env:
             # Name of the CNI config file to create.
@@ -586,7 +588,7 @@ spec:
         # container programs network policy and routes on each
         # host.
         - name: calico-node
-          image: "{{ quay_registry }}/calico/node:v3.6.2"
+          image: "{{ quay_registry.url }}/calico/node:v3.6.2"
           env:
             # Configure inbound failsafe rules
             - name: FELIX_FAILSAFEINBOUNDHOSTPORTS
@@ -790,9 +792,11 @@ spec:
         - key: node-role.kubernetes.io/master
           effect: NoSchedule
       serviceAccountName: calico-kube-controllers
+      imagePullSecrets:
+        - name: quay-registry-secret
       containers:
         - name: calico-kube-controllers
-          image: "{{ quay_registry }}/calico/kube-controllers:v3.6.2"
+          image: "{{ quay_registry.url }}/calico/kube-controllers:v3.6.2"
           env:
             # Choose which controllers to run.
             - name: ENABLED_CONTROLLERS

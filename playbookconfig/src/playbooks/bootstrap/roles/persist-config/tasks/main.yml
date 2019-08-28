@@ -91,6 +91,76 @@
   include: shutdown_services.yml
   when: restart_services
 
+- name: Find old registry secrets in Barbican
+  shell: "{{ item }}"
+  with_items:
+    - "source /etc/platform/openrc; openstack secret list | grep k8s-registry-secret | awk '{print $2}'"
+    - "source /etc/platform/openrc; openstack secret list | grep gcr-registry-secret | awk '{print $2}'"
+    - "source /etc/platform/openrc; openstack secret list | grep quay-registry-secret | awk '{print $2}'"
+    - "source /etc/platform/openrc; openstack secret list | grep docker-registry-secret | awk '{print $2}'"
+  register: old_barbican_secrets
+
+- name: Delete old registry secrets in Barbican
+  shell: "source /etc/platform/openrc; openstack secret delete {{ item }}"
+  with_items:
+    - "{{ old_barbican_secrets.results | map(attribute='stdout_lines') | flatten }}"
+
+# need to do this here to get the barbican secret id for sysinv
+- block:
+  - name: Create Barbican secret for k8s registry if credentials exist
+    shell: "source /etc/platform/openrc; openstack secret store -n k8s-registry-secret
+           -p 'username:{{ k8s_registry['username'] }} password:{{ k8s_registry['password'] }}' -c 'Secret href' -f value"
+    register: k8s_registry_secret_output
+
+  - set_fact:
+      k8s_registry_secret: "{{ k8s_registry_secret_output.stdout }}"
+
+  when: k8s_registry.username is defined
+
+- block:
+  - name: Create Barbican secret for gcr registry if credentials exist
+    shell: "source /etc/platform/openrc; openstack secret store -n gcr-registry-secret
+           -p 'username:{{ gcr_registry['username'] }} password:{{ gcr_registry['password'] }}' -c 'Secret href' -f value"
+    register: gcr_registry_secret_output
+
+  - set_fact:
+      gcr_registry_secret: "{{ gcr_registry_secret_output.stdout }}"
+
+  when: gcr_registry.username is defined
+
+- block:
+  - name: Create Barbican secret for quay registry if credentials exist
+    shell: "source /etc/platform/openrc; openstack secret store -n quay-registry-secret
+           -p 'username:{{ quay_registry['username'] }} password:{{ quay_registry['password'] }}' -c 'Secret href' -f value"
+    register: quay_registry_secret_output
+
+  - set_fact:
+      quay_registry_secret: "{{ quay_registry_secret_output.stdout }}"
+
+  when: quay_registry.username is defined
+
+- block:
+  - name: Create Barbican secret for docker registry if credentials exist
+    shell: "source /etc/platform/openrc; openstack secret store -n docker-registry-secret
+           -p 'username:{{ docker_registry['username'] }} password:{{ docker_registry['password'] }}'
+           -c 'Secret href' -f value"
+    register: docker_registry_secret_output
+
+  - set_fact:
+      docker_registry_secret: "{{ docker_registry_secret_output.stdout }}"
+
+  when: docker_registry.username is defined
+
+- name: Append config ini file with Barbican secret uuid
+  lineinfile:
+    path: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
+    line: "{{ item }}"
+  with_items:
+    - "K8S_REGISTRY_SECRET={{ k8s_registry_secret | default('none') }}"
+    - "GCR_REGISTRY_SECRET={{ gcr_registry_secret | default('none') }}"
+    - "QUAY_REGISTRY_SECRET={{ quay_registry_secret | default('none') }}"
+    - "DOCKER_REGISTRY_SECRET={{ docker_registry_secret | default('none') }}"
+
 - include: update_sysinv_database.yml
   when: save_config_to_db
 

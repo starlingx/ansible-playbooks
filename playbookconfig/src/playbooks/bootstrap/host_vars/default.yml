@@ -108,7 +108,13 @@ cluster_host_dynamic_address_allocation: true
 #
 # To overwrite a particular registry url, use the original registry
 # value as the key followed by a custom IP address or domain for
-# the value.
+# the value. If the registry is authenticated, specify username and password
+# e.g.
+#   docker_registries:
+#     k8s.gcr.io:
+#       url: my.k8sregistry.io
+#       username: k8sreguser
+#       password: K8sregPass*
 #
 # The "unified" is a special registry key. Defining and giving
 # it a value implies all images are to be retrieved from this

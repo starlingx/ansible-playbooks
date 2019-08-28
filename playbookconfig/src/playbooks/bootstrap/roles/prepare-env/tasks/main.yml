@@ -193,6 +193,10 @@
       external_oam_node_0_address: "{{ external_oam_node_0_address | default('derived') }}"
       external_oam_node_1_address: "{{ external_oam_node_1_address | default('derived') }}"
 
+  - set_fact:
+      docker_registries: "{{ vault_docker_registries }}"
+    when: vault_docker_registries is defined
+
   - name: Set default registries dictionary
     set_fact:
       default_docker_registries:
@@ -259,12 +263,16 @@
     when: (docker_http_proxy is defined and docker_http_proxy is not none) or
           (docker_https_proxy is defined and docker_https_proxy is not none)
 
-  - name: Set default values for platform registries
+  - name: Set default values for individual platform registries and registry secrets
     set_fact:
-      default_k8s_registry: k8s.gcr.io
-      default_gcr_registry: gcr.io
-      default_quay_registry: quay.io
-      default_docker_registry: docker.io
+      default_k8s_registry:
+        url: k8s.gcr.io
+      default_gcr_registry:
+        url: gcr.io
+      default_quay_registry:
+        url: quay.io
+      default_docker_registry:
+        url: docker.io
 
   - name: Set default values for OpenID connect
     set_fact:
