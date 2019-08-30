@@ -27,9 +27,11 @@ spec:
       tolerations:
       - operator: Exists
         effect: NoSchedule
+      imagePullSecrets:
+        - name: docker-registry-secret
       containers:
       - name: kube-sriov-cni
-        image: "{{ docker_registry }}/starlingx/k8s-cni-sriov:master-centos-stable-latest"
+        image: "{{ docker_registry.url }}/starlingx/k8s-cni-sriov:master-centos-stable-latest"
         securityContext:
           privileged: true
         resources:

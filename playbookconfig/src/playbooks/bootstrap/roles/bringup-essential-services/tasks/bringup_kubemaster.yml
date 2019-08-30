@@ -59,7 +59,7 @@
     when: not is_secure_registry
 
   environment:
-    DOCKER_REGISTRY_IP: "{{ docker_registry }}"
+    DOCKER_REGISTRY_IP: "{{ docker_registry.url }}"
   when: use_unified_registry
 
 - name: Update kernel parameters for iptables
@@ -140,7 +140,7 @@
     ETCD_ENDPOINT: "http://{{ cluster_floating_address | ipwrap }}:2379"
     POD_NETWORK_CIDR: "{{ cluster_pod_subnet }}"
     SERVICE_NETWORK_CIDR: "{{ cluster_service_subnet }}"
-    K8S_REGISTRY: "{{ k8s_registry }}"
+    K8S_REGISTRY: "{{ k8s_registry.url }}"
 
 - name: Add apiserver certificate SANs to kubeadm
   replace:
@@ -172,6 +172,61 @@
     - "sed -i -e '/<%= @apiserver_oidc_username_claim %>/d' /etc/kubernetes/kubeadm.yaml"
   when: apiserver_oidc | length == 0
 
+- name: log in to k8s registry if credentials exist
+  docker_login:
+    registry: "{{ k8s_registry['url'] }}"
+    username: "{{ k8s_registry['username'] }}"
+    password: "{{ k8s_registry['password'] }}"
+  when: k8s_registry.username is defined
+
+- name: log in to gcr registry if credentials exist
+  docker_login:
+    registry: "{{ gcr_registry['url'] }}"
+    username: "{{ gcr_registry['username'] }}"
+    password: "{{ gcr_registry['password'] }}"
+  when: gcr_registry.username is defined
+
+- name: log in to quay registry if credentials exist
+  docker_login:
+    registry: "{{ quay_registry['url'] }}"
+    username: "{{ quay_registry['username'] }}"
+    password: "{{ quay_registry['password'] }}"
+  when: quay_registry.username is defined
+
+- name: log in to docker registry if credentials exist
+  docker_login:
+    registry: "{{ docker_registry['url'] }}"
+    username: "{{ docker_registry['username'] }}"
+    password: "{{ docker_registry['password'] }}"
+  when: docker_registry.username is defined
+
+- name: prepull kubernetes images
+  command: kubeadm config images pull --config=/etc/kubernetes/kubeadm.yaml
+
+- name: log out of k8s registry if credentials exist
+  docker_login:
+    registry: "{{ k8s_registry['url'] }}"
+    state: absent
+  when: k8s_registry.username is defined
+
+- name: log out of gcr registry if credentials exist
+  docker_login:
+    registry: "{{ gcr_registry['url'] }}"
+    state: absent
+  when: gcr_registry.username is defined
+
+- name: log out of quay registry if credentials exist
+  docker_login:
+    registry: "{{ quay_registry['url'] }}"
+    state: absent
+  when: quay_registry.username is defined
+
+- name: log out of docker registry if credentials exist
+  docker_login:
+    registry: "{{ docker_registry['url'] }}"
+    state: absent
+  when: docker_registry.username is defined
+
 - name: Initializing Kubernetes master
   command: kubeadm init --config=/etc/kubernetes/kubeadm.yaml
 
@@ -186,6 +241,53 @@
     src: /usr/share/puppet/modules/platform/files/kubeconfig.sh
     dest: /etc/profile.d/kubeconfig.sh
     remote_src: yes
+
+- name: Patch pull secret into kube-proxy service account
+  command: >
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf patch serviceaccount
+    kube-proxy -p '{"imagePullSecrets": [{"name": "k8s-registry-secret"}]}' -n kube-system
+
+- name: Find old Kubernetes registry secrets
+  shell: "{{ item }}"
+  with_items:
+    - "kubectl --kubeconfig=/etc/kubernetes/admin.conf get secrets -n kube-system |
+      grep k8s-registry-secret | awk '{print $1}'"
+    - "kubectl --kubeconfig=/etc/kubernetes/admin.conf get secrets -n kube-system |
+      grep gcr-registry-secret | awk '{print $1}'"
+    - "kubectl --kubeconfig=/etc/kubernetes/admin.conf get secrets -n kube-system |
+      grep quay-registry-secret | awk '{print $1}'"
+    - "kubectl --kubeconfig=/etc/kubernetes/admin.conf get secrets -n kube-system |
+      grep docker-registry-secret | awk '{print $1}'"
+  register: old_kubernetes_secrets
+
+- name: Delete old Kubernetes registry secrets
+  shell: "kubectl --kubeconfig=/etc/kubernetes/admin.conf delete secret -n kube-system {{ item }}"
+  with_items:
+    - "{{ old_kubernetes_secrets.results | map(attribute='stdout_lines') | flatten }}"
+
+- name: Create k8s registry pull secret
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf create secret docker-registry k8s-registry-secret
+            --docker-server={{ k8s_registry['url'] }} --docker-username={{ k8s_registry['username'] }}
+            --docker-password={{ k8s_registry['password'] }} -n kube-system"
+  when: k8s_registry['username'] is defined
+
+- name: Create gcr registry pull secret
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf create secret docker-registry gcr-registry-secret
+            --docker-server={{ gcr_registry['url'] }} --docker-username={{ gcr_registry['username'] }}
+            --docker-password={{ gcr_registry['password'] }} -n kube-system"
+  when: gcr_registry['username'] is defined
+
+- name: Create quay registry pull secret
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf create secret docker-registry quay-registry-secret
+            --docker-server={{ quay_registry['url'] }} --docker-username={{ quay_registry['username'] }}
+            --docker-password={{ quay_registry['password'] }} -n kube-system"
+  when: quay_registry['username'] is defined
+
+- name: Create docker registry pull secret
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf create secret docker-registry docker-registry-secret
+            --docker-server={{ docker_registry['url'] }} --docker-username={{ docker_registry['username'] }}
+            --docker-password={{ docker_registry['password'] }} -n kube-system"
+  when: docker_registry['username'] is defined
 
 - name: Set Calico cluster configuration
   set_fact:
