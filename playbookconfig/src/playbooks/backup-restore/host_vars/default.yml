@@ -17,12 +17,16 @@ override_files_dir: "{{ lookup('env', 'HOME') }}"
 backup_dir: /opt/backups
 
 #
-# The system backup tarball will be named in this format:
-# <backup_filename_prefix>_<timestamp>.tgz
+# The platform backup tarball will be named in this format:
+# <platform_backup_filename_prefix>_<timestamp>.tgz
 #
-# This variable is used for backup only.
+platform_backup_filename_prefix: "{{ inventory_hostname }}_platform_backup"
+
 #
-backup_filename_prefix: "{{ inventory_hostname }}_system_backup"
+# The stx-openstack application backup tarball will be named in this format:
+# <openstack_backup_filename_prefix>_<timestamp>.tgz
+#
+openstack_backup_filename_prefix: "{{ inventory_hostname }}_openstack_backup"
 
 #
 # System backup tarball filename. User must provide the filename either

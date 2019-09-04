@@ -144,8 +144,8 @@ docker_registries:
     url:
   docker.io:
     url:
-  # unified:
-  #   url: example.domain
+# unified:
+#   url: example.domain
 
 # is_secure_registry: True
 
