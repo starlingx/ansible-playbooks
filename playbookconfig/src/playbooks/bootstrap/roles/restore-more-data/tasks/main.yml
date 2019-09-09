@@ -354,5 +354,5 @@
 
   # restore_openstack still needs the backup tarball to restore
   # mariadb data
-  - name: Move backup tarball from /scratch to /opt/backups
+  - name: Move backup tarball from {{ staging_dir }} to {{ backup_dir }}
     command: mv {{ staging_dir }}/{{ backup_filename }} {{ backup_dir }}/{{ backup_filename }}
