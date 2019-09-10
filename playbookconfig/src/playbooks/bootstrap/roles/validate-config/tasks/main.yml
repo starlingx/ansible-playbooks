@@ -118,12 +118,13 @@
        distributed_cloud_role != 'systemcontroller' and
        distributed_cloud_role != 'subcloud')
 
-  - name: Validate system type if distributed cloud role is system controller
+  - name: Validate system type and system mode if distributed cloud role is system controller
     fail:
-      msg: "An All-in-one controller cannot be configured as Distributed Cloud System Controller"
+      msg: "A simplex All-in-one controller cannot be configured as Distributed Cloud System Controller"
     when: >
       (distributed_cloud_role == 'systemcontroller' and
-       system_type == 'All-in-one')
+       system_type == 'All-in-one' and
+       system_mode == 'simplex')
 
   - name: Checking registered timezones
     stat:
