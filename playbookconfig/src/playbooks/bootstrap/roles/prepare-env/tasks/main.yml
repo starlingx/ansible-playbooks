@@ -567,8 +567,8 @@
     file:
       path: "{{ ansible_remote_tmp }}"
       state: directory
-      owner: root
-      group: root
+      owner: sysadmin
+      group: sys_protected
       mode: 0755
     become: yes
 

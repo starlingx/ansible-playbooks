@@ -43,13 +43,13 @@
 
   - name: Prefetch static hieradata
     command: >-
-      tar -C {{ hieradata_workdir }} -xpf {{ staging_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+      tar -C {{ hieradata_workdir }} -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
       '{{ short_puppet_permdir }}/*static.yaml'
     args:
       warn: false
 
   - name: Look for ssh_config dir in the backup tarball
-    shell: "tar -tf {{ staging_dir }}/{{ backup_filename }} | grep 'opt/platform/config/.*/ssh_config'"
+    shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} | grep 'opt/platform/config/.*/ssh_config'"
     args:
       warn: false
     failed_when: false
@@ -66,7 +66,7 @@
 
     - name: Prefetch ssh_config
       command: >-
-        tar -C {{ temp_ssh_config_dir }} -xpf {{ staging_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+        tar -C {{ temp_ssh_config_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
         {{ short_ssh_config_permdir }}
       args:
         warn: false

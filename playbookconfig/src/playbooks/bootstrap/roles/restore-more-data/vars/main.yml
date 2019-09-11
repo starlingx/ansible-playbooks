@@ -6,11 +6,8 @@ patching_repo_permdir: /www/pages/updates
 extension_permdir: /opt/extension
 patch_vault_permdir: /opt/patch-vault
 ldap_permdir: /var/lib/openldap-data
-kube_config_dir: "{{ lookup('env', 'KUBECONFIG') }}"
 crushmap_file: crushmap.bin.backup
-staging_dir: /scratch/restore
 
-# Default directory where the backup tarball is stored at the end
-# of the platform restore. As a continuation of the restore process,
-# this backup tarball is needed when restoring the openstack application.
-backup_dir: /opt/backups
+# The staging area to process the data from the backup tarball
+# after bootstrap controller-0 is done during the restore.
+staging_dir: /opt/backups

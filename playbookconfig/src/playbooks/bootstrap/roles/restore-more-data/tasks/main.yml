@@ -29,7 +29,7 @@
 
 - name: Extract platform.conf from the backup tarball
   command: >-
-    tar -C {{ staging_dir }} -xpf {{ staging_dir }}/{{ backup_filename }}  --transform='s,.*/,,'
+    tar -C {{ staging_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}  --transform='s,.*/,,'
     {{ short_platform_conf_path }}/platform.conf
   args:
     warn: false
@@ -72,21 +72,21 @@
 # Restore resolv.conf and dnsmaq
 - name: Extract resolv.conf from backup tarball
   command: >-
-    tar -C /etc -xpf {{ staging_dir }}/{{ backup_filename }} --overwrite
+    tar -C /etc -xpf {{ target_backup_dir }}/{{ backup_filename }} --overwrite
     --transform='s,.*/,,' etc/resolv.conf
   args:
     warn: false
 
 - name: Restore resolv.conf in config permdir (/opt/platform/config/...)
   command: >-
-    tar -C {{ config_permdir }} -xpf {{ staging_dir }}/{{ backup_filename }}
+    tar -C {{ config_permdir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
     --overwrite --transform='s,.*/,,' '{{ short_config_permdir }}/resolv.conf'
   args:
     warn: false
 
 - name: Restore dnsmaq in config permdir (/opt/platform/config/...)
   command: >-
-    tar -C {{ config_permdir }} -xpf {{ staging_dir }}/{{ backup_filename }}
+    tar -C {{ config_permdir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
     --overwrite --transform='s,.*/,,' '{{ short_config_permdir }}/dnsmasq*'
   args:
     warn: false
@@ -97,14 +97,14 @@
 
 - name: Restore boot files in pxelinux.cfg dir
   command: >-
-    tar -C {{ pxe_config_permdir }} -xpf {{ staging_dir }}/{{ backup_filename }}
+    tar -C {{ pxe_config_permdir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
     --overwrite --transform='s,.*/,,' '{{ short_pxe_config_permdir }}/*-*-*'
   args:
     warn: false
 
 - name: Extract ldap.db to staging directory
   command: >-
-    tar -C {{ staging_dir }} -xpf {{ staging_dir }}/{{ backup_filename }}
+    tar -C {{ staging_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
     --transform='s,.*/,,' '*/ldap.db'
   args:
     warn: false
@@ -138,13 +138,13 @@
     state: absent
 
 - name: Restore home directory
-  shell: tar -C / --overwrite -xpf {{ staging_dir }}/{{ backup_filename }} 'home/*'
+  shell: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} 'home/*'
   args:
     warn: false
   become_user: root
 
 - name: Restore Helm charts, armada manifests and extension filesystem
-  command: tar -C / --overwrite -xpf {{ staging_dir }}/{{ backup_filename }} {{ item }}
+  command: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} {{ item }}
   args:
     warn: false
   become_user: root
@@ -169,7 +169,7 @@
 
 - name: Restore ceph crush map
   command: >-
-    tar -C {{ ceph_crushmap_dir }} -xpf {{ staging_dir }}/{{ backup_filename }}
+    tar -C {{ ceph_crushmap_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
     --transform='s,.*/,,' '*/crushmap.bin.backup'
   args:
     warn: false
@@ -190,7 +190,7 @@
     short_patch_vault_permdir: "{{ patch_vault_permdir | regex_replace('^\\/', '') }}"
 
 - name: Look for patch-vault filesystem
-  shell: "tar -tf {{ staging_dir }}/{{ backup_filename }} | grep 'patch-vault'"
+  shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} | grep 'patch-vault'"
   args:
     warn: false
   failed_when: false
@@ -198,7 +198,7 @@
 
 - name: Restore patch-vault filesystem
   command: >-
-    tar -C / --overwrite -xpf {{ staging_dir }}/{{ backup_filename }}
+    tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }}
     {{ short_patch_vault_permdir }}
   args:
     warn: false
@@ -246,7 +246,7 @@
 
   - name: Extract postgres db to staging directory
     command: >-
-      tar -C {{ staging_dir }}/postgres -xpf {{ staging_dir }}/{{ backup_filename }}
+      tar -C {{ staging_dir }}/postgres -xpf {{ target_backup_dir }}/{{ backup_filename }}
       --transform='s,.*/,,' '*/*\.postgreSql\.*'
     args:
       warn: false
@@ -338,6 +338,11 @@
     retries: 30
     delay: 10
 
+  - name: Remove {{ ansible_remote_tmp }} directory
+    file:
+      path: "{{ ansible_remote_tmp }}"
+      state: absent
+
   - name: Inform user that restore_platform is run successfully
     debug:
       msg: >-
@@ -351,8 +356,3 @@
         Platform restore was unsuccessful. Please refer to the system administration
         guide for next step.
     when: check_online.rc != 0
-
-  # restore_openstack still needs the backup tarball to restore
-  # mariadb data
-  - name: Move backup tarball from {{ staging_dir }} to {{ backup_dir }}
-    command: mv {{ staging_dir }}/{{ backup_filename }} {{ backup_dir }}/{{ backup_filename }}

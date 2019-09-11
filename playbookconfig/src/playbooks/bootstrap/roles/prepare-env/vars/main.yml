@@ -7,7 +7,6 @@ supported_release_versions:
   - "19.09"
 patching_permdir: /opt/patching
 patching_repo_permdir: /www/pages/updates
-staging_dir: /scratch/restore
 restore_in_progress_flag: /etc/platform/.restore_in_progress
 restore_patching_complete_flag: /etc/platform/.restore_patching_complete
 node_is_patched_flag: /var/run/node_is_patched

@@ -1,0 +1,22 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to include user override files for a play.
+#
+- stat:
+    path: "{{ item }}"
+  register: files_to_import
+  with_items:
+    - "{{ override_files_dir }}/secrets.yml"
+    - "{{ override_files_dir }}/{{ inventory_hostname }}_secrets.yml"
+    - "{{ override_files_dir }}/site.yml"
+    - "{{ override_files_dir }}/{{ inventory_hostname }}.yml"
+  delegate_to: localhost
+
+- include_vars: "{{ item.item }}"
+  when: item.stat.exists
+  with_items: "{{ files_to_import.results }}"

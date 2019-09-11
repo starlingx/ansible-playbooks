@@ -10,47 +10,12 @@
   vars_files:
     - host_vars/default.yml
 
-  pre_tasks:
-    - block:
-      - name: Fail if backup_filename is not defined or set
-        fail:
-          msg: "Mandatory configuration parameter backup_filename is not defined or set."
-        when: backup_filename is not defined or backup_filename is none
+  roles:
+    - include-override-files
+    - pre-restore-bootstrap
 
-      - name: Look for override backup file in the backup tarball
-        shell: "tar -tf {{ host_backup_dir }}/{{ backup_filename }} | grep '_override_backup.yml'"
-        args:
-          warn: false
-        failed_when: false
-        register: search_result
-
-      - block:
-        - name: Extract override backup file
-          shell: >-
-            tar -C {{ override_files_dir }} -xf {{ host_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
-            {{ search_result.stdout_lines[0] }}
-          args:
-            warn: false
-
-        - name: Prepare to rename override file
-          set_fact:
-            override_filename: "{{ (search_result.stdout_lines[0] | basename).split('_override_backup')[0] }}.yml"
-
-        - name: Rename override file
-          command: >-
-            mv -f {{ override_files_dir }}/{{ (search_result.stdout_lines[0] | basename) }}
-            {{ override_files_dir }}/{{ override_filename }}
-
-        when: search_result.rc == 0
-
-      - name: Fail if override file is missing
-        fail:
-          msg: >-
-            Cannot find {{ host_backup_dir }}/{{ backup_filename }}
-            or the override file is missing in the backup tarball!
-        when: search_result.rc != 0
-
-      delegate_to: localhost
+  vars:
+    change_password: false
 
 - name: Run bootstrap playbook with restore mode
   import_playbook: bootstrap.yml mode='restore'
@@ -58,5 +23,9 @@
 - hosts: all
   gather_facts: no
 
+  vars_files:
+    - host_vars/default.yml
+
   roles:
+    - include-override-files
     - { role: restore-more-data, become: yes }

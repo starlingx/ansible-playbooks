@@ -16,19 +16,62 @@
       path: "{{ restore_in_progress_flag }}"
       state: touch
 
-  - name: Create {{ staging_dir }} for restore
-    file:
-      path: "{{ staging_dir }}"
-      state: directory
+  # For remote play the backup tarball will be transferred to /scratch
+  - block:
+    # Check if the backup tarball already exists. If it is the second run
+    # after the reboot, no need to transfer the backup tarball again.
+    - name: Check if {{ backup_filename }} has been uploaded already
+      stat:
+        path: "/scratch/{{ backup_filename }}"
+      register: check_backup_tarball
 
-  # Put the backup tarball in {{ staging_dir }} on controller-0
-  - name: Transfer backup tarball to remote controller-0
-    copy:
-      src: "{{ host_backup_dir }}/{{ backup_filename }}"
-      dest: "{{ staging_dir }}"
-      owner: root
-      group: root
-      mode: 0644
+    - block:
+      # TODO(wzhou): Considering to break backup tarball into multiple small tarfiles
+      # During restore upload each small tarfile one at a time to restore a subfunction.
+
+      # Because Ansible copy module uses ansible_remote_tmp directory as
+      # a staging area to transfer file, the default ansible_remote_tmp
+      # which is set in /tmp (1GB) may be too small for backup tarball,
+      # we require user to set ansible_remote_tmp to a new directory in
+      # /home/sysadmin via -e option on the command line. For example:
+      # -e "ansible_remote_tmp=/home/sysadmin/ansible-restore"
+      - name: Transfer backup tarball to /scratch on controller-0
+        copy:
+          src: "{{ initial_backup_dir }}/{{ backup_filename }}"
+          dest: /scratch
+          owner: root
+          group: root
+          mode: 0644
+
+      # As an alternative to Ansible copy, synchronize module may be
+      # used to transfer large files. But synchronize is broken in Ansible 2.8
+      # https://github.com/ansible/ansible/issues/56629.
+      # - name: Transfer backup tarball to /scratch on controller-0
+      #   synchronize:
+      #     src: "{{ initial_backup_dir }}/{{ backup_filename }}"
+      #     dest: "/scratch/{{ backup_filename }}"
+
+      when: not check_backup_tarball.stat.exists
+
+    - name: Set target_backup_dir to /scratch
+      set_fact:
+        target_backup_dir: /scratch
+
+    when: inventory_hostname != "localhost"
+
+  - name: For local play set target_backup_dir to initial_backup_dir
+    set_fact:
+      target_backup_dir: "{{ initial_backup_dir }}"
+    when: inventory_hostname == "localhost"
+
+  - name: Set fact for patching staging dir
+    set_fact:
+      patching_staging_dir: /scratch/patching
+
+  - name: Create staging directory {{ patching_staging_dir }} for patch files
+    file:
+      path: "{{ patching_staging_dir }}"
+      state: directory
 
   - block:
     - name: Get the checksum of the build.info file of the installed load
@@ -39,14 +82,14 @@
 
     - name: Retrieve build.info file from backup
       command: >-
-        tar -C {{ staging_dir }}  -xpf {{ staging_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+        tar -C {{ patching_staging_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
         etc/build.info
       args:
         warn: false
 
     - name: Get the checksum of the build.info file from the backup
       stat:
-        path: "{{ staging_dir }}/build.info"
+        path: "{{ patching_staging_dir }}/build.info"
         get_checksum: yes
       register: backup_buildinfo_check
 
@@ -57,13 +100,13 @@
 
     - name: Retrieve platform.conf file from the backup
       command: >-
-        tar -C {{ staging_dir }}  -xpf {{ staging_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+        tar -C {{ patching_staging_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
         etc/platform/platform.conf
       args:
         warn: false
 
     - name: Get subfunction from the backup
-      shell: grep -F 'subfunction' {{ staging_dir }}/platform.conf
+      shell: grep -F 'subfunction' {{ patching_staging_dir }}/platform.conf
       register: backup_subfunc
 
     - name: Get subfunction set from backup platform.conf
@@ -110,7 +153,7 @@
 
       - name: Restore patching
         command: >-
-          tar -C /opt -xpf {{ staging_dir }}/{{ backup_filename }} --strip-components=1
+          tar -C /opt -xpf {{ target_backup_dir }}/{{ backup_filename }} --strip-components=1
           {{ short_patching_permdir }}
         args:
           warn: false
@@ -122,7 +165,7 @@
 
       - name: Restore patching repo
         command: >-
-          tar -C /www/pages -xpf {{ staging_dir }}/{{ backup_filename }} --strip-components=2
+          tar -C /www/pages -xpf {{ target_backup_dir }}/{{ backup_filename }} --strip-components=2
           {{ short_patching_repo_permdir }}
         args:
           warn: false
@@ -170,17 +213,17 @@
             path: "{{ restore_in_progress_flag }}"
             state: absent
 
-        - name: Clean up the {{ staging_dir }}
+        - name: Remove staging directory {{ patching_staging_dir }} for patch files
           file:
-            path: "{{ staging_dir }}"
+            path: "{{ patching_staging_dir }}"
             state: absent
 
         # For better control of the restore, we don't invoke Ansible
         # reboot module to reboot the node. We require user to re-run
         # the playbook to restore the platform after reboot is completed.
-        # TODO: Suport patching without re-run of the restore_platform playbook
-        #       by either invoking Ansible reboot module or defining reboot
-        #       as an async task.
+        # TODO(wzhou): Suport patching without re-run of the restore_platform
+        #   playbook by either invoking Ansible reboot module or defining reboot
+        #   as an async task.
         - name: Reboot the controller
           shell: sleep 5 && reboot
           failed_when: false
@@ -206,6 +249,11 @@
         path: "{{ restore_patching_complete_flag }}"
         state: absent
 
+    - name: Remove staging directory {{ patching_staging_dir }} for patch files
+      file:
+        path: "{{ patching_staging_dir }}"
+        state: absent
+
     rescue:
       - block:
         - name: Remove the {{ restore_in_progress_flag }} file
@@ -213,9 +261,9 @@
             path: "{{ restore_in_progress_flag }}"
             state: absent
 
-        - name: Clean up the {{ staging_dir }}
+        - name: Remove staging directory {{ patching_staging_dir }} for patch files
           file:
-            path: "{{ staging_dir }}"
+            path: "{{ patching_staging_dir }}"
             state: absent
 
         - name: Fail the platform restore

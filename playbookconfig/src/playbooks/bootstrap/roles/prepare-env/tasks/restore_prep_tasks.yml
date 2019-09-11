@@ -27,7 +27,7 @@
 
   - name: Restore branding tar file
     command: >-
-      tar -C /opt/branding -xpf {{ staging_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+      tar -C /opt/branding -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
       {{ short_branding_permdir }}
     args:
       warn: false
@@ -38,7 +38,7 @@
       state: absent
 
   - name: Look for banner directory in the backup tarball
-    shell: "tar -tf {{ staging_dir }}/{{ backup_filename }} | grep -F 'banner/etc'"
+    shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} | grep -F 'banner/etc'"
     args:
       warn: false
     failed_when: false
@@ -52,7 +52,7 @@
 
     - name: Restore banner files if they exist in the backup tarball
       command: >-
-        tar -C /opt/banner -xpf {{ staging_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+        tar -C /opt/banner -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
         {{ short_banner_permdir }}
       args:
         warn: false
