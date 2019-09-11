@@ -5,9 +5,11 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
-#   This role is to backup system data.
+#   This role is to backup StarlingX platform data and
+#   StarlingX OpenStack Application data if the app exists.
+#   The backup data are stored in two separate tar files.
 #
-- name: Do system backup
+- name: Do StarlingX backup
   block:
     - name: Generate backup_in_progress alarm
       script: fm_alarm.py "--set" "--backup"
@@ -137,12 +139,18 @@
         shell: >-
           source /etc/platform/openrc; system application-list | grep stx-openstack | grep applied
         failed_when: false
-        register: check_openstack
+        register: check_openstack_applied
+
+      - name: Check if stx-openstack is uploaded
+        shell: >-
+          source /etc/platform/openrc; system application-list | grep stx-openstack | grep uploaded
+        failed_when: false
+        register: check_openstack_uploaded
 
       - name: Fail the backup if MariaDB is not running
         fail:
           msg: "WARNING: {{ mariadb_pod }} is not running. Cannot backup mariadb data."
-        when: check_openstack.rc == 0
+        when: check_openstack_applied.rc == 0
       when: check_mariadb_pod.rc != 0
 
     # Now Postgres data and MariaDB data are stored in staging dir, we can estimate
@@ -388,41 +396,20 @@
         with_items: "{{ check_docker_proxy.stdout }}"
       when: check_docker_proxy.stdout != ""
 
-    # Archive fails when symbolic link points to non-existent file.
-    # Issue was raised in May 2018 and it is still not fixed yet.
-    # Leave this code here for now. Will remove it when the story is completed.
-    # - name: Create a tgz archive
-    #   archive:
-    #     path:
-    #       - "{{ override_backup_file }}"
-    #       - /etc
-    #       - /home
-    #       - "{{ config_permdir }}"
-    #       - "{{ puppet_permdir }}/hieradata"
-    #       - "{{ keyring_permdir }}"
-    #       - "{{ patching_permdir }}"
-    #       - "{{ patching_repo_permdir }}"
-    #       - "{{ extension_permdir }}"
-    #       - "{{ patch_vault_permdir }}"
-    #       - "{{ crushmap_file }}"
-    #       - "{{ ldap_db_backup }}"
-    #       - "{{ postgres_dir.path }}"
-    #       - "{{ armada_permdir }}"
-    #       - "{{ helm_charts_permdir }}"
-    #       - "{{ mariadb_dir.path }}"
-    #     dest: "{{ backup_dir }}/{{ backup_filename }}.tgz"
-    #     unsafe_writes: no
-
-    - name: Attach timestamp to the backup filename
+    - name: Attach timestamp to the platform backup filename
       set_fact:
-        backup_file: "{{ backup_filename_prefix }}_{{ lookup('pipe', 'date +%Y_%m_%d_%H_%M_%S') }}.tgz"
+        platform_backup_file: "{{ platform_backup_filename_prefix }}_{{ lookup('pipe', 'date +%Y_%m_%d_%H_%M_%S') }}.tgz"
 
-    - name: Set backup file absolute path
+    - name: Set platform backup file absolute path
       set_fact:
-        backup_file_path: "{{ backup_dir }}/{{ backup_file }}"
+        platform_backup_file_path: "{{ backup_dir }}/{{ platform_backup_file }}"
 
-    - name: Create a tgz archive
-      shell: "tar -czf {{ backup_file_path }} $(ls -d \
+    # Archive module has a known bug that doesn't handle empty symbolic links
+    # well. Restore to tar command. Can add -P option to keep the leading
+    # '/'s in file names in the tar file, so that the tasks that strip leading
+    # '/' from the directory names before untar won't be required.
+    - name: Create a tgz archive for platform backup
+      shell: "tar -czf {{ platform_backup_file_path }} $(ls -d \
            {{ override_backup_file }} \
            /etc \
            /home \
@@ -436,28 +423,49 @@
            {{ crushmap_file }} \
            {{ ldap_db_backup }} \
            {{ postgres_dir.path }} \
-           {{ armada_permdir }} \
-           {{ helm_charts_permdir }} \
-           {{ mariadb_dir.path }} 2>/dev/null)"
+           {{ armada_permdir }}/platform-integ-apps \
+           {{ armada_permdir }}/admin.conf \
+           {{ helm_charts_permdir }}/stx-platform 2>/dev/null)"
       args:
         warn: false
 
-    - name: Notify user where the backup tarball is stored
+    - block:
+      - name: Attach timestamp to the OpenStack backup filename
+        set_fact:
+          openstack_backup_file: "{{ openstack_backup_filename_prefix }}_{{ lookup('pipe', 'date +%Y_%m_%d_%H_%M_%S') }}.tgz"
+
+      - name: Set SpenStack backup file absolute path
+        set_fact:
+          openstack_backup_file_path: "{{ backup_dir }}/{{ openstack_backup_file }}"
+
+      - name: Create a tgz archive for OpenStack backup
+        shell: "tar -czf {{ openstack_backup_file_path }} $(ls -d \
+             {{ armada_permdir }}/stx-openstack \
+             {{ helm_charts_permdir }}/starlingx \
+             {{ mariadb_dir.path }} 2>/dev/null)"
+        args:
+          warn: false
+      when: check_mariadb_pod.rc == 0 or check_openstack_uploaded.rc == 0
+
+    - name: Notify the user backup tar file(s) are available
       debug:
-        msg: "Backup tarball {{ backup_file_path }} is stored on active controller."
+        msg: >-
+          Backup tar file(s) are now available in {{ backup_dir }} on the active controller.
 
     - block:
-      - name: Transfer the backup tarball to the local machine
+      - name: Transfer backup tar files to the local machine
         fetch:
-          src: "{{ backup_file_path }}"
+          src: "{{ item }}"
           dest: "{{ host_backup_dir }}/"
           flat: yes
+        with_items:
+          - "{{ platform_backup_file_path }}"
+          - "{{ openstack_backup_file_path }}"
 
-      - name: Notify user where the backup tarball is downloaded
+      - name: Notify the user where the backup tar file(s) can be found
         debug:
           msg: >-
-            "Backup tarball {{ backup_file }} is downloaded to
-            {{ host_backup_dir }} on local machine."
+            Backup tar file(s) have been transferred to {{ host_backup_dir }} on Ansible control host.
       when: inventory_hostname != 'localhost'
 
   always:
