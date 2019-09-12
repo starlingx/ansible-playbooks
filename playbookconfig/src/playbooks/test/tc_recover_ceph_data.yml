@@ -24,11 +24,24 @@
         msg: "Mandatory configuration parameter backup_filename is not defined or set."
       when: backup_filename is not defined or backup_filename is none
 
-    # Put the backup tarball in /scratch
     - name: Set staging and target backup dirs
       set_fact:
         staging_dir: /scratch
         target_backup_dir: /scratch
+
+    # Get system_type
+    - name: Retrieve system type
+      shell: source /etc/platform/platform.conf; echo $system_type
+      register: system_type_result
+
+    - name: Fail if system type is not defined
+      fail:
+        msg: "system_type is missing in /etc/platform/platform.conf"
+      when: system_type_result.stdout_lines|length == 0
+
+    - name: Set system type config path fact
+      set_fact:
+        system_type: "{{ system_type_result.stdout_lines[0] }}"
 
   roles:
     - { role: recover-ceph-data, become: yes }
