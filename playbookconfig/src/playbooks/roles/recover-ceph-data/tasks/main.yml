@@ -9,11 +9,25 @@
 
 - name: Restore CEPH Monitor data
   block:
+    # Get system_mode after restore
+    - name: Retrieve system mode
+      shell: source /etc/platform/platform.conf; echo $system_mode
+      register: restore_system_mode_result
+
+    - name: Fail if system mode is not defined
+      fail:
+        msg: "system_mode is missing in /etc/platform/platform.conf"
+      when: restore_system_mode_result.stdout_lines|length == 0
+
+    - name: Set facts
+      set_fact:
+        restore_system_mode: "{{ restore_system_mode_result.stdout_lines[0] }}"
+
     - name: Create flag file in /etc/platform to skip wiping OSDs
       file:
         path: "{{ skip_ceph_osds_wipe_flag }}"
         state: touch
-      when: system_mode != 'simplex'
+      when: restore_system_mode != 'simplex'
 
     - name: Restore ceph.conf file
       command: >-
@@ -21,6 +35,58 @@
         'etc/ceph/ceph.conf'
       args:
         warn: false
+
+    - name: Set initial ceph-mon name
+      set_fact:
+        mon_name: 'controller-0'
+
+    # On AIO-DX we have a single, floating, monitor with
+    # the data partition DRBD synced between controllers
+    # So, before restoring ceph-mon data, we have to first
+    # set up DRBD for the ceph-mon partition.
+    - name: Enable DRBD for ceph-mon on AIO-DX
+      block:
+      - name: Update host config data to get ceph-mon size
+        command: "/usr/bin/sysinv-puppet create-host-config"
+        failed_when: false
+        register: host_config_result
+
+      - name: Fail if host hieradata cannot be generated
+        fail:
+          msg: "Failed to create puppet hiera host config."
+        when: host_config_result.rc != 0
+
+      - name: Create list of Ceph DRBD classes to pass to puppet
+        copy:
+          dest: "/tmp/ceph-mon.yml"
+          content: |
+            classes:
+            - platform::drbd::cephmon::runtime
+
+      - name: Applying puppet ceph-mon DRBD manifest
+        command: >
+          /usr/local/bin/puppet-manifest-apply.sh
+          {{ puppet_permdir }}/hieradata/
+          {{ derived_network_params.controller_0_address }}
+          controller runtime /tmp/ceph-mon.yml
+          controller ansible_bootstrap > {{ ceph_mon_manifest_apply_log }}
+        register: ceph_mon_manifest
+        environment:
+          INITIAL_CONFIG_PRIMARY: "true"
+          LC_ALL: "en_US.UTF-8"
+
+      - name: Fail if puppet manifest apply script returns an error
+        fail:
+          msg: >-
+               Failed to apply ceph-mon DRBD manifest. See /var/log/puppet/latest/puppet.log
+               for details.
+        when: ceph_mon_manifest.rc != 0
+
+      - name: Set mode to floating controller
+        set_fact:
+          mon_name: 'controller'
+      when: (restore_system_mode != 'simplex') and
+            (system_type == 'All-in-one')
 
     - name: Allow Ceph to start with a single monitor on a Standard deployment
       ini_file:
@@ -73,13 +139,13 @@
 
     - name: Delete store.db file from ceph-mon
       file:
-        path: /var/lib/ceph/mon/ceph-controller-0/store.db
+        path: "/var/lib/ceph/mon/ceph-{{ mon_name }}/store.db"
         state: absent
 
     # Cannot use the 'copy' module with 'remote_src: yes' for
     # recursive copy till Ansible 2.8.
     - name: Restore store.db from mon-store
-      shell: cp -ar /tmp/mon-store/store.db /var/lib/ceph/mon/ceph-controller-0
+      shell: cp -ar /tmp/mon-store/store.db /var/lib/ceph/mon/ceph-{{ mon_name }}
 
     - name: Bring up ceph Monitor and OSDs
       command: /etc/init.d/ceph start
@@ -100,6 +166,11 @@
       retries: 30
       delay: 10
 
+    - name: Wait {{ ceph_wait_time }} for Ceph to detect that peer OSDs on controller-1 are down
+      wait_for:
+        timeout: "{{ ceph_wait_time }}"
+      when: restore_system_mode != 'simplex'
+
     - name: Restart ceph one more time to pick latest changes
       command: /etc/init.d/ceph restart
 
@@ -110,6 +181,17 @@
         option: mon_initial_members
         state: absent
       when: system_type == 'Standard'
+
+    # Return to the setting before puppet was run to allow node unlock w/o ip's on the
+    # management network. Same change is required for both IPv4 and IPv6.
+    # Puppet will then set the correct values as per DB on first run.
+    - name: Adjust DRBD ceph-mon resource for AIO-DX to start without networking
+      shell: |
+        awk '/address ipv/{c++; { sub("ipv.*$","ipv4 127.0.0." c ":7788;")}}1' \
+          {{ drbd_cephmon_res }} > {{ tmp_drbd_cephmon_res }}
+        cp -f {{ tmp_drbd_cephmon_res }} {{ drbd_cephmon_res }}
+      when: (restore_system_mode != 'simplex') and
+            (system_type == 'All-in-one')
 
   become: yes
   become_user: root
