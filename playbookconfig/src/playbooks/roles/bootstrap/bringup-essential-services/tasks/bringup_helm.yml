@@ -170,11 +170,27 @@
     kubectl --kubeconfig=/etc/kubernetes/admin.conf create clusterrolebinding
     tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
 
-- name: Initialize Helm (local host)
-  command: >-
-    helm init --skip-refresh --service-account tiller --node-selectors
-    "node-role.kubernetes.io/master"="" --tiller-image={{ tiller_img }}
-    --override spec.template.spec.hostNetwork=true
+# Adding temporary workaround using multiple helm init commands
+# and a sed command until helm and tiller provide a fix for
+# https://github.com/helm/helm/issues/6374
+- block:
+  - name: Initialize Helm (local host client only)
+    command: helm init --client-only
+
+  - name: Initialize Helm (local host tiller)
+    shell: >-
+      helm init
+      --skip-refresh
+      --service-account tiller
+      --node-selectors "node-role.kubernetes.io/master"=""
+      --tiller-image={{ tiller_img }}
+      --override spec.template.spec.hostNetwork=true
+      --override spec.selector.matchLabels.app=helm
+      --override spec.selector.matchLabels.name=tiller
+      --output yaml
+      | sed 's@apiVersion: extensions/v1beta1@apiVersion: apps/v1@'
+      | kubectl apply -f -
+
   become_user: sysadmin
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
@@ -183,12 +199,27 @@
 
 # Workaround for helm init remotely. Not sure why the task cannot be executed
 # successfully as sysadmin on remote host.
+# This also has the workaround for https://github.com/helm/helm/issues/6374
 - block:
-  - name: Initialize Helm (remote host)
+  - name: Initialize Helm (remote host client only)
+    command: helm init --client-only
+    environment:
+      KUBECONFIG: /etc/kubernetes/admin.conf
+      HOME: /home/sysadmin
+
+  - name: Initialize Helm (remote host tiller)
     command: >-
-      helm init --skip-refresh --service-account tiller --node-selectors
-      "node-role.kubernetes.io/master"="" --tiller-image={{ tiller_img }}
+      helm init
+      --skip-refresh
+      --service-account tiller
+      --node-selectors "node-role.kubernetes.io/master"=""
+      --tiller-image={{ tiller_img }}
       --override spec.template.spec.hostNetwork=true
+      --override spec.selector.matchLabels.app=helm
+      --override spec.selector.matchLabels.name=tiller
+      --output yaml
+      | sed 's@apiVersion: extensions/v1beta1@apiVersion: apps/v1@'
+      | kubectl apply -f -
     environment:
       KUBECONFIG: /etc/kubernetes/admin.conf
       HOME: /home/sysadmin

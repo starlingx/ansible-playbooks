@@ -85,16 +85,17 @@ data:
     {
       "name": "multus-cni-network",
       "type": "multus",
+      "cniVersion": "0.3.1",
       "capabilities": {
           "portMappings": true
       },
       "delegates": [
         {
-          "cniVersion": "0.3.0",
+          "cniVersion": "0.3.1",
           "name": "chain",
           "plugins": [
             {
-              "cniVersion": "0.3.0",
+              "cniVersion": "0.3.1",
               "name": "k8s-pod-network",
               "type": "calico",
               "masterplugin": true,
@@ -134,7 +135,7 @@ data:
       "kubeconfig": "/etc/cni/net.d/multus.d/multus.kubeconfig"
     }
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: kube-multus-ds-amd64
@@ -142,16 +143,21 @@ metadata:
   labels:
     tier: node
     app: multus
+    name: multus
 spec:
+  selector:
+    matchLabels:
+      name: multus
   template:
     metadata:
       labels:
         tier: node
         app: multus
+        name: multus
     spec:
       hostNetwork: true
       nodeSelector:
-        beta.kubernetes.io/arch: amd64
+        kubernetes.io/arch: amd64
       tolerations:
       - operator: Exists
         effect: NoSchedule
@@ -160,7 +166,7 @@ spec:
         - name: docker-registry-secret
       containers:
       - name: kube-multus
-        image: "{{ docker_registry.url }}/nfvpe/multus:v3.2"
+        image: "{{ docker_registry.url }}/starlingx/multus:v3.2.16"
         env:
           - name: KUBERNETES_NODE_NAME
             valueFrom:

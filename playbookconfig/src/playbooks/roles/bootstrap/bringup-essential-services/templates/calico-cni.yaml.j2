@@ -47,7 +47,7 @@ data:
   cni_network_config: |-
     {
       "name": "k8s-pod-network",
-      "cniVersion": "0.3.0",
+      "cniVersion": "0.3.1",
       "plugins": [
         {
           "type": "calico",
@@ -490,7 +490,7 @@ subjects:
 # - The cnibin volume hostPath is made variable
 # - The UPDATE_CNI_BINARIES environment variable is set to 'false'
 kind: DaemonSet
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 metadata:
   name: calico-node
   namespace: kube-system
@@ -508,13 +508,8 @@ spec:
     metadata:
       labels:
         k8s-app: calico-node
-      annotations:
-        # This, along with the CriticalAddonsOnly toleration below,
-        # marks the pod as a critical add-on, ensuring it gets
-        # priority scheduling and that its resources are reserved
-        # if it ever gets evicted.
-        scheduler.alpha.kubernetes.io/critical-pod: ''
     spec:
+      priorityClassName: system-node-critical
       nodeSelector:
         beta.kubernetes.io/os: linux
       hostNetwork: true
@@ -771,18 +766,19 @@ metadata:
 # Source: calico/templates/calico-kube-controllers.yaml
 # This manifest deploys the Calico node controller.
 # See https://github.com/projectcalico/kube-controllers
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: calico-kube-controllers
   namespace: kube-system
   labels:
     k8s-app: calico-kube-controllers
-  annotations:
-    scheduler.alpha.kubernetes.io/critical-pod: ''
 spec:
   # The controller can only have a single active instance.
   replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: calico-kube-controllers
   strategy:
     type: Recreate
   template:
@@ -792,6 +788,7 @@ spec:
       labels:
         k8s-app: calico-kube-controllers
     spec:
+      priorityClassName: system-node-critical
       nodeSelector:
         beta.kubernetes.io/os: linux
       tolerations:
