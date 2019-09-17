@@ -11,6 +11,7 @@
 import os
 import pyudev
 import re
+import stat
 import subprocess
 import sys
 import time
@@ -733,30 +734,14 @@ def find_boot_device():
     context = pyudev.Context()
 
     # Get the boot partition
-    # Unfortunately, it seems we can only get it from the logfile.
-    # We'll parse the device used from a line like the following:
-    # BIOSBoot.create: device: /dev/sda1 ; status: False ; type: biosboot ;
-    # or
-    # EFIFS.create: device: /dev/sda1 ; status: False ; type: efi ;
-    #
-    logfile = '/var/log/anaconda/storage.log'
+    try:
+        part = pyudev.Device.from_device_number(context,
+                                                'block',
+                                                os.stat('/boot')[stat.ST_DEV])
+        boot_device = part.parent.device_node
 
-    re_line = re.compile(r'(BIOSBoot|EFIFS).create: device: ([^\s;]*)')
-    boot_partition = None
-    with open(logfile, 'r') as f:
-        for line in f:
-            match = re_line.search(line)
-            if match:
-                boot_partition = match.group(2)
-                break
-    if boot_partition is None:
+    except Exception:
         raise ConfigFail("Failed to determine the boot partition")
-
-    # Find the boot partition and get its parent
-    for device in context.list_devices(DEVTYPE='partition'):
-        if device.device_node == boot_partition:
-            boot_device = device.find_parent('block').device_node
-            break
 
     if boot_device is None:
         raise ConfigFail("Failed to determine the boot device")
