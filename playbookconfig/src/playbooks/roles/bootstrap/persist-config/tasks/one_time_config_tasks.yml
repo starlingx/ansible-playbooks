@@ -107,6 +107,7 @@
     - lvextend -L20G /dev/cgts-vg/pgsql-lv
     - lvextend -L16G /dev/cgts-vg/dockerdistribution-lv
     - lvextend -L40G /dev/cgts-vg/backup-lv
+    - resize2fs /dev/cgts-vg/backup-lv
     - drbdadm -- --assume-peer-has-space resize all
     - resize2fs /dev/drbd0
     - resize2fs /dev/drbd8
@@ -127,6 +128,7 @@
     with_items:
       - lvextend -L40G /dev/cgts-vg/pgsql-lv
       - lvextend -L50G /dev/cgts-vg/backup-lv
+      - resize2fs /dev/cgts-vg/backup-lv
       - drbdadm -- --assume-peer-has-space resize all
       - resize2fs /dev/drbd0
 
