@@ -1,0 +1,29 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- hosts: all
+  # If gathering facts is really necessary, run setup task AFTER host connectivity
+  # check block in prepare-env role.
+  gather_facts: no
+
+  vars_files:
+    - host_vars/default.yml
+
+  # Main play
+  roles:
+    - include-override-files
+    - bootstrap/prepare-env
+    - { role: bootstrap/validate-config, when: not skip_play, become: yes }
+    - { role: bootstrap/store-passwd, when: not skip_play and save_password, become: yes }
+    - { role: bootstrap/apply-bootstrap-manifest, when: not skip_play and not replayed, become: yes }
+    - { role: bootstrap/persist-config, when: not skip_play, become: yes }
+    - { role: bootstrap/bringup-essential-services, when: not skip_play, become: yes }
+
+  vars:
+    change_password: false
+    skip_play: false
+    replayed: false
+    mode: 'bootstrap'

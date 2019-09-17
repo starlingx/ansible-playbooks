@@ -453,14 +453,18 @@
           Backup tar file(s) are now available in {{ backup_dir }} on the active controller.
 
     - block:
-      - name: Transfer backup tar files to the local machine
+      - name: Transfer platform backup tar file to the local machine
         fetch:
-          src: "{{ item }}"
+          src: "{{ platform_backup_file_path }}"
           dest: "{{ host_backup_dir }}/"
           flat: yes
-        with_items:
-          - "{{ platform_backup_file_path }}"
-          - "{{ openstack_backup_file_path }}"
+
+      - name: Transfer openstack backup tar files to the local machine if it exists
+        fetch:
+          src: "{{ openstack_backup_file_path}}"
+          dest: "{{ host_backup_dir }}/"
+          flat: yes
+        when: check_mariadb_pod.rc == 0 or check_openstack_uploaded.rc == 0
 
       - name: Notify the user where the backup tar file(s) can be found
         debug:

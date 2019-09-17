@@ -12,7 +12,7 @@
 
   roles:
     - include-override-files
-    - pre-restore-bootstrap
+    - restore-platform/pre-restore-bootstrap
 
   vars:
     change_password: false
@@ -28,4 +28,4 @@
 
   roles:
     - include-override-files
-    - { role: restore-more-data, become: yes }
+    - { role: restore-platform/restore-more-data, become: yes }
