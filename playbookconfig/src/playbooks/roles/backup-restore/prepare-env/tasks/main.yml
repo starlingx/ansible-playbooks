@@ -8,32 +8,6 @@
 #   This role contains common components (tasks, vars, etc.) that
 #   can be shared by all the backup and restore playbooks.
 
-# Check host connectivity
-- block:
-  - name: Set SSH port
-    set_fact:
-      ansible_port: "{{ ansible_port | default(22) }}"
-
-  - name: Update SSH known hosts
-    lineinfile:
-      path: ~/.ssh/known_hosts
-      state: absent
-      regexp: '^{{ ansible_host }}|^\[{{ ansible_host }}\]:{{ ansible_port }}'
-    delegate_to: localhost
-
-  - name: Check connectivity
-    local_action: command ping -c 1 {{ ansible_host }}
-    failed_when: false
-    register: ping_result
-
-  - name: Fail if host is unreachable
-    fail: msg='Host {{ ansible_host }} is unreachable!'
-    with_items:
-      - "{{ ping_result.stdout_lines|list }}"
-    when: ping_result.rc != 0 and item is search('100% packet loss')
-
-  when: inventory_hostname != 'localhost'
-
 - name: Check archive dir
   stat:
     path: "{{ backup_dir }}"

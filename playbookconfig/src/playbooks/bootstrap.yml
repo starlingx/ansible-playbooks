@@ -10,11 +10,11 @@
   gather_facts: no
 
   vars_files:
-    - host_vars/default.yml
+    - host_vars/bootstrap/default.yml
 
   # Main play
   roles:
-    - include-override-files
+    - common/prepare-env
     - bootstrap/prepare-env
     - { role: bootstrap/validate-config, when: not skip_play, become: yes }
     - { role: bootstrap/store-passwd, when: not skip_play and save_password, become: yes }
@@ -23,7 +23,6 @@
     - { role: bootstrap/bringup-essential-services, when: not skip_play, become: yes }
 
   vars:
-    change_password: false
     skip_play: false
     replayed: false
     mode: 'bootstrap'

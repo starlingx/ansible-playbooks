@@ -5,8 +5,10 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
-#   This role is to retrieve the override file from the backup tarball
-#   required for the controller bootstrap.
+#   This role performs following tasks:
+#     1. Retrieve the override file from the backup tarball
+#        required for the controller bootstrap.
+#     2. Verify if platform restore should proceed
 #
 - block:
   - name: Fail if backup_filename is not defined or set
@@ -53,3 +55,43 @@
     when: search_result.rc != 0
 
   delegate_to: localhost
+
+- block:
+  # Bail if the host has been unlocked
+  - name: Check initial config flag
+    stat:
+      path: /etc/platform/.initial_config_complete
+    register: initial_config_done
+
+  - name: Fail if the host has been unlocked
+    fail:
+      msg: "Host {{ ansible_host }} has been unlocked. Cannot perform restore."
+    when: initial_config_done.stat.exists
+
+  - name: Check if restore is in progress if bootstrap is with restore mode
+    stat:
+      path: "{{ restore_in_progress_flag }}"
+    register: restore_in_progress
+
+  - name: Fail if restore is already in progress
+    fail:
+      msg: " Restore is already in progress!"
+    when: restore_in_progress.stat.exists
+
+  - name: Create {{ restore_in_progress_flag }} flag file
+    file:
+      path: "{{ restore_in_progress_flag }}"
+      state: touch
+
+  - name: For remote play set target_backup_dir to /scratch
+    set_fact:
+      target_backup_dir: /scratch
+    when: inventory_hostname != "localhost"
+
+  - name: For local play set target_backup_dir to initial_backup_dir
+    set_fact:
+      target_backup_dir: "{{ initial_backup_dir }}"
+    when: inventory_hostname == "localhost"
+
+  become: yes
+  become_user: root
