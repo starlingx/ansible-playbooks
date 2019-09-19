@@ -8,14 +8,12 @@
   gather_facts: no
 
   vars_files:
-    - host_vars/default.yml
+    - host_vars/backup-restore/default.yml
 
   roles:
-    - include-override-files
-    - restore-platform/pre-restore-bootstrap
-
-  vars:
-    change_password: false
+    - common/prepare-env
+    - restore-platform/prepare-env
+    - backup-restore/transfer-file
 
 - name: Run bootstrap playbook with restore mode
   import_playbook: bootstrap.yml mode='restore'
@@ -24,8 +22,8 @@
   gather_facts: no
 
   vars_files:
-    - host_vars/default.yml
+    - host_vars/backup-restore/default.yml
 
   roles:
-    - include-override-files
+    - common/prepare-env
     - { role: restore-platform/restore-more-data, become: yes }
