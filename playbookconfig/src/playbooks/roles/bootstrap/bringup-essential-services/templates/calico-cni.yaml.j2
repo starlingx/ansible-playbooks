@@ -59,6 +59,7 @@ data:
             "type": "calico-ipam",
             "assign_ipv4": "{{ "true" if cluster_network_ipv4 else "false" }}",
             "assign_ipv6": "{{ "true" if cluster_network_ipv6 else "false" }}"
+          },
           "policy": {
               "type": "k8s"
           },
