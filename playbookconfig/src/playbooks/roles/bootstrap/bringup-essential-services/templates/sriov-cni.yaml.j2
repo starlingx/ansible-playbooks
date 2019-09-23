@@ -8,6 +8,8 @@
 # - The cnibin volume hostPath is made variable
 # - An updateStrategy was added to the DaemonSet spec to allow controlled template
 #   updates of pods with "kubectl apply".
+# - The image is set to a stable starlingX version
+# - The 'imagePullPolicy: Never' is omitted
 ---
 apiVersion: apps/v1
 kind: DaemonSet

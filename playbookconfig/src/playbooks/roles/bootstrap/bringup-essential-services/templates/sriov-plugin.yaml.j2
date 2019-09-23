@@ -10,6 +10,9 @@
 # - The daemonset is modified to tolerate all NoSchedule taints
 # - An updateStrategy was added to the DaemonSet spec to allow controlled template
 #   updates of pods with "kubectl apply".
+# - The image is set to a stable starlingX version
+# - The default configMap is not used.  Rather, a hostPath to the config.json file
+#   is used, as resources are populated and based on datanetwork names.
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -41,6 +44,8 @@ spec:
         tier: node
         app: sriovdp
     spec:
+      hostNetwork: true
+      hostPID: true
       nodeSelector:
         beta.kubernetes.io/arch: amd64
         sriovdp: enabled
@@ -54,26 +59,26 @@ spec:
       - name: kube-sriovdp
         image: "{{ local_registry }}/{{ sriov_network_device_img }}"
         args:
+        - --log-dir=sriovdp
         - --log-level=10
         securityContext:
-          privileged: false
+          privileged: true
         volumeMounts:
         - name: devicesock
-          mountPath: /var/lib/kubelet/device-plugins/
+          mountPath: /var/lib/kubelet/
           readOnly: false
-        - name: sysfs
-          mountPath: /sys
-          readOnly: true
+        - name: log
+          mountPath: /var/log
         - name: config
           mountPath: /etc/pcidp/config.json
           readOnly: true
       volumes:
         - name: devicesock
           hostPath:
-            path: /var/lib/kubelet/device-plugins/
-        - name: sysfs
+            path: /var/lib/kubelet/
+        - name: log
           hostPath:
-            path: /sys
+            path: /var/log
         - name: config
           hostPath:
             path: /etc/pcidp/config.json
