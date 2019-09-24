@@ -38,23 +38,27 @@
           (mgmt_floating_virtual != prev_mgmt_floating_virtual)
 
   - name: Refresh local DNS (i.e. /etc/hosts)
-    include: refresh_local_dns.yml
+    import_tasks: refresh_local_dns.yml
+
+  - name: Set up default route to the oam gateway
+    include_tasks: setup_default_route.yml
+    when: distributed_cloud_role == 'subcloud'
 
   - name: Load images from archives if configured
-    include: load_images_from_archive.yml
+    include_tasks: load_images_from_archive.yml
     when: images_archive_exists
 
   - name: Bring up Kubernetes master
-    include: bringup_kubemaster.yml
+    import_tasks: bringup_kubemaster.yml
 
   - name: Bring up Helm
-    include: bringup_helm.yml
+    import_tasks: bringup_helm.yml
 
   - name: Set up controller registry certificate and keys
-    include: setup_registry_certificate_and_keys.yml
+    import_tasks: setup_registry_certificate_and_keys.yml
 
   - name: Bring up essential flock services
-    include: bringup_flock_services.yml
+    import_tasks: bringup_flock_services.yml
 
   - name: Set dnsmasq.leases flag for unlock
     file:

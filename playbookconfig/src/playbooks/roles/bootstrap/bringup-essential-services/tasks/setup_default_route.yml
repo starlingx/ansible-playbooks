@@ -1,0 +1,29 @@
+---
+#
+# copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   These tasks configure a default route to the oam gateway on subclouds.
+#
+
+- name: Set the ip command based on IP address version
+  set_fact:
+    ip_command: "{{ 'ip' if ipv6_addressing == False else 'ip -6' }}"
+
+- name: Check if the default route exists
+  shell: "{{ ip_command }} route show | grep 'default via {{ external_oam_gateway_address }}'"
+  ignore_errors: yes
+  register: route_check
+
+- block:
+  - name: Configure the default route
+    shell: "{{ ip_command }} route replace default via {{ external_oam_gateway_address }}"
+    register: route_config
+
+  - name: Fail if configuring the default route returns an error
+    fail: msg="Failed to configure a default route to {{ external_oam_gateway_address }}."
+    when: route_config.rc != 0
+
+  when: route_check.rc != 0
