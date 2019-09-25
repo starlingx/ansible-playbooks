@@ -80,3 +80,8 @@ host_backup_dir: "{{ lookup('env', 'HOME') }}"
 # Flag file to indicate if platform restore is in progress
 #
 restore_in_progress_flag: /etc/platform/.restore_in_progress
+
+# This variable is set to true when restore_openstack playbook is
+# played again to bring up remaining OpenStack services after Ceph
+# data is restored.
+restore_openstack_continue: false

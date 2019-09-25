@@ -10,26 +10,12 @@
   gather_facts: no
 
   vars_files:
-    - host_vars/default.yml
-
-  pre_tasks:
-    - stat:
-        path: "{{ item }}"
-      register: files_to_import
-      with_items:
-        - "{{ override_files_dir }}/secrets.yml"
-        - "{{ override_files_dir }}/{{ inventory_hostname }}_secrets.yml"
-        - "{{ override_files_dir }}/site.yml"
-        - "{{ override_files_dir }}/{{ inventory_hostname }}.yml"
-      delegate_to: localhost
-
-    - include_vars: "{{ item.item }}"
-      when: item.stat.exists
-      with_items: "{{ files_to_import.results }}"
-      loop_control:
-        label: "{{ item.item }}"
+    - host_vars/backup-restore/default.yml
 
   # Main play
   roles:
-    - common
+    - { role: common/prepare-env }
+    - { role: backup-restore/prepare-env }
+    - { role: restore-openstack/prepare-env, when: not restore_openstack_continue|bool }
+    - { role: backup-restore/transfer-file, when: not restore_openstack_continue|bool }
     - { role: restore-openstack/restore, become: yes }
