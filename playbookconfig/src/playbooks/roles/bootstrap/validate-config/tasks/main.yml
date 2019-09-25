@@ -629,7 +629,7 @@
       - "CLUSTER_POD_END_ADDRESS={{ address_pairs['cluster_pod']['end'] }}"
       - "CLUSTER_SERVICE_SUBNET={{ cluster_service_subnet }}"
       - "CLUSTER_SERVICE_START_ADDRESS={{ address_pairs['cluster_service']['start'] }}"
-      - "CLUSTER_SERVICE_END_ADDRESS={{ address_pairs['cluster_service']['start'] }}"
+      - "CLUSTER_SERVICE_END_ADDRESS={{ address_pairs['cluster_service']['end'] }}"
       - "EXTERNAL_OAM_SUBNET={{ external_oam_subnet }}"
       - "EXTERNAL_OAM_START_ADDRESS={{ address_pairs['oam']['start'] }}"
       - "EXTERNAL_OAM_END_ADDRESS={{ address_pairs['oam']['end'] }}"
