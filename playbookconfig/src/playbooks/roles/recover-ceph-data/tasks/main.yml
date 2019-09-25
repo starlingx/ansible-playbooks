@@ -9,26 +9,6 @@
 
 - name: Restore CEPH Monitor data
   block:
-    # Get system_mode after restore
-    - name: Retrieve system mode
-      shell: source /etc/platform/platform.conf; echo $system_mode
-      register: restore_system_mode_result
-
-    - name: Fail if system mode is not defined
-      fail:
-        msg: "system_mode is missing in /etc/platform/platform.conf"
-      when: restore_system_mode_result.stdout_lines|length == 0
-
-    - name: Set facts
-      set_fact:
-        restore_system_mode: "{{ restore_system_mode_result.stdout_lines[0] }}"
-
-    - name: Create flag file in /etc/platform to skip wiping OSDs
-      file:
-        path: "{{ skip_ceph_osds_wipe_flag }}"
-        state: touch
-      when: restore_system_mode != 'simplex'
-
     - name: Restore ceph.conf file
       command: >-
         tar -C / -xpf {{ target_backup_dir }}/{{ backup_filename }}

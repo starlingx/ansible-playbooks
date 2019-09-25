@@ -7,6 +7,7 @@ extension_permdir: /opt/extension
 patch_vault_permdir: /opt/patch-vault
 ldap_permdir: /var/lib/openldap-data
 crushmap_file: crushmap.bin.backup
+skip_ceph_osds_wipe_flag: /etc/platform/.skip_ceph_osds_wipe
 
 # The staging area to process the data from the backup tarball
 # after bootstrap controller-0 is done during the restore.

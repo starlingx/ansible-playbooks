@@ -277,6 +277,14 @@
       psql -c "update i_host set administrative='locked', operational='disabled',
       availability='offline'" sysinv
     become_user: postgres
+    when: wipe_ceph_osds|bool
+
+  - name: Set all the hosts, except storage nodes to locked/disabled/offline state
+    shell: >-
+      psql -c "update i_host set administrative='locked', operational='disabled',
+      availability='offline' where personality!='storage'" sysinv
+    become_user: postgres
+    when: not wipe_ceph_osds|bool
 
   # Set platform-integ-apps to "uploaded" state, so that once ceph is up after
   # controller-0 is unlocked for the first time, the manifest will be applied.
@@ -347,8 +355,42 @@
 
   # Restore ceph-mon data
   - block:
-    - include_role:
-        name: recover-ceph-data
+    - block:
+      # Recover procedure for systems with storage nodes is different from
+      # that of systems with controller storage:
+      # - For controller storage we recover ceph-mon data by scanning OSDs.
+      # - For systems with storage nodes we get ceph-mon data from storage-0
+      #   ceph-mon that is already up and will not be reinstalled.
+      - name: Check if setup has storage nodes
+        shell: source /etc/platform/openrc; system host-list | awk '$6=="storage"{exit 1}'
+        register: storage_nodes
+        failed_when: false
+
+      # Get system_mode after restore and create flag file to skip wiping OSDs
+      - name: Retrieve system mode
+        shell: source /etc/platform/platform.conf; echo $system_mode
+        register: restore_system_mode_result
+
+      - name: Fail if system mode is not defined
+        fail:
+          msg: "system_mode is missing in /etc/platform/platform.conf"
+        when: restore_system_mode_result.stdout_lines|length == 0
+
+      - name: Set system mode fact
+        set_fact:
+          restore_system_mode: "{{ restore_system_mode_result.stdout_lines[0] }}"
+
+      - name: Create flag file in /etc/platform to skip wiping OSDs
+        file:
+          path: "{{ skip_ceph_osds_wipe_flag }}"
+          state: touch
+        when: restore_system_mode != 'simplex'
+
+      # Recover ceph data for systems with controller storage
+      - include_role:
+          name: recover-ceph-data
+        when: storage_nodes.rc == 0
+
       when: not wipe_ceph_osds|bool
 
     - name: Inform user that restore_platform is run successfully
