@@ -253,6 +253,29 @@
       shell: "grep pxeboot {{ tempdir.path }}/addrpool.txt | awk '{print $6\"/\"$8}'"
       register: pxeboot_subnet
 
+    - name: Retrieve pxeboot_start_address from sysinv db
+      shell:
+        "grep pxeboot {{ tempdir.path }}/addrpool.txt | awk 'match($12, /-/) {print substr($12, 3, RSTART-3)}'"
+      register: pxeboot_start_address
+
+    - name: Retrieve pxeboot_end_address from sysinv db
+      shell: >-
+        grep pxeboot {{ tempdir.path }}/addrpool.txt |
+        awk 'split($12, array, "-") {print substr(array[2], 1, length(array[2])-2)}'
+      register: pxeboot_end_address
+
+    - name: Retrieve pxeboot_floating_address from sysinv db
+      shell: "grep pxeboot {{ tempdir.path }}/addrpool.txt | awk '{print $14}'"
+      register: pxeboot_floating_address
+
+    - name: Retrieve pxeboot_controller0_address from sysinv db
+      shell: "grep pxeboot {{ tempdir.path }}/addrpool.txt | awk '{print $16}'"
+      register: pxeboot_controller0_address
+
+    - name: Retrieve pxeboot_controller1_address from sysinv db
+      shell: "grep pxeboot {{ tempdir.path }}/addrpool.txt | awk '{print $18}'"
+      register: pxeboot_controller1_address
+
     - name: Retrieve management_subnet from sysinv db
       shell: "grep management {{ tempdir.path }}/addrpool.txt | awk '{print $6\"/\"$8}'"
       register: management_subnet
@@ -262,22 +285,111 @@
         "grep management {{ tempdir.path }}/addrpool.txt | awk 'match($12, /-/) {print substr($12, 3, RSTART-3)}'"
       register: management_start_address
 
+    - name: Retrieve management_end_address from sysinv db
+      shell: >-
+        grep management {{ tempdir.path }}/addrpool.txt |
+        awk 'split($12, array, "-") {print substr(array[2], 1, length(array[2])-2)}'
+      register: management_end_address
+
+    - name: Retrieve management_floating_address from sysinv db
+      shell: "grep management {{ tempdir.path }}/addrpool.txt | awk '{print $14}'"
+      register: management_floating_address
+
+    - name: Retrieve management_controller0_address from sysinv db
+      shell: "grep management {{ tempdir.path }}/addrpool.txt | awk '{print $16}'"
+      register: management_controller0_address
+
+    - name: Retrieve management_controller1_address from sysinv db
+      shell: "grep management {{ tempdir.path }}/addrpool.txt | awk '{print $18}'"
+      register: management_controller1_address
+
+    - name: Retrieve management_multicast_subnet from sysinv db
+      shell: "grep multicast-subnet {{ tempdir.path }}/addrpool.txt | awk '{print $6\"/\"$8}'"
+      register: management_multicast_subnet
+
+    - name: Retrieve management_multicast_start_address from sysinv db
+      shell:
+        "grep multicast-subnet {{ tempdir.path }}/addrpool.txt | awk 'match($12, /-/) {print substr($12, 3, RSTART-3)}'"
+      register: management_multicast_start_address
+
+    - name: Retrieve management_multicast_end_address from sysinv db
+      shell: >-
+        grep multicast-subnet {{ tempdir.path }}/addrpool.txt |
+        awk 'split($12, array, "-") {print substr(array[2], 1, length(array[2])-2)}'
+      register: management_multicast_end_address
+
     - name: Retrieve cluster_host_subnet from sysinv db
       shell:
         "grep cluster-host-subnet {{ tempdir.path }}/addrpool.txt | awk '{print $6\"/\"$8}'"
       register: cluster_host_subnet
 
+    - name: Retrieve cluster_host_start_address from sysinv db
+      shell:
+        "grep cluster-host-subnet {{ tempdir.path }}/addrpool.txt | awk 'match($12, /-/) {print substr($12, 3, RSTART-3)}'"
+      register: cluster_host_start_address
+
+    - name: Retrieve cluster_host_end_address from sysinv db
+      shell: >-
+        grep cluster-host-subnet {{ tempdir.path }}/addrpool.txt |
+        awk 'split($12, array, "-") {print substr(array[2], 1, length(array[2])-2)}'
+      register: cluster_host_end_address
+
+    - name: Retrieve cluster_host_floating_address from sysinv db
+      shell: "grep cluster-host-subnet {{ tempdir.path }}/addrpool.txt | awk '{print $14}'"
+      register: cluster_host_floating_address
+
+    - name: Retrieve cluster_host_controller0_address from sysinv db
+      shell: "grep cluster-host-subnet {{ tempdir.path }}/addrpool.txt | awk '{print $16}'"
+      register: cluster_host_controller0_address
+
+    - name: Retrieve cluster_host_controller1_address from sysinv db
+      shell: "grep cluster-host-subnet {{ tempdir.path }}/addrpool.txt | awk '{print $18}'"
+      register: cluster_host_controller1_address
+
     - name: Retrieve cluster_pod_subnet from sysinv db
       shell: "grep cluster-pod-subnet {{ tempdir.path }}/addrpool.txt | awk '{print $6\"/\"$8}'"
       register: cluster_pod_subnet
+
+    - name: Retrieve cluster_pod_start_address from sysinv db
+      shell:
+        "grep cluster-pod-subnet {{ tempdir.path }}/addrpool.txt | awk 'match($12, /-/) {print substr($12, 3, RSTART-3)}'"
+      register: cluster_pod_start_address
+
+    - name: Retrieve cluster_pod_end_address from sysinv db
+      shell: >-
+        grep cluster-pod-subnet {{ tempdir.path }}/addrpool.txt |
+        awk 'split($12, array, "-") {print substr(array[2], 1, length(array[2])-2)}'
+      register: cluster_pod_end_address
 
     - name: Retrieve cluster_service_subnet from sysinv db
       shell: "grep cluster-service-subnet {{ tempdir.path }}/addrpool.txt | awk '{print $6\"/\"$8}'"
       register: cluster_service_subnet
 
+    - name: Retrieve cluster_service_start_address from sysinv db
+      shell:
+        grep cluster-service-subnet {{ tempdir.path }}/addrpool.txt | awk 'match($12, /-/) {print substr($12, 3, RSTART-3)}'
+      register: cluster_service_start_address
+
+    - name: Retrieve cluster_service_end_address from sysinv db
+      shell: >-
+        grep cluster-service-subnet {{ tempdir.path }}/addrpool.txt |
+        awk 'split($12, array, "-") {print substr(array[2], 1, length(array[2])-2)}'
+      register: cluster_service_end_address
+
     - name: Retrieve external_oam_subnet from sysinv db
       shell: "grep oam {{ tempdir.path }}/addrpool.txt | awk '{print $6\"/\"$8}'"
       register: external_oam_subnet
+
+    - name: Retrieve external_oam_start_address from sysinv db
+      shell:
+        "grep oam {{ tempdir.path }}/addrpool.txt | awk 'match($12, /-/) {print substr($12, 3, RSTART-3)}'"
+      register: external_oam_start_address
+
+    - name: Retrieve external_oam_end_address from sysinv db
+      shell: >-
+        grep oam {{ tempdir.path }}/addrpool.txt |
+        awk 'split($12, array, "-") {print substr(array[2], 1, length(array[2])-2)}'
+      register: external_oam_end_address
 
     - name: Retrieve external_oam_gateway_address from sysinv db
       shell: "grep oam {{ tempdir.path }}/addrpool.txt | awk '{print $20}'"
@@ -287,20 +399,63 @@
       shell: "grep oam {{ tempdir.path }}/addrpool.txt | awk '{print $14}'"
       register: external_oam_floating_address
 
+    - block:
+      - name: Retrieve external_oam_controller0_address from sysinv db
+        shell: "grep oam {{ tempdir.path }}/addrpool.txt | awk '{print $16}'"
+        register: external_oam_controller0_address
+
+      - name: Retrieve external_oam_controller1_address from sysinv db
+        shell: "grep oam {{ tempdir.path }}/addrpool.txt | awk '{print $18}'"
+        register: external_oam_controller1_address
+
+      when: system_mode != 'simplex'
+
     - name: Write entries to override backup file
       lineinfile:
         dest: "{{ override_backup_file }}"
         line: "{{ item }}"
       with_items:
         - "pxeboot_subnet: {{ pxeboot_subnet.stdout }}"
+        - "pxeboot_start_address: {{ pxeboot_start_address.stdout }}"
+        - "pxeboot_end_address: {{ pxeboot_end_address.stdout }}"
+        - "pxeboot_floating_address: {{ pxeboot_floating_address.stdout }}"
+        - "pxeboot_node_0_address: {{ pxeboot_controller0_address.stdout }}"
+        - "pxeboot_node_1_address: {{ pxeboot_controller1_address.stdout }}"
         - "management_subnet: {{ management_subnet.stdout }}"
         - "management_start_address: {{ management_start_address.stdout }}"
+        - "management_end_address: {{ management_end_address.stdout }}"
+        - "management_floating_address: {{ management_floating_address.stdout }}"
+        - "management_node_0_address: {{ management_controller0_address.stdout }}"
+        - "management_node_1_address: {{ management_controller1_address.stdout }}"
+        - "management_multicast_subnet: {{ management_multicast_subnet.stdout }}"
+        - "management_multicast_start_address: {{ management_multicast_start_address.stdout }}"
+        - "management_multicast_end_address: {{ management_multicast_end_address.stdout }}"
         - "cluster_host_subnet: {{ cluster_host_subnet.stdout }}"
+        - "cluster_host_start_address: {{ cluster_host_start_address.stdout }}"
+        - "cluster_host_end_address: {{ cluster_host_end_address.stdout }}"
+        - "cluster_host_floating_address: {{ cluster_host_floating_address.stdout }}"
+        - "cluster_host_node_0_address: {{ cluster_host_controller0_address.stdout }}"
+        - "cluster_host_node_1_address: {{ cluster_host_controller1_address.stdout }}"
         - "cluster_pod_subnet: {{ cluster_pod_subnet.stdout }}"
+        - "cluster_pod_start_address: {{ cluster_pod_start_address.stdout }}"
+        - "cluster_pod_end_address: {{ cluster_pod_end_address.stdout }}"
         - "cluster_service_subnet: {{ cluster_service_subnet.stdout }}"
+        - "cluster_sevice_start_address: {{ cluster_service_start_address.stdout }}"
+        - "cluster_service_end_address: {{ cluster_service_end_address.stdout }}"
         - "external_oam_subnet: {{ external_oam_subnet.stdout }}"
+        - "external_oam_start_address: {{ external_oam_start_address.stdout }}"
+        - "external_oam_end_address: {{ external_oam_end_address.stdout }}"
         - "external_oam_gateway_address: {{ external_oam_gateway_address.stdout }}"
         - "external_oam_floating_address: {{ external_oam_floating_address.stdout }}"
+
+    - name: Write external_oam_node_x_address to override backup file
+      lineinfile:
+        dest: "{{ override_backup_file }}"
+        line: "{{ item }}"
+      with_items:
+        - "external_oam_node_0_address: {{ external_oam_controller0_address.stdout }}"
+        - "external_oam_node_1_address: {{ external_oam_controller1_address.stdout }}"
+      when: system_mode != 'simplex'
 
     - name: Query service parameters for docker
       shell: >-
@@ -378,6 +533,11 @@
           dest: "{{ override_backup_file }}"
           line: "  - {{ item }}"
         with_items: "{{ docker_no_proxy.stdout.split(',') }}"
+
+      - name: Remove the open and close parenthesis around IPV6 address
+        command: sed -i -e 's/[][]//g' {{ override_backup_file }}
+        args:
+          warn: false
 
       when: docker_no_proxy.stdout != ""
 
