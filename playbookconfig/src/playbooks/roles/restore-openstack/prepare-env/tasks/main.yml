@@ -1,0 +1,82 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role verifies if platform restore should proceed
+#
+- name: Fail if backup_filename is not defined or set
+  fail:
+    msg: "Mandatory configuration parameter backup_filename is not defined or set."
+  when: backup_filename is not defined or backup_filename is none
+
+- name: Fail if initial_backup_dir is not defined or set
+  fail:
+    msg: "Mandatory configuration parameter initial_backup_dir is not defined or set."
+  when: initial_backup_dir is not defined or initial_backup_dir is none
+
+- name: Check if restoring StarlingX Openstack is already in progress
+  stat:
+    path: "{{ restore_openstack_in_progress_flag }}"
+  register: restore_openstack_in_progress
+
+- name: Fail if restoring StarlingX Openstack is already in progress
+  fail:
+    msg: "Restoring StarlingX Openstack is already in progress!"
+  when: restore_openstack_in_progress.stat.exists
+
+- name: Check if it is the active controller
+  shell: source /etc/platform/openrc; system host-show $(cat /etc/hostname) | grep -i "Controller-Active"
+  register: active_ctlr
+
+- name: Fail if it is not the active controller
+  fail:
+    msg: "Restore StarlingX Openstack application can only be done on the active controller."
+  when: active_ctlr.rc != 0
+
+- name: Search for stx-openstack application
+  shell: source /etc/platform/openrc; system application-list | grep 'stx-openstack'
+  register: check_openstack
+  failed_when: false
+
+# If stx-application doesn't exist or is in applied state, the restore is complete.
+- block:
+  - debug:
+      msg: >-
+        Either StarlingX OpenStack application had not been applied when the system was
+        backed up or it has already been restored successfully.
+  - meta: end_play
+
+  when: check_openstack.rc != 0 or check_openstack.stdout is search('applied')
+
+# If stx-application is not in uploaded state, it means restore_openstack playbook
+# has been run and was not successful. Re-run the playbook is not supported.
+- name: Fail if StarlingX Openstack is not in the right state for restore
+  fail:
+    msg: >-
+      stx-openstack application must be in ‘uploaded’ state for the restore to proceed.
+      The restore must have failed already.
+  when: check_openstack.stdout is not search('uploaded')
+
+- name: Check if platform-integ-apps was applied successfully during controller-0 unlock
+  shell: >-
+    source /etc/platform/openrc; system application-list |
+    grep 'platform-integ-apps.*applied.*completed'
+  register: check_platform_integ
+
+- name: Fail if platform-integ-apps was not applied successfully
+  fail:
+    msg: Application platform-integ-apps was not applied successfully during controller-0 unlock
+  when: check_platform_integ.rc != 0
+
+- name: For remote play set target_backup_dir to {{ backup_dir }}
+  set_fact:
+    target_backup_dir: "{{ backup_dir }}"
+  when: inventory_hostname != "localhost"
+
+- name: For local play set target_backup_dir to initial_backup_dir
+  set_fact:
+    target_backup_dir: "{{ initial_backup_dir }}"
+  when: inventory_hostname == "localhost"
