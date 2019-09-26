@@ -106,20 +106,55 @@ cluster_host_dynamic_address_allocation: true
 # k8s.gcr.io registry which hosts Kubernetes related images, has
 # the default registry url value of k8s.gcr.io
 #
-# To overwrite a particular registry url, use the original registry
-# value as the key followed by a custom IP address or domain for
-# the value. If the registry is authenticated, specify username and password
+# To overwrite a particular registry url, use the url of the original
+# registry value as the key followed by a custom IP address or domain
+# for the value.
+# If the registry is authenticated, specify username and password. The
+# optional key "type" is only relevant to authenticated registry, it
+# indicates the type of authenticated registry, supported values are
+# "docker" and "aws-ecr". If no type specified, the default type "docker"
+# will be used.
+#
 # e.g.
 #   docker_registries:
 #     k8s.gcr.io:
 #       url: my.k8sregistry.io
+#       type: docker
 #       username: k8sreguser
 #       password: K8sregPass*
 #
-# The "unified" is a special registry key. Defining and giving
-# it a value implies all images are to be retrieved from this
-# single source. Hence, registry values of all other registry keys
-# if specified will be ignored.
+# The "defaults" is registry key defines common values that to be applied
+# to all override-able public registries. The following example will apply
+# "url", "type", "username" and "password" to docker.io, gcr.io, k8s.gcr.io,
+# quay.io and docker.elastic.co registries.
+# e.g.
+#   docker_registries:
+#     defaults:
+#       url: unified.io
+#       type: docker
+#       username: adminUser
+#       password: adminPass
+#
+# The values under the specific registries, if specified, will take precedence
+# over the values under defaults registry. The following example will apply
+# "type", "username" and "password" from the defaults entry to other public
+# registries while the "url" is different for each public registry.
+# e.g.
+#   docker_registries:
+#     docker.io:
+#        url: my.dockerregistry.io
+#     gcr.io:
+#        url: my.gcrregistry.io
+#     quay.io:
+#       url: my.quayregistry.io
+#     k8s.gcr.io:
+#       url: my.k8sregistry.io
+#     docker.elastic.co:
+#       url: my.elasticregistry.io
+#     defaults:
+#       type: docker
+#       username: adminUser
+#       password: adminPass
 #
 # The docker registries map can be extended with new custom keys in
 # the near future.
@@ -132,7 +167,7 @@ cluster_host_dynamic_address_allocation: true
 #   - IPv6 address (e.g. FD01::0100)
 #   - IPv6 address with port (e.g. [FD01::0100]:5000
 #
-# Parameter is_secure_registry is only relevant when a unified registry is
+# Parameter is_secure_registry is only relevant when defaults registry is
 # used.
 
 docker_registries:
@@ -144,10 +179,28 @@ docker_registries:
     url:
   docker.io:
     url:
-# unified:
+  docker.elastic.co:
+    url:
+# defaults:
 #   url: example.domain
 
 # is_secure_registry: True
+
+# ADDITIONAL IMAGES
+# =================
+#
+# This parameter provides a means to pre-pull additional images to local
+# docker registry.
+#
+# The additional_local_registry_images is a list of image references that
+# will be downloaded from public/private registry and pushed to local registry.
+# This value must be a list and each image reference in the list must be
+# fully specified.
+#
+# additional_local_registry_images:
+#   - <registry-url>/image1:v1.0
+#   - <registry-url>/image2:v2.0
+#   ...
 
 # CERTIFICATES
 # ============

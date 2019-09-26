@@ -39,10 +39,10 @@ spec:
       - operator: Exists
         effect: NoSchedule
       imagePullSecrets:
-        - name: docker-registry-secret
+        - name: registry-local-secret
       containers:
       - name: kube-sriov-cni
-        image: "{{ docker_registry.url }}/starlingx/k8s-cni-sriov:master-centos-stable-latest"
+        image: "{{ local_registry }}/{{ sriov_cni_img }}"
         securityContext:
           privileged: true
         resources:

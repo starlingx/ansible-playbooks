@@ -169,10 +169,10 @@ spec:
         effect: NoSchedule
       serviceAccountName: multus
       imagePullSecrets:
-        - name: docker-registry-secret
+        - name: registry-local-secret
       containers:
       - name: kube-multus
-        image: "{{ docker_registry.url }}/starlingx/multus:v3.2.16"
+        image: "{{ local_registry }}/{{ multus_img }}"
         env:
           - name: KUBERNETES_NODE_NAME
             valueFrom:

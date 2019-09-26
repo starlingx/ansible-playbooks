@@ -462,9 +462,9 @@
         source /etc/platform/openrc; system service-parameter-list --nowrap |
         grep -w docker | awk '{if ($4=="docker") print $line}' > {{ tempdir.path }}/docker.txt
 
-    - name: Check if there is a unified docker registry
+    - name: Check if there is a defaults docker registry
       shell: grep -w insecure_registry {{ tempdir.path }}/docker.txt
-      register: check_unified
+      register: check_defaults
       failed_when: false
 
     - block:
@@ -472,19 +472,19 @@
         shell: grep -w insecure_registry {{ tempdir.path }}/docker.txt | awk '{print $10}'
         register: insecure
 
-      - name: Retrieve unified docker registry from sysinv
+      - name: Retrieve defaults docker registry from sysinv
         shell: grep -w k8s {{ tempdir.path }}/docker.txt | awk '{if ($8=="k8s") print $10}'
-        register: unified_docker_registry
+        register: defaults_docker_registry
 
-      - name: Write unified docker registry to override backup file
+      - name: Write defaults docker registry to override backup file
         lineinfile:
           dest: "{{ override_backup_file }}"
           line: "{{ item }}"
         with_items:
           - "is_secure_registry: {{ not (insecure.stdout|bool) }}"
           - "docker_registries:"
-          - "  unified: {{ unified_docker_registry.stdout }}"
-      when: check_unified.rc == 0
+          - "  defaults: {{ defaults_docker_registry.stdout }}"
+      when: check_defaults.rc == 0
 
     - block:
       - name: Search for docker registries
@@ -513,7 +513,7 @@
             replace: 'k8s.gcr.io'
 
         when: docker_registries.stdout != ""
-      when: check_unified.rc != 0
+      when: check_defaults.rc != 0
 
     - name: Check if docker no-proxy exists
       shell: >-

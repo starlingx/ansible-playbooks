@@ -7,7 +7,6 @@
 # SUB-TASKS DESCRIPTION:
 #   Bring up Helm
 #   - Set up needed directories
-#   - Pull Tiller and Armada images
 #   - Create service account and cluster role binding
 #   - Initialize Helm
 #   - Restart lighttpd
@@ -94,45 +93,6 @@
     regexp: "var.pxeboot_ip_network =.*$"
     replace: 'var.pxeboot_ip_network = "{{ pxeboot_subnet }}"'
 
-- name: Update Tiller and Armada image tags
-  set_fact:
-    tiller_img: "{{ tiller_img | regex_replace('gcr.io', '{{ gcr_registry.url }}') }}"
-    armada_img: "{{ armada_img | regex_replace('quay.io', '{{ quay_registry.url }}') }}"
-
-
-- name: log in to gcr registry if credentials exist
-  docker_login:
-    registry: "{{ gcr_registry['url'] }}"
-    username: "{{ gcr_registry['username'] }}"
-    password: "{{ gcr_registry['password'] }}"
-  when: gcr_registry.username is defined
-
-- name: log in to quay registry if credentials exist
-  docker_login:
-    registry: "{{ quay_registry['url'] }}"
-    username: "{{ quay_registry['username'] }}"
-    password: "{{ quay_registry['password'] }}"
-  when: quay_registry.username is defined
-
-- name: Pull Tiller and Armada images
-  docker_image:
-    name: "{{ item }}"
-  with_items:
-    - "{{ tiller_img }}"
-    - "{{ armada_img }}"
-
-- name: log out of gcr registry if credentials exist
-  docker_login:
-    registry: "{{ gcr_registry['url'] }}"
-    state: absent
-  when: gcr_registry.username is defined
-
-- name: log out of quay registry if credentials exist
-  docker_login:
-    registry: "{{ quay_registry['url'] }}"
-    state: absent
-  when: quay_registry.username is defined
-
 - name: Create source and target helm bind directories
   file:
     path: "{{ item }}"
@@ -163,7 +123,7 @@
 - name: Patch pull secret into tiller service account
   command: >
     kubectl --kubeconfig=/etc/kubernetes/admin.conf patch serviceaccount
-    tiller -p '{"imagePullSecrets": [{"name": "gcr-registry-secret"}]}' -n kube-system
+    tiller -p '{"imagePullSecrets": [{"name": "registry-local-secret"}]}' -n kube-system
 
 - name: Create cluster role binding for Tiller service account
   command: >
@@ -183,7 +143,7 @@
       --skip-refresh
       --service-account tiller
       --node-selectors "node-role.kubernetes.io/master"=""
-      --tiller-image={{ tiller_img }}
+      --tiller-image={{ local_registry }}/{{ tiller_img }}
       --override spec.template.spec.hostNetwork=true
       --override spec.selector.matchLabels.app=helm
       --override spec.selector.matchLabels.name=tiller
@@ -213,7 +173,7 @@
       --skip-refresh
       --service-account tiller
       --node-selectors "node-role.kubernetes.io/master"=""
-      --tiller-image={{ tiller_img }}
+      --tiller-image={{ local_registry }}/{{ tiller_img }}
       --override spec.template.spec.hostNetwork=true
       --override spec.selector.matchLabels.app=helm
       --override spec.selector.matchLabels.name=tiller

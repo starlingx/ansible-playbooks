@@ -1,0 +1,231 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   This task is to pre-pull platform images from public/private registries
+#   and push images to the local registry.
+#   - Update /etc/hosts with registry.local
+#   - Login to k8s/gcr/quay/docker registries if applicable
+#   - Login to local registry with its credentials
+#   - Pull platform images from k8s/gcr/quay/docker registries
+#     and push them to local registry
+#   - Logout of k8s/gcr/quay/docker registries if applicable
+#   - Logout of local registry
+#   - Remove registry.local from /etc/hosts
+
+- name: Update /etc/hosts with local registry host
+  command: >-
+    sed -i -e 's|'$CONTROLLER_ADDRESS'\t'$CONTROLLER'|'$CONTROLLER_ADDRESS'\t'$CONTROLLER'\t'$LOCAL_REGISTRY'|g' /etc/hosts
+  args:
+    warn: false
+  environment:
+    CONTROLLER_ADDRESS: "{{ controller_floating_address }}"
+    CONTROLLER: "controller"
+    LOCAL_REGISTRY: "registry.local"
+
+- name: Get kubernetes version
+  command: "sed -n 's|^kubernetesVersion: \\(.*\\)$|\\1|p' {{ kube_admin_yaml_template }}"
+  args:
+    warn: false
+  register: kubernetes_version
+
+- name: Get the list of kubernetes images
+  shell: "kubeadm config images list --kubernetes-version {{ kubernetes_version.stdout }}
+          --image-repository {{ k8s_registry.url }} | grep -v etcd"
+  register: kubernetes_images_output
+
+- set_fact:
+    kubernetes_images: "{{ kubernetes_images_output.stdout_lines }}"
+
+- name: Update Tiller, Armada, Calico, Multus, Sriov image tags
+  set_fact:
+    tiller_img: "{{ tiller_img | regex_replace('gcr.io', '{{ gcr_registry.url }}') }}"
+    armada_img: "{{ armada_img | regex_replace('quay.io', '{{ quay_registry.url }}') }}"
+    calico_cni_img: "{{  calico_cni_img | regex_replace('quay.io', '{{ quay_registry.url }}') }}"
+    calico_node_img: "{{ calico_node_img | regex_replace('quay.io', '{{ quay_registry.url }}') }}"
+    calico_kube_controllers_img: "{{ calico_kube_controllers_img | regex_replace('quay.io', '{{ quay_registry.url }}') }}"
+    multus_img: "{{ multus_img | regex_replace('docker.io', '{{ docker_registry.url }}') }}"
+    sriov_cni_img: "{{ sriov_cni_img | regex_replace('docker.io', '{{ docker_registry.url }}') }}"
+    sriov_network_device_img: "{{ sriov_network_device_img | regex_replace('docker.io', '{{ docker_registry.url }}') }}"
+
+- name: Get the list of platform images
+  set_fact:
+    platform_images:
+      - "{{ tiller_img }}"
+      - "{{ armada_img }}"
+      - "{{ calico_cni_img }}"
+      - "{{ calico_node_img }}"
+      - "{{ calico_kube_controllers_img }}"
+      - "{{ multus_img }}"
+      - "{{ sriov_cni_img }}"
+      - "{{ sriov_network_device_img }}"
+
+- block:
+  - name: Update additional image tags if applicable
+    shell: >-
+      echo {{ item }} | sed 's|quay.io|{{ quay_registry.url }}|g' | sed 's|docker.io|{{ docker_registry.url }}|g' |
+      sed 's|k8s.gcr.io|{{ k8s_registry.url }}|g' | sed 's|gcr.io|{{ gcr_registry.url }}|g'
+    with_items: "{{ additional_local_registry_images }}"
+    register: images
+
+  - set_fact:
+      additional_images: "{{ images.results | map(attribute='stdout') | list }}"
+  when: additional_local_registry_images
+
+- name: Set the download images list
+  set_fact:
+    download_images_list:
+      "{{ (kubernetes_images + platform_images + additional_images) if additional_images is defined
+      else (kubernetes_images + platform_images) }}"
+
+- set_fact:
+    download_images: "{{ download_images_list | join(',') }}"
+
+- debug: var=download_images_list
+
+- block:
+  - block:
+    - name: Get the k8s registry credentials if registry type is AWS ECR
+      script: get_registry_auth.py {{ k8s_registry.url }} {{ k8s_registry.username }} {{ k8s_registry.password }}
+      register: k8s_registry_auth_output
+
+    - set_fact:
+        k8s_registry_auth: "{{ k8s_registry_auth_output.stdout }}"
+    - set_fact:
+        k8s_registry: "{{ k8s_registry | combine(k8s_registry_auth, recursive=true) }}"
+    when: k8s_registry.type is defined and k8s_registry.type == 'aws-ecr'
+
+  - name: Log in to k8s registry if credentials exist
+    docker_login:
+      registry: "{{ k8s_registry['url'] }}"
+      username: "{{ k8s_registry['username'] }}"
+      password: "{{ k8s_registry['password'] }}"
+  when: k8s_registry.username is defined
+
+- block:
+  - block:
+    - name: Get the gcr registry credentials if registry type is AWS ECR
+      script: get_registry_auth.py {{ gcr_registry.url }} {{ gcr_registry.username }} {{ gcr_registry.password }}
+      register: gcr_registry_auth_output
+
+    - set_fact:
+        gcr_registry_auth: "{{ gcr_registry_auth_output.stdout }}"
+    - set_fact:
+        gcr_registry: "{{ gcr_registry | combine(gcr_registry_auth, recursive=true) }}"
+    when: gcr_registry.type is defined and gcr_registry.type == 'aws-ecr'
+
+  - name: Log in to gcr registry if credentials exist
+    docker_login:
+      registry: "{{ gcr_registry['url'] }}"
+      username: "{{ gcr_registry['username'] }}"
+      password: "{{ gcr_registry['password'] }}"
+  when: gcr_registry.username is defined
+
+- block:
+  - block:
+    - name: Get the quay registry credentials if registry type is AWS ECR
+      script: get_registry_auth.py {{ quay_registry.url }} {{ quay_registry.username }} {{ quay_registry.password }}
+      register: quay_registry_auth_output
+
+    - set_fact:
+        quay_registry_auth: "{{ quay_registry_auth_output.stdout }}"
+    - set_fact:
+        quay_registry: "{{ quay_registry | combine(quay_registry_auth, recursive=true) }}"
+    when: quay_registry.type is defined and quay_registry.type == 'aws-ecr'
+
+  - name: Log in to quay registry if credentials exist
+    docker_login:
+      registry: "{{ quay_registry['url'] }}"
+      username: "{{ quay_registry['username'] }}"
+      password: "{{ quay_registry['password'] }}"
+  when: quay_registry.username is defined
+
+- block:
+  - block:
+    - name: Get the docker registry credentials if registry type is AWS ECR
+      script: get_registry_auth.py {{ docker_registry.url }} {{ docker_registry.username }} {{ docker_registry.password }}
+      register: docker_registry_auth_output
+
+    - set_fact:
+        docker_registry_auth: "{{ docker_registry_auth_output.stdout }}"
+    - set_fact:
+        docker_registry: "{{ docker_registry | combine(docker_registry_auth, recursive=true) }}"
+    when: docker_registry.type is defined and docker_registry.type == 'aws-ecr'
+
+  - name: Log in to docker registry if credentials exist
+    docker_login:
+      registry: "{{ docker_registry['url'] }}"
+      username: "{{ docker_registry['username'] }}"
+      password: "{{ docker_registry['password'] }}"
+  when: docker_registry.username is defined
+
+- name: Get local registry credentials
+  vars:
+    script_content: |
+      import keyring
+      password = str(keyring.get_password("CGCS", "admin"))
+      if not password:
+          raise Exception("Local registry password not found.")
+      print dict(username='admin', password=password)
+  shell: "{{ script_content }}"
+  args:
+    executable: /usr/bin/python
+  register: local_registry_credentials_output
+
+- set_fact:
+    local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
+
+- name: Log in to local registry
+  docker_login:
+    registry: "{{ local_registry }}"
+    username: "{{ local_registry_credentials['username'] }}"
+    password: "{{ local_registry_credentials['password'] }}"
+
+- name: Download images and push to local registry
+  script: download_images.py {{ download_images }}
+  register: download_images_output
+
+- debug:
+    msg: "{{ download_images_output.stdout_lines }}"
+
+- name: Log out of k8s registry if credentials exist
+  docker_login:
+    registry: "{{ k8s_registry['url'] }}"
+    state: absent
+  when: k8s_registry.username is defined
+
+- name: Log out of gcr registry if credentials exist
+  docker_login:
+    registry: "{{ gcr_registry['url'] }}"
+    state: absent
+  when: gcr_registry.username is defined
+
+- name: Log out of quay registry if credentials exist
+  docker_login:
+    registry: "{{ quay_registry['url'] }}"
+    state: absent
+  when: quay_registry.username is defined
+
+- name: Log out of docker registry if credentials exist
+  docker_login:
+    registry: "{{ docker_registry['url'] }}"
+    state: absent
+  when: docker_registry.username is defined
+
+- name: Log out of local registry
+  docker_login:
+    registry: "{{ local_registry }}"
+    state: absent
+
+- name: Remove local registry host from /etc/hosts
+  command: >-
+    sed -i -e 's|'$CONTROLLER_ADDRESS'\t'$CONTROLLER'\t'$LOCAL_REGISTRY'|'$CONTROLLER_ADDRESS'\t'$CONTROLLER'|g' /etc/hosts
+  args:
+    warn: false
+  environment:
+    CONTROLLER_ADDRESS: "{{ controller_floating_address }}"
+    CONTROLLER: "controller"
+    LOCAL_REGISTRY: "registry.local"

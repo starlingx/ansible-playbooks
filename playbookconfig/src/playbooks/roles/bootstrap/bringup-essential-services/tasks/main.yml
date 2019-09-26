@@ -48,14 +48,17 @@
     include_tasks: load_images_from_archive.yml
     when: images_archive_exists
 
+  - name: Bring up local docker registry
+    import_tasks: bringup_local_registry.yml
+
+  - name: Push images to local docker registry
+    import_tasks: push_images_to_local_registry.yml
+
   - name: Bring up Kubernetes master
     import_tasks: bringup_kubemaster.yml
 
   - name: Bring up Helm
     import_tasks: bringup_helm.yml
-
-  - name: Set up controller registry certificate and keys
-    import_tasks: setup_registry_certificate_and_keys.yml
 
   - name: Bring up essential flock services
     import_tasks: bringup_flock_services.yml

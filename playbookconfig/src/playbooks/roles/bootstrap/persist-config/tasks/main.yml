@@ -98,6 +98,7 @@
     - "source /etc/platform/openrc; openstack secret list | grep gcr-registry-secret | awk '{print $2}'"
     - "source /etc/platform/openrc; openstack secret list | grep quay-registry-secret | awk '{print $2}'"
     - "source /etc/platform/openrc; openstack secret list | grep docker-registry-secret | awk '{print $2}'"
+    - "source /etc/platform/openrc; openstack secret list | grep elastic-registry-secret | awk '{print $2}'"
   register: old_barbican_secrets
 
 - name: Delete old registry secrets in Barbican
@@ -151,6 +152,18 @@
 
   when: docker_registry.username is defined
 
+- block:
+  - name: Create Barbican secret for elastic registry if credentials exist
+    shell: "source /etc/platform/openrc; openstack secret store -n elastic-registry-secret
+           -p 'username:{{ docker_registry['username'] }} password:{{ docker_registry['password'] }}'
+           -c 'Secret href' -f value"
+    register: elastic_registry_secret_output
+
+  - set_fact:
+      elastic_registry_secret: "{{ elastic_registry_secret_output.stdout }}"
+
+  when: elastic_registry.username is defined
+
 - name: Append config ini file with Barbican secret uuid
   lineinfile:
     path: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
@@ -160,6 +173,7 @@
     - "GCR_REGISTRY_SECRET={{ gcr_registry_secret | default('none') }}"
     - "QUAY_REGISTRY_SECRET={{ quay_registry_secret | default('none') }}"
     - "DOCKER_REGISTRY_SECRET={{ docker_registry_secret | default('none') }}"
+    - "ELASTIC_REGISTRY_SECRET={{ elastic_registry_secret | default('none') }}"
 
 - include: update_sysinv_database.yml
   when: save_config_to_db

@@ -139,6 +139,8 @@
           url: quay.io
         docker.io:
           url: docker.io
+        docker.elastic.co:
+          url: docker.elastic.co
 
   - name: Merge user and default registries dictionaries
     set_fact:
@@ -152,7 +154,7 @@
       save_password: true
       save_config_to_db: true
       use_docker_proxy: false
-      use_unified_registry: false
+      use_defaults_registry: false
       restart_services: false
       reconfigure_endpoints: false
       dc_role_changed: false
@@ -204,6 +206,12 @@
         url: quay.io
       default_docker_registry:
         url: docker.io
+      default_elastic_registry:
+        url: docker.elastic.co
+
+  - name: Set default values for additional images list
+    set_fact:
+      additional_local_registry_images: "{{ additional_local_registry_images | default([]) }}"
 
   - name: Set default values for OpenID connect
     set_fact:

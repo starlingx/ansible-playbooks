@@ -45,14 +45,22 @@
         (docker_registries[default_docker_registry.url].username is not defined and
          docker_registries[default_docker_registry.url].password is defined)
 
-- name: Check unified registry credentials
+- name: Check elastic_registry credentials
   fail:
-    msg: "unified registry username and password must both be specified or not at all"
-  when: docker_registries['unified'] is defined and
-        ((docker_registries['unified'].username is defined and
-         docker_registries['unified'].password is not defined) or
-        (docker_registries['unified'].username is not defined and
-         docker_registries['unified'].password is defined))
+    msg: "elastic registry username and password must both be specified or not at all"
+  when: (docker_registries[default_elastic_registry.url].username is defined and
+         docker_registries[default_elastic_registry.url].password is not defined) or
+        (docker_registries[default_elastic_registry.url].username is not defined and
+         docker_registries[default_elastic_registry.url].password is defined)
+
+- name: Check defaults registry credentials
+  fail:
+    msg: "defaults registry username and password must both be specified or not at all"
+  when: docker_registries['defaults'] is defined and
+        ((docker_registries['defaults'].username is defined and
+         docker_registries['defaults'].password is not defined) or
+        (docker_registries['defaults'].username is not defined and
+         docker_registries['defaults'].password is defined))
 
 # create a copy of docker_registries without passwords for debug logging
 - set_fact:
@@ -411,6 +419,10 @@
       cluster_broadcast: "{{ cluster_host_subnet | ipaddr('broadcast') }}"
       controller_0_cluster_host: "{{ cluster_floating_address|ipmath(1) }}"
       controller_1_cluster_host: "{{ cluster_floating_address|ipmath(2) }}"
+      controller_floating_address_url:
+        "{{ controller_floating_address|ipwrap if controller_floating_address|ipv6 != False
+        else controller_floating_address}}"
+
 
   - name: Set facts for IP address provisioning against loopback interface
     set_fact:
@@ -426,22 +438,11 @@
 - block:
   - set_fact:
       use_default_registries: true
-      k8s_registry:
-        "{{ docker_registries_with_secrets[default_k8s_registry.url]
-        if docker_registries[default_k8s_registry.url]['url'] is not none
-        else default_k8s_registry }}"
-      gcr_registry:
-        "{{ docker_registries_with_secrets[default_gcr_registry.url]
-        if docker_registries[default_gcr_registry.url]['url'] is not none
-        else default_gcr_registry }}"
-      quay_registry:
-        "{{ docker_registries_with_secrets[default_quay_registry.url]
-        if docker_registries[default_quay_registry.url]['url'] is not none
-        else default_quay_registry }}"
-      docker_registry:
-        "{{ docker_registries_with_secrets[default_docker_registry.url]
-        if docker_registries[default_docker_registry.url]['url'] is not none
-        else default_docker_registry }}"
+      k8s_registry: "{{ default_k8s_registry }}"
+      gcr_registry: "{{ default_gcr_registry }}"
+      quay_registry: "{{ default_quay_registry }}"
+      docker_registry: "{{ default_docker_registry }}"
+      elastic_registry: "{{ default_elastic_registry }}"
       default_no_proxy:
         - localhost
         - 127.0.0.1
@@ -487,36 +488,107 @@
       when: (is_secure_registry is defined) and
             (not is_secure_registry |type_debug == 'bool')
 
-    - name: Default the unified registry to secure if not specified
+    - name: Set the defaults registry to secure if not specified
       set_fact:
         is_secure_registry: true
       when: is_secure_registry is not defined
 
-    - name: Turn on use_unified_registry flag
+    - name: Turn on use_defaults_registry flag
       set_fact:
-        use_unified_registry: true
-        k8s_registry: "{{ docker_registries_with_secrets['unified'] }}"
-        gcr_registry: "{{ docker_registries_with_secrets['unified'] }}"
-        quay_registry: "{{ docker_registries_with_secrets['unified'] }}"
-        docker_registry: "{{ docker_registries_with_secrets['unified'] }}"
+        use_defaults_registry: true
+        k8s_registry: "{{ k8s_registry | combine(docker_registries_with_secrets['defaults'], recursive=true) }}"
+        gcr_registry: "{{ gcr_registry | combine(docker_registries_with_secrets['defaults'], recursive=true) }}"
+        quay_registry: "{{ quay_registry | combine(docker_registries_with_secrets['defaults'], recursive=true) }}"
+        docker_registry: "{{ docker_registry | combine(docker_registries_with_secrets['defaults'], recursive=true) }}"
+        elastic_registry: "{{ elastic_registry | combine(docker_registries_with_secrets['defaults'], recursive=true) }}"
 
-    when: docker_registries['unified'] is defined and docker_registries['unified'] is not none
+    when: docker_registries['defaults'] is defined and docker_registries['defaults'] is not none
+
+  - set_fact:
+      k8s_registry:
+        "{{ k8s_registry | combine(docker_registries_with_secrets[default_k8s_registry.url], recursive=true) }}"
+    when: (docker_registries[default_k8s_registry.url]['url'] is not defined or
+           (docker_registries[default_k8s_registry.url]['url'] is not none and
+           docker_registries[default_k8s_registry.url]['url'] != default_k8s_registry.url))
+
+  - set_fact:
+      gcr_registry:
+        "{{ gcr_registry | combine(docker_registries_with_secrets[default_gcr_registry.url], recursive=true) }}"
+    when: (docker_registries[default_gcr_registry.url]['url'] is not defined or
+           (docker_registries[default_gcr_registry.url]['url'] is not none and
+           docker_registries[default_gcr_registry.url]['url'] != default_gcr_registry.url))
+
+  - set_fact:
+      quay_registry:
+        "{{ quay_registry | combine(docker_registries_with_secrets[default_quay_registry.url], recursive=true) }}"
+    when: (docker_registries[default_quay_registry.url]['url'] is not defined or
+           (docker_registries[default_quay_registry.url]['url'] is not none and
+           docker_registries[default_quay_registry.url]['url'] != default_quay_registry.url))
+
+  - set_fact:
+      docker_registry:
+        "{{ docker_registry | combine(docker_registries_with_secrets[default_docker_registry.url], recursive=true) }}"
+    when: (docker_registries[default_docker_registry.url]['url'] is not defined or
+           (docker_registries[default_docker_registry.url]['url'] is not none and
+           docker_registries[default_docker_registry.url]['url'] != default_docker_registry.url))
+
+  - set_fact:
+      elastic_registry:
+        "{{ elastic_registry | combine(docker_registries_with_secrets[default_elastic_registry.url], recursive=true) }}"
+    when: (docker_registries[default_elastic_registry.url]['url'] is not defined or
+           (docker_registries[default_elastic_registry.url]['url'] is not none and
+           docker_registries[default_elastic_registry.url]['url'] != default_elastic_registry.url))
 
   - name: Update use_default_registries flag
     set_fact:
       use_default_registries: false
-    when: use_unified_registry or
-          docker_registries|length != 4 or
+    when: use_defaults_registry or
+          docker_registries|length != 5 or
           k8s_registry != default_k8s_registry or
           gcr_registry != default_gcr_registry or
           quay_registry != default_quay_registry or
-          docker_registry != default_docker_registry
+          docker_registry != default_docker_registry or
+          elastic_registry != default_elastic_registry
 
   - block:
-    - include: validate_address.yml  input_address={{ item.value.url }}
-      with_dict: "{{ docker_registries }}"
+    - name: Validate k8s_registry type if specified
+      fail:
+        msg: "The registry type for k8s registry is not supported."
+      when: (k8s_registry.type is defined and k8s_registry.type not in ['docker', 'aws-ecr'])
+
+    - name: Validate quay_registry type if specified
+      fail:
+        msg: "The registry type for quay registry is not supported."
+      when: (quay_registry.type is defined and quay_registry.type not in ['docker', 'aws-ecr'])
+
+    - name: Validate gcr_registry type if specified
+      fail:
+        msg: "The registry type for gcr registry is not supported."
+      when: (gcr_registry.type is defined and gcr_registry.type not in ['docker', 'aws-ecr'])
+
+    - name: Validate docker_registry type if specified
+      fail:
+        msg: "The registry type for docker registry is not supported."
+      when: (docker_registry.type is defined and docker_registry.type not in ['docker', 'aws-ecr'])
+
+    - name: Validate elastic_registry type if specified
+      fail:
+        msg: "The registry type for elastic registry is not supported."
+      when: (elastic_registry.type is defined and elastic_registry.type not in ['docker', 'aws-ecr'])
+
+    - include: validate_address.yml input_address={{ item }}
+      with_items:
+        - "{{ k8s_registry.url }}"
+        - "{{ gcr_registry.url }}"
+        - "{{ quay_registry.url }}"
+        - "{{ docker_registry.url }}"
+        - "{{ elastic_registry.url }}"
     when: not use_default_registries
 
+- name: Validate additional_local_registry_images list
+  fail:
+    msg: "additional_local_registry_images must be a list"
+  when: additional_local_registry_images | type_debug != 'list'
 
 # Docker images archive source validation
 - block:
@@ -667,6 +739,17 @@
       - "GCR_REGISTRY={{ gcr_registry.url }}"
       - "QUAY_REGISTRY={{ quay_registry.url }}"
       - "DOCKER_REGISTRY={{ docker_registry.url }}"
+      - "ELASTIC_REGISTRY={{ elastic_registry.url }}"
+      - "K8S_REGISTRY_TYPE={{ k8s_registry.type | default('docker') }}"
+      - "GCR_REGISTRY_TYPE={{ gcr_registry.type | default('docker') }}"
+      - "QUAY_REGISTRY_TYPE={{ quay_registry.type | default('docker') }}"
+      - "DOCKER_REGISTRY_TYPE={{ docker_registry.type | default('docker') }}"
+      - "ELASTIC_REGISTRY_TYPE={{ elastic_registry.type | default('docker') }}"
+      - "K8S_REGISTRY_ADDITIONAL_OVERRIDES={{ k8s_registry.additional_overrides | default('undef') }}"
+      - "GCR_REGISTRY_ADDITIONAL_OVERRIDES={{ gcr_registry.additional_overrides | default('undef') }}"
+      - "QUAY_REGISTRY_ADDITIONAL_OVERRIDES={{ quay_registry.additional_overrides | default('undef') }}"
+      - "DOCKER_REGISTRY_ADDITIONAL_OVERRIDES={{ docker_registry.additional_overrides | default('undef') }}"
+      - "ELASTIC_REGISTRY_ADDITIONAL_OVERRIDES={{ elastic_registry.additional_overrides | default('undef') }}"
       - "USE_DEFAULT_REGISTRIES={{ use_default_registries }}"
       - "IS_SECURE_REGISTRY={{ is_secure_registry | default(True) }}"
       - "RECONFIGURE_ENDPOINTS={{ reconfigure_endpoints }}"

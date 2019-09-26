@@ -579,7 +579,8 @@ def populate_docker_config(client):
                 parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_K8S_REGISTRY or
                 parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_GCR_REGISTRY or
                 parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_QUAY_REGISTRY or
-                parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_DOCKER_REGISTRY):
+                parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_DOCKER_REGISTRY or
+                parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_ELASTIC_REGISTRY):
             client.sysinv.service_parameter.delete(parameter.uuid)
 
     if not use_default_registries:
@@ -591,10 +592,22 @@ def populate_docker_config(client):
         gcr_url = CONF.get('BOOTSTRAP_CONFIG', 'GCR_REGISTRY')
         quay_url = CONF.get('BOOTSTRAP_CONFIG', 'QUAY_REGISTRY')
         docker_url = CONF.get('BOOTSTRAP_CONFIG', 'DOCKER_REGISTRY')
+        elastic_url = CONF.get('BOOTSTRAP_CONFIG', 'ELASTIC_REGISTRY')
         k8s_secret = CONF.get('BOOTSTRAP_CONFIG', 'K8S_REGISTRY_SECRET')
         gcr_secret = CONF.get('BOOTSTRAP_CONFIG', 'GCR_REGISTRY_SECRET')
         quay_secret = CONF.get('BOOTSTRAP_CONFIG', 'QUAY_REGISTRY_SECRET')
+        elastic_secret = CONF.get('BOOTSTRAP_CONFIG', 'ELASTIC_REGISTRY_SECRET')
         docker_secret = CONF.get('BOOTSTRAP_CONFIG', 'DOCKER_REGISTRY_SECRET')
+        k8s_type = CONF.get('BOOTSTRAP_CONFIG', 'K8S_REGISTRY_TYPE')
+        gcr_type = CONF.get('BOOTSTRAP_CONFIG', 'GCR_REGISTRY_TYPE')
+        quay_type = CONF.get('BOOTSTRAP_CONFIG', 'QUAY_REGISTRY_TYPE')
+        elastic_type = CONF.get('BOOTSTRAP_CONFIG', 'ELASTIC_REGISTRY_TYPE')
+        docker_type = CONF.get('BOOTSTRAP_CONFIG', 'DOCKER_REGISTRY_TYPE')
+        k8s_additional_overrides = CONF.get('BOOTSTRAP_CONFIG', 'K8S_REGISTRY_ADDITIONAL_OVERRIDES')
+        gcr_additional_overrides = CONF.get('BOOTSTRAP_CONFIG', 'GCR_REGISTRY_ADDITIONAL_OVERRIDES')
+        quay_additional_overrides = CONF.get('BOOTSTRAP_CONFIG', 'QUAY_REGISTRY_ADDITIONAL_OVERRIDES')
+        docker_additional_overrides = CONF.get('BOOTSTRAP_CONFIG', 'DOCKER_REGISTRY_ADDITIONAL_OVERRIDES')
+        elastic_additional_overrides = CONF.get('BOOTSTRAP_CONFIG', 'ELASTIC_REGISTRY_ADDITIONAL_OVERRIDES')
 
         parameters[
             sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_K8S_REGISTRY] = \
@@ -608,27 +621,76 @@ def populate_docker_config(client):
         parameters[
             sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_DOCKER_REGISTRY] = \
             {sysinv_constants.SERVICE_PARAM_NAME_DOCKER_URL: docker_url}
+        parameters[
+            sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_ELASTIC_REGISTRY] = \
+            {sysinv_constants.SERVICE_PARAM_NAME_DOCKER_URL: elastic_url}
         if k8s_secret != "none":
+            # we need the split because we want the Barbican UUID, not the secret href
             parameters[
                 sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_K8S_REGISTRY][
                 sysinv_constants.SERVICE_PARAM_NAME_DOCKER_AUTH_SECRET] = \
                 k8s_secret.split('/')[-1]
-            # we need the split because we want the Barbican UUID, not the secret href
+            parameters[
+                sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_K8S_REGISTRY][
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_TYPE] = k8s_type
         if gcr_secret != "none":
             parameters[
                 sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_GCR_REGISTRY][
                 sysinv_constants.SERVICE_PARAM_NAME_DOCKER_AUTH_SECRET] = \
                 gcr_secret.split('/')[-1]
+            parameters[
+                sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_GCR_REGISTRY][
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_TYPE] = gcr_type
         if quay_secret != "none":
             parameters[
                 sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_QUAY_REGISTRY][
                 sysinv_constants.SERVICE_PARAM_NAME_DOCKER_AUTH_SECRET] = \
                 quay_secret.split('/')[-1]
+            parameters[
+                sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_QUAY_REGISTRY][
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_TYPE] = quay_type
         if docker_secret != "none":
             parameters[
                 sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_DOCKER_REGISTRY][
                 sysinv_constants.SERVICE_PARAM_NAME_DOCKER_AUTH_SECRET] = \
                 docker_secret.split('/')[-1]
+            parameters[
+                sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_DOCKER_REGISTRY][
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_TYPE] = docker_type
+        if elastic_secret != "none":
+            parameters[
+                sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_ELASTIC_REGISTRY][
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_AUTH_SECRET] = \
+                elastic_secret.split('/')[-1]
+            parameters[
+                sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_ELASTIC_REGISTRY][
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_TYPE] = elastic_type
+
+        if k8s_additional_overrides != 'undef':
+            parameters[
+                sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_K8S_REGISTRY][
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_ADDITIONAL_OVERRIDES] = \
+                k8s_additional_overrides
+        if gcr_additional_overrides != 'undef':
+            parameters[
+                sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_GCR_REGISTRY][
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_ADDITIONAL_OVERRIDES] = \
+                gcr_additional_overrides
+        if quay_additional_overrides != 'undef':
+            parameters[
+                sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_QUAY_REGISTRY][
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_ADDITIONAL_OVERRIDES] = \
+                quay_additional_overrides
+        if docker_additional_overrides != 'undef':
+            parameters[
+                sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_DOCKER_REGISTRY][
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_ADDITIONAL_OVERRIDES] = \
+                docker_additional_overrides
+        if elastic_additional_overrides != 'undef':
+            parameters[
+                sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_ELASTIC_REGISTRY][
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_ADDITIONAL_OVERRIDES] = \
+                elastic_additional_overrides
 
         print("Populating/Updating docker registry config...")
         for registry in parameters:
