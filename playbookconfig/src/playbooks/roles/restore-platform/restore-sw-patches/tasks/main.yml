@@ -11,10 +11,6 @@
 #       - reboot the controller if it is required by the patching
 #
 - block:
-  - name: Set fact for restore_in_progress flag file
-    set_fact:
-      restore_in_progress_flag: /etc/platform/.restore_in_progress
-
   - name: Set fact for patching staging dir
     set_fact:
       patching_staging_dir: /scratch/patching

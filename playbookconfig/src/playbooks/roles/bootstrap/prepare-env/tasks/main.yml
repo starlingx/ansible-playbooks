@@ -43,12 +43,6 @@
 
 # Proceed only if skip_play flag is not turned on
 - block:
-  - block:
-    # Do load verification and patching if required
-    - include_tasks: load_patching_tasks.yml
-
-    when: mode == 'restore'
-
   # The following parameters should exist in default.yml. If any of them is
   # not available, the file is invalid.
   - name: Fail if any of the mandatory configurations are not defined

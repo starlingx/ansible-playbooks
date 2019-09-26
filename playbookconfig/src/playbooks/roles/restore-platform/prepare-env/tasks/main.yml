@@ -68,7 +68,7 @@
       msg: "Host {{ ansible_host }} has been unlocked. Cannot perform restore."
     when: initial_config_done.stat.exists
 
-  - name: Check if restore is in progress if bootstrap is with restore mode
+  - name: Check if restore is in progress
     stat:
       path: "{{ restore_in_progress_flag }}"
     register: restore_in_progress

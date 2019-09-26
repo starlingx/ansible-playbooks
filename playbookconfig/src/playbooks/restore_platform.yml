@@ -14,6 +14,7 @@
     - common/prepare-env
     - restore-platform/prepare-env
     - backup-restore/transfer-file
+    - restore-platform/restore-sw-patches
 
 - name: Run bootstrap playbook with restore mode
   import_playbook: bootstrap.yml mode='restore'
