@@ -484,6 +484,11 @@ subjects:
 # This manifest installs the node container, as well
 # as the Calico CNI plugins and network config on
 # each master and worker node in a Kubernetes cluster.
+#
+# The following modifications have been made:
+#
+# - The cnibin volume hostPath is made variable
+# - The UPDATE_CNI_BINARIES environment variable is set to 'false'
 kind: DaemonSet
 apiVersion: extensions/v1beta1
 metadata:
@@ -578,6 +583,9 @@ spec:
                   key: veth_mtu
             # Prevents the container from sleeping forever.
             - name: SLEEP
+              value: "false"
+            # Prevents any existing CNI plugins from being updated
+            - name: UPDATE_CNI_BINARIES
               value: "false"
           volumeMounts:
             - mountPath: /host/opt/cni/bin
@@ -741,7 +749,7 @@ spec:
         # Used to install CNI.
         - name: cni-bin-dir
           hostPath:
-            path: /opt/cni/bin
+            path: {{ kubelet_cni_bin_dir }}
         - name: cni-net-dir
           hostPath:
             path: /etc/cni/net.d

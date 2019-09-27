@@ -5,6 +5,7 @@
 # The following modifications have been made:
 #
 # - The daemonset is modified to tolerate all NoSchedule taints
+# - The cnibin volume hostPath is made variable
 ---
 apiVersion: extensions/v1beta1
 kind: DaemonSet
@@ -47,4 +48,4 @@ spec:
       volumes:
         - name: cnibin
           hostPath:
-            path: /opt/cni/bin
+            path: {{ kubelet_cni_bin_dir }}

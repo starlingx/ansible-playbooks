@@ -10,6 +10,7 @@
 # - The tuning plugin is used to update sysctl tcp_keepalive timers.
 # - The portmap plugin is enabled to allow forwarding from one or more ports
 #   on the host to the container
+# - The cnibin volume hostPath is made variable
 ---
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
@@ -197,7 +198,7 @@ spec:
             path: /etc/cni/net.d
         - name: cnibin
           hostPath:
-            path: /opt/cni/bin
+            path: {{ kubelet_cni_bin_dir }}
         - name: multus-cfg
           configMap:
             name: multus-cni-config
