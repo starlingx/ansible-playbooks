@@ -50,7 +50,7 @@
   - name: Restore certificate and key files
     command: >-
       tar -C /etc/ssl/private -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
-      'etc/ssl/private/registry-cert*'
+      'etc/ssl/private/*cert*'
     args:
       warn: false
 
