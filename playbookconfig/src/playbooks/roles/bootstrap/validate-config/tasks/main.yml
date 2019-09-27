@@ -392,6 +392,8 @@
         - localhost
         - 127.0.0.1
         - registry.local
+        - "{{ cluster_service_start_address if cluster_service_start_address != 'derived'
+            else default_cluster_service_start_address }}"
         - "{{ controller_floating_address }}"
         - "{{ derived_network_params.controller_0_address }}"
         - "{{ external_oam_floating_address }}"
