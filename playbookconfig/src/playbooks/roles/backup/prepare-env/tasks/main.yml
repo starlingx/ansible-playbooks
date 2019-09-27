@@ -39,6 +39,19 @@
       Please cleanup /home directory and try backup again.
   when: home_dir_usage.stdout|int > max_home_dir_usage
 
+- name: Search for system_mode in /etc/platform/platform.conf
+  shell: grep system_mode {{ platform_conf_path }}/platform.conf
+  register: check_system_mode
+
+- name: Fail if system_mode is not set in /etc/platform/platform.conf
+  fail:
+    msg: "system_mode is not set in /etc/platform/platform.conf"
+  when: check_system_mode.rc != 0
+
+- name: set system_mode
+  set_fact:
+    system_mode: "{{ check_system_mode.stdout.split('=')[1] }}"
+
 - name: Set config path facts
   set_fact:
     keyring_permdir: "{{ platform_path }}/.keyring/{{ software_version }}"
