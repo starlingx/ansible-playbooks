@@ -1,0 +1,93 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to restore the CEPH Monitor data
+
+- name: Restore CEPH Monitor data
+  block:
+    - name: Restore ceph.conf file
+      command: >-
+        tar -C / -xpf {{ target_backup_dir }}/{{ backup_filename }}
+        'etc/ceph/ceph.conf'
+      args:
+        warn: false
+
+    - name: Check if ceph-mon processes are running
+      command: pgrep ceph-mon
+      register: ceph_mons
+      failed_when: false
+
+    - name: Shut down Ceph monitor and OSDs if they are running
+      command: "{{ item }}"
+      with_items:
+        - /etc/init.d/ceph stop osd
+        - /etc/init.d/ceph stop mon
+      when: ceph_mons.stdout != ""
+
+    # On a partial restore ceph-osds are not wiped.
+    # 'ceph-disk list' command returns the list of ceph osds
+    # This task:
+    # 1. parses the output of 'ceph-disk list' and extracts
+    # the ceph osds, create for every ceph osd a folder under
+    # /var/lib/ceph/osd and mount the osd in there.
+    # 2. Gets ceph-mon size from sysinv, creates ceph-mon-lv,
+    # format and mounts it under /var/lib/ceph/mon
+    # then populates the data structure for controller-0 monitor
+    # so that Ceph can be started.
+    - name: Mount ceph-osds and format ceph-mon
+      script: prepare_ceph_partitions.py
+      register: prepare_ceph_partitions
+
+    - debug: var=prepare_ceph_partitions.stdout_lines
+
+    - name: Bring up ceph-mon
+      command: /etc/init.d/ceph start mon
+
+    # Recover ceph-data from every osd with ceph-objectore-tool
+    - name: Recover ceph-data
+      script: recover_ceph_data.py
+      register: ceph_data_out
+
+    - debug: var=ceph_data_out.stdout_lines
+
+    - name: Bring down ceph-mon
+      command: /etc/init.d/ceph stop mon
+
+    - name: Delete store.db file from ceph-mon
+      file:
+        path: /var/lib/ceph/mon/ceph-controller-0/store.db
+        state: absent
+
+    # Cannot use the 'copy' module with 'remote_src: yes' for
+    # recursive copy till Ansible 2.8.
+    - name: Restore store.db from mon-store
+      shell: cp -ar /tmp/mon-store/store.db /var/lib/ceph/mon/ceph-controller-0
+
+    - name: Bring up ceph Monitor and OSDs
+      command: /etc/init.d/ceph start
+
+    - name: Wait for ceph monitor to be up
+      shell: ceph -s
+      until: true
+      retries: 5
+      delay: 2
+
+    - name: Start Ceph manager
+      command: /usr/bin/ceph-mgr --cluster ceph --id controller-0 - start ceph-mgr
+
+    - name: Wait for ceph-mgr to detect Ceph's pools
+      shell: ceph -s
+      register: result
+      until: "'0 pools' not in result"
+      retries: 30
+      delay: 10
+
+    - name: Restart ceph one more time to pick latest changes
+      command: /etc/init.d/ceph restart
+
+  become: yes
+  become_user: root

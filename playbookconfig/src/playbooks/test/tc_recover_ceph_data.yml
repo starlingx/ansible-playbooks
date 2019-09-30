@@ -1,0 +1,34 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Role of this playbook is to allow easy testing of ceph recovery process.
+# To run it make sure that the normal platform restore playbook was
+# executed with wipe_ceph_osds=false. Then run this playbook from sysadmin
+# user with same params as the platform restore. E.g.: ' ansible-playbook
+# /usr/share/ansible/stx-ansible/playbooks/bootstrap/tc_recover_ceph_data.yml
+# -e "wipe_ceph_osds=false ansible_become_pass=<password> admin_password=<password>
+# backup_filename=<backup.tgz>"'
+
+- hosts: localhost
+  gather_facts: no
+
+  vars_files:
+    - host_vars/default.yml
+
+  pre_tasks:
+    - name: Fail if backup_filename is not defined or set
+      fail:
+        msg: "Mandatory configuration parameter backup_filename is not defined or set."
+      when: backup_filename is not defined or backup_filename is none
+
+    # Put the backup tarball in /scratch
+    - name: Set staging and target backup dirs
+      set_fact:
+        staging_dir: /scratch
+        target_backup_dir: /scratch
+
+  roles:
+    - { role: recover-ceph-data, become: yes }

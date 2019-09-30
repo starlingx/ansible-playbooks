@@ -23,6 +23,7 @@
   gather_facts: no
 
   vars_files:
+    - host_vars/bootstrap/default.yml
     - host_vars/backup-restore/default.yml
 
   roles:

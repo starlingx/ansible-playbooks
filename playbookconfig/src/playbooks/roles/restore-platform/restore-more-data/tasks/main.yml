@@ -338,21 +338,28 @@
     retries: 30
     delay: 10
 
-  - name: Remove {{ ansible_remote_tmp }} directory
-    file:
-      path: "{{ ansible_remote_tmp }}"
-      state: absent
-
-  - name: Inform user that restore_platform is run successfully
-    debug:
-      msg: >-
-        Controller-0 is now online. The next step is to unlock this controller.
-        Please refer to the system administration guide for more details.
-    when: check_online.rc == 0
-
   - name: Inform user that restore_platform is not successful
     debug:
       msg: >-
         Platform restore was unsuccessful. Please refer to the system administration
         guide for next step.
     when: check_online.rc != 0
+
+  # Restore ceph-mon data
+  - block:
+    - include_role:
+        name: recover-ceph-data
+      when: not wipe_ceph_osds|bool
+
+    - name: Inform user that restore_platform is run successfully
+      debug:
+        msg: >-
+          Controller-0 is now online. The next step is to unlock this controller.
+          Please refer to the system administration guide for more details.
+    when: check_online.rc == 0
+
+  # Remove temporary staging area used by the copy module
+  - name: Remove {{ ansible_remote_tmp }} directory
+    file:
+      path: "{{ ansible_remote_tmp }}"
+      state: absent
