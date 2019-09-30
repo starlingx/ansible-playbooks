@@ -65,12 +65,12 @@ openstack_backup_filename_prefix: "{{ inventory_hostname }}_openstack_backup"
 
 # An indication whether it is a full restore or partial restore.
 #   true:  a full restore where storage partition(s) is/are wiped during
-#          platform restore and ceph data needs restored
+#          platform restore and cinder+glance data needs restored
 #   false: a partial restore where ceph data remain intact during restore
 #
 # This variable is used for StarlingX OpenStack application restore only
 #
-restore_ceph_data: false
+restore_cinder_glance_data: false
 
 # Default directory where the system backup tarballs fetched from the
 # active controller can be found

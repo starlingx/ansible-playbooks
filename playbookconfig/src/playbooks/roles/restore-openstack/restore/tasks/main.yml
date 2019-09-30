@@ -190,7 +190,7 @@
         state: touch
 
     - meta: end_play
-    when: restore_ceph_data
+    when: restore_cinder_glance_data
 
   - name: Continue to bring up the remaining StarlingX Openstack services
     shell: source /etc/platform/openrc; system application-apply --mode normal stx-openstack
