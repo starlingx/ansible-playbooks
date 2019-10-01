@@ -6,6 +6,8 @@
 #
 # - The daemonset is modified to tolerate all NoSchedule taints
 # - The cnibin volume hostPath is made variable
+# - An updateStrategy was added to the DaemonSet spec to allow controlled template
+#   updates of pods with "kubectl apply".
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -20,6 +22,10 @@ spec:
     matchLabels:
       tier: node
       app: sriov-cni
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   template:
     metadata:
       labels:

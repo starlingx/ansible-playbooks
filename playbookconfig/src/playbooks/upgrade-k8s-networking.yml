@@ -1,0 +1,100 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- hosts: all
+
+  tasks:
+
+    # TODO(kbujold): This comment from the review will be implemented in a separate submission.
+    # "I would recommend that we follow the same model as we did for for the Puppet
+    # hiera data generation to avoid scraping CLI command output. The output is not
+    # intended for machine consumption. Create a command line utility that shares the
+    # same code as the sysinv-conductor to generate the required Ansible formatted
+    # data (yaml) directly from the DB. See sysinv/cmd/puppet.py as an example.
+    # This same utility command can be used by B&R to generate the required restore
+    # data form the running system directly from the DB in a format that is understood
+    # the Playbooks."
+
+    - name: Dump address pool data to temp file
+      shell:
+        source /etc/platform/openrc; system addrpool-list --nowrap > /tmp/addrpool.txt
+
+    - name: Retrieve cluster_pod_subnet
+      shell: "grep cluster-pod-subnet /tmp/addrpool.txt | awk '{print $6\"/\"$8}'"
+      register: cluster_pod_subnet
+
+    - name: Retrieve cluster_floating_address
+      shell: "grep cluster-host-subnet /tmp/addrpool.txt | awk '{print $14}'"
+      register: cluster_floating_address
+
+    - name: Query the quay-registry
+      shell: >-
+        source /etc/platform/openrc; system service-parameter-list --nowrap |
+        awk '{if ($6 == "quay-registry" && $8 == "url") print $10;}'
+      register: running_quay_registry
+
+    - name: Query the docker-registry
+      shell: >-
+        source /etc/platform/openrc; system service-parameter-list --nowrap |
+        awk '{if ($6 == "docker-registry" && $8 == "url") print $10;}'
+      register: running_docker_registry
+
+    - name: Set default registries
+      set_fact:
+        default_quay_registry:
+          url: "quay.io"
+
+        default_docker_registry:
+          url: "docker.io"
+
+    - name: Set networking and registry facts
+      set_fact:
+        kubelet_cni_bin_dir: "/usr/libexec/cni"
+        cluster_pod_subnet: "{{ cluster_pod_subnet.stdout }}"
+        cluster_network_ipv4: "{{ cluster_pod_subnet.stdout | ipv4 }}"
+        cluster_network_ipv6: "{{ cluster_pod_subnet.stdout | ipv6 }}"
+        cluster_floating_address: "{{ cluster_floating_address.stdout }}"
+        quay_registry:
+          url:
+            "{{ running_quay_registry.stdout if (running_quay_registry.stdout|length > 0)
+            else  default_quay_registry.url}}"
+        docker_registry:
+          url:
+            "{{ running_docker_registry.stdout if (running_docker_registry.stdout|length > 0)
+            else  default_docker_registry.url}}"
+
+    - name: Create Calico config file
+      template:
+        src: "roles/bootstrap/bringup-essential-services/templates/calico-cni.yaml.j2"
+        dest: /etc/kubernetes/update_calico.yaml
+
+    - name: Update Calico Networking
+      command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_calico.yaml"
+
+    - name: Create Multus config file
+      template:
+        src: "roles/bootstrap/bringup-essential-services/templates/multus-cni.yaml.j2"
+        dest: /etc/kubernetes/update_multus.yaml
+
+    - name: Update Multus Networking
+      command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_multus.yaml"
+
+    - name: Create SRIOV Networking config file
+      template:
+        src: "roles/bootstrap/bringup-essential-services/templates/sriov-cni.yaml.j2"
+        dest: /etc/kubernetes/update_sriov-cni.yaml
+
+    - name: Update SRIOV Networking
+      command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_sriov-cni.yaml"
+
+    - name: Create SRIOV device plugin config file
+      template:
+        src: "roles/bootstrap/bringup-essential-services/templates/sriov-plugin.yaml.j2"
+        dest: /etc/kubernetes/update_sriovdp-daemonset.yaml
+
+    - name: Update SRIOV device plugin
+      command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_sriovdp-daemonset.yaml"

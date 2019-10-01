@@ -8,6 +8,8 @@
 #   pods only run on appropriately labelled nodes.
 # - The config hostPath is explicitly set to 'File'
 # - The daemonset is modified to tolerate all NoSchedule taints
+# - An updateStrategy was added to the DaemonSet spec to allow controlled template
+#   updates of pods with "kubectl apply".
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -29,6 +31,10 @@ spec:
     matchLabels:
       tier: node
       app: sriovdp
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   template:
     metadata:
       labels:
