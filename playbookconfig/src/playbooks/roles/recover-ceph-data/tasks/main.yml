@@ -9,12 +9,26 @@
 
 - name: Restore CEPH Monitor data
   block:
+    - name: Create flag file in /etc/platform to skip wiping OSDs
+      file:
+        path: "{{ skip_ceph_osds_wipe_flag }}"
+        state: touch
+      when: system_mode != 'simplex'
+
     - name: Restore ceph.conf file
       command: >-
         tar -C / -xpf {{ target_backup_dir }}/{{ backup_filename }}
         'etc/ceph/ceph.conf'
       args:
         warn: false
+
+    - name: Allow Ceph to start with a single monitor on a Standard deployment
+      ini_file:
+        path: "/etc/ceph/ceph.conf"
+        section: global
+        option: mon_initial_members
+        value: controller-0
+      when: system_type == 'Standard'
 
     - name: Check if ceph-mon processes are running
       command: pgrep ceph-mon
@@ -88,6 +102,14 @@
 
     - name: Restart ceph one more time to pick latest changes
       command: /etc/init.d/ceph restart
+
+    - name: Remove Ceph option to start with a single monitor on a Standard deployment
+      ini_file:
+        path: "/etc/ceph/ceph.conf"
+        section: global
+        option: mon_initial_members
+        state: absent
+      when: system_type == 'Standard'
 
   become: yes
   become_user: root
