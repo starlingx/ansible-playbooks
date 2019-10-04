@@ -7,9 +7,11 @@
 
 import os
 import json
+import shutil
 import subprocess
 
 from controllerconfig import openstack
+from tsconfig import tsconfig as tsc
 
 OSD_ROOT_DIR = "/var/lib/ceph/osd"
 MON_ROOT_DIR = "/var/lib/ceph/mon"
@@ -98,10 +100,27 @@ def prepare_monitor():
         subprocess.check_output(['mount', "-t", "ext4", CEPH_LV_PATH, MON_ROOT_DIR],
                                 stderr=fnull)
 
-        print("Populating Ceph mon fs structure for controller-0.")
-        subprocess.check_output(["ceph-mon", "--mkfs", "-i", "controller-0"], stderr=fnull)
+
+def populate_ceph_mon_fs(mon_name):
+    # Remove old ceph-mon if available
+    mon_path = MON_ROOT_DIR + "/ceph-" + mon_name
+    if os.path.exists(mon_path):
+        shutil.rmtree(mon_path)
+
+    print("Populating Ceph mon fs structure at {}.".format(mon_path))
+    with open(os.devnull, "w") as fnull:
+        subprocess.check_output(["ceph-mon", "--mkfs", "-i", mon_name], stderr=fnull)
+
+    # Touch sysvinit in ceph monitor folder
+    os.mknod(mon_path + "/sysvinit")
 
 
 if __name__ == '__main__':
     mount_osds()
-    prepare_monitor()
+    if (tsc.system_type == 'All-in-one' and
+            tsc.system_mode != 'simplex'):
+        populate_ceph_mon_fs('controller')
+    else:
+        # We need to prepare the monitor for non AIO-DX configs
+        prepare_monitor()
+        populate_ceph_mon_fs('controller-0')

@@ -6,11 +6,19 @@
 #
 # Role of this playbook is to allow easy testing of ceph recovery process.
 # To run it make sure that the normal platform restore playbook was
-# executed with wipe_ceph_osds=false. Then run this playbook from sysadmin
-# user with same params as the platform restore. E.g.: ' ansible-playbook
+# executed with wipe_ceph_osds=false. Then copy this file to bootstrap playbook
+# and run it from sysadmin user with same params as the platform restore.
+# Before running remove /etc/platform/.restore_in_progress.
+# E.g.: '
+# cp -f /usr/share/ansible/stx-ansible/playbooks/test/tc_recover_ceph_data.yml
+# /usr/share/ansible/stx-ansible/playbooks/bootstrap/;
+# ansible-playbook
 # /usr/share/ansible/stx-ansible/playbooks/bootstrap/tc_recover_ceph_data.yml
-# -e "wipe_ceph_osds=false ansible_become_pass=<password> admin_password=<password>
+# -e "initial_backup_dir=/home/sysadmin
+# wipe_ceph_osds=false ansible_become_pass=<password> admin_password=<password>
 # backup_filename=<backup.tgz>"'
+#
+# Note: Test case works only when executed localy.
 
 - hosts: localhost
   gather_facts: no
@@ -24,9 +32,10 @@
         msg: "Mandatory configuration parameter backup_filename is not defined or set."
       when: backup_filename is not defined or backup_filename is none
 
-    - name: Set staging and target backup dirs
+    - name: Set default folder facts
       set_fact:
         staging_dir: /scratch
+        platform_path: /opt/platform
         target_backup_dir: /scratch
 
     # Get system_type
@@ -42,6 +51,34 @@
     - name: Set system type config path fact
       set_fact:
         system_type: "{{ system_type_result.stdout_lines[0] }}"
+
+    # Get SW_VERSION
+    - name: Retrieve software version number
+      # lookup module does not work with /etc/build.info as it does not have ini
+      # format. Resort to shell source.
+      shell: source /etc/build.info; echo $SW_VERSION
+      register: sw_version_result
+
+    - name: Fail if software version is not defined
+      fail:
+        msg: "SW_VERSION is missing in /etc/build.info"
+      when: sw_version_result.stdout_lines|length == 0
+
+    - name: Set facts
+      set_fact:
+        software_version: "{{ sw_version_result.stdout_lines[0] }}"
+
+    - name: Retrieve management IP
+      shell: >-
+          source /etc/platform/openrc;
+          system host-show controller-0 | grep mgmt_ip | awk '{print $4}'
+      register: mgmt_ip
+
+    - name: Set derived facts for subsequent tasks/roles
+      set_fact:
+        puppet_permdir: "{{ platform_path }}/puppet/{{ software_version }}"
+        derived_network_params:
+          'controller_0_address': "{{ mgmt_ip.stdout_lines[0] }}"
 
   roles:
     - { role: recover-ceph-data, become: yes }
