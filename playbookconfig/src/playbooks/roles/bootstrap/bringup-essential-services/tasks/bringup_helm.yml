@@ -175,7 +175,7 @@
 # https://github.com/helm/helm/issues/6374
 - block:
   - name: Initialize Helm (local host client only)
-    command: helm init --client-only
+    command: helm init --client-only --skip-refresh
 
   - name: Initialize Helm (local host tiller)
     shell: >-
@@ -202,7 +202,7 @@
 # This also has the workaround for https://github.com/helm/helm/issues/6374
 - block:
   - name: Initialize Helm (remote host client only)
-    command: helm init --client-only
+    command: helm init --client-only --skip-refresh
     environment:
       KUBECONFIG: /etc/kubernetes/admin.conf
       HOME: /home/sysadmin
