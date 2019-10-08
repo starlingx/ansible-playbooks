@@ -168,7 +168,7 @@
       HOME: /home/sysadmin
 
   - name: Initialize Helm (remote host tiller)
-    command: >-
+    shell: >-
       helm init
       --skip-refresh
       --service-account tiller
