@@ -115,7 +115,7 @@
     ETCD_ENDPOINT: "http://{{ cluster_floating_address | ipwrap }}:2379"
     POD_NETWORK_CIDR: "{{ cluster_pod_subnet }}"
     SERVICE_NETWORK_CIDR: "{{ cluster_service_subnet }}"
-    K8S_REGISTRY: "{{ k8s_registry.url }}"
+    K8S_REGISTRY: "{{ k8s_registry.url | regex_replace(':[0-9]+', '') }}"
 
 - name: Add apiserver certificate SANs to kubeadm
   replace:
