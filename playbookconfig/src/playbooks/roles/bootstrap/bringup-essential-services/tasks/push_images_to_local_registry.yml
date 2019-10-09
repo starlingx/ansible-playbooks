@@ -220,6 +220,17 @@
     registry: "{{ local_registry }}"
     state: absent
 
+- name: Strip out port from Tiller, Armada, Calico, Multus, Sriov image tags
+  set_fact:
+    tiller_img: "{{ tiller_img | regex_replace(':[0-9]+/', '/') }}"
+    armada_img: "{{ armada_img | regex_replace(':[0-9]+/', '/') }}"
+    calico_cni_img: "{{  calico_cni_img | regex_replace(':[0-9]+/', '/') }}"
+    calico_node_img: "{{ calico_node_img | regex_replace(':[0-9]+/', '/') }}"
+    calico_kube_controllers_img: "{{ calico_kube_controllers_img | regex_replace(':[0-9]+/', '/') }}"
+    multus_img: "{{ multus_img | regex_replace(':[0-9]+/', '/') }}"
+    sriov_cni_img: "{{ sriov_cni_img | regex_replace(':[0-9]+/', '/') }}"
+    sriov_network_device_img: "{{ sriov_network_device_img | regex_replace(':[0-9]+/', '/') }}"
+
 - name: Remove local registry host from /etc/hosts
   command: >-
     sed -i -e 's|'$CONTROLLER_ADDRESS'\t'$CONTROLLER'\t'$LOCAL_REGISTRY'|'$CONTROLLER_ADDRESS'\t'$CONTROLLER'|g' /etc/hosts

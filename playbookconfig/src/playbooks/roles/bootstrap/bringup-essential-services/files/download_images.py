@@ -15,7 +15,31 @@ MAX_DOWNLOAD_THREAD = 5
 
 
 def download_an_image(img):
-    local_img = 'registry.local:9001/' + img
+    # This function is to pull image from public/private
+    # registry and push to local registry.
+    #
+    # Examples of passed img reference:
+    #  - k8s.gcr.io/kube-proxy:v.16.0
+    #  - privateregistry.io:5000/kube-proxy:v1.16.0
+    #
+    # To push to local registry, local registry url
+    # 'registry.local:9001' needs to be prepended to
+    # image reference. The registry url of passed img
+    # may contains a port, if it has a port, we strip
+    # it out as Docker does not allow the format of
+    # the image that has port in repositories/namespaces
+    # i.e.
+    # Invalid format:
+    #   registry.local:9001/privateregistry.io:5000/kube-proxy:v1.16.0
+
+    registry_url = img[:img.find('/')]
+    if ':' in registry_url:
+        img_name = img[img.find('/'):]
+        new_img = registry_url.split(':')[0] + img_name
+    else:
+        new_img = img
+
+    local_img = 'registry.local:9001/' + new_img
     err_msg = " Image %s download failed: " % img
 
     for i in range(MAX_DOWNLOAD_ATTEMPTS):
