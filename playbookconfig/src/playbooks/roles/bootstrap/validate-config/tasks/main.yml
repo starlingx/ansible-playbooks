@@ -192,31 +192,6 @@
       msg: "pxeboot_subnet subnet must always be IPv4"
     failed_when: network_params.pxeboot_subnet|ipv4 == False
 
-  - name: Fail if cluster pod/service subnet size is too small (minimum size = 65536)
-    fail:
-      msg: "Subnet size is too small, must have minimum {{ min_pod_service_num_addresses }} addresses."
-    when: item|ipaddr('size') < min_pod_service_num_addresses
-    with_items:
-      - "{{ network_params.cluster_pod_subnet }}"
-      - "{{ network_params.cluster_service_subnet }}"
-
-  - name: Fail if pxeboot/management/multicast subnet size is too small (minimum size = 16)
-    fail:
-      msg: "Subnet size is too small, must have minimum {{ min_16_addresses }} addresses."
-    when: item|ipaddr('size') < min_16_addresses
-    with_items:
-      - "{{ network_params.pxeboot_subnet }}"
-      - "{{ network_params.management_subnet }}"
-      - "{{ network_params.management_multicast_subnet }}"
-
-  - name: Fail if the size of the remaining subnets is too small (minimum size = 8)
-    fail:
-      msg: "Subnet size is too small, must have minimum {{ min_8_addresses }} addresses."
-    when: item|ipaddr('size') < min_8_addresses
-    with_items:
-      - "{{ network_params.cluster_host_subnet }}"
-      - "{{ network_params.external_oam_subnet }}"
-
   - name: Generate warning if subnet prefix is not typical for Standard systems
     debug:
       msg: "WARNING: Subnet prefix of less than /24 is not typical. This will affect scaling of the system!"
@@ -288,9 +263,6 @@
             "{{ pxeboot_end_address if pxeboot_end_address != 'derived'
             else default_pxeboot_end_address }}"
           subnet: "{{ network_params.pxeboot_subnet }}"
-          use_default:
-            "{{ true if pxeboot_start_address == 'derived' and
-            pxeboot_end_address == 'derived' else false }}"
         management:
           start:
             "{{ management_start_address if management_start_address != 'derived'
@@ -299,9 +271,6 @@
             "{{ management_end_address if management_end_address != 'derived'
             else default_management_end_address }}"
           subnet: "{{ network_params.management_subnet }}"
-          use_default:
-            "{{ true if management_start_address == 'derived' and
-            management_end_address == 'derived' else false }}"
         cluster_host:
           start:
             "{{ cluster_host_start_address if cluster_host_start_address != 'derived'
@@ -310,9 +279,6 @@
             "{{ cluster_host_end_address if cluster_host_end_address != 'derived'
             else default_cluster_host_end_address}}"
           subnet: "{{ network_params.cluster_host_subnet }}"
-          use_default:
-            "{{ true if cluster_host_start_address == 'derived' and
-            cluster_host_end_address == 'derived' else false }}"
         cluster_pod:
           start:
             "{{ cluster_pod_start_address if cluster_pod_start_address != 'derived'
@@ -321,9 +287,6 @@
             "{{ cluster_pod_end_address if cluster_pod_end_address != 'derived'
             else default_cluster_pod_end_address }}"
           subnet: "{{ network_params.cluster_pod_subnet }}"
-          use_default:
-            "{{ true if cluster_pod_start_address == 'derived' and
-            cluster_pod_end_address == 'derived' else false }}"
         cluster_service:
           start:
             "{{ cluster_service_start_address if cluster_service_start_address != 'derived'
@@ -332,9 +295,6 @@
             "{{ cluster_service_end_address if cluster_service_end_address != 'derived'
             else default_cluster_service_end_address }}"
           subnet: "{{ network_params.cluster_service_subnet }}"
-          use_default:
-            "{{ true if cluster_service_start_address == 'derived' and
-            cluster_service_end_address == 'derived' else false }}"
         oam:
           start:
             "{{ external_oam_start_address if external_oam_start_address != 'derived'
@@ -343,9 +303,6 @@
             "{{ external_oam_end_address if external_oam_end_address != 'derived'
             else default_external_oam_end_address }}"
           subnet: "{{ network_params.external_oam_subnet }}"
-          use_default:
-            "{{ true if external_oam_start_address == 'derived' and
-            external_oam_end_address == 'derived' else false }}"
         multicast:
           start:
             "{{ management_multicast_start_address if management_multicast_start_address != 'derived'
@@ -354,9 +311,6 @@
             "{{ management_multicast_end_address if management_multicast_end_address != 'derived'
             else default_management_multicast_end_address }}"
           subnet: "{{ network_params.management_multicast_subnet }}"
-          use_default:
-            "{{ true if management_multicast_start_address == 'derived' and
-            management_multicast_end_address == 'derived' else false }}"
         oam_node:
           start:
             "{{ external_oam_node_0_address if external_oam_node_0_address != 'derived'
@@ -365,9 +319,6 @@
             "{{ external_oam_node_1_address if external_oam_node_1_address != 'derived'
             else default_external_oam_node_1_address }}"
           subnet: "{{ network_params.external_oam_subnet }}"
-          use_default:
-            "{{ true if external_oam_node_0_address == 'derived' and
-            external_oam_node_1_address == 'derived' else false }}"
 
   - include: validate_address_range.yml
     with_dict: "{{ address_pairs }}"
