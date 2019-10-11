@@ -1,0 +1,28 @@
+# exclude_paths:
+
+parseable: true
+
+quiet: true
+
+# rulesdir:
+
+# All errors below should be cleaned up in ansible and removed from the skip_list
+skip_list:
+  - '204' # [E204] Lines should be no longer than 160 chars
+  - '206' # [E206] Variables should have spaces before and after: {{ var_name }
+  - '301' # [E301] Commands should not change things if nothing needs doing
+  - '303' # [E303] systemctl used in place of systemd module
+  - '305' # [E305] Use shell only when shell functionality is required
+  - '306' # [E306] Shells that use pipes should set the pipefail option
+  - '501' # [E501] become_user requires become to work as expected
+  - '502' # [502] All tasks should be named
+  - '504' # [E504] Do not use 'local_action', use 'delegate_to: localhost'
+  - '601' # [E601] Don't compare to literal True/False
+  - '602' # [E602] Don't compare to empty string
+  - '701' # [E701] No 'galaxy_info' found
+
+# tags:
+
+use_default_rules: true
+
+verbosity: 1
