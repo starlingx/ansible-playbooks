@@ -1,0 +1,8 @@
+---
+- name: Create Intel QAT device plugin config file
+  template:
+    src: "intel-qat-plugin.yaml.j2"
+    dest: /etc/kubernetes/intel-qat-daemonset.yaml
+
+- name: Activate Intel QAT device plugin
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/intel-qat-daemonset.yaml"
