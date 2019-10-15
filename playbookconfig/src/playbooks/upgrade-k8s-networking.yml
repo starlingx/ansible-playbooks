@@ -7,6 +7,9 @@
 
 - hosts: all
 
+  vars:
+    upgrade_k8s_networking: true
+
   tasks:
 
     # TODO(kbujold): This comment from the review will be implemented in a separate submission.
@@ -31,41 +34,22 @@
       shell: "grep cluster-host-subnet /tmp/addrpool.txt | awk '{print $14}'"
       register: cluster_floating_address
 
-    - name: Query the quay-registry
-      shell: >-
-        source /etc/platform/openrc; system service-parameter-list --nowrap |
-        awk '{if ($6 == "quay-registry" && $8 == "url") print $10;}'
-      register: running_quay_registry
-
-    - name: Query the docker-registry
-      shell: >-
-        source /etc/platform/openrc; system service-parameter-list --nowrap |
-        awk '{if ($6 == "docker-registry" && $8 == "url") print $10;}'
-      register: running_docker_registry
-
-    - name: Set default registries
-      set_fact:
-        default_quay_registry:
-          url: "quay.io"
-
-        default_docker_registry:
-          url: "docker.io"
-
-    - name: Set networking and registry facts
+    - name: Set networking facts
       set_fact:
         kubelet_cni_bin_dir: "/usr/libexec/cni"
         cluster_pod_subnet: "{{ cluster_pod_subnet.stdout }}"
         cluster_network_ipv4: "{{ cluster_pod_subnet.stdout | ipv4 }}"
         cluster_network_ipv6: "{{ cluster_pod_subnet.stdout | ipv6 }}"
         cluster_floating_address: "{{ cluster_floating_address.stdout }}"
-        quay_registry:
-          url:
-            "{{ running_quay_registry.stdout if (running_quay_registry.stdout|length > 0)
-            else  default_quay_registry.url}}"
-        docker_registry:
-          url:
-            "{{ running_docker_registry.stdout if (running_docker_registry.stdout|length > 0)
-            else  default_docker_registry.url}}"
+
+    - name: Set images facts
+      include_vars:
+        dir: "roles/bootstrap/bringup-essential-services/vars"
+        files_matching: main.yml
+
+    - name: Upgrade k8s networking images
+      import_role:
+        name: common/push-docker-images
 
     - name: Create Calico config file
       template:

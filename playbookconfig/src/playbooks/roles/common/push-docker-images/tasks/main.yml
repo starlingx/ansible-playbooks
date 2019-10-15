@@ -1,0 +1,191 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to perform tasks that download container images
+#   from public/private registries and push to local registry.
+#
+
+- name: Get docker registries if upgrade kubernetes or k8s networking
+  include: get_docker_registry.yml registry={{ item }}
+  with_items:
+    - { name: 'k8s_registry', value: { url: 'k8s.gcr.io' } }
+    - { name: 'gcr_registry', value: { url: 'gcr.io' } }
+    - { name: 'quay_registry', value: { url: 'quay.io' } }
+    - { name: 'docker_registry', value: { url: 'docker.io' } }
+  when: upgrade_k8s_networking is defined or
+        upgrade_kubernetes is defined
+
+# Disable the log to not expose registry password
+- name: Get registry credentials if registry type is AWS ECR
+  include: get_aws_ecr_credentials.yml registry={{ item }}
+  with_items:
+    - { name: "k8s_registry", value: "{{ k8s_registry }}" }
+    - { name: "gcr_registry", value: "{{ gcr_registry }}" }
+    - { name: "quay_registry", value: "{{ quay_registry }}" }
+    - { name: "docker_registry", value: "{{ docker_registry }}" }
+  when: registry.value.type is defined and
+        registry.value.type == 'aws-ecr'
+  no_log: true
+
+- block:
+  - name: Get kubernetes version from template
+    command: "sed -n 's|^kubernetesVersion: \\(.*\\)$|\\1|p' {{ kube_admin_yaml_template }}"
+    args:
+      warn: false
+    register: kubernetes_version_output
+
+  - set_fact:
+      kubernetes_version: "{{ kubernetes_version_output.stdout }}"
+  when: upgrade_kubernetes is not defined
+
+- name: Get the list of kubernetes images
+  shell: "kubeadm config images list --kubernetes-version {{ kubernetes_version }}
+          --image-repository {{ k8s_registry.url }} | grep -v etcd"
+  register: kubernetes_images_output
+  when: k8s_registry.url is defined and kubernetes_version is defined
+
+- set_fact:
+    kubernetes_images: "{{ kubernetes_images_output.stdout_lines }}"
+
+- name: Update Tiller, Armada, Calico, Multus, Sriov image tags
+  set_fact:
+    tiller_img: "{{ tiller_img | regex_replace('gcr.io', '{{ gcr_registry.url }}') }}"
+    armada_img: "{{ armada_img | regex_replace('quay.io', '{{ quay_registry.url }}') }}"
+    calico_cni_img: "{{  calico_cni_img | regex_replace('quay.io', '{{ quay_registry.url }}') }}"
+    calico_node_img: "{{ calico_node_img | regex_replace('quay.io', '{{ quay_registry.url }}') }}"
+    calico_kube_controllers_img: "{{ calico_kube_controllers_img | regex_replace('quay.io', '{{ quay_registry.url }}') }}"
+    multus_img: "{{ multus_img | regex_replace('docker.io', '{{ docker_registry.url }}') }}"
+    sriov_cni_img: "{{ sriov_cni_img | regex_replace('docker.io', '{{ docker_registry.url }}') }}"
+    sriov_network_device_img: "{{ sriov_network_device_img | regex_replace('docker.io', '{{ docker_registry.url }}') }}"
+
+- name: Get the list of platform images
+  set_fact:
+    networking_images:
+      - "{{ calico_cni_img }}"
+      - "{{ calico_node_img }}"
+      - "{{ calico_kube_controllers_img }}"
+      - "{{ multus_img }}"
+      - "{{ sriov_cni_img }}"
+      - "{{ sriov_network_device_img }}"
+    tiller_armada_images:
+      - "{{ tiller_img }}"
+      - "{{ armada_img }}"
+
+- block:
+  - name: Update additional image tags if applicable
+    shell: >-
+      echo {{ item }} |
+      sed 's|quay.io|{{ quay_registry.url }}|g' |
+      sed 's|docker.io|{{ docker_registry.url }}|g' |
+      sed 's|k8s.gcr.io|{{ k8s_registry.url }}|g' |
+      sed 's|gcr.io|{{ gcr_registry.url }}|g' |
+      sed 's|docker.elastic.co|{{ elastic_registry.url }}|g'
+    with_items: "{{ additional_local_registry_images }}"
+    register: images
+
+  - set_fact:
+      additional_images: "{{ images.results | map(attribute='stdout') | list }}"
+  when: additional_local_registry_images is defined and
+        additional_local_registry_images | length > 0
+
+# Download all system images and additional images if bootstrap
+- name: Set download images list
+  set_fact:
+    download_images_list:
+      "{{ (kubernetes_images + networking_images + tiller_armada_images + additional_images)
+      if additional_images is defined else (kubernetes_images + networking_images + tiller_armada_images) }}"
+  when: (upgrade_kubernetes is not defined and
+         upgrade_k8s_networking is not defined)
+
+# Only download k8s networking images if k8s networking upgrade
+- name: Set download images list to k8s network images if upgrading k8s networking
+  set_fact:
+    download_images_list: "{{ download_images_list|default([]) + networking_images }}"
+  when: upgrade_k8s_networking is defined and upgrade_k8s_networking
+
+# Only download kubernetes images if kubernetes upgrade
+- name: Set download images list to kubernetes images if upgrading kubernetes
+  set_fact:
+    download_images_list: "{{ download_images_list|default([]) + kubernetes_images }}"
+  when: upgrade_kubernetes is defined and upgrade_kubernetes
+
+- set_fact:
+    download_images: "{{ download_images_list | join(',') }}"
+
+- debug: var=download_images_list
+
+# Disable the log to not expose registry password
+- name: Log in k8s, gcr, quay, docker registries if credentials exist
+  docker_login:
+    registry: "{{ item['url'] }}"
+    username: "{{ item['username'] }}"
+    password: "{{ item['password'] }}"
+  with_items:
+    - "{{ k8s_registry }}"
+    - "{{ gcr_registry }}"
+    - "{{ quay_registry }}"
+    - "{{ docker_registry }}"
+  when: item.username is defined
+  no_log: true
+
+- name: Get local registry credentials
+  vars:
+    script_content: |
+      import keyring
+      password = str(keyring.get_password("CGCS", "admin"))
+      if not password:
+          raise Exception("Local registry password not found.")
+      print dict(username='admin', password=password)
+  shell: "{{ script_content }}"
+  args:
+    executable: /usr/bin/python
+  register: local_registry_credentials_output
+
+- set_fact:
+    local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
+
+- name: Log in to local registry
+  docker_login:
+    registry: "{{ local_registry }}"
+    username: "{{ local_registry_credentials['username'] }}"
+    password: "{{ local_registry_credentials['password'] }}"
+
+- name: Download images and push to local registry
+  script: download_images.py {{ download_images }}
+  register: download_images_output
+
+- debug:
+    msg: "{{ download_images_output.stdout_lines }}"
+
+# Disable the log to not expose registry password
+- name: Log out of k8s, gcr, quay, docker registries if credentials exist
+  docker_login:
+    registry: "{{ item['url'] }}"
+    state: absent
+  with_items:
+    - "{{ k8s_registry }}"
+    - "{{ gcr_registry }}"
+    - "{{ quay_registry }}"
+    - "{{ docker_registry }}"
+  when: item.username is defined
+  no_log: true
+
+- name: Log out of local registry
+  docker_login:
+    registry: "{{ local_registry }}"
+    state: absent
+
+- name: Strip out port from Tiller, Armada, Calico, Multus, Sriov image tags
+  set_fact:
+    tiller_img: "{{ tiller_img | regex_replace(':[0-9]+/', '/') }}"
+    armada_img: "{{ armada_img | regex_replace(':[0-9]+/', '/') }}"
+    calico_cni_img: "{{  calico_cni_img | regex_replace(':[0-9]+/', '/') }}"
+    calico_node_img: "{{ calico_node_img | regex_replace(':[0-9]+/', '/') }}"
+    calico_kube_controllers_img: "{{ calico_kube_controllers_img | regex_replace(':[0-9]+/', '/') }}"
+    multus_img: "{{ multus_img | regex_replace(':[0-9]+/', '/') }}"
+    sriov_cni_img: "{{ sriov_cni_img | regex_replace(':[0-9]+/', '/') }}"
+    sriov_network_device_img: "{{ sriov_network_device_img | regex_replace(':[0-9]+/', '/') }}"
