@@ -13,7 +13,6 @@
     start_addr: "{{ item.value['start'] }}"
     end_addr: "{{ item.value['end'] }}"
     subnet: "{{ item.value['subnet'] }}"
-    use_default: "{{ item.value['use_default'] }}"
 
 - block:
   - name: Validate {{ network }} start and end address format
@@ -39,18 +38,34 @@
           if start not in subnet or end not in subnet:
             raise Exception("Failed validation, {{ network }} start or end address must be within its subnet range.")
 
+          min_subnet_sizes = {
+              'cluster_pod': 65536,
+              'cluster_service': 65536,
+              'pxeboot': 16,
+              'multicast': 16,
+              'management': 16,
+              'cluster_host': 8,
+              'oam': 8
+          }
+          max_subnet_sizes = {
+              'cluster_service': 1048576
+          }
           range = IPRange("{{ start_addr }}", "{{ end_addr }}")
-          if (("{{ network }}" == 'cluster_pod' or "{{ network }}" == 'cluster_service') and
-              range.size < {{ min_pod_service_num_addresses|int }}):
-            raise Exception("Failed validation, {{ network }} address range must contain at least %d addresses." %
-                            int("{{ min_pod_service_num_addresses }}"))
-          elif (("{{ network }}" == 'pxeboot' or "{{ network }}" == 'multicast' or "{{ network }}" == 'management') and
-                range.size < {{ min_16_addresses|int }}):
-            raise Exception("Failed validation, {{ network }} address range must contain at least %d addresses." %
-                            int("{{ min_16_addresses }}"))
-          elif range.size < {{ min_8_addresses|int }}:
-            raise Exception("Failed validation, {{ network }} address range must contain at least %d addresses." %
-                            int("{{ min_8_addresses }}"))
+          subnet_min_size = min_subnet_sizes.get("{{ network }}")
+          subnet_max_size = max_subnet_sizes.get("{{ network }}", None)
+          if subnet.size < subnet_min_size:
+              raise Exception("Failed validation, {{ network }} subnet must contain at least %d addresses." %
+                              subnet_min_size)
+
+          if subnet_max_size and subnet.size > subnet_max_size:
+              raise Exception("Failed validation, {{ network }} subnet must not contain more than %d addresses." %
+                              subnet_max_size)
+
+          range_min_size = subnet_min_size - 2
+          if range.size < range_min_size:
+              raise Exception("Failed validation, {{ network }} address range must contain at least %d addresses." %
+                              range_min_size)
+
           if ("{{ distributed_cloud_role }}" == 'systemcontroller' and  "{{ network }}" == 'management' and
               range.size >= (subnet.size - 2)):
             raise Exception("Failed validation, {{ network }} address range too large, no addresses left for "
@@ -67,4 +82,3 @@
       when: range_check_result.rc != 0
 
     when: network != 'oam_node'
-  when: not use_default
