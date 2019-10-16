@@ -239,6 +239,21 @@
 - name: Remove taint from master node
   shell: "kubectl --kubeconfig=/etc/kubernetes/admin.conf taint node controller-0 node-role.kubernetes.io/master- || true"
 
+- block:
+  - name: Applying kubernetes plugins
+    include_role:
+      name: bootstrap/plugins
+      tasks_from: "{{ item }}"
+    with_items: "{{ k8s_plugins }}"
+
+  - name: Create kube plugin list file
+    copy:
+      content: "{{ k8s_plugins }}"
+      dest: /etc/platform/enabled_kube_plugins
+      mode: 0640
+      group: sys_protected
+  when: k8s_plugins
+
 - name: Add kubelet service override
   copy:
     src: "{{ kubelet_override_template }}"
