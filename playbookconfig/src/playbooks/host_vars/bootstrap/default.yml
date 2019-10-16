@@ -46,7 +46,7 @@ pxeboot_subnet: 169.254.202.0/24
 # pxeboot_start_address:
 # pxeboot_end_address:
 
-management_subnet: 192.168.204.0/28
+management_subnet: 192.168.204.0/24
 # management_start_address:
 # management_end_address:
 
