@@ -52,7 +52,8 @@
     import_tasks: bringup_local_registry.yml
 
   - name: Push images to local docker registry
-    import_tasks: push_images_to_local_registry.yml
+    import_role:
+      name: common/push-docker-images
 
   - name: Bring up Kubernetes master
     import_tasks: bringup_kubemaster.yml

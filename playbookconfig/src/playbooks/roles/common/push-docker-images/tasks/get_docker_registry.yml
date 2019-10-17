@@ -1,0 +1,55 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Query a registry from Sysinv via Sysinv CLI
+
+- block:
+  - name: Query the {{ registry.name }}
+    shell: >-
+      source /etc/platform/openrc; system service-parameter-list --nowrap |
+      awk '{if ($6 == "{{ registry.name | regex_replace('_', '-') }}") print $8"="$10;}'
+    register: running_registry_output
+
+  - set_fact:
+      running_registry:
+        "{{ running_registry|default({}) | combine({inner_item.split('=')[0]:inner_item.split('=')[1]}, recursive=True) }}"
+    with_items: "{{ running_registry_output.stdout_lines }}"
+    loop_control:
+      loop_var: inner_item
+
+  - block:
+    - name: Validate {{ registry.name }} information if it exists
+      fail:
+        msg: "{{ registry.name }}'s url doesn't exist"
+      when: running_registry['url'] is not defined
+
+    - block:
+      - name: Get the {{ registry.name }} barbican secret if it's authenticated
+        shell: >-
+          source /etc/platform/openrc; openstack secret get {{ running_registry['auth-secret'] }} -p -f value
+        register: registry_credentials
+
+      - name: Validate {{ registry.name }} secret
+        fail:
+          msg: "Unknown format of the {{ registry.name }} secret"
+        when: (registry_credentials.stdout is not search('username:') or
+               registry_credentials.stdout is not search('password:'))
+
+      - set_fact:
+          registry_username: "{{ registry_credentials.stdout.split()[0].split('username:')[1] }}"
+          registry_password: "{{ registry_credentials.stdout.split()[1].split('password:')[1] }}"
+        when: registry_credentials.stdout | length > 0
+
+      - set_fact:
+          running_registry:
+            "{{ running_registry | combine(
+            {'username': registry_username, 'password': registry_password}, recursive=True) }}"
+      when: running_registry['auth-secret'] is defined
+    when: running_registry is defined
+
+  - set_fact:
+      "{{ registry.name }}": "{{ registry.value if running_registry is not defined else running_registry }}"
