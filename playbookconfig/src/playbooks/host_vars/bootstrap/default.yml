@@ -288,7 +288,7 @@ override_files_dir: "{{ lookup('env', 'HOME') }}"
 # ================
 # The setting of the following parameter is only relevant when the controller
 # is bootstrapped for the purpose of restoring the system from backup data.
-# When set to true, disk partitions that were previously used for Ceph data are
+# When set to false, disk partitions that were previously used for Ceph data are
 # not wiped. Otherwise, all disks are wiped as part of the bootstrap.
 wipe_ceph_osds: false
 
