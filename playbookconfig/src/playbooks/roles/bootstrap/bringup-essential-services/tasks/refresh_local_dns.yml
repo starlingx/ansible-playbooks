@@ -35,6 +35,13 @@
       - "{{ controller_1_cluster_host }}\tcontroller-1-infra"
       - "{{ derived_network_params.nfs_management_address_2 }}\tcontroller-nfs"
 
+  - name: Update /etc/hosts for subcloud
+    lineinfile:
+      path: /etc/hosts
+      line: "{{ system_controller_oam_floating_address }}\tregistry.central"
+      insertbefore: EOF
+    when: distributed_cloud_role == 'subcloud'
+
   - name: Save hosts file to permanent location
     copy:
       src: /etc/hosts

@@ -1,0 +1,38 @@
+---
+#
+# copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   These tasks copy the central registy certificate to the subcloud
+#   docker certificate directory and store it in the shared file system
+#   for the mate
+#
+
+- name: Create docker certificate directory for central
+  file:
+    path: "{{ docker_cert_dir }}/registry.central:9001"
+    state: directory
+    recurse: yes
+    mode: 0700
+
+- name: Copy the central cloud registry certificate
+  copy:
+    src: "{{ docker_cert_dir }}/registry.local:9001/registry-cert.crt"
+    dest: "{{ docker_cert_dir }}/registry.central:9001/registry-cert.crt"
+    mode: preserve
+
+- name: Create the shared filesystem directory for central
+  file:
+    path: "{{ config_permdir }}/registry.central"
+    state: directory
+    recurse: yes
+    mode: 0700
+
+- name: Store the central certificate to the shared filesystem
+  copy:
+    src: "{{ docker_cert_dir }}/registry.central:9001/registry-cert.crt"
+    dest: "{{ config_permdir }}/registry.central/registry-cert.crt"
+    remote_src: yes
+    mode: preserve
