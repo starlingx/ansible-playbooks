@@ -5,7 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # SUB-TASK DESCRIPTION:
-#   These tasks configure a default route to the oam gateway on subclouds.
+#   These tasks configure a default route to the oam gateway.
 #
 
 - name: Set the ip command based on IP address version

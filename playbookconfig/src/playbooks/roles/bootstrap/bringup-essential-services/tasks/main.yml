@@ -42,7 +42,6 @@
 
   - name: Set up default route to the oam gateway
     include_tasks: setup_default_route.yml
-    when: distributed_cloud_role == 'subcloud'
 
   - name: Load images from archives if configured
     include_tasks: load_images_from_archive.yml
