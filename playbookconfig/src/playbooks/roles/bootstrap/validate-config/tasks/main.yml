@@ -623,8 +623,6 @@
   - name: Wipe ceph osds
     script: wipe_osds.sh
     register: results
-    become: yes
-    become_user: root
 
   - name: Result of wiping ceph osds
     debug: var=results.stdout_lines
