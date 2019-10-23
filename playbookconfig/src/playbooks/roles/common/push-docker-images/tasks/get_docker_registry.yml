@@ -14,9 +14,14 @@
       awk '{if ($6 == "{{ registry.name | regex_replace('_', '-') }}") print $8"="$10;}'
     register: running_registry_output
 
+  # Make sure variables are empty to allow succesive executions
+  - set_fact:
+      running_registry: { }
+      registry_filtered: { }
+
   - set_fact:
       running_registry:
-        "{{ running_registry|default({}) | combine({inner_item.split('=')[0]:inner_item.split('=')[1]}, recursive=True) }}"
+        "{{ running_registry | combine({inner_item.split('=')[0]:inner_item.split('=')[1]}, recursive=True) }}"
     with_items: "{{ running_registry_output.stdout_lines }}"
     loop_control:
       loop_var: inner_item
@@ -26,6 +31,11 @@
       fail:
         msg: "{{ registry.name }}'s url doesn't exist"
       when: running_registry['url'] is not defined
+
+    - name: Set secure to bool
+      set_fact:
+        running_registry: "{{ running_registry | combine({ 'secure' : running_registry['secure']|bool }) }}"
+      when: running_registry['secure'] is defined
 
     - block:
       - name: Get the {{ registry.name }} barbican secret if it's authenticated
@@ -49,7 +59,17 @@
             "{{ running_registry | combine(
             {'username': registry_username, 'password': registry_password}, recursive=True) }}"
       when: running_registry['auth-secret'] is defined
-    when: running_registry is defined
+
+    # remove auth-secret key from the registry dictionary as it is no longer used
+    - set_fact:
+        registry_filtered: "{{ registry_filtered|default({}) | combine({inner_item.key: inner_item.value}) }}"
+      when: inner_item.key not in ['auth-secret']
+      with_dict:
+        - "{{ running_registry }}"
+      loop_control:
+        loop_var: inner_item
+
+    when: running_registry
 
   - set_fact:
-      "{{ registry.name }}": "{{ registry.value if running_registry is not defined else running_registry }}"
+      "{{ registry.name }}": "{{ registry.value if not registry_filtered else registry_filtered }}"
