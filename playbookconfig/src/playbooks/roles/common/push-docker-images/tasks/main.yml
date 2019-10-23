@@ -44,7 +44,7 @@
 
 - name: Get the list of kubernetes images
   shell: "kubeadm config images list --kubernetes-version {{ kubernetes_version }}
-          --image-repository {{ k8s_registry.url }} | grep -v etcd"
+          --image-repository {{ k8s_registry.url }}"
   register: kubernetes_images_output
   when: k8s_registry.url is defined and kubernetes_version is defined
 
