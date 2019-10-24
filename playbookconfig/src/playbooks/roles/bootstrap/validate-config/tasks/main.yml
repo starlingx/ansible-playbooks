@@ -243,11 +243,11 @@
   # based on the subnet values
   - name: Set default start and end addresses based on provided subnets
     set_fact:
-      default_pxeboot_start_address: "{{ (pxeboot_subnet | ipaddr(2)).split('/')[0] }}"
+      default_pxeboot_start_address: "{{ (pxeboot_subnet | ipaddr(1)).split('/')[0] }}"
       default_pxeboot_end_address: "{{ (pxeboot_subnet | ipaddr(-2)).split('/')[0] }}"
-      default_management_start_address: "{{ (management_subnet | ipaddr(2)).split('/')[0] }}"
+      default_management_start_address: "{{ (management_subnet | ipaddr(1)).split('/')[0] }}"
       default_management_end_address: "{{ (management_subnet | ipaddr(-2)).split('/')[0] }}"
-      default_cluster_host_start_address: "{{ (cluster_host_subnet | ipaddr(2)).split('/')[0] }}"
+      default_cluster_host_start_address: "{{ (cluster_host_subnet | ipaddr(1)).split('/')[0] }}"
       default_cluster_host_end_address: "{{ (cluster_host_subnet | ipaddr(-2)).split('/')[0] }}"
       default_cluster_pod_start_address: "{{ (cluster_pod_subnet | ipaddr(1)).split('/')[0] }}"
       default_cluster_pod_end_address: "{{ (cluster_pod_subnet | ipaddr(-2)).split('/')[0] }}"
@@ -335,15 +335,9 @@
     set_fact:
       # Not sure why ipaddr('address') and ipsubnet filter did not extract
       # the IP from CIDR input. Resort to string split for now.
-      controller_floating_address:
-        "{{ (management_subnet | ipaddr(2)).split('/')[0] if management_start_address == 'derived'
-        else management_start_address }}"
-      controller_pxeboot_floating_address:
-        "{{ (pxeboot_subnet | ipaddr(2)).split('/')[0] if pxeboot_start_address == 'derived'
-        else  pxeboot_start_address }}"
-      cluster_floating_address:
-        "{{ (cluster_host_subnet | ipaddr(2)).split('/')[0] if cluster_host_start_address == 'derived'
-        else cluster_host_start_address }}"
+      controller_floating_address: "{{ address_pairs['management']['start'] }}"
+      controller_pxeboot_floating_address: "{{ address_pairs['pxeboot']['start'] }}"
+      cluster_floating_address: "{{ address_pairs['cluster_host']['start'] }}"
 
   - name: Set derived facts for subsequent tasks/roles
     set_fact:

@@ -18,19 +18,12 @@ dns_servers:
 #
 # Unless specified in the host override file, the start and end addresses of
 # each subnet are derived from the provided CIDR as follows:
-#   For pxebook, management and cluster host subnets:
-#     - start address: index 2 of CIDR
-#     - end address: index -2 of CIDR
-#     e.g. management_subnet (provided/default): 192.168.204.0/28
-#          management_start_address (derived): 192.168.204.2
-#          management_end_address (derived): 192.168.204.14
-#
-#   For cluster pod, cluster service, oam and multicast subnets:
+#   For pxebook, management, oam, multicast, and cluster host/pod/service subnets:
 #     - start address: index 1 of CIDR
 #     - end address: index -2 of CIDR
-#     e.g. multicast_subnet (provided/default): 239.1.1.0/28
-#          multicast_start_address (derived): 239.1.1.1
-#          multicast_end_address (derived): 238.1.1.14
+#     e.g. management_subnet (provided/default): 192.168.204.0/28
+#          management_start_address (derived): 192.168.204.1
+#          management_end_address (derived): 192.168.204.14
 #
 # Unless specified, the external_oam_node_0_address and external_oam_node_1_address
 # are derived from the external_oam_floating address as follows:
