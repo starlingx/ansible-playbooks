@@ -72,14 +72,14 @@
     set_fact:
       prev_management_subnet_prefix: "{{ prev_management_subnet | ipaddr('prefix') }}"
       prev_controller_floating_address:
-        "{{ (prev_management_subnet | ipaddr(2)).split('/')[0]
+        "{{ (prev_management_subnet | ipaddr(1)).split('/')[0]
         if prev_management_start_address == 'derived' else prev_management_start_address }}"
       prev_cluster_floating_address:
-        "{{ (prev_cluster_host_subnet | ipaddr(2)).split('/')[0]
+        "{{ (prev_cluster_host_subnet | ipaddr(1)).split('/')[0]
         if prev_cluster_host_start_address == 'derived' else prev_cluster_host_start_address }}"
       prev_cluster_subnet_prefix: "{{ prev_cluster_host_subnet | ipaddr('prefix') }}"
       prev_controller_pxeboot_floating_address:
-        "{{ (prev_pxeboot_subnet | ipaddr(2)).split('/')[0]
+        "{{ (prev_pxeboot_subnet | ipaddr(1)).split('/')[0]
         if prev_pxeboot_start_address == 'derived' else prev_pxeboot_start_address }}"
       prev_pxe_subnet_prefix: "{{ prev_pxeboot_subnet | ipaddr('prefix') }}"
 
