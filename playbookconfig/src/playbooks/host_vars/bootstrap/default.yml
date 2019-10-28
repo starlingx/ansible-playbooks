@@ -299,3 +299,4 @@ wipe_ceph_osds: false
 
 k8s_plugins:
 #  intel-gpu-plugin: intelgpu=enabled
+#  intel-qat-plugin: intelqat=enabled
