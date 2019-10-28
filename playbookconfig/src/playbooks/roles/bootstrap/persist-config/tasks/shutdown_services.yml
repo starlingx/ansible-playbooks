@@ -38,10 +38,9 @@
   # That bug was re-broken by this commit in k8s 1.16
   # https://github.com/kubernetes/kubernetes/commit/6845c66efbb888d2f73e1a1c17f0e06b34d8e261
   - name: Mount kubelet-lv
-    command: mount /var/lib/kubelet/
+    command: bash -c 'mountpoint -q /var/lib/kubelet || mount /var/lib/kubelet'
     args:
       warn: false
-    when: '"/var/lib/kubelet/" is not mount'
 
   # it looks like k8s 1.16 unmounts the folder before clearing it
   - name: Clear kubelet data
