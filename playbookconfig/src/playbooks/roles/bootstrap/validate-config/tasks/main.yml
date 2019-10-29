@@ -438,17 +438,6 @@
     when: use_docker_proxy
 
   - block:
-    - name: Fail if secure registry flag is misconfigured
-      fail:
-        msg: "is_secure_registry is misconfigured. Valid value is either 'True' or 'False'."
-      when: (is_secure_registry is defined) and
-            (not is_secure_registry |type_debug == 'bool')
-
-    - name: Set the defaults registry to secure if not specified
-      set_fact:
-        is_secure_registry: true
-      when: is_secure_registry is not defined
-
     - name: Turn on use_defaults_registry flag
       set_fact:
         use_defaults_registry: true
@@ -507,30 +496,19 @@
           elastic_registry != default_elastic_registry
 
   - block:
-    - name: Validate k8s_registry type if specified
+    - name: Validate registry type if specified
       fail:
-        msg: "The registry type for k8s registry is not supported."
-      when: (k8s_registry.type is defined and k8s_registry.type not in ['docker', 'aws-ecr'])
+        msg: "Registry type for {{ item.key }} is not supported. Valid value is either 'docker' or 'aws-ecr'."
+      with_dict: "{{ docker_registries }}"
+      when: (item.value.type is defined and
+            item.value.type not in ['docker', 'aws-ecr'])
 
-    - name: Validate quay_registry type if specified
+    - name: Fail if secure registry flag is misconfigured
       fail:
-        msg: "The registry type for quay registry is not supported."
-      when: (quay_registry.type is defined and quay_registry.type not in ['docker', 'aws-ecr'])
-
-    - name: Validate gcr_registry type if specified
-      fail:
-        msg: "The registry type for gcr registry is not supported."
-      when: (gcr_registry.type is defined and gcr_registry.type not in ['docker', 'aws-ecr'])
-
-    - name: Validate docker_registry type if specified
-      fail:
-        msg: "The registry type for docker registry is not supported."
-      when: (docker_registry.type is defined and docker_registry.type not in ['docker', 'aws-ecr'])
-
-    - name: Validate elastic_registry type if specified
-      fail:
-        msg: "The registry type for elastic registry is not supported."
-      when: (elastic_registry.type is defined and elastic_registry.type not in ['docker', 'aws-ecr'])
+        msg: "'secure' parameter of registry {{ item.key }} is misconfigured. Valid value is either 'True' or 'False'."
+      with_dict: "{{ docker_registries }}"
+      when: (item.value.secure is defined and
+            not (item.value.secure|type_debug == 'bool'))
 
     - include: validate_address.yml input_address={{ item }}
       with_items:
@@ -706,13 +684,17 @@
       - "QUAY_REGISTRY_TYPE={{ quay_registry.type | default('docker') }}"
       - "DOCKER_REGISTRY_TYPE={{ docker_registry.type | default('docker') }}"
       - "ELASTIC_REGISTRY_TYPE={{ elastic_registry.type | default('docker') }}"
+      - "K8S_REGISTRY_SECURE={{ k8s_registry.secure | default(True) }}"
+      - "GCR_REGISTRY_SECURE={{ gcr_registry.secure | default(True) }}"
+      - "QUAY_REGISTRY_SECURE={{ quay_registry.secure | default(True) }}"
+      - "DOCKER_REGISTRY_SECURE={{ docker_registry.secure | default(True) }}"
+      - "ELASTIC_REGISTRY_SECURE={{ elastic_registry.secure | default(True) }}"
       - "K8S_REGISTRY_ADDITIONAL_OVERRIDES={{ k8s_registry.additional_overrides | default('undef') }}"
       - "GCR_REGISTRY_ADDITIONAL_OVERRIDES={{ gcr_registry.additional_overrides | default('undef') }}"
       - "QUAY_REGISTRY_ADDITIONAL_OVERRIDES={{ quay_registry.additional_overrides | default('undef') }}"
       - "DOCKER_REGISTRY_ADDITIONAL_OVERRIDES={{ docker_registry.additional_overrides | default('undef') }}"
       - "ELASTIC_REGISTRY_ADDITIONAL_OVERRIDES={{ elastic_registry.additional_overrides | default('undef') }}"
       - "USE_DEFAULT_REGISTRIES={{ use_default_registries }}"
-      - "IS_SECURE_REGISTRY={{ is_secure_registry | default(True) }}"
       - "RECONFIGURE_ENDPOINTS={{ reconfigure_endpoints }}"
       - "INITIAL_DB_POPULATED={{ initial_db_populated }}"
       - "INCOMPLETE_BOOTSTRAP={{ incomplete_bootstrap }}"

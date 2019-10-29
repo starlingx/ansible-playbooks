@@ -6,36 +6,47 @@
 #
 # SUB-TASKS DESCRIPTION:
 #   Bring up local registry
-#   - Create daemon.json for insecure defaults registry if applicable
+#   - Create daemon.json for insecure registries if applicable
 #   - Prepare config files for local registry
 #   - Prepare config file for registry token server
 #   - Set up docker registry certificate and keys required
 #   - Start registry token server
 #   - Start local registry
 
+- name: Set insecure registries
+  set_fact:
+    insecure_registries:
+      "{{ (insecure_registries|default([]) + [item.url|regex_replace('/.*', '')]) | unique }}"
+  with_items:
+    - "{{ docker_registry }}"
+    - "{{ gcr_registry }}"
+    - "{{ k8s_registry }}"
+    - "{{ quay_registry }}"
+    - "{{ elastic_registry }}"
+  when: (item.secure is defined and not item.secure)
+  no_log: true
+
 - block:
-  - block:
-    - name: Create daemon.json file for insecure registry
-      copy:
-        src: "{{ insecure_docker_registry_template }}"
-        dest: /etc/docker/daemon.json
-        remote_src: yes
-        mode: 0644
+  - name: Create daemon.json file for insecure registry
+    copy:
+      src: "{{ insecure_docker_registry_template }}"
+      dest: /etc/docker/daemon.json
+      remote_src: yes
+      mode: 0644
 
-    - name: Update daemon.json with registry IP
-      command: "sed -i -e 's|<%= @insecure_registries %>|\"$DOCKER_REGISTRY_IP\"|g' /etc/docker/daemon.json"
-      args:
-        warn: false
+  - name: Update daemon.json with registry IP
+    command: "sed -i -e 's|<%= @insecure_registries %>|$INSECURE_REGISTRIES|g' /etc/docker/daemon.json"
+    args:
+      warn: false
+    environment:
+      INSECURE_REGISTRIES: "{{ insecure_registries | to_json }}"
 
-    - name: Restart docker
-      systemd:
-        name: docker
-        state: restarted
-    when: not is_secure_registry
-
-  environment:
-    DOCKER_REGISTRY_IP: "{{ docker_registry.url }}"
-  when: use_defaults_registry
+  - name: Restart docker
+    systemd:
+      name: docker
+      state: restarted
+  when: (insecure_registries is defined and
+        insecure_registries | length > 0)
 
 - name: Generate local registry runtime config file from template
   copy:

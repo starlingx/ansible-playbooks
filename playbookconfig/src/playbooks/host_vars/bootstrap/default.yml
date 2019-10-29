@@ -107,6 +107,8 @@ cluster_host_dynamic_address_allocation: true
 # indicates the type of authenticated registry, supported values are
 # "docker" and "aws-ecr". If no type specified, the default type "docker"
 # will be used.
+# The optional key "secure" provides the ability to configure an insecure
+# registry, the default value is "True".
 #
 # e.g.
 #   docker_registries:
@@ -115,6 +117,7 @@ cluster_host_dynamic_address_allocation: true
 #       type: docker
 #       username: k8sreguser
 #       password: K8sregPass*
+#       secure: True
 #
 # The "defaults" is registry key defines common values that to be applied
 # to all override-able public registries. The following example will apply
@@ -160,8 +163,6 @@ cluster_host_dynamic_address_allocation: true
 #   - IPv6 address (e.g. FD01::0100)
 #   - IPv6 address with port (e.g. [FD01::0100]:5000
 #
-# Parameter is_secure_registry is only relevant when defaults registry is
-# used.
 
 docker_registries:
   k8s.gcr.io:
@@ -176,8 +177,6 @@ docker_registries:
     url:
 # defaults:
 #   url: example.domain
-
-# is_secure_registry: True
 
 # ADDITIONAL IMAGES
 # =================
