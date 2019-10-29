@@ -7,3 +7,4 @@ supported_release_versions:
   - "19.09"
 temp_ssl_ca_dir: "/tmp"
 temp_ssl_ca_file: "ca-cert.pem"
+temp_k8s_plugins_dir: "/tmp"

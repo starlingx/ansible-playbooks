@@ -24,6 +24,7 @@
     set_fact:
       short_branding_permdir: "{{ branding_permdir | regex_replace('^\\/', '') }}"
       short_banner_permdir: "{{ banner_permdir | regex_replace('^\\/', '') }}"
+      short_config_permdir: "{{ config_permdir | regex_replace('^\\/', '') }}"
 
   - name: Restore branding tar file
     command: >-
@@ -80,6 +81,26 @@
     set_fact:
       ssl_ca_cert: "{{ temp_ssl_ca_dir }}/{{ temp_ssl_ca_file }}"
     when: ca_from_bk.stat.exists == True
+
+  - name: Extract enabled kubernetes plugin configuration from the backup archive
+    command: >-
+      tar -C {{ temp_k8s_plugins_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
+      --overwrite --transform='s,.*/,,' '{{ short_config_permdir }}/enabled_kube_plugins'
+    args:
+      warn: false
+    ignore_errors: yes
+
+  - name: Check that enabled_kube_plugins exists
+    stat:
+      path: "{{ temp_k8s_plugins_dir }}/enabled_kube_plugins"
+    register: plugins_from_bk
+
+  - name: set fact k8s_plugins
+    include_vars:
+      file: '{{ temp_k8s_plugins_dir }}/enabled_kube_plugins'
+      name: k8s_plugins
+    when: plugins_from_bk.stat.exists == True
+
 
   become: yes
   become_user: root

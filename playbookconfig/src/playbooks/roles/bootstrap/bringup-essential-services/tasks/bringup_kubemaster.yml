@@ -247,7 +247,7 @@
   - name: Create kube plugin list file
     copy:
       content: "{{ k8s_plugins }}"
-      dest: /etc/platform/enabled_kube_plugins
+      dest: "{{ config_permdir }}/enabled_kube_plugins"
       mode: 0640
       group: sys_protected
   when: k8s_plugins
