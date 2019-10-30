@@ -401,10 +401,17 @@ def populate_system_controller_network(client):
         'BOOTSTRAP_CONFIG', 'SYSTEM_CONTROLLER_SUBNET'))
     system_controller_floating_ip = CONF.get(
         'BOOTSTRAP_CONFIG', 'SYSTEM_CONTROLLER_FLOATING_ADDRESS')
-    network_name = 'system-controller'
+    network_name_mgmt = 'system-controller'
+
+    system_controller_oam_subnet = IPNetwork(CONF.get(
+        'BOOTSTRAP_CONFIG', 'SYSTEM_CONTROLLER_OAM_SUBNET'))
+    system_controller_oam_floating_ip = CONF.get(
+        'BOOTSTRAP_CONFIG', 'SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS')
+    network_name_oam = 'system-controller-oam'
 
     if RECONFIGURE_NETWORK:
-        delete_network_and_addrpool(client, 'system-controller')
+        delete_network_and_addrpool(client, network_name_mgmt)
+        delete_network_and_addrpool(client, network_name_oam)
         print("Updating system controller network...")
     else:
         print("Populating system controller network...")
@@ -416,16 +423,32 @@ def populate_system_controller_network(client):
         'prefix': system_controller_subnet.prefixlen,
         'floating_address': str(system_controller_floating_ip),
     }
-    pool = create_addrpool(client, values, network_name)
+    mgmt_pool = create_addrpool(client, values, network_name_mgmt)
+
+    values = {
+        'name': 'system-controller-oam-subnet',
+        'network': str(system_controller_oam_subnet.network),
+        'prefix': system_controller_oam_subnet.prefixlen,
+        'floating_address': str(system_controller_oam_floating_ip),
+    }
+    oam_pool = create_addrpool(client, values, network_name_oam)
 
     # create the network for the pool
     values = {
         'type': sysinv_constants.NETWORK_TYPE_SYSTEM_CONTROLLER,
         'name': sysinv_constants.NETWORK_TYPE_SYSTEM_CONTROLLER,
         'dynamic': False,
-        'pool_uuid': pool.uuid,
+        'pool_uuid': mgmt_pool.uuid,
     }
-    create_network(client, values, network_name)
+    create_network(client, values, network_name_mgmt)
+
+    values = {
+        'type': sysinv_constants.NETWORK_TYPE_SYSTEM_CONTROLLER_OAM,
+        'name': sysinv_constants.NETWORK_TYPE_SYSTEM_CONTROLLER_OAM,
+        'dynamic': False,
+        'pool_uuid': oam_pool.uuid,
+    }
+    create_network(client, values, network_name_oam)
 
 
 def populate_cluster_pod_network(client):

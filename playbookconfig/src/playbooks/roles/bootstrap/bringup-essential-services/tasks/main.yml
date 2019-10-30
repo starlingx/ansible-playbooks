@@ -43,6 +43,10 @@
   - name: Set up default route to the oam gateway
     include_tasks: setup_default_route.yml
 
+  - name: Copy the central registry certificate
+    include_tasks: copy_central_registry_cert.yml
+    when: distributed_cloud_role == 'subcloud'
+
   - name: Load images from archives if configured
     include_tasks: load_images_from_archive.yml
     when: images_archive_exists

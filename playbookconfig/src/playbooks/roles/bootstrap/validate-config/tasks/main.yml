@@ -402,6 +402,17 @@
       docker_no_proxy_combined: []
 
   - block:
+    - name: Set subcloud no proxy list
+      set_fact:
+        subcloud_no_proxy:
+          - registry.central
+          - "{{ system_controller_oam_floating_address }}"
+    - name: Update default no proxy list for subcloud
+      set_fact:
+        default_no_proxy: "{{ default_no_proxy + subcloud_no_proxy }}"
+    when: distributed_cloud_role == 'subcloud'
+
+  - block:
     - name: Set default no-proxy address list (non simplex)
       set_fact:
         default_no_proxy: "{{ default_no_proxy + non_sx_proxy_addons }}"
@@ -680,6 +691,8 @@
       - "MANAGEMENT_MULTICAST_END_ADDRESS={{ address_pairs['multicast']['end'] }}"
       - "SYSTEM_CONTROLLER_SUBNET={{ system_controller_subnet }}"
       - "SYSTEM_CONTROLLER_FLOATING_ADDRESS={{ system_controller_floating_address }}"
+      - "SYSTEM_CONTROLLER_OAM_SUBNET={{ system_controller_oam_subnet }}"
+      - "SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS={{ system_controller_oam_floating_address }}"
       - "DOCKER_HTTP_PROXY={{ docker_http_proxy }}"
       - "DOCKER_HTTPS_PROXY={{ docker_https_proxy }}"
       - "DOCKER_NO_PROXY={{ docker_no_proxy_combined | join(',') }}"
