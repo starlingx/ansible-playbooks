@@ -1,0 +1,8 @@
+---
+- name: Create Intel FPGA device plugin config file
+  template:
+    src: "intel-fpga-plugin.yaml.j2"
+    dest: /etc/kubernetes/intel-fpga-daemonset.yaml
+
+- name: Activate Intel FPGA device plugin
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/intel-fpga-daemonset.yaml"
