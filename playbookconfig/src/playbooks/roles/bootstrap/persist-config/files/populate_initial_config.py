@@ -842,10 +842,7 @@ def populate_controller_config(client):
     install_output = get_orig_install_mode()
     print("Install output = %s" % install_output)
 
-    provision_state = sysinv.HOST_PROVISIONED
-    system_type = CONF.get('BOOTSTRAP_CONFIG', 'SYSTEM_TYPE')
-    if system_type == COMBINED_LOAD:
-        provision_state = sysinv.HOST_PROVISIONING
+    provision_state = sysinv.HOST_PROVISIONING
 
     values = {
         'personality': sysinv.HOST_PERSONALITY_CONTROLLER,
