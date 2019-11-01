@@ -9,9 +9,21 @@ from eventlet import greenpool
 import docker
 import sys
 import time
+import os
+import json
 
 MAX_DOWNLOAD_ATTEMPTS = 3
 MAX_DOWNLOAD_THREAD = 5
+
+DEFAULT_REGISTRIES = {
+    'docker.io': 'docker.io',
+    'gcr.io': 'gcr.io',
+    'k8s.gcr.io': 'k8s.gcr.io',
+    'quay.io': 'quay.io',
+    'docker.elastic.co': 'docker.elastic.co'
+}
+
+registries = json.loads(os.environ['REGISTRIES'])
 
 
 def download_an_image(img):
@@ -31,7 +43,6 @@ def download_an_image(img):
     # i.e.
     # Invalid format:
     #   registry.local:9001/privateregistry.io:5000/kube-proxy:v1.16.0
-
     registry_url = img[:img.find('/')]
     if ':' in registry_url:
         img_name = img[img.find('/'):]
@@ -39,31 +50,54 @@ def download_an_image(img):
     else:
         new_img = img
 
+    target_img = get_img_tag_with_registry(img)
     local_img = 'registry.local:9001/' + new_img
-    err_msg = " Image %s download failed: " % img
+    err_msg = " Image download failed: %s" % target_img
 
     for i in range(MAX_DOWNLOAD_ATTEMPTS):
         try:
             client = docker.APIClient()
-            client.pull(img)
-            client.tag(img, local_img)
+            client.pull(target_img)
+            client.tag(target_img, local_img)
             client.push(local_img)
-            print("Image %s download succeeded" % img)
-            return img, True
+            print("Image download succeeded: %s" % target_img)
+            print("Image push succeeded: %s" % local_img)
+            return target_img, True
         except docker.errors.NotFound as e:
             print(err_msg + str(e))
-            return img, False
+            return target_img, False
         except docker.errors.APIError as e:
             print(err_msg + str(e))
             if "no basic auth credentials" in str(e):
-                return img, False
+                return target_img, False
         except Exception as e:
             print(err_msg + str(e))
 
-        print("Sleep 20s before retry downloading image %s ..." % img)
+        print("Sleep 20s before retry downloading image %s ..." % target_img)
         time.sleep(20)
 
-    return img, False
+    return target_img, False
+
+
+def get_img_tag_with_registry(pub_img):
+    if registries == DEFAULT_REGISTRIES:
+        # return as no private registires configured
+        return pub_img
+
+    for registry_default, registry_replaced in registries.items():
+        if pub_img.startswith(registry_default):
+            img_name = pub_img.split(registry_default)[1]
+            return registry_replaced + img_name
+        elif pub_img.startswith(registry_replaced):
+            return pub_img
+
+    # If the image is not from any of the known registries
+    # (ie..k8s.gcr.io, gcr.io, quay.io, docker.io. docker.elastic.co)
+    # or no registry name specified in image tag, use user specified
+    # docker registry as default
+    if registries['docker.io'] != DEFAULT_REGISTRIES['docker.io']:
+        return registries['docker.io'] + '/' + pub_img
+    return pub_img
 
 
 def download_images(images):

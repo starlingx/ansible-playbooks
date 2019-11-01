@@ -16,6 +16,7 @@
     - { name: 'gcr_registry', value: { url: 'gcr.io' } }
     - { name: 'quay_registry', value: { url: 'quay.io' } }
     - { name: 'docker_registry', value: { url: 'docker.io' } }
+    - { name: 'elastic_registry', value: { url: 'docker.elastic.co' } }
   when: upgrade_k8s_networking is defined or
         upgrade_kubernetes is defined
 
@@ -27,6 +28,7 @@
     - { name: "gcr_registry", value: "{{ gcr_registry }}" }
     - { name: "quay_registry", value: "{{ quay_registry }}" }
     - { name: "docker_registry", value: "{{ docker_registry }}" }
+    - { name: "elastic_registry", value: "{{ elastic_registry }}" }
   when: registry.value.type is defined and
         registry.value.type == 'aws-ecr'
   no_log: true
@@ -43,24 +45,12 @@
   when: upgrade_kubernetes is not defined
 
 - name: Get the list of kubernetes images
-  shell: "kubeadm config images list --kubernetes-version {{ kubernetes_version }}
-          --image-repository {{ k8s_registry.url }}"
+  shell: "kubeadm config images list --kubernetes-version {{ kubernetes_version }}"
   register: kubernetes_images_output
-  when: k8s_registry.url is defined and kubernetes_version is defined
+  when: kubernetes_version is defined
 
 - set_fact:
     kubernetes_images: "{{ kubernetes_images_output.stdout_lines }}"
-
-- name: Update Tiller, Armada, Calico, Multus, Sriov image tags
-  set_fact:
-    tiller_img: "{{ tiller_img | regex_replace('gcr.io', '{{ gcr_registry.url }}') }}"
-    armada_img: "{{ armada_img | regex_replace('quay.io', '{{ quay_registry.url }}') }}"
-    calico_cni_img: "{{  calico_cni_img | regex_replace('quay.io', '{{ quay_registry.url }}') }}"
-    calico_node_img: "{{ calico_node_img | regex_replace('quay.io', '{{ quay_registry.url }}') }}"
-    calico_kube_controllers_img: "{{ calico_kube_controllers_img | regex_replace('quay.io', '{{ quay_registry.url }}') }}"
-    multus_img: "{{ multus_img | regex_replace('docker.io', '{{ docker_registry.url }}') }}"
-    sriov_cni_img: "{{ sriov_cni_img | regex_replace('docker.io', '{{ docker_registry.url }}') }}"
-    sriov_network_device_img: "{{ sriov_network_device_img | regex_replace('docker.io', '{{ docker_registry.url }}') }}"
 
 - name: Get the list of platform images
   set_fact:
@@ -75,29 +65,13 @@
       - "{{ tiller_img }}"
       - "{{ armada_img }}"
 
-- block:
-  - name: Update additional image tags if applicable
-    shell: >-
-      echo {{ item }} |
-      sed 's|quay.io|{{ quay_registry.url }}|g' |
-      sed 's|docker.io|{{ docker_registry.url }}|g' |
-      sed 's|k8s.gcr.io|{{ k8s_registry.url }}|g' |
-      sed 's|gcr.io|{{ gcr_registry.url }}|g' |
-      sed 's|docker.elastic.co|{{ elastic_registry.url }}|g'
-    with_items: "{{ additional_local_registry_images }}"
-    register: images
-
-  - set_fact:
-      additional_images: "{{ images.results | map(attribute='stdout') | list }}"
-  when: additional_local_registry_images is defined and
-        additional_local_registry_images | length > 0
-
 # Download all system images and additional images if bootstrap
 - name: Set download images list
   set_fact:
     download_images_list:
-      "{{ (kubernetes_images + networking_images + tiller_armada_images + additional_images)
-      if additional_images is defined else (kubernetes_images + networking_images + tiller_armada_images) }}"
+      "{{ (kubernetes_images + networking_images + tiller_armada_images + additional_local_registry_images)
+      if (additional_local_registry_images is defined and additional_local_registry_images|length > 0)
+      else (kubernetes_images + networking_images + tiller_armada_images) }}"
   when: (upgrade_kubernetes is not defined and
          upgrade_k8s_networking is not defined)
 
@@ -117,6 +91,17 @@
     download_images: "{{ download_images_list | join(',') }}"
 
 - debug: var=download_images_list
+
+- name: Set registries information
+  set_fact:
+    registries:
+      "{{ (registries|default({})) | combine({item.default_url:item.replaced_url}, recursive=true)}}"
+  with_items:
+    - { default_url: 'k8s.gcr.io', replaced_url: "{{ k8s_registry.url }}" }
+    - { default_url: 'gcr.io', replaced_url: "{{ gcr_registry.url }}" }
+    - { default_url: 'quay.io', replaced_url: "{{ quay_registry.url }}" }
+    - { default_url: 'docker.io', replaced_url: "{{ docker_registry.url }}" }
+    - { default_url: 'docker.elastic.co', replaced_url: "{{ elastic_registry.url }}" }
 
 # Disable the log to not expose registry password
 - name: Log in k8s, gcr, quay, docker registries if credentials exist
@@ -157,6 +142,8 @@
 - name: Download images and push to local registry
   script: download_images.py {{ download_images }}
   register: download_images_output
+  environment:
+    REGISTRIES: "{{ registries | to_json }}"
 
 - debug:
     msg: "{{ download_images_output.stdout_lines }}"
@@ -178,14 +165,3 @@
   docker_login:
     registry: "{{ local_registry }}"
     state: absent
-
-- name: Strip out port from Tiller, Armada, Calico, Multus, Sriov image tags
-  set_fact:
-    tiller_img: "{{ tiller_img | regex_replace(':[0-9]+/', '/') }}"
-    armada_img: "{{ armada_img | regex_replace(':[0-9]+/', '/') }}"
-    calico_cni_img: "{{  calico_cni_img | regex_replace(':[0-9]+/', '/') }}"
-    calico_node_img: "{{ calico_node_img | regex_replace(':[0-9]+/', '/') }}"
-    calico_kube_controllers_img: "{{ calico_kube_controllers_img | regex_replace(':[0-9]+/', '/') }}"
-    multus_img: "{{ multus_img | regex_replace(':[0-9]+/', '/') }}"
-    sriov_cni_img: "{{ sriov_cni_img | regex_replace(':[0-9]+/', '/') }}"
-    sriov_network_device_img: "{{ sriov_network_device_img | regex_replace(':[0-9]+/', '/') }}"

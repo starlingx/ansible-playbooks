@@ -109,13 +109,11 @@
     - "sed -i -e 's|<%= @service_domain %>|'cluster.local'|g' /etc/kubernetes/kubeadm.yaml"
     - "sed -i -e 's|<%= @pod_network_cidr %>|'$POD_NETWORK_CIDR'|g' /etc/kubernetes/kubeadm.yaml"
     - "sed -i -e 's|<%= @service_network_cidr %>|'$SERVICE_NETWORK_CIDR'|g' /etc/kubernetes/kubeadm.yaml"
-    - "sed -i -e 's|<%= @k8s_registry %>|'$K8S_REGISTRY'|g' /etc/kubernetes/kubeadm.yaml"
   environment:
     CLUSTER_IP: "{{ cluster_floating_address }}"
     ETCD_ENDPOINT: "http://{{ cluster_floating_address | ipwrap }}:2379"
     POD_NETWORK_CIDR: "{{ cluster_pod_subnet }}"
     SERVICE_NETWORK_CIDR: "{{ cluster_service_subnet }}"
-    K8S_REGISTRY: "{{ k8s_registry.url | regex_replace(':[0-9]+', '') }}"
 
 - name: Add apiserver certificate SANs to kubeadm
   replace:
