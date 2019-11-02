@@ -88,15 +88,7 @@ def get_img_tag_with_registry(pub_img):
         if pub_img.startswith(registry_default):
             img_name = pub_img.split(registry_default)[1]
             return registry_replaced + img_name
-        elif pub_img.startswith(registry_replaced):
-            return pub_img
 
-    # If the image is not from any of the known registries
-    # (ie..k8s.gcr.io, gcr.io, quay.io, docker.io. docker.elastic.co)
-    # or no registry name specified in image tag, use user specified
-    # docker registry as default
-    if registries['docker.io'] != DEFAULT_REGISTRIES['docker.io']:
-        return registries['docker.io'] + '/' + pub_img
     return pub_img
 
 
