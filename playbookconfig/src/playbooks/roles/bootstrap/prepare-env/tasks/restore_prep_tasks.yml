@@ -63,5 +63,23 @@
         state: absent
     when: banner_result.rc == 0
 
+  - name: Extract ssl_ca certifcate from backup archive
+    command: >-
+      tar -xf {{ target_backup_dir }}/{{ backup_filename }} -C {{ temp_ssl_ca_dir }} -p --transform='s,.*/,,'
+      */{{ temp_ssl_ca_file }}*
+    args:
+      warn: false
+    ignore_errors: yes
+
+  - name: Check that ssl_ca certificate exists
+    stat:
+      path: "{{ temp_ssl_ca_dir }}/{{ temp_ssl_ca_file }}"
+    register: ca_from_bk
+
+  - name: Set ssl_ca_cert if exists
+    set_fact:
+      ssl_ca_cert: "{{ temp_ssl_ca_dir }}/{{ temp_ssl_ca_file }}"
+    when: ca_from_bk.stat.exists == True
+
   become: yes
   become_user: root
