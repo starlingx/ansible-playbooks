@@ -37,7 +37,7 @@
   when: active_ctlr.rc != 0
 
 - name: Search for stx-openstack application
-  shell: source /etc/platform/openrc; system application-list | grep 'stx-openstack'
+  shell: source /etc/platform/openrc; system application-show stx-openstack --column status --format value
   register: check_openstack
   failed_when: false
 
@@ -49,7 +49,7 @@
         backed up or it has already been restored successfully.
   - meta: end_play
 
-  when: check_openstack.rc != 0 or check_openstack.stdout is search('applied')
+  when: check_openstack.rc != 0 or check_openstack.stdout == "applied"
 
 # If stx-application is not in uploaded state, it means restore_openstack playbook
 # has been run and was not successful. Re-run the playbook is not supported.
@@ -58,18 +58,17 @@
     msg: >-
       stx-openstack application must be in ‘uploaded’ state for the restore to proceed.
       The restore must have failed already.
-  when: check_openstack.stdout is not search('uploaded')
+  when: check_openstack.stdout != "uploaded"
 
 - name: Check if platform-integ-apps was applied successfully during controller-0 unlock
   shell: >-
-    source /etc/platform/openrc; system application-list |
-    grep 'platform-integ-apps.*applied.*completed'
+    source /etc/platform/openrc; system application-show platform-integ-apps --column status --format value
   register: check_platform_integ
 
 - name: Fail if platform-integ-apps was not applied successfully
   fail:
     msg: Application platform-integ-apps was not applied successfully during controller-0 unlock
-  when: check_platform_integ.rc != 0
+  when: check_platform_integ.stdout not in ['applied', 'completed']
 
 - name: For remote play set target_backup_dir to {{ backup_dir }}
   set_fact:

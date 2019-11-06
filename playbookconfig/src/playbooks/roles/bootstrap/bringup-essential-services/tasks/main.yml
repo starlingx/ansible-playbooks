@@ -78,11 +78,11 @@
       line: "nameserver {{ controller_floating_address }}"
       insertbefore: BOF
 
-  - name: Check for controller-0 online status
-    shell: source /etc/platform/openrc; system host-list | grep online
-    register: online_check
-    until: online_check.rc == 0
+  - name: Check controller-0 is in online state
+    shell: source /etc/platform/openrc; system host-show controller-0 --column availability --format value
+    register: check_online
     retries: 10
+    until: check_online.stdout == "online"
 
   - name: Wait for {{ pods_wait_time }} seconds to ensure kube-system pods are all started
     wait_for:
