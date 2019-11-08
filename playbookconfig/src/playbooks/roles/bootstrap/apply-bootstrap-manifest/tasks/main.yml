@@ -29,6 +29,15 @@
 
   when: mode == 'bootstrap'
 
+- name: Write system controller keystone admin user and project Ids to static hieradata if it's subcloud
+  lineinfile:
+    path: "{{ hieradata_workdir }}/static.yaml"
+    line: "{{ item }}"
+  with_items:
+    - "keystone::dc_admin_user_id: {{ system_controller_keystone_admin_user_id }}"
+    - "keystone::dc_admin_project_id: {{ system_controller_keystone_admin_project_id }}"
+  when: distributed_cloud_role == 'subcloud'
+
 - block:
   - name: Set ssh_config tmp dir fact
     set_fact:
