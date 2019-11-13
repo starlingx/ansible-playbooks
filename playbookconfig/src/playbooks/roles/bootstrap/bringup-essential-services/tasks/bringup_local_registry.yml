@@ -149,6 +149,18 @@
     args:
       warn: false
 
+  - name: Check if {{ server_cert_pem }} exists
+    stat: path="{{ server_cert_pem }}"
+    register: server_cert_pem_stat
+
+  - name: Copy {{ server_cert_pem }} to shared filesystem for mate
+    copy:
+      src: "{{ server_cert_pem }}"
+      dest: "{{ config_permdir }}"
+      remote_src: yes
+      mode: preserve
+    when: server_cert_pem_stat.stat.exists
+
   when: mode == 'restore'
 
 - name: Copy certificate and keys to shared filesystem for mate
