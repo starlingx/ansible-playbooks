@@ -457,63 +457,16 @@
         - "external_oam_node_1_address: {{ external_oam_controller1_address.stdout }}"
       when: system_mode != 'simplex'
 
-    - name: Query service parameters for docker
-      shell: >-
-        source /etc/platform/openrc; system service-parameter-list --nowrap |
-        grep -w docker | awk '{if ($4=="docker") print $line}' > {{ tempdir.path }}/docker.txt
+    - name: Get docker registries information
+      include_role:
+        name: common/push-docker-images
+        tasks_from: get_docker_registries
 
-    - name: Check if there is a defaults docker registry
-      shell: grep -w insecure_registry {{ tempdir.path }}/docker.txt
-      register: check_defaults
-      failed_when: false
-
-    - block:
-      - name: Get insecure_registry value
-        shell: grep -w insecure_registry {{ tempdir.path }}/docker.txt | awk '{print $10}'
-        register: insecure
-
-      - name: Retrieve defaults docker registry from sysinv
-        shell: grep -w k8s {{ tempdir.path }}/docker.txt | awk '{if ($8=="k8s") print $10}'
-        register: defaults_docker_registry
-
-      - name: Write defaults docker registry to override backup file
-        lineinfile:
-          dest: "{{ override_backup_file }}"
-          line: "{{ item }}"
-        with_items:
-          - "is_secure_registry: {{ not (insecure.stdout|bool) }}"
-          - "docker_registries:"
-          - "  defaults: {{ defaults_docker_registry.stdout }}"
-      when: check_defaults.rc == 0
-
-    - block:
-      - name: Search for docker registries
-        shell: >-
-          grep -w registry {{ tempdir.path }}/docker.txt |
-          awk '{if ($6=="registry") print $8 ".io: " $10}'
-        failed_when: false
-        register: docker_registries
-
-      - block:
-        - name: Write docker_registries
-          lineinfile:
-            dest: "{{ override_backup_file }}"
-            line: "docker_registries:"
-
-        - name: Write docker_registry to override backup file
-          lineinfile:
-            dest: "{{ override_backup_file }}"
-            line: "  {{ item }}"
-          with_items: "{{ docker_registries.stdout_lines }}"
-
-        - name: Replace k8s.io with k8s.gcr.io in the override backup file
-          replace:
-            path: "{{ override_backup_file }}"
-            regexp: 'k8s\.io'
-            replace: 'k8s.gcr.io'
-
-        when: docker_registries.stdout != ""
-      when: check_defaults.rc != 0
+    - name: Append registries configuration
+      blockinfile:
+        path: "{{ override_backup_file }}"
+        marker: ""
+        block: "{{ registries|default({}) | to_nice_yaml(indent=2) }}"
 
     - name: Check if docker no-proxy exists
       shell: >-

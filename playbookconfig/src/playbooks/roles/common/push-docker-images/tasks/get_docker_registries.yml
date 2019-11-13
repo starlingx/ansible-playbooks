@@ -1,0 +1,29 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Query a registry from Sysinv via Sysinv CLI
+
+- block:
+
+  - name: Get docker registries
+    include: get_docker_registry.yml registry={{ item }}
+    with_items:
+      - { name: 'k8s_registry', value: { } }
+      - { name: 'gcr_registry', value: { } }
+      - { name: 'quay_registry', value: { } }
+      - { name: 'docker_registry', value: { } }
+      - { name: 'elastic_registry', value: { } }
+
+  - name: Put docker registries into a single variable
+    set_fact:
+      registries: "{{ registries|default({}) | combine({'docker_registries': {item.name: item.value} }, recursive=True) }}"
+    with_items:
+      - { name: 'k8s.gcr.io', value: "{{ k8s_registry }}" }
+      - { name: 'gcr.io', value: "{{ gcr_registry }}" }
+      - { name: 'quay.io', value: "{{ quay_registry }}" }
+      - { name: 'docker.io', value: "{{ docker_registry }}" }
+      - { name: 'docker.elastic.co', value: "{{ elastic_registry }}" }
