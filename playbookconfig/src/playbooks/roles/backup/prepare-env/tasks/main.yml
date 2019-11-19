@@ -56,6 +56,7 @@
   set_fact:
     keyring_permdir: "{{ platform_path }}/.keyring/{{ software_version }}"
     config_permdir: "{{ platform_path }}/config/{{ software_version }}"
+    sysinv_permdir: "{{ platform_path }}/sysinv/{{ software_version }}"
     puppet_permdir: "{{ platform_path }}/puppet/{{ software_version }}"
     armada_permdir: "{{ platform_path }}/armada/{{ software_version }}"
     helm_charts_permdir: "{{ platform_path }}/helm_charts"

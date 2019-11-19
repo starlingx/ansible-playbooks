@@ -27,14 +27,17 @@
     when: tmp_keyring.stat.exists
   when: save_password
 
-- name: Ensure replicated config parent directory exists
+- name: Ensure replicated config parent directories exist
   file:
-    path: "{{ config_permdir }}"
+    path: "{{ item }}"
     state: directory
     recurse: yes
     owner: root
     group: root
     mode: 0755
+  with_items:
+    - "{{ config_permdir }}"
+    - "{{ sysinv_permdir }}"
 
 - name: Get list of new config files
   find:

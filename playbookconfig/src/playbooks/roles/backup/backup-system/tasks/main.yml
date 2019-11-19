@@ -161,6 +161,7 @@
         - /etc
         - /home
         - "{{ config_permdir }}"
+        - "{{ sysinv_permdir }}"
         - "{{ puppet_permdir }}/hieradata"
         - "{{ keyring_permdir }}"
         - "{{ patching_permdir }}"
@@ -527,6 +528,7 @@
            /etc \
            /home \
            {{ config_permdir }} \
+           {{ sysinv_permdir }} \
            {{ puppet_permdir }}/hieradata \
            {{ keyring_permdir }} \
            {{ patching_permdir }} \

@@ -103,6 +103,7 @@
     set_fact:
       keyring_permdir: "{{ platform_path + '/.keyring/' + software_version }}"
       config_permdir: "{{ platform_path + '/config/' + software_version }}"
+      sysinv_permdir: "{{ platform_path + '/sysinv/' + software_version }}"
       puppet_permdir: "{{ platform_path + '/puppet/' + software_version }}"
 
   - name: Set initial address facts if not defined. They will be updated later

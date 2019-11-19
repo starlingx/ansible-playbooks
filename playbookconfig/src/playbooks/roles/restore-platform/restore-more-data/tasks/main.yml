@@ -153,6 +153,13 @@
     - "{{ armada_permdir | regex_replace('^\\/', '') }}"
     - "{{ extension_permdir | regex_replace('^\\/', '') }}"
 
+- name: Restore sysinv default configuration file
+  command: >-
+    tar -C {{ sysinv_config_permdir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
+    --transform='s,.*/,,' '*/sysinv.conf.default'
+  args:
+    warn: false
+
 # Can't store ceph crushmap at sysinv_config_permdir (/opt/platform/sysinv/)
 # for AIO systems because when unlocking controller-0 for the first time,
 # the crushmap is set thru ceph puppet when /opt/platform is not mounted yet.
@@ -390,6 +397,14 @@
       - include_role:
           name: recover-ceph-data
         when: storage_nodes.rc == 0
+
+      - name: Mark crushmap as restored
+        file:
+          path: "{{ sysinv_config_permdir }}/.crushmap_applied"
+          owner: root
+          group: root
+          mode: 644
+          state: touch
 
       when: not wipe_ceph_osds|bool
 
