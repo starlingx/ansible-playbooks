@@ -4,6 +4,10 @@
 # https://docs.projectcalico.org/v3.6/getting-started/kubernetes/installation/
 #              hosted/kubernetes-datastore/calico-networking/1.7/calico.yaml
 #
+# The following modifications have been made:
+#
+# - Added node-role.kubernetes.io/master nodeSelector to calico-kube-controller
+#
 # This is the calico configuration file for systems with less than 50 nodes.
 #
 # Notes when upversioning calico:
@@ -791,6 +795,7 @@ spec:
       priorityClassName: system-node-critical
       nodeSelector:
         beta.kubernetes.io/os: linux
+        node-role.kubernetes.io/master: ''
       tolerations:
         # Mark the pod as a critical add-on for rescheduling.
         - key: CriticalAddonsOnly
