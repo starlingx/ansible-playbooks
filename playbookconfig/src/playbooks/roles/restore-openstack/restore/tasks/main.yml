@@ -25,17 +25,17 @@
     shell: source /etc/platform/openrc; system application-apply --mode normal stx-openstack
 
   - name: Checking stx-openstack apply progress for the remaining Openstack services... (max 50 mins)
-    shell: source /etc/platform/openrc; system application-list | grep 'stx-openstack'
+    shell: >-
+      source /etc/platform/openrc; system application-show stx-openstack --column status --format value
     register: check_app_state
-    until: check_app_state.stdout is search('applied') or
-           check_app_state.stdout is search('apply-failed')
+    until: check_app_state.stdout in ['applied', 'apply-failed']
     retries: 50
     delay: 60
 
   - name: Fail if the remaining Openstack services cannot be restored successfully
     fail:
       msg: stx-openstack application is not applied successfully.
-    when: check_app_state.stdout is not search('applied')
+    when: check_app_state.stdout != "applied"
 
   - name: Remove restore_openstack_in_progress flag file
     file:
@@ -78,10 +78,10 @@
       source /etc/platform/openrc; system application-apply --mode restore_db stx-openstack
 
   - name: Checking MariaDB apply progress ... (max 30 mins)
-    shell: source /etc/platform/openrc; system application-list | grep 'stx-openstack'
+    shell: >-
+      source /etc/platform/openrc; system application-show stx-openstack --column status --format value
     register: check_app_state
-    until: check_app_state.stdout is search('applied') or
-           check_app_state.stdout is search('apply-failed')
+    until: check_app_state.stdout in ['applied', 'apply-failed']
     retries: 30
     delay: 60
 
@@ -97,7 +97,7 @@
       msg: >-
         MariaDB service cannot be restored successfully.
         Restore StarlingX Openstack application failed.
-    when: check_app_state.stdout is not search('applied') or
+    when: check_app_state.stdout != "applied" or
           check_mariadb_pod.rc != 0
 
   - block:
@@ -163,10 +163,9 @@
 
   - name: Checking Cinder and Glance apply progress... (max 30 mins)
     shell: >-
-      source /etc/platform/openrc; system application-list | grep 'stx-openstack'
+      source /etc/platform/openrc; system application-show stx-openstack --column status --format value
     register: check_app_state
-    until: check_app_state.stdout is search('applied') or
-           check_app_state.stdout is search('apply-failed')
+    until: check_app_state.stdout in ['applied', 'apply-failed']
     retries: 30
     delay: 60
 
@@ -175,7 +174,7 @@
       msg: >-
         Cinder and Glance services cannot be restored successfully.
         Restore stx-openstack application failed.
-    when: check_app_state.stdout is not search('applied')
+    when: check_app_state.stdout != "applied"
 
   - block:
     - name: Inform user to restore Glance images and Cinder volumes
@@ -196,17 +195,17 @@
     shell: source /etc/platform/openrc; system application-apply --mode normal stx-openstack
 
   - name: Checking stx-openstack apply progress for the remaining Openstack services... (max 50 mins)
-    shell: source /etc/platform/openrc; system application-list | grep 'stx-openstack'
+    shell: >-
+      source /etc/platform/openrc; system application-show stx-openstack --column status --format value
     register: check_app_state
-    until: check_app_state.stdout is search('applied') or
-           check_app_state.stdout is search('apply-failed')
+    until: check_app_state.stdout in ['applied', 'apply-failed']
     retries: 50
     delay: 60
 
   - name: Fail if the remaining Openstack services cannot be restored successfully
     fail:
       msg: stx-openstack application is not applied successfully.
-    when: check_app_state.stdout is not search('applied')
+    when: check_app_state.stdout != "applied"
 
   - debug:
       msg: Restore stx-openstack application is successful!

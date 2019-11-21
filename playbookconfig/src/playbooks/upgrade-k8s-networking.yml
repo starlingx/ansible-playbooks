@@ -9,38 +9,25 @@
 
   vars:
     upgrade_k8s_networking: true
+    overrides_file: "/tmp/upgrade_overrides.yaml"
 
   tasks:
 
-    # TODO(kbujold): This comment from the review will be implemented in a separate submission.
-    # "I would recommend that we follow the same model as we did for for the Puppet
-    # hiera data generation to avoid scraping CLI command output. The output is not
-    # intended for machine consumption. Create a command line utility that shares the
-    # same code as the sysinv-conductor to generate the required Ansible formatted
-    # data (yaml) directly from the DB. See sysinv/cmd/puppet.py as an example.
-    # This same utility command can be used by B&R to generate the required restore
-    # data form the running system directly from the DB in a format that is understood
-    # the Playbooks."
+    - name: Create the upgrade overrides file
+      command: "/usr/bin/sysinv-utils create-host-overrides {{ overrides_file }}"
+      failed_when: result.stderr != ""
+      register: result
 
-    - name: Dump address pool data to temp file
-      shell:
-        source /etc/platform/openrc; system addrpool-list --nowrap > /tmp/addrpool.txt
-
-    - name: Retrieve cluster_pod_subnet
-      shell: "grep cluster-pod-subnet /tmp/addrpool.txt | awk '{print $6\"/\"$8}'"
-      register: cluster_pod_subnet
-
-    - name: Retrieve cluster_floating_address
-      shell: "grep cluster-host-subnet /tmp/addrpool.txt | awk '{print $14}'"
-      register: cluster_floating_address
+    - name: Read the overrides variables
+      include_vars:
+        file: "{{ overrides_file }}"
 
     - name: Set networking facts
       set_fact:
         kubelet_cni_bin_dir: "/usr/libexec/cni"
-        cluster_pod_subnet: "{{ cluster_pod_subnet.stdout }}"
-        cluster_network_ipv4: "{{ cluster_pod_subnet.stdout | ipv4 }}"
-        cluster_network_ipv6: "{{ cluster_pod_subnet.stdout | ipv6 }}"
-        cluster_floating_address: "{{ cluster_floating_address.stdout }}"
+        cluster_network_ipv4: "{{ cluster_pod_subnet | ipv4 }}"
+        cluster_network_ipv6: "{{ cluster_pod_subnet | ipv6 }}"
+        cluster_floating_address: "{{ cluster_host_floating_address }}"
 
     - name: Set images facts
       include_vars:

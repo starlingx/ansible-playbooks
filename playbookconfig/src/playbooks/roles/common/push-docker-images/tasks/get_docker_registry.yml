@@ -9,20 +9,19 @@
 
 - block:
   - name: Query the {{ registry.name }}
-    shell: >-
-      source /etc/platform/openrc; system service-parameter-list --nowrap |
-      awk '{if ($6 == "{{ registry.name | regex_replace('_', '-') }}") print $8"="$10;}'
+    shell: source /etc/platform/openrc;
+      system service-parameter-list --section "{{ registry.name | regex_replace('_', '-') }}"
+      --column name --column value --format yaml
     register: running_registry_output
 
-  # Make sure variables are empty to allow succesive executions
+  # Make sure variables are empty to allow successive executions
   - set_fact:
       running_registry: { }
       registry_filtered: { }
 
   - set_fact:
-      running_registry:
-        "{{ running_registry | combine({inner_item.split('=')[0]:inner_item.split('=')[1]}, recursive=True) }}"
-    with_items: "{{ running_registry_output.stdout_lines }}"
+      running_registry: "{{ running_registry|default({}) | combine({inner_item.name:inner_item.value}) }}"
+    with_items: "{{ running_registry_output.stdout | from_yaml }}"
     loop_control:
       loop_var: inner_item
 

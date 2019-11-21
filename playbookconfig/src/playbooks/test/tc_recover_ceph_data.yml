@@ -71,7 +71,7 @@
     - name: Retrieve management IP
       shell: >-
           source /etc/platform/openrc;
-          system host-show controller-0 | grep mgmt_ip | awk '{print $4}'
+          system host-show controller-0 --format value --column mgmt_ip
       register: mgmt_ip
 
     - name: Set derived facts for subsequent tasks/roles
