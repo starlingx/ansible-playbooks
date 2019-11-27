@@ -15,8 +15,6 @@
 
     - name: Create the upgrade overrides file
       command: "/usr/bin/sysinv-utils create-host-overrides {{ overrides_file }}"
-      failed_when: result.stderr != ""
-      register: result
 
     - name: Read the overrides variables
       include_vars:
