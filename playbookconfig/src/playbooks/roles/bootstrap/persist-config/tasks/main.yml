@@ -29,15 +29,15 @@
 
 - name: Ensure replicated config parent directories exist
   file:
-    path: "{{ item }}"
+    path: "{{ item.path }}"
     state: directory
     recurse: yes
-    owner: root
-    group: root
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
     mode: 0755
   with_items:
-    - "{{ config_permdir }}"
-    - "{{ sysinv_permdir }}"
+    - { path: "{{ config_permdir }}", owner: "root", group: "root" }
+    - { path: "{{ sysinv_permdir }}", owner: "sysinv", group: "sysinv" }
 
 - name: Get list of new config files
   find:
