@@ -25,7 +25,7 @@ Supported StarlingX Releases
 ============================
 The playbooks in this repo are compatible with the following StarlingX releases:
 
-- 19.09
+- 19.12
 
 Executing StarlingX Playbooks
 =============================
