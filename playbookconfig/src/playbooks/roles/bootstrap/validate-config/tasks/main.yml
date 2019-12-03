@@ -433,7 +433,7 @@
 
     - name: Add user defined no-proxy address list to default
       set_fact:
-        docker_no_proxy_combined: "{{ default_no_proxy | union(docker_no_proxy) | unique | ipwrap }}"
+        docker_no_proxy_combined: "{{ default_no_proxy | union(docker_no_proxy) | ipwrap | unique }}"
 
     when: use_docker_proxy
 
