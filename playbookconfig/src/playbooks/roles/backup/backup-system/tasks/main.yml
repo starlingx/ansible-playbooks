@@ -227,10 +227,6 @@
 
     - name: Create the override backup file
       command: "/usr/bin/sysinv-utils create-host-overrides {{ override_backup_file }}"
-      failed_when: result.stderr != ""
-      register: result
-
-    - debug: var=result.stdout
 
     - name: Get docker registries information
       include_role:
