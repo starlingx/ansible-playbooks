@@ -287,6 +287,8 @@
     - ca.key
     - sa.pub
     - sa.key
+    - front-proxy-ca.crt
+    - front-proxy-ca.key
 
 - name: Mark Kubernetes config complete
   file:
