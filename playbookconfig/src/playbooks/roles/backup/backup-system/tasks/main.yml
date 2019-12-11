@@ -148,6 +148,42 @@
         when: openstack_status.stdout == "applied"
       when: check_mariadb_pod.rc != 0
 
+    # In order to restore only the stx-openstack, the user needs to manually
+    # remove, delete and upload the application.
+    # This procedure will make the helm overrides data that is
+    # present in the sysinv DB and the stx-openstack DB to be inconsistent.
+    # A dump file containing the overrides data is used here to solve this inconsistency issue.
+    # Note that this file will contain only 'update' sql commands because the
+    # overrides are already created when we uploaded the application.
+    - name: Create Helm overrides temp dir
+      file:
+        path: "{{ tempdir.path }}/helm_overrides_dir"
+        state: directory
+      register: helm_overrides_dir
+
+    - name: Get the openstack Helm overrides from the from the database
+      shell: >-
+        psql -c "copy(select row_to_json(t) from (select name, user_overrides, system_overrides
+        from helm_overrides where namespace='openstack') as t) to stdout" sysinv | sed -e 's/\\\\/\\/g'
+      become_user: postgres
+      register: helm_overrides_list
+
+    - name: Generate postgres update commands for Helm overrides
+      set_fact:
+        updates_list: >
+          {{ updates_list | default('') }}update helm_overrides set
+          system_overrides={% if item.system_overrides %}'{{ item.system_overrides }}'{% else %}NULL{% endif %},
+          user_overrides={% if item.user_overrides %}'{{ item.user_overrides }}'{% else %}NULL{% endif %}
+          where name='{{ item.name }}' and namespace='openstack';
+      with_items: "{{ helm_overrides_list.stdout_lines | map('from_json') | list }}"
+
+    - name: Backup Helm overrides
+      copy:
+        dest: "{{ helm_overrides_dir.path }}/helm_overrides_dump.sql"
+        mode: 0755
+        content: '{{ updates_list }}'
+
+
     # Now Postgres data and MariaDB data are stored in staging dir, we can estimate
     # the disk size requirement for the backup archive.
     - name: Check the size (in kilobyte) of directories that will be backed up
@@ -167,6 +203,7 @@
         - "{{ armada_permdir }}"
         - "{{ helm_charts_permdir }}"
         - "{{ mariadb_dir.path }}"
+        - "{{ helm_overrides_dir.path }}"
       register: size_output
 
     # Estimate the backup size. We add 128M overhead for things like ceph crushmap,
@@ -286,7 +323,8 @@
         shell: "tar -czf {{ openstack_backup_file_path }} $(ls -d \
              {{ armada_permdir }}/stx-openstack \
              {{ helm_charts_permdir }}/starlingx \
-             {{ mariadb_dir.path }} 2>/dev/null)"
+             {{ mariadb_dir.path }} \
+             {{ helm_overrides_dir.path }} 2>/dev/null)"
         args:
           warn: false
       when: check_mariadb_pod.rc == 0 or openstack_status.stdout == "uploaded"

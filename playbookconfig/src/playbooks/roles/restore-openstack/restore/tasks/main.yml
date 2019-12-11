@@ -21,6 +21,11 @@
          to restore OpenStack application."
     when: not check_restore_openstack_continue.stat.exists
 
+  - name: Unset show_multiple_locations override
+    shell: >-
+      source /etc/platform/openrc; system helm-override-update
+      --set conf.glance.DEFAULT.show_multiple_locations=False stx-openstack glance openstack
+
   - name: Continue to bring up the remaining StarlingX Openstack services
     shell: source /etc/platform/openrc; system application-apply --mode normal stx-openstack
 
@@ -72,6 +77,35 @@
     with_items:
       - "{{ helm_charts_permdir | regex_replace('^\\/', '') }}"
       - "{{ armada_permdir | regex_replace('^\\/', '') }}"
+
+  - name: Set Helm Overrides backup directory
+    tempfile:
+      state: directory
+    register: helm_overrides_dir
+    become_user: postgres
+
+  - name: Restore Helm Overrides dump file
+    command: >-
+      tar -C {{ helm_overrides_dir.path }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
+      --transform='s,.*/,,' '*/helm_overrides*.sql'
+    args:
+      warn: false
+
+  - name: Apply Helm Overrides dump file
+    shell: >-
+      psql -f {{ helm_overrides_dir.path }}/helm_overrides_dump.sql sysinv
+    become_user: postgres
+
+  - name: Remove Helm Overrides backup directory
+    file:
+      path: "{{ helm_overrides_dir.path }}"
+      state: absent
+
+  # This override is required by the tidy_storage helper script when we do a full restore.
+  - name: Set show_multiple_locations override
+    shell: >-
+      source /etc/platform/openrc; system helm-override-update
+      --set conf.glance.DEFAULT.show_multiple_locations=True stx-openstack glance openstack
 
   - name: Bring up MariaDB and its prerequisite services
     shell: >-
