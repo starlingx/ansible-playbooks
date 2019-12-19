@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2020 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -360,6 +360,92 @@
         Platform restore was unsuccessful. Please refer to the system administration
         guide for next step.
     when: check_online.stdout != "online"
+
+  # Resize drbd-backed partitions
+  - block:
+    - name: Get DRBD-synced partitions
+      shell: source /etc/platform/openrc; system controllerfs-list --format yaml
+      register: controllerfs_partitions_output
+
+    # First extend the logical volumes
+    - name: Resize logical volumes (except database)
+      command: "lvextend -L{{ item.size }}G /dev/cgts-vg/{{ item.logical_volume }}"
+      failed_when: false
+      with_items: "{{ controllerfs_partitions_output.stdout | from_yaml }}"
+      when: item.name != "database"
+      register: lvextend_output
+
+    # In cases where we try to resize an LV to the size it already is, lvextend
+    # will throw an error, but it's not an issue so we just ignore that error.
+    - name: Fail if resize of logical volumes fail
+      fail:
+        msg: "{{ item.item }}  failed for the following reason: {{ item.stderr }}"
+      when: item.rc is defined and item.rc != 0 and
+            item.stderr is not search('matches existing size')
+      with_items: "{{ lvextend_output.results }}"
+
+    # The database LV is twice the size that is stored in sysinv (in order to support
+    # upgrades), so we resize it seperately.
+    - name: Resize database logical volume
+      command: "lvextend -L{{ (item.size*2) }}G /dev/cgts-vg/{{ item.logical_volume }}"
+      failed_when: false
+      with_items: "{{ controllerfs_partitions_output.stdout | from_yaml }}"
+      when: item.name == "database"
+      register: lvextend_database_output
+
+    - name: Fail if resize of database logical volume fails
+      fail:
+        msg: "{{ item.item }}  failed for the following reason: {{ item.stderr }}"
+      when: item.rc is defined and item.rc != 0 and
+            item.stderr is not search('matches existing size')
+      with_items: "{{ lvextend_database_output.results }}"
+
+    - name: Resize DRBD resources
+      command: "drbdadm -- --assume-peer-has-space resize all"
+
+    # Resize the filesystem on top of DRBD resources.
+    # The information about which /dev/drbd<id> corresponds to each LV is hard-coded
+    # in puppet and is not available in sysinv, so we provide a static list of devices
+    # here as well.
+    # Keep this list in sync with the device names specified in the stx-puppet repo at:
+    # puppet-manifests/src/modules/platform/manifests/drbd.pp
+    # NOTE: Only devices present in the "system controllerfs-list" command output
+    #       need to be kept in sync. Filesystem that we don't allow resizing for
+    #       (for example rabbitmq) or those that don't use the controllerfs
+    #       command (for example cephmon) don't need to be kept in sync.
+    - name: Resize DRBD filesystems
+      command: "resize2fs {{ item }}"
+      register: resize2fs_output
+      failed_when: false
+      with_items:
+        - /dev/drbd0  # postgres
+        - /dev/drbd2  # platform
+        - /dev/drbd5  # extension
+        - /dev/drbd7  # etcd
+        - /dev/drbd8  # docker-distribution
+
+    - name: Fail if resize of DRBD filesystems fail
+      fail:
+        msg: "{{ item.item }}  failed for the following reason: {{ item.stderr }}"
+      when: item.rc != 0 and item.stderr is not search('Nothing to do!')
+      with_items: "{{ resize2fs_output.results }}"
+
+    # The patch-vault drbd device is only present on a distributed cloud setup
+    # on the system controller,
+    - name: Resize patch-vault filesystem
+      command: "resize2fs /dev/drbd6"
+      register: resize2fs_patch_resize_output
+      failed_when: false
+      when: distributed_cloud_role == 'systemcontroller'
+
+    - name: Fail if resize of patch-vault filesystem fails
+      fail:
+        msg: "resize2fs /dev/drbd6 failed for the following reason: {{ resize2fs_patch_resize_output.stderr }}"
+      when: distributed_cloud_role == 'systemcontroller' and
+            resize2fs_patch_resize_output.rc is defined and
+            resize2fs_patch_resize_output.rc != 0 and
+            resize2fs_patch_resize_output.stderr is not search('Nothing to do!')
+    when: check_online.stdout == "online"
 
   # Restore ceph-mon data
   - block:
