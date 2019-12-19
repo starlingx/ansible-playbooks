@@ -16,6 +16,7 @@
 #   - Prepare Multus config and activate Multus networking
 #   - Prepare SRIOV config and activate SRIOV networking
 #   - Prepare SRIOV device plugin config and activate SRIOV device plugin
+#   - Restore Helm charts if the host is bootstrapped in restore mode
 #   - Restrict coredns to master node and set anti-affnity (duplex system)
 #   - Restrict coredns to 1 pod (simplex system)
 #   - Remove taint from master node
@@ -23,6 +24,11 @@
 #   - Register kubelet with pmond
 #   - Reload systemd
 #
+
+- name: Check if we have to do k8s_restore or clean initialization
+  set_fact:
+    k8s_restore: true
+  when: mode == 'restore' and not wipe_ceph_osds|bool
 
 - name: Setup iptables for Kubernetes
   lineinfile:
@@ -69,7 +75,7 @@
       dest: "{{ kubeadm_pki_dir }}/{{item.key}}"
     with_dict: "{{ k8s_pki_files }}"
 
-  when: k8s_pki_files is defined
+  when: k8s_pki_files is defined and not k8s_restore
 
 - name: Set kubelet node configuration
   set_fact:
@@ -94,6 +100,7 @@
     src: "encryption-provider.yaml.j2"
     dest: "{{ encryption_provider_config }}"
     mode: 0600
+  when: not k8s_restore
 
 - name: Create Kube admin yaml
   copy:
@@ -183,8 +190,55 @@
   environment:
     ENCRYPTION_PROVIDER_CONFIG: "{{ encryption_provider_config }}"
 
+- name: Set Calico cluster configuration
+  set_fact:
+    cluster_network_ipv4: "{{ cluster_pod_subnet | ipv4 }}"
+    cluster_network_ipv6: "{{ cluster_pod_subnet | ipv6 }}"
+
+- name: Create Calico config file
+  template:
+    src: "k8s-{{ kubernetes_version }}/calico-cni.yaml.j2"
+    dest: /etc/kubernetes/calico.yaml
+
+- name: Create Multus config file
+  template:
+    src: "k8s-{{ kubernetes_version }}/multus-cni.yaml.j2"
+    dest: /etc/kubernetes/multus.yaml
+
+- name: Create SRIOV Networking config file
+  template:
+    src: "k8s-{{ kubernetes_version }}/sriov-cni.yaml.j2"
+    dest: /etc/kubernetes/sriov-cni.yaml
+
+- name: Create SRIOV device plugin config file
+  template:
+    src: "k8s-{{ kubernetes_version }}/sriov-plugin.yaml.j2"
+    dest: /etc/kubernetes/sriovdp-daemonset.yaml
+
+- block:
+  - name: Restore kubernetes certificates
+    shell: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} {{ item }}
+    args:
+      warn: false
+    with_items:
+      - "{{ kubeadm_pki_dir | regex_replace('^\\/', '') }}"
+    become_user: root
+
+  - name: Restore encryption provider config
+    shell: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} {{ item }}
+    args:
+      warn: false
+    with_items:
+      - "{{ encryption_provider_config | regex_replace('^\\/', '') }}"
+    become_user: root
+
+  - name: Restore etcd database
+    import_tasks: restore_etcd.yml
+
+  when: k8s_restore
+
 - name: Initializing Kubernetes master
-  command: kubeadm init --config=/etc/kubernetes/kubeadm.yaml
+  command: kubeadm init --ignore-preflight-errors=DirAvailable--var-lib-etcd --config=/etc/kubernetes/kubeadm.yaml
 
 - name: Update kube admin.conf file mode and owner
   file:
@@ -198,79 +252,56 @@
     dest: /etc/profile.d/kubeconfig.sh
     remote_src: yes
 
-- name: Patch pull secret into kube-proxy service account
-  command: >
-    kubectl --kubeconfig=/etc/kubernetes/admin.conf patch serviceaccount
-    kube-proxy -p '{"imagePullSecrets": [{"name": "registry-local-secret"}]}' -n kube-system
-
-- name: Find old local registry secret
-  shell: "kubectl --kubeconfig=/etc/kubernetes/admin.conf get secrets -n kube-system |
-          grep registry-local-secret | awk '{print $1}'"
-  register: old_local_registry_secret
-
-- name: Delete old local registry secret
-  shell: "kubectl --kubeconfig=/etc/kubernetes/admin.conf delete secret -n kube-system registry-local-secret"
-  when: old_local_registry_secret.stdout
-
-- name: Create local registry pull secret
-  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf create secret docker-registry registry-local-secret
-            --docker-server={{ local_registry }} --docker-username={{ local_registry_credentials['username'] }}
-            --docker-password={{ local_registry_credentials['password'] }} -n kube-system"
-
-- name: Set Calico cluster configuration
-  set_fact:
-    cluster_network_ipv4: "{{ cluster_pod_subnet | ipv4 }}"
-    cluster_network_ipv6: "{{ cluster_pod_subnet | ipv6 }}"
-
-# Configure calico networking using the Kubernetes API datastore.
-- name: Create Calico config file
-  template:
-    src: "k8s-{{ kubernetes_version }}/calico-cni.yaml.j2"
-    dest: /etc/kubernetes/calico.yaml
-
-- name: Activate Calico Networking
-  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/calico.yaml"
-
-- name: Create Multus config file
-  template:
-    src: "k8s-{{ kubernetes_version }}/multus-cni.yaml.j2"
-    dest: /etc/kubernetes/multus.yaml
-
-- name: Activate Multus Networking
-  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/multus.yaml"
-
-- name: Create SRIOV Networking config file
-  template:
-    src: "k8s-{{ kubernetes_version }}/sriov-cni.yaml.j2"
-    dest: /etc/kubernetes/sriov-cni.yaml
-
-- name: Activate SRIOV Networking
-  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/sriov-cni.yaml"
-
-- name: Create SRIOV device plugin config file
-  template:
-    src: "k8s-{{ kubernetes_version }}/sriov-plugin.yaml.j2"
-    dest: /etc/kubernetes/sriovdp-daemonset.yaml
-
-- name: Activate SRIOV device plugin
-  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/sriovdp-daemonset.yaml"
-
-  # Restrict coredns to master node and use anti-affinity for core dns for duplex systems
 - block:
-  - name: Restrict coredns to master node
-    command: >-
-      kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system patch deployment coredns -p
-      '{"spec":{"template":{"spec":{"nodeSelector":{"node-role.kubernetes.io/master":""}}}}}'
+  - name: Patch pull secret into kube-proxy service account
+    command: >
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf patch serviceaccount
+      kube-proxy -p '{"imagePullSecrets": [{"name": "registry-local-secret"}]}' -n kube-system
 
-  - name: Use anti-affinity for coredns pods
-    command: >-
-      kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system patch deployment coredns -p
-      '{"spec":{"template":{"spec":{"affinity":{"podAntiAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":[{"labelSelector":{"matchExpressions":[{"key":"k8s-app","operator":"In","values":["kube-dns"]}]},"topologyKey":"kubernetes.io/hostname"}]}}}}}}'
-  when: system_mode != 'simplex'
+  - name: Find old local registry secret
+    shell: "kubectl --kubeconfig=/etc/kubernetes/admin.conf get secrets -n kube-system |
+            grep registry-local-secret | awk '{print $1}'"
+    register: old_local_registry_secret
 
-- name: Restrict coredns to 1 pod for simplex
-  command: kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system scale --replicas=1 deployment coredns
-  when: system_mode == 'simplex'
+  - name: Delete old local registry secret
+    shell: "kubectl --kubeconfig=/etc/kubernetes/admin.conf delete secret -n kube-system registry-local-secret"
+    when: old_local_registry_secret.stdout
+
+  - name: Create local registry pull secret
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf create secret docker-registry registry-local-secret
+              --docker-server={{ local_registry }} --docker-username={{ local_registry_credentials['username'] }}
+              --docker-password={{ local_registry_credentials['password'] }} -n kube-system"
+
+  - name: Activate Calico Networking
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/calico.yaml"
+
+  - name: Activate Multus Networking
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/multus.yaml"
+
+  - name: Activate SRIOV Networking
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/sriov-cni.yaml"
+
+  - name: Activate SRIOV device plugin
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/sriovdp-daemonset.yaml"
+
+    # Restrict coredns to master node and use anti-affinity for core dns for duplex systems
+  - block:
+    - name: Restrict coredns to master node
+      command: >-
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system patch deployment coredns -p
+        '{"spec":{"template":{"spec":{"nodeSelector":{"node-role.kubernetes.io/master":""}}}}}'
+
+    - name: Use anti-affinity for coredns pods
+      command: >-
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system patch deployment coredns -p
+        '{"spec":{"template":{"spec":{"affinity":{"podAntiAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":[{"labelSelector":{"matchExpressions":[{"key":"k8s-app","operator":"In","values":["kube-dns"]}]},"topologyKey":"kubernetes.io/hostname"}]}}}}}}'
+    when: system_mode != 'simplex'
+
+  - name: Restrict coredns to 1 pod for simplex
+    command: kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system scale --replicas=1 deployment coredns
+    when: system_mode == 'simplex'
+
+  when: not k8s_restore
 
 - name: Remove taint from master node
   shell: "kubectl --kubeconfig=/etc/kubernetes/admin.conf taint node controller-0 node-role.kubernetes.io/master- || true"
@@ -288,7 +319,7 @@
       dest: "{{ config_permdir }}/enabled_kube_plugins"
       mode: 0640
       group: sys_protected
-  when: k8s_plugins
+  when: k8s_plugins and not k8s_restore
 
 - name: Add kubelet service override
   copy:

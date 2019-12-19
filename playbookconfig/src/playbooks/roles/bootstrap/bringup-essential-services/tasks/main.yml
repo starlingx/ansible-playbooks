@@ -88,22 +88,48 @@
     wait_for:
       timeout: "{{ pods_wait_time }}"
 
+  - name: Set async parameters
+    set_fact:
+      async_timeout: 30
+      async_retries: 10
+
+  - name: Set Kubernetes components list
+    set_fact:
+      kube_component_list:
+        - k8s-app=calico-node
+        - k8s-app=calico-kube-controllers
+        - k8s-app=kube-proxy
+        - app=multus
+        - app=sriov-cni
+        - app=helm
+        - component=kube-apiserver
+        - component=kube-controller-manager
+        - component=kube-scheduler
+
+  - block:
+    - name: Update Kubernetes components list
+      set_fact:
+        # We skip the calico-node pod on AIO-DX and STANDARD setups
+        # because the pods running on a different host than controller-0 will
+        # be unreachable at this moment and the calico-node pods
+        # will try to connect to them and fail forever
+        kube_component_list: "{{ kube_component_list | reject('search', 'calico-node') | list }}"
+
+    - name: Override async parameters
+      set_fact:
+        async_timeout: 120
+        async_retries: 20
+      when: system_type == 'Standard'
+
+    when: mode == 'restore'
+
   - name: Start parallel tasks to wait for Kubernetes component, Networking and Tiller pods to reach ready state
     command: >-
       kubectl --kubeconfig=/etc/kubernetes/admin.conf wait  --namespace=kube-system
       --for=condition=Ready pods --selector {{ item }} --timeout=30s
-    async: 30
+    async: "{{ async_timeout }}"
     poll: 0
-    with_items:
-      - k8s-app=calico-node
-      - k8s-app=calico-kube-controllers
-      - k8s-app=kube-proxy
-      - app=multus
-      - app=sriov-cni
-      - app=helm
-      - component=kube-apiserver
-      - component=kube-controller-manager
-      - component=kube-scheduler
+    with_items: "{{ kube_component_list }}"
     register: wait_for_pods
 
   - name: Get wait tasks results
@@ -113,7 +139,15 @@
     until: wait_job_result.finished
     # Set the retry to 10 times (60 seconds) but the async jobs above will
     # complete (success or failure) within 30 seconds
-    retries: 10
+    retries: "{{ async_retries }}"
+    # At B&R, after the restore phase, this will fail on duplex or standard systems because
+    # some of the resources that we are waiting for are replicasets and daemonsets
+    # and some pods will be launched on a different host than controller-0.
+    # Since only the controller-0 is online at this step, the rest of the pods that
+    # are on a different host will fail to start, so we only need to check that
+    # at least 1 pod from every deployment is up and running. If there are none active
+    # from a particular deployment it will be caught in the next task.
+    failed_when: false
     with_items: "{{ wait_for_pods.results }}"
 
   - name: Fail if any of the Kubernetes component, Networking and Tiller pods is not ready by this time

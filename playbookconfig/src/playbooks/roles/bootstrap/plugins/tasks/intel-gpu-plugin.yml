@@ -6,3 +6,4 @@
 
 - name: Activate Intel GPU device plugin
   command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/intel-gpu-daemonset.yaml"
+  when: not k8s_restore

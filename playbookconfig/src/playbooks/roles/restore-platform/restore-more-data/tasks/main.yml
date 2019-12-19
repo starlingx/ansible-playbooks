@@ -143,13 +143,12 @@
     warn: false
   become_user: root
 
-- name: Restore Helm charts, armada manifests and extension filesystem
+- name: Restore armada manifests and extension filesystem
   command: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} {{ item }}
   args:
     warn: false
   become_user: root
   with_items:
-    - "{{ helm_charts_permdir | regex_replace('^\\/', '') }}"
     - "{{ armada_permdir | regex_replace('^\\/', '') }}"
     - "{{ extension_permdir | regex_replace('^\\/', '') }}"
 
@@ -307,8 +306,13 @@
     become_user: postgres
     register: app_res
 
-  - name: Set stx-openstack app to "uploaded" state
-    shell: psql -c "update kube_app set status='uploaded' where name='stx-openstack'" sysinv
+  - block:
+    - name: Set stx-openstack app to "uploaded" state
+      shell: psql -c "update kube_app set status='uploaded' where name='stx-openstack'" sysinv
+
+    - name: Set stx-openstack app to inactive
+      shell: psql -c "update kube_app set active='f' where name='stx-openstack'" sysinv
+
     become_user: postgres
     when: app_res.stdout is search('applied')
 
