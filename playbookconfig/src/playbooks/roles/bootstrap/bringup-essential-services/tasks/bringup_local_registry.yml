@@ -48,51 +48,6 @@
   when: (insecure_registries is defined and
         insecure_registries | length > 0)
 
-- name: Create containerd config file directory
-  file:
-    path: /etc/containerd
-    state: directory
-    mode: 0700
-
-- name: Create config.toml file for containerd configuration
-  copy:
-    src: "{{ containerd_template }}"
-    dest: /etc/containerd/config.toml
-    remote_src: yes
-    mode: 0600
-
-- name: Remove puppet template for insecure registries
-  replace:
-    path: /etc/containerd/config.toml
-    after: '# Begin of insecure registries'
-    regexp: '^(<%- @insecure_registries.+)\n(.+)\n(.+)\n(.+end -%>)'
-    replace: ''
-
-- name: Update config.toml with insecure registries
-  blockinfile:
-    path: /etc/containerd/config.toml
-    insertafter: '# Begin of insecure registries'
-    marker: "        # {{ item }}"
-    block: |2
-              [plugins.cri.registry.mirrors."{{ item }}"]
-                endpoint = ["http://{{ item }}"]
-  loop:
-    "{{ insecure_registries }}"
-  when: (insecure_registries is defined and
-        insecure_registries | length > 0)
-
-- name: Update config.toml with cni bin dir
-  command: "sed -i -e 's|<%= @k8s_cni_bin_dir %>|$CNI_BIN_DIR|g' /etc/containerd/config.toml"
-  args:
-    warn: false
-  environment:
-    CNI_BIN_DIR: "{{ kubelet_cni_bin_dir }}"
-
-- name: Restart containerd
-  systemd:
-    name: containerd
-    state: restarted
-
 - name: Generate local registry runtime config file from template
   copy:
     src: "{{ registry_config_template }}"

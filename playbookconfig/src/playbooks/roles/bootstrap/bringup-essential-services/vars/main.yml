@@ -17,7 +17,6 @@ registry_token_server_template: /usr/share/puppet/modules/platform/templates/reg
 registry_token_server_file: /etc/docker-distribution/registry/token_server.conf
 cert_cnf_template: /usr/share/puppet/modules/platform/templates/registry-cert-extfile.erb
 insecure_docker_registry_template: /usr/share/puppet/modules/platform/templates/insecuredockerregistry.conf.erb
-containerd_template: /usr/share/puppet/modules/platform/templates/config.toml.erb
 cert_cnf_file: /etc/ssl/private/registry-cert-extfile.cnf
 registry_cert_key: /etc/ssl/private/registry-cert.key
 registry_cert_crt: /etc/ssl/private/registry-cert.crt

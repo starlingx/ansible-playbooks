@@ -11,8 +11,6 @@ import sys
 import time
 import os
 import json
-import keyring
-import subprocess
 
 MAX_DOWNLOAD_ATTEMPTS = 3
 MAX_DOWNLOAD_THREAD = 5
@@ -56,29 +54,14 @@ def download_an_image(img):
     local_img = 'registry.local:9001/' + new_img
     err_msg = " Image download failed: %s" % target_img
 
-    password = str(keyring.get_password("CGCS", "admin"))
-    if not password:
-        raise Exception("Local registry password not found.")
-    auth = '{0}:{1}'.format('admin', password)
-
     for i in range(MAX_DOWNLOAD_ATTEMPTS):
         try:
             client = docker.APIClient()
             client.pull(target_img)
-            print("Image download succeeded: %s" % target_img)
             client.tag(target_img, local_img)
             client.push(local_img)
+            print("Image download succeeded: %s" % target_img)
             print("Image push succeeded: %s" % local_img)
-            # due to crictl doesn't support push function, docker client is used
-            # to pull and push image to local registry, then crictl download image
-            # from local registry.
-            subprocess.check_call(["crictl", "pull", "--creds", auth, local_img])
-            print("Image %s download succeeded by containerd" % target_img)
-            # except armada/tiller, other docker images could be removed.
-            # TODO: run armada with containerd.
-            if not ('armada' in target_img or 'tiller' in target_img):
-                client.remove_image(target_img)
-                client.remove_image(local_img)
             return target_img, True
         except docker.errors.NotFound as e:
             print(err_msg + str(e))
