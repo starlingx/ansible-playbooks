@@ -9,10 +9,10 @@ URL: unknown
 Source0: %{name}-%{version}.tar.gz
 
 Requires: ansible
-Requires: python
-Requires: python2-netaddr
-Requires: python2-ptyprocess
-Requires: python2-pexpect
+Requires: python3
+Requires: python3-netaddr
+Requires: python3-ptyprocess
+Requires: python3-pexpect
 Requires: sshpass
 Requires: sysinv
 
