@@ -1,0 +1,24 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ rvmc_name }}
+spec:
+  ttlSecondsAfterFinished: 600
+  activeDeadlineSeconds: 600
+  backoffLimit: 1
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: {{ host_name }}
+      containers:
+        - name: rvmc
+          image: {{ rvmc_image }}
+          volumeMounts:
+            - mountPath: /etc/rvmc.yaml
+              name: rvmc-config
+      volumes:
+        - name: rvmc-config
+          hostPath:
+            path: {{ rvmc_config_file }}
+      restartPolicy: Never
