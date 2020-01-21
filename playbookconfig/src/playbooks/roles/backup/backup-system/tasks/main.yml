@@ -181,7 +181,7 @@
       copy:
         dest: "{{ helm_overrides_dir.path }}/helm_overrides_dump.sql"
         mode: 0755
-        content: '{{ updates_list }}'
+        content: '{{ updates_list | default("") }}'
 
 
     # Now Postgres data and MariaDB data are stored in staging dir, we can estimate
