@@ -3,7 +3,6 @@ source_helm_bind_dir: /opt/platform/helm_charts
 target_helm_bind_dir: /www/pages/helm_charts
 helm_repo_name_apps: starlingx
 helm_repo_name_platform: stx-platform
-kube_admin_yaml_template: /usr/share/puppet/modules/platform/templates/kubeadm.yaml.erb
 kubelet_override_template: /usr/share/puppet/modules/platform/templates/kube-stx-override.conf.erb
 kubelet_pmond_template: /usr/share/puppet/modules/platform/templates/kubelet-pmond-conf.erb
 kubelet_cni_bin_dir: /usr/libexec/cni
