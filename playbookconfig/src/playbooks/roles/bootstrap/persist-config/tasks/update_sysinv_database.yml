@@ -85,6 +85,11 @@
     timeout: 450
     msg: Timeout waiting for service endpoints reconfiguration to complete
 
+- name: Restart barbican
+  systemd:
+    state: restarted
+    name: openstack-barbican-api
+
 - name: Wait for system controller database configuration to complete
   wait_for:
     path: /etc/platform/.sc_database_configured
