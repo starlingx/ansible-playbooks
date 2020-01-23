@@ -1,0 +1,156 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Install Playbook
+  hosts: all
+  gather_facts: false
+  become: no
+  tasks:
+    - set_fact:
+        ansible_port: "{{ ansible_port | default(22) }}"
+        rvmc_resource_file: "{{ rvmc_config_dir }}/rvmc.yaml"
+        rvmc_image: "{{ rvmc_image | default('docker.io/starlingx/rvmc') }}"
+        rvmc_config_file: "{{ rvmc_config_dir }}/rvmc-config.yaml"
+        pod_schedule_time: "{{ pod_schedule_time | default(60) }}"
+        job_wait_time: "{{ job_wait_time | default(900) }}"
+        boot_wait_time: " {{ boot_wait_time | default(600) }}"
+        wait_for_timeout: " {{ wait_for_timeout | default(3600) }}"
+
+    # The following block is executed locally
+    - block:
+      - name: Clean up the Redfish Virtual Media Controller from previous run if it has not been cleaned automatically
+        command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf delete job {{ rvmc_name }}"
+        register: deleted_job
+        failed_when: false
+        no_log: true
+
+      - name: Wait for 60 seconds to ensure Redfish Virtual Media Controller pods are terminated
+        wait_for:
+          timeout: 60
+        when: deleted_job.rc == 0
+
+      - name: Create Redfish Virtual Media Controller resource file
+        template:
+          src: "roles/install/templates/rvmc.yaml.j2"
+          dest: "{{ rvmc_resource_file }}"
+
+      - name: Activate Redfish Virtual Media Controller
+        command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ rvmc_resource_file }}"
+
+      - name: Get the pod name that created by Redfish Virtual Media Controller batch job
+        command: >-
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -l job-name={{ rvmc_name }}
+          --output=jsonpath='{.items[*].metadata.name}'
+        failed_when: pod_name.stdout == ""
+        register: pod_name
+
+      - block:
+        - set_fact:
+            rvmc_pod_name: "{{ pod_name.stdout_lines[0] }}"
+
+        - name: Wait for {{ pod_schedule_time }} seconds for {{ rvmc_pod_name }} to be ready
+          command: >-
+            kubectl --kubeconfig=/etc/kubernetes/admin.conf wait
+            --for=condition=Ready pod/{{ rvmc_pod_name }}
+            --timeout={{ pod_schedule_time }}s
+          failed_when: false
+          register: wait_for_pod
+
+        - block:
+          - name: Save Redfish Virtual Media Controller logs if {{ rvmc_pod_name }} is not ready
+            command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf logs {{ rvmc_pod_name }}"
+            register: pod_logs
+
+          - debug:
+              msg: "{{ pod_logs.stdout }}"
+
+          - name: Fail if {{ rvmc_pod_name }} is not ready
+            fail: msg="Redfish Virtual Media Controller failed to start the install"
+
+          when: wait_for_pod.rc != 0
+
+        # The rvmc takes few minutes to open the client connection.
+        # It takes longer when it fails, and the running pod goes to error state
+        - name: Wait for 200 seconds to ensure Redfish Client Connection to BMC is established
+          wait_for:
+            timeout: 200
+
+        - name: Check if the Redfish Virtual Media Controller is in an error state
+          command: >-
+            kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -l job-name={{ rvmc_name }}
+            --field-selector=status.phase!=Running,status.phase!=Succeeded
+          register: pod_has_error
+
+        - block:
+          - name: Save Redfish Virtual Media Controller logs if it is in an error state
+            command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf logs {{ rvmc_pod_name }}"
+            register: pod_error_logs
+
+          - debug:
+              msg: "{{ pod_error_logs.stdout }}"
+
+          - name: Fail if Redfish Virtual Media Controller enters an error state
+            fail: msg="Redfish Virtual Media Controller failed to install the host"
+
+          when: pod_has_error.stdout != ""
+
+      - name: Wait for {{ job_wait_time }} seconds for Redfish Virtual Media Controller to complete
+        command: >-
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf wait
+          --for=condition=complete job/{{ rvmc_name }} --timeout={{ job_wait_time }}s
+        failed_when: false
+        register: wait_for_rvmc
+
+      - name: Store Redfish Virtual Media Controller log after the job is completed
+        command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf logs job/{{ rvmc_name }}"
+        register: rvmc_logs
+
+      - debug:
+          msg: "{{ rvmc_logs.stdout }}"
+
+      - block:
+        - debug:
+            msg: "{{ wait_for_rvmc.stdout }}"
+
+        - name: Fail if waiting for Redfish Virtual Media Controller returns an error
+          fail: msg="Failed to install the host via Redfish Virtual Media Controller."
+
+        when: wait_for_rvmc.rc != 0
+
+      delegate_to: localhost
+
+    - debug:
+        msg: "Waiting for the system to install..."
+
+    - name: Waiting {{ wait_for_timeout }} seconds for port {{ ansible_port }} become open on {{ ansible_host }}
+      local_action:
+        module: wait_for
+          port={{ ansible_port }}
+          host={{ ansible_host }}
+          delay={{ boot_wait_time }}
+          timeout={{ wait_for_timeout }}
+          state=started
+
+    - set_fact:
+        override_files_dir: "{{ lookup('env', 'HOME') }}"
+        password_change_responses:
+          yes/no: 'yes'
+          sysadmin*: 'sysadmin'
+          \(current\) UNIX password: 'sysadmin'
+          (?i)New password: "{{ ansible_ssh_pass }}"
+          (?i)Retype new password: "{{ ansible_ssh_pass }}"
+
+    - import_role:
+        name: common/prepare-env
+
+    - name: Check if the system is ready
+      command: "systemctl is-active multi-user.target"
+      register: check_active
+      retries: 30
+      delay: 40
+      until: check_active.rc == 0
+      no_log: true
