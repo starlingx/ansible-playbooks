@@ -236,13 +236,18 @@
       - "{{ containerd_proxy_conf }}"
     when: docker_https_proxy != 'undef'
 
-  - name: Add no proxy address list to docker and containerd proxy config files
+  - name: Add no proxy address list to docker proxy config file
     lineinfile:
-      path: "{{ item }}"
+      path: "{{ docker_proxy_conf }}"
       line: "Environment='NO_PROXY={{ docker_no_proxy_combined | join(',') }}'"
-    with_items:
-      - "{{ docker_proxy_conf }}"
-      - "{{ containerd_proxy_conf }}"
+
+  # Containerd doesn't work with the NO_PROXY environment
+  # variable if it has IPv6 addresses with square brackets,
+  # remove the square brackets
+  - name: Add no proxy address list to containerd proxy config file
+    lineinfile:
+      path: "{{ containerd_proxy_conf }}"
+      line: "Environment='NO_PROXY={{ docker_no_proxy_combined | join(',') | regex_replace('\\[|\\]', '') }}'"
 
   - name: Restart Docker and containerd
     systemd:
