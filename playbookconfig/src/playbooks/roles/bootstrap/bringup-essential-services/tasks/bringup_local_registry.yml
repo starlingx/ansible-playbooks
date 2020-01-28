@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2020 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -145,22 +145,15 @@
     REGISTRY_KS_ENDPOINT: "http://{{ controller_floating_address_url }}:5000/v3"
 
 - block:
-  - name: Generate cnf file from template
-    copy:
-      src: "{{ cert_cnf_template }}"
-      dest: "{{ cert_cnf_file }}"
-      remote_src: yes
+  - name: Set network info for docker registry
+    set_fact:
+      docker_registry_ip: "{{ controller_floating_address }}"
+      docker_registry_public_ip: "{{ external_oam_floating_address }}"
 
-  - name: Update cnf file with network info
-    command: "{{ item }}"
-    args:
-      warn: false
-    with_items:
-      - "sed -i -e 's|<%= @docker_registry_ip %>|'$DOCKER_REGISTRY_IP'|g' {{ cert_cnf_file }}"
-      - "sed -i -e 's|<%= @docker_registry_public_ip %>|'$DOCKER_REGISTRY_PUBLIC_IP'|g' {{ cert_cnf_file }}"
-    environment:
-      DOCKER_REGISTRY_IP: "{{ controller_floating_address }}"
-      DOCKER_REGISTRY_PUBLIC_IP: "{{ external_oam_floating_address }}"
+  - name: Generate cnf file from template
+    template:
+      src: "registry-cert-extfile.j2"
+      dest: "{{ cert_cnf_file }}"
 
   - name: Generate certificate and key files
     command: >-

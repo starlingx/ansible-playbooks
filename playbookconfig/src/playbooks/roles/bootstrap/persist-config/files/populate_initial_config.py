@@ -16,16 +16,8 @@ import subprocess
 import sys
 import time
 
-# The following imports are to make use of the OpenStack cgtsclient and some
-# constants in controllerconfig. When it is time to remove/deprecate these
-# packages, classes OpenStack, Token and referenced constants need to be moved
-# to this standalone script.
-from controllerconfig.common import constants
-from controllerconfig import ConfigFail
-from controllerconfig import openstack
-from controllerconfig import sysinv_api as sysinv
-
 from netaddr import IPNetwork
+from cgtsclient import client as cgts_client
 from sysinv.common import constants as sysinv_constants
 
 try:
@@ -41,7 +33,80 @@ RECONFIGURE_NETWORK = False
 RECONFIGURE_SERVICE = False
 INITIAL_POPULATION = True
 INCOMPLETE_BOOTSTRAP = False
+SYSTEM_CONFIG_TIMEOUT = 420
 CONF = ConfigParser()
+
+
+class CgtsClient(object):
+    SYSINV_API_VERSION = 1
+
+    def __init__(self):
+        self.conf = {}
+        self._sysinv = None
+
+        source_command = 'source /etc/platform/openrc && env'
+
+        with open(os.devnull, "w") as fnull:
+            proc = subprocess.Popen(
+                ['bash', '-c', source_command],
+                stdout=subprocess.PIPE, stderr=fnull)
+
+        for line in proc.stdout:
+            key, _, value = line.partition("=")
+            if key == 'OS_USERNAME':
+                self.conf['admin_user'] = value.strip()
+            elif key == 'OS_PASSWORD':
+                self.conf['admin_pwd'] = value.strip()
+            elif key == 'OS_PROJECT_NAME':
+                self.conf['admin_tenant'] = value.strip()
+            elif key == 'OS_AUTH_URL':
+                self.conf['auth_url'] = value.strip()
+            elif key == 'OS_REGION_NAME':
+                self.conf['region_name'] = value.strip()
+            elif key == 'OS_USER_DOMAIN_NAME':
+                self.conf['user_domain'] = value.strip()
+            elif key == 'OS_PROJECT_DOMAIN_NAME':
+                self.conf['project_domain'] = value.strip()
+
+        proc.communicate()
+
+    @property
+    def sysinv(self):
+        if not self._sysinv:
+            self._sysinv = cgts_client.get_client(
+                self.SYSINV_API_VERSION,
+                os_username=self.conf['admin_user'],
+                os_password=self.conf['admin_pwd'],
+                os_auth_url=self.conf['auth_url'],
+                os_project_name=self.conf['admin_tenant'],
+                os_project_domain_name=self.conf['project_domain'],
+                os_user_domain_name=self.conf['user_domain'],
+                os_region_name=self.conf['region_name'],
+                os_service_type='platform',
+                os_endpoint_type='admin')
+        return self._sysinv
+
+
+class ConfigFail(Exception):
+    """Base class for general configuration exceptions."""
+
+    def __init__(self, message=None):
+        self.message = message
+        super(ConfigFail, self).__init__(message)
+
+    def __str__(self):
+        return self.message or ""
+
+
+def dict_to_patch(values, install_action=False):
+    # install default action
+    if install_action:
+        values.update({'action': 'install'})
+    patch = []
+    for key, value in values.items():
+        path = '/' + key
+        patch.append({'op': 'replace', 'path': path, 'value': value})
+    return patch
 
 
 def touch(fname):
@@ -55,7 +120,7 @@ def is_subcloud():
 
 
 def wait_system_config(client):
-    for _ in range(constants.SYSTEM_CONFIG_TIMEOUT):
+    for _ in range(SYSTEM_CONFIG_TIMEOUT):
         try:
             systems = client.sysinv.isystem.list()
             if systems:
@@ -115,7 +180,7 @@ def populate_system_config(client):
             {'system_type': CONF.get('BOOTSTRAP_CONFIG', 'SYSTEM_TYPE')}
         )
 
-    patch = sysinv.dict_to_patch(values)
+    patch = dict_to_patch(values)
     try:
         client.sysinv.isystem.update(system.uuid, patch)
     except Exception as e:
@@ -547,7 +612,7 @@ def populate_dns_config(client):
         'nameservers': nameservers.rstrip(','),
         'action': 'apply'
     }
-    patch = sysinv.dict_to_patch(values)
+    patch = dict_to_patch(values)
     client.sysinv.idns.update(dns_record.uuid, patch)
     print("DNS config completed.")
 
@@ -842,16 +907,16 @@ def populate_controller_config(client):
     install_output = get_orig_install_mode()
     print("Install output = %s" % install_output)
 
-    provision_state = sysinv.HOST_PROVISIONING
+    provision_state = sysinv_constants.PROVISIONING
 
     values = {
-        'personality': sysinv.HOST_PERSONALITY_CONTROLLER,
+        'personality': sysinv_constants.CONTROLLER,
         'hostname': CONF.get('BOOTSTRAP_CONFIG', 'CONTROLLER_HOSTNAME'),
         'mgmt_ip': CONF.get('BOOTSTRAP_CONFIG', 'CONTROLLER_0_ADDRESS'),
         'mgmt_mac': mgmt_mac,
-        'administrative': sysinv.HOST_ADMIN_STATE_LOCKED,
-        'operational': sysinv.HOST_OPERATIONAL_STATE_DISABLED,
-        'availability': sysinv.HOST_AVAIL_STATE_OFFLINE,
+        'administrative': sysinv_constants.ADMIN_LOCKED,
+        'operational': sysinv_constants.OPERATIONAL_DISABLED,
+        'availability': sysinv_constants.AVAILABILITY_OFFLINE,
         'invprovision': provision_state,
         'rootfs_device': rootfs_device,
         'boot_device': boot_device,
@@ -878,7 +943,7 @@ def populate_controller_config(client):
 
 
 def wait_initial_inventory_complete(client, host):
-    for _ in range(constants.SYSTEM_CONFIG_TIMEOUT / 10):
+    for _ in range(SYSTEM_CONFIG_TIMEOUT / 10):
         try:
             host = client.sysinv.ihost.get('controller-0')
             if host and (host.inv_state ==
@@ -960,25 +1025,21 @@ if __name__ == '__main__':
     INCOMPLETE_BOOTSTRAP = CONF.getboolean('BOOTSTRAP_CONFIG',
                                            'INCOMPLETE_BOOTSTRAP')
 
-    # Puppet manifest might be applied as part of initial host
-    # config, set INITIAL_CONFIG_PRIMARY variable just in case.
-    os.environ["INITIAL_CONFIG_PRIMARY"] = "true"
-
     try:
-        with openstack.OpenStack() as client:
-            populate_system_config(client)
-            populate_load_config(client)
-            populate_network_config(client)
-            populate_dns_config(client)
-            populate_docker_config(client)
-            controller = populate_controller_config(client)
-            inventory_config_complete_wait(client, controller)
-            populate_default_storage_backend(client, controller)
-            os.remove(config_file)
-            if INITIAL_POPULATION:
-                print("Successfully updated the initial system config.")
-            else:
-                print("Successfully provisioned the initial system config.")
+        client = CgtsClient()
+        populate_system_config(client)
+        populate_load_config(client)
+        populate_network_config(client)
+        populate_dns_config(client)
+        populate_docker_config(client)
+        controller = populate_controller_config(client)
+        inventory_config_complete_wait(client, controller)
+        populate_default_storage_backend(client, controller)
+        os.remove(config_file)
+        if INITIAL_POPULATION:
+            print("Successfully updated the initial system config.")
+        else:
+            print("Successfully provisioned the initial system config.")
     except Exception:
         # Print the marker string for Ansible and re raise the exception
         if INITIAL_POPULATION:

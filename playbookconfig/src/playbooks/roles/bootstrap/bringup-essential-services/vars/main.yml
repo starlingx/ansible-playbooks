@@ -15,7 +15,6 @@ registry_readonly_config_file: /etc/docker-distribution/registry/readonly_config
 registry_config_file: /etc/docker-distribution/registry/config.yml
 registry_token_server_template: /usr/share/puppet/modules/platform/templates/registry-token-server.conf.erb
 registry_token_server_file: /etc/docker-distribution/registry/token_server.conf
-cert_cnf_template: /usr/share/puppet/modules/platform/templates/registry-cert-extfile.erb
 insecure_docker_registry_template: /usr/share/puppet/modules/platform/templates/insecuredockerregistry.conf.erb
 containerd_template: /usr/share/puppet/modules/platform/templates/config.toml.erb
 cert_cnf_file: /etc/ssl/private/registry-cert-extfile.cnf

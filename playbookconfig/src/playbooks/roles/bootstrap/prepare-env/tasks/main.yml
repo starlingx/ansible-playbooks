@@ -9,17 +9,17 @@
 #   the next step.
 #
 
-# Check for one of unmistakenly StarlingX packages
-- name: "Look for unmistakenly {{ image_brand }} package"
-  command: rpm -q controllerconfig
+# Check for unmistakenly StarlingX packages
+- name: "Look for unmistakenly {{ image_brand }} packages"
+  command: rpm -q sysinv cgts-client
   args:
     warn: false
   failed_when: false
-  register: controllerconfig_installed
+  register: packages_installed
 
 - name: Fail if host is not running the right image
   fail: msg='Host {{ ansible_host }} does not have the right image!.'
-  when: controllerconfig_installed.rc > 0
+  when: packages_installed.rc > 0
 
 # Bail if the host has been unlocked
 - name: Check initial config flag
