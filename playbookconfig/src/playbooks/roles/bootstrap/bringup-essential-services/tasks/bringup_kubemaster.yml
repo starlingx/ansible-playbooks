@@ -87,9 +87,8 @@
 
 - name: Create Kube admin yaml
   copy:
-    src: "{{ kube_admin_yaml_template }}"
+    src: roles/common/files/kubeadm.yaml.erb
     dest: /etc/kubernetes/kubeadm.yaml
-    remote_src: yes
 
 - name: Set loopback ip for kubeadm configuration
   set_fact:
