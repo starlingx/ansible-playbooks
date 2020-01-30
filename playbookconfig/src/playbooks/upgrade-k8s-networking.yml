@@ -12,6 +12,9 @@
     overrides_file: "/tmp/upgrade_overrides.yaml"
 
   tasks:
+    - name: Fail if kubernetes_version is not defined
+      fail: msg="The mandatory parameter kubernetes_version is not defined."
+      when: kubernetes_version is not defined
 
     - name: Create the upgrade overrides file
       command: "/usr/bin/sysinv-utils create-host-overrides {{ overrides_file }}"
@@ -27,18 +30,13 @@
         cluster_network_ipv6: "{{ cluster_pod_subnet | ipv6 }}"
         cluster_floating_address: "{{ cluster_host_floating_address }}"
 
-    - name: Set images facts
-      include_vars:
-        dir: "roles/bootstrap/bringup-essential-services/vars"
-        files_matching: main.yml
-
     - name: Upgrade k8s networking images
       import_role:
         name: common/push-docker-images
 
     - name: Create Calico config file
       template:
-        src: "roles/bootstrap/bringup-essential-services/templates/calico-cni.yaml.j2"
+        src: "roles/bootstrap/bringup-essential-services/templates/k8s-{{ kubernetes_version }}/calico-cni.yaml.j2"
         dest: /etc/kubernetes/update_calico.yaml
 
     - name: Update Calico Networking
@@ -46,7 +44,7 @@
 
     - name: Create Multus config file
       template:
-        src: "roles/bootstrap/bringup-essential-services/templates/multus-cni.yaml.j2"
+        src: "roles/bootstrap/bringup-essential-services/templates/k8s-{{ kubernetes_version }}/multus-cni.yaml.j2"
         dest: /etc/kubernetes/update_multus.yaml
 
     - name: Update Multus Networking
@@ -54,7 +52,7 @@
 
     - name: Create SRIOV Networking config file
       template:
-        src: "roles/bootstrap/bringup-essential-services/templates/sriov-cni.yaml.j2"
+        src: "roles/bootstrap/bringup-essential-services/templates/k8s-{{ kubernetes_version }}/sriov-cni.yaml.j2"
         dest: /etc/kubernetes/update_sriov-cni.yaml
 
     - name: Update SRIOV Networking
@@ -62,7 +60,7 @@
 
     - name: Create SRIOV device plugin config file
       template:
-        src: "roles/bootstrap/bringup-essential-services/templates/sriov-plugin.yaml.j2"
+        src: "roles/bootstrap/bringup-essential-services/templates/k8s-{{ kubernetes_version }}/sriov-plugin.yaml.j2"
         dest: /etc/kubernetes/update_sriovdp-daemonset.yaml
 
     - name: Update SRIOV device plugin

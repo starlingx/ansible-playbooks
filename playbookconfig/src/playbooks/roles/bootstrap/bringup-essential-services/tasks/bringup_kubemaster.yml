@@ -205,7 +205,7 @@
 # Configure calico networking using the Kubernetes API datastore.
 - name: Create Calico config file
   template:
-    src: "calico-cni.yaml.j2"
+    src: "k8s-{{ kubernetes_version }}/calico-cni.yaml.j2"
     dest: /etc/kubernetes/calico.yaml
 
 - name: Activate Calico Networking
@@ -213,7 +213,7 @@
 
 - name: Create Multus config file
   template:
-    src: "multus-cni.yaml.j2"
+    src: "k8s-{{ kubernetes_version }}/multus-cni.yaml.j2"
     dest: /etc/kubernetes/multus.yaml
 
 - name: Activate Multus Networking
@@ -221,7 +221,7 @@
 
 - name: Create SRIOV Networking config file
   template:
-    src: "sriov-cni.yaml.j2"
+    src: "k8s-{{ kubernetes_version }}/sriov-cni.yaml.j2"
     dest: /etc/kubernetes/sriov-cni.yaml
 
 - name: Activate SRIOV Networking
@@ -229,7 +229,7 @@
 
 - name: Create SRIOV device plugin config file
   template:
-    src: "sriov-plugin.yaml.j2"
+    src: "k8s-{{ kubernetes_version }}/sriov-plugin.yaml.j2"
     dest: /etc/kubernetes/sriovdp-daemonset.yaml
 
 - name: Activate SRIOV device plugin

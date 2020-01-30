@@ -16,10 +16,6 @@
       fail: msg="The mandatory parameter kubernetes_version is not defined."
       when: kubernetes_version is not defined
 
-    - include_vars:
-        dir: "roles/bootstrap/bringup-essential-services/vars"
-        files_matching: main.yml
-
     - import_role:
         name: common/push-docker-images
       become: yes
