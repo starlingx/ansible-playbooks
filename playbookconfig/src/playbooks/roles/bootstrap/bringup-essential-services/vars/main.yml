@@ -25,3 +25,6 @@ docker_cert_dir: /etc/docker/certs.d
 cgroup_root: /sys/fs/cgroup
 k8s_cgroup_name: k8s-infra
 kubeadm_pki_dir: /etc/kubernetes/pki
+
+# Kubernetes api server encryption provider configuration file
+encryption_provider_config: /etc/kubernetes/encryption-provider.yaml

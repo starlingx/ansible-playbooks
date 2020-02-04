@@ -85,6 +85,16 @@
     name: kubelet
     enabled: yes
 
+- name: Create kube api server encryption provider config file
+  vars:
+    aescbc_keys:
+      - name: key1
+        secret: "{{ lookup('password', '/dev/null chars=ascii_letters length=16') | b64encode }}"
+  template:
+    src: "encryption-provider.yaml.j2"
+    dest: "{{ encryption_provider_config }}"
+    mode: 0600
+
 - name: Create Kube admin yaml
   copy:
     src: roles/common/files/kubeadm.yaml.erb
@@ -162,6 +172,16 @@
   with_items:
     - "sed -i -e '/<%= @apiserver_oidc_groups_claim %>/d' /etc/kubernetes/kubeadm.yaml"
   when: apiserver_oidc | length == 3
+
+- name: Update Kube admin yaml with encryption provider config flag
+  command: "{{ item }}"
+  args:
+    warn: false
+  with_items:
+    - "sed -i -e 's|<%= @apiserver_encryption_provider_config %>|'$ENCRYPTION_PROVIDER_CONFIG'|g'
+       /etc/kubernetes/kubeadm.yaml"
+  environment:
+    ENCRYPTION_PROVIDER_CONFIG: "{{ encryption_provider_config }}"
 
 - name: Initializing Kubernetes master
   command: kubeadm init --config=/etc/kubernetes/kubeadm.yaml
@@ -307,6 +327,14 @@
     - sa.key
     - front-proxy-ca.crt
     - front-proxy-ca.key
+
+- name: Copy kube api server encryption provider config
+  copy:
+    src: "{{ encryption_provider_config }}"
+    dest: "{{ config_permdir }}/kubernetes/"
+    remote_src: yes
+    force: yes
+    mode: 0400
 
 - name: Mark Kubernetes config complete
   file:
