@@ -15,6 +15,7 @@ Requires: python3-ptyprocess
 Requires: python3-pexpect
 Requires: sshpass
 Requires: sysinv
+Requires: cgts-client
 
 %description
 This package contains playbooks used for configuring StarlingX.

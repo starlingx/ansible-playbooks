@@ -87,9 +87,8 @@
 
 - name: Create Kube admin yaml
   copy:
-    src: "{{ kube_admin_yaml_template }}"
+    src: roles/common/files/kubeadm.yaml.erb
     dest: /etc/kubernetes/kubeadm.yaml
-    remote_src: yes
 
 - name: Set loopback ip for kubeadm configuration
   set_fact:
@@ -121,7 +120,7 @@
     regexp: "^<% @apiserver_certsans(.*[\n])*?<% end -%>"
     replace: "{{ apiserver_cert_list | to_nice_yaml(width=512) | indent(2, indentfirst=True) }}"
 
-- name: Update Kube admin yaml with OpenID Connect info
+- name: Update Kube admin yaml with OpenID Connect client-id, issuer-url, and username-claim
   command: "{{ item }}"
   args:
     warn: false
@@ -133,7 +132,17 @@
     OIDC_CLIENT_ID: "{{ apiserver_oidc.client_id }}"
     OIDC_ISSUER_URL: "{{ apiserver_oidc.issuer_url }}"
     OIDC_USERNAME_CLAIM: "{{ apiserver_oidc.username_claim }}"
-  when: apiserver_oidc | length != 0
+  when: apiserver_oidc | length == 3 or apiserver_oidc | length == 4
+
+- name: Update Kube admin yaml with OpenID Connect client-id, issuer-url, and username-claim
+  command: "{{ item }}"
+  args:
+    warn: false
+  with_items:
+    - "sed -i -e 's|<%= @apiserver_oidc_groups_claim %>|'$OIDC_GROUPS_CLAIM'|g' /etc/kubernetes/kubeadm.yaml"
+  environment:
+    OIDC_GROUPS_CLAIM: "{{ apiserver_oidc.groups_claim }}"
+  when: apiserver_oidc | length == 4
 
 - name: Delete Kube admin yaml OpenID Connect entries if required config parameters are not present
   command: "{{ item }}"
@@ -143,7 +152,16 @@
     - "sed -i -e '/<%= @apiserver_oidc_client_id %>/d' /etc/kubernetes/kubeadm.yaml"
     - "sed -i -e '/<%= @apiserver_oidc_issuer_url %>/d' /etc/kubernetes/kubeadm.yaml"
     - "sed -i -e '/<%= @apiserver_oidc_username_claim %>/d' /etc/kubernetes/kubeadm.yaml"
+    - "sed -i -e '/<%= @apiserver_oidc_groups_claim %>/d' /etc/kubernetes/kubeadm.yaml"
   when: apiserver_oidc | length == 0
+
+- name: Delete Kube admin yaml Dex entries if required config parameters are not present
+  command: "{{ item }}"
+  args:
+    warn: false
+  with_items:
+    - "sed -i -e '/<%= @apiserver_oidc_groups_claim %>/d' /etc/kubernetes/kubeadm.yaml"
+  when: apiserver_oidc | length == 3
 
 - name: Initializing Kubernetes master
   command: kubeadm init --config=/etc/kubernetes/kubeadm.yaml
@@ -187,7 +205,7 @@
 # Configure calico networking using the Kubernetes API datastore.
 - name: Create Calico config file
   template:
-    src: "calico-cni.yaml.j2"
+    src: "k8s-{{ kubernetes_version }}/calico-cni.yaml.j2"
     dest: /etc/kubernetes/calico.yaml
 
 - name: Activate Calico Networking
@@ -195,7 +213,7 @@
 
 - name: Create Multus config file
   template:
-    src: "multus-cni.yaml.j2"
+    src: "k8s-{{ kubernetes_version }}/multus-cni.yaml.j2"
     dest: /etc/kubernetes/multus.yaml
 
 - name: Activate Multus Networking
@@ -203,7 +221,7 @@
 
 - name: Create SRIOV Networking config file
   template:
-    src: "sriov-cni.yaml.j2"
+    src: "k8s-{{ kubernetes_version }}/sriov-cni.yaml.j2"
     dest: /etc/kubernetes/sriov-cni.yaml
 
 - name: Activate SRIOV Networking
@@ -211,7 +229,7 @@
 
 - name: Create SRIOV device plugin config file
   template:
-    src: "sriov-plugin.yaml.j2"
+    src: "k8s-{{ kubernetes_version }}/sriov-plugin.yaml.j2"
     dest: /etc/kubernetes/sriovdp-daemonset.yaml
 
 - name: Activate SRIOV device plugin

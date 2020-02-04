@@ -15,6 +15,7 @@ Requires: python2-ptyprocess
 Requires: python2-pexpect
 Requires: sshpass
 Requires: sysinv
+Requires: cgts-client
 
 BuildArch: noarch
 

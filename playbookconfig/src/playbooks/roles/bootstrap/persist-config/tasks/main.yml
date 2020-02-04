@@ -183,42 +183,57 @@
   when: save_config_to_db
 
 
-# Update docker config file and restart docker if docker proxy is
-# configured
+# Update docker and containerd config files and restart docker and containerd
+# if docker proxy is configured
 - block:
-  - name: Ensure docker config directory exists
+  - name: Ensure docker and containerd config directory exist
     file:
-      path: /etc/systemd/system/docker.service.d
+      path: "{{ item }}"
       state: directory
       owner: root
       group: root
       mode: 0755
+    with_items:
+      - /etc/systemd/system/docker.service.d
+      - /etc/systemd/system/containerd.service.d
 
-  - name: Ensure docker proxy config exists
+  - name: Ensure docker and containerd proxy config exist
     copy:
       content: ""
-      dest: "{{ docker_proxy_conf }}"
+      dest: "{{ item }}"
       force: no
       owner: root
       group: root
       mode: 0644
       remote_src: yes
+    with_items:
+      - "{{ docker_proxy_conf }}"
+      - "{{ containerd_proxy_conf }}"
 
-  - name: Write header to docker proxy conf file
+  - name: Write header to docker and containerd proxy conf files
     lineinfile:
-      path: "{{ docker_proxy_conf }}"
+      path: "{{ item }}"
       line: "[Service]"
+    with_items:
+      - "{{ docker_proxy_conf }}"
+      - "{{ containerd_proxy_conf }}"
 
-  - name: Add http proxy URL to docker proxy conf file
+  - name: Add http proxy URL to docker and containerd proxy conf files
     lineinfile:
-      path: "{{ docker_proxy_conf }}"
+      path: "{{ item }}"
       line: "Environment='HTTP_PROXY={{ docker_http_proxy }}'"
+    with_items:
+      - "{{ docker_proxy_conf }}"
+      - "{{ containerd_proxy_conf }}"
     when: docker_http_proxy != 'undef'
 
-  - name: Add https proxy URL to docker proxy conf file
+  - name: Add https proxy URL to docker and containerd proxy conf files
     lineinfile:
-      path: "{{ docker_proxy_conf }}"
+      path: "{{ item }}"
       line: "Environment='HTTPS_PROXY={{ docker_https_proxy }}'"
+    with_items:
+      - "{{ docker_proxy_conf }}"
+      - "{{ containerd_proxy_conf }}"
     when: docker_https_proxy != 'undef'
 
   - name: Add no proxy address list to docker proxy config file
@@ -226,11 +241,22 @@
       path: "{{ docker_proxy_conf }}"
       line: "Environment='NO_PROXY={{ docker_no_proxy_combined | join(',') }}'"
 
-  - name: Restart Docker
+  # Containerd doesn't work with the NO_PROXY environment
+  # variable if it has IPv6 addresses with square brackets,
+  # remove the square brackets
+  - name: Add no proxy address list to containerd proxy config file
+    lineinfile:
+      path: "{{ containerd_proxy_conf }}"
+      line: "Environment='NO_PROXY={{ docker_no_proxy_combined | join(',') | regex_replace('\\[|\\]', '') }}'"
+
+  - name: Restart Docker and containerd
     systemd:
       state: restarted
       daemon_reload: yes
-      name: docker
+      name: "{{ item }}"
+    with_items:
+      - docker
+      - containerd
 
   when: use_docker_proxy
 

@@ -10,7 +10,7 @@ import json
 import shutil
 import subprocess
 
-from controllerconfig import openstack
+from cgtsclient import client as cgts_client
 from tsconfig import tsconfig as tsc
 
 OSD_ROOT_DIR = "/var/lib/ceph/osd"
@@ -20,14 +20,64 @@ CEPH_MON_VG = 'cgts-vg'
 CEPH_MON_LV = 'ceph-mon-lv'
 
 
+class CgtsClient(object):
+    SYSINV_API_VERSION = 1
+
+    def __init__(self):
+        self.conf = {}
+        self._sysinv = None
+
+        source_command = 'source /etc/platform/openrc && env'
+
+        with open(os.devnull, "w") as fnull:
+            proc = subprocess.Popen(
+                ['bash', '-c', source_command],
+                stdout=subprocess.PIPE, stderr=fnull)
+
+        for line in proc.stdout:
+            key, _, value = line.partition("=")
+            if key == 'OS_USERNAME':
+                self.conf['admin_user'] = value.strip()
+            elif key == 'OS_PASSWORD':
+                self.conf['admin_pwd'] = value.strip()
+            elif key == 'OS_PROJECT_NAME':
+                self.conf['admin_tenant'] = value.strip()
+            elif key == 'OS_AUTH_URL':
+                self.conf['auth_url'] = value.strip()
+            elif key == 'OS_REGION_NAME':
+                self.conf['region_name'] = value.strip()
+            elif key == 'OS_USER_DOMAIN_NAME':
+                self.conf['user_domain'] = value.strip()
+            elif key == 'OS_PROJECT_DOMAIN_NAME':
+                self.conf['project_domain'] = value.strip()
+
+        proc.communicate()
+
+    @property
+    def sysinv(self):
+        if not self._sysinv:
+            self._sysinv = cgts_client.get_client(
+                self.SYSINV_API_VERSION,
+                os_username=self.conf['admin_user'],
+                os_password=self.conf['admin_pwd'],
+                os_auth_url=self.conf['auth_url'],
+                os_project_name=self.conf['admin_tenant'],
+                os_project_domain_name=self.conf['project_domain'],
+                os_user_domain_name=self.conf['user_domain'],
+                os_region_name=self.conf['region_name'],
+                os_service_type='platform',
+                os_endpoint_type='admin')
+        return self._sysinv
+
+
 def get_ceph_mon_size():
-    with openstack.OpenStack() as client:
-        ceph_mons = client.sysinv.ceph_mon.list()
-        # All Ceph monitor partitions have the same size, so grab one and return.
-        if ceph_mons:
-            return ceph_mons[0].ceph_mon_gib
-        else:
-            raise Exception("No ceph monitor defined!")
+    client = CgtsClient()
+    ceph_mons = client.sysinv.ceph_mon.list()
+    # All Ceph monitor partitions have the same size, so grab one and return.
+    if ceph_mons:
+        return ceph_mons[0].ceph_mon_gib
+    else:
+        raise Exception("No ceph monitor defined!")
 
 
 def mount_osds():

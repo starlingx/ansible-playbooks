@@ -34,15 +34,11 @@
   no_log: true
 
 - block:
-  - name: Get kubernetes version from template
-    command: "sed -n 's|^kubernetesVersion: \\(.*\\)$|\\1|p' {{ kube_admin_yaml_template }}"
-    args:
-      warn: false
-    register: kubernetes_version_output
-
   - set_fact:
-      kubernetes_version: "{{ kubernetes_version_output.stdout }}"
-  when: upgrade_kubernetes is not defined
+      kubernetes_version: "{{ lookup('file', 'roles/common/files/kubeadm.yaml.erb') |
+        regex_search('^kubernetesVersion: (.*)$', multiline=True) | regex_replace('^(.*): (.*)$', '\\2')}}"
+  when: (upgrade_kubernetes is not defined and
+         upgrade_k8s_networking is not defined)
 
 - name: Get the list of kubernetes images
   shell: "kubeadm config images list --kubernetes-version {{ kubernetes_version }}"
@@ -51,6 +47,10 @@
 
 - set_fact:
     kubernetes_images: "{{ kubernetes_images_output.stdout_lines }}"
+
+- include_vars:
+    dir: "vars/k8s-{{ kubernetes_version }}"
+    files_matching: "system-images.yml"
 
 - name: Get the list of platform images
   set_fact:

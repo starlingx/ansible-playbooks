@@ -1,8 +1,9 @@
 ---
 keyring_workdir: /tmp/python_keyring
 docker_proxy_conf: /etc/systemd/system/docker.service.d/http-proxy.conf
+containerd_proxy_conf: /etc/systemd/system/containerd.service.d/http-proxy.conf
 minimum_root_disk_size: 240
-default_security_feature: "nopti nospectre_v2"
+default_security_feature: "nopti nospectre_v2 nospectre_v1"
 temp_ssl_ca: "/tmp/ca-cert.pem"
 ssl_ca_complete_flag: /etc/platform/.ssl_ca_complete
 region_config: no

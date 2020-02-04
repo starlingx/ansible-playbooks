@@ -3,7 +3,6 @@ source_helm_bind_dir: /opt/platform/helm_charts
 target_helm_bind_dir: /www/pages/helm_charts
 helm_repo_name_apps: starlingx
 helm_repo_name_platform: stx-platform
-kube_admin_yaml_template: /usr/share/puppet/modules/platform/templates/kubeadm.yaml.erb
 kubelet_override_template: /usr/share/puppet/modules/platform/templates/kube-stx-override.conf.erb
 kubelet_pmond_template: /usr/share/puppet/modules/platform/templates/kubelet-pmond-conf.erb
 kubelet_cni_bin_dir: /usr/libexec/cni
@@ -15,8 +14,8 @@ registry_readonly_config_file: /etc/docker-distribution/registry/readonly_config
 registry_config_file: /etc/docker-distribution/registry/config.yml
 registry_token_server_template: /usr/share/puppet/modules/platform/templates/registry-token-server.conf.erb
 registry_token_server_file: /etc/docker-distribution/registry/token_server.conf
-cert_cnf_template: /usr/share/puppet/modules/platform/templates/registry-cert-extfile.erb
 insecure_docker_registry_template: /usr/share/puppet/modules/platform/templates/insecuredockerregistry.conf.erb
+containerd_template: /usr/share/puppet/modules/platform/templates/config.toml.erb
 cert_cnf_file: /etc/ssl/private/registry-cert-extfile.cnf
 registry_cert_key: /etc/ssl/private/registry-cert.key
 registry_cert_crt: /etc/ssl/private/registry-cert.crt
@@ -26,14 +25,3 @@ docker_cert_dir: /etc/docker/certs.d
 cgroup_root: /sys/fs/cgroup
 k8s_cgroup_name: k8s-infra
 kubeadm_pki_dir: /etc/kubernetes/pki
-local_registry: registry.local:9001
-
-# System images that are pre-pulled and pushed to local registry
-tiller_img: gcr.io/kubernetes-helm/tiller:v2.13.1
-armada_img: quay.io/airshipit/armada:8a1638098f88d92bf799ef4934abe569789b885e-ubuntu_bionic
-calico_cni_img: quay.io/calico/cni:v3.6.2
-calico_node_img: quay.io/calico/node:v3.6.2
-calico_kube_controllers_img: quay.io/calico/kube-controllers:v3.6.2
-multus_img: docker.io/starlingx/multus:v3.2.16
-sriov_cni_img: docker.io/starlingx/k8s-cni-sriov:master-centos-stable-latest
-sriov_network_device_img: docker.io/starlingx/k8s-plugins-sriov-network-device:master-centos-stable-latest

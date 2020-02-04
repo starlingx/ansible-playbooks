@@ -392,6 +392,8 @@
         - localhost
         - 127.0.0.1
         - registry.local
+        - "{{ cluster_service_start_address if cluster_service_start_address != 'derived'
+            else default_cluster_service_start_address }}"
         - "{{ controller_floating_address }}"
         - "{{ derived_network_params.controller_0_address }}"
         - "{{ external_oam_floating_address }}"
@@ -584,12 +586,21 @@
 
 - name: Check OpenID Connect parameters
   fail:
-    msg: "OpenID Connect parameters must all be specified or not at all:
-          apiserver_oidc: client_id, issuer_url, username_claim"
-  when: (apiserver_oidc|length != 0) and
-        (apiserver_oidc.client_id is not defined or
-         apiserver_oidc.issuer_url is not defined or
-         apiserver_oidc.username_claim is not defined)
+    msg: "If OpenID Connect parameters are specified, you must specify all 3
+          apiserver_oidc: client_id, issuer_url, username_claim or
+          apiserver_oidc: groups_claim in addition to the previous 3."
+  when: not ((apiserver_oidc|length == 0)
+        or
+        ((apiserver_oidc|length == 3) and
+        apiserver_oidc.client_id is defined and
+        apiserver_oidc.issuer_url is defined and
+        apiserver_oidc.username_claim is defined)
+        or
+        ((apiserver_oidc|length == 4) and
+        apiserver_oidc.client_id is defined and
+        apiserver_oidc.issuer_url is defined and
+        apiserver_oidc.username_claim is defined and
+        apiserver_oidc.groups_claim is defined))
 
 # Wipe ceph osds
 # Note that due to Ansible mishandling of boolean values via extra-vars we are
