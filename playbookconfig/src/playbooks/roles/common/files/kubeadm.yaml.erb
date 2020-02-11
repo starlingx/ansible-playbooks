@@ -22,6 +22,13 @@ apiServer:
     oidc-groups-claim: <%= @apiserver_oidc_groups_claim %>
     feature-gates: "SCTPSupport=true,TTLAfterFinished=true"
     event-ttl: "24h"
+    encryption-provider-config: <%= @apiserver_encryption_provider_config %>
+  extraVolumes:
+    - name: "encryption-config"
+      hostPath: <%= @apiserver_encryption_provider_config %>
+      mountPath: <%= @apiserver_encryption_provider_config %>
+      readOnly: true
+      pathType: File
 controllerManager:
   extraArgs:
     node-monitor-period: "2s"
