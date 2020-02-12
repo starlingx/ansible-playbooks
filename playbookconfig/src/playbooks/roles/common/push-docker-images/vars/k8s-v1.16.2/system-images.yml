@@ -6,5 +6,5 @@ calico_cni_img: quay.io/calico/cni:v3.6.2
 calico_node_img: quay.io/calico/node:v3.6.2
 calico_kube_controllers_img: quay.io/calico/kube-controllers:v3.6.2
 multus_img: docker.io/starlingx/multus:v3.2.16
-sriov_cni_img: docker.io/starlingx/k8s-cni-sriov:master-centos-stable-latest
-sriov_network_device_img: docker.io/starlingx/k8s-plugins-sriov-network-device:master-centos-stable-latest
+sriov_cni_img: docker.io/starlingx/k8s-cni-sriov:stx.3.0-v2.2
+sriov_network_device_img: docker.io/starlingx/k8s-plugins-sriov-network-device:stx.3.0-v3.1
