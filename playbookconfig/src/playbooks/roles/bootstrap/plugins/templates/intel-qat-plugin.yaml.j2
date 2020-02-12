@@ -60,7 +60,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
-        image: "{{ docker_registry.url }}/starlingx/intel-qat-plugin:master-distroless-stable-latest"
+        image: "{{ docker_registry.url }}/starlingx/intel-qat-plugin:stx.3.0-v0.11.0-109-gc48c502"
         imagePullPolicy: IfNotPresent
         securityContext:
           readOnlyRootFilesystem: true
