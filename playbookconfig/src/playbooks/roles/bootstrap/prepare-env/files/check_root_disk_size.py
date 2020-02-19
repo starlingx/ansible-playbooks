@@ -6,9 +6,9 @@
 #
 
 import os
+import parted
 import pyudev
 import re
-import subprocess
 import sys
 
 DEVICE_NAME_NVME = 'nvme'
@@ -44,17 +44,8 @@ def get_rootfs_node():
 
 
 def parse_fdisk(device_node):
-    """Cloned/modified from sysinv"""
-    # Run command
-    fdisk_command = ('fdisk -l %s 2>/dev/null | grep "Disk %s:"' %
-                     (device_node, device_node))
-    fdisk_process = subprocess.Popen(fdisk_command, stdout=subprocess.PIPE,
-                                     shell=True)
-    fdisk_output = fdisk_process.stdout.read()
-
-    # Parse output
-    secnd_half = fdisk_output.split(',')[1]
-    size_bytes = secnd_half.split()[0].strip()
+    dev_info = parted.getDevice(device_node)
+    size_bytes = dev_info.length * dev_info.sectorSize
 
     # Convert bytes to GiB (1 GiB = 1024*1024*1024 bytes)
     int_size = int(size_bytes)

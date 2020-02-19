@@ -9,6 +9,7 @@ URL: unknown
 Source0: %{name}-%{version}.tar.gz
 
 Requires: ansible
+Requires: pyparted
 Requires: python
 Requires: python2-netaddr
 Requires: python2-ptyprocess
