@@ -965,31 +965,6 @@ def inventory_config_complete_wait(client, controller):
     wait_initial_inventory_complete(client, controller)
 
 
-def populate_default_storage_backend(client, controller):
-    if not INITIAL_POPULATION:
-        return
-
-    print("Populating ceph-mon config for controller-0...")
-    values = {'ihost_uuid': controller.uuid}
-    client.sysinv.ceph_mon.create(**values)
-
-    print("Populating ceph storage backend config...")
-    values = {'confirmed': True}
-    try:
-        client.sysinv.storage_ceph.create(**values)
-    except Exception as e:
-        if INCOMPLETE_BOOTSTRAP:
-            storage_backends = client.sysinv.storage_backend.list()
-            for storage_backend in storage_backends:
-                if storage_backend.name == "ceph-store":
-                    break
-            else:
-                raise e
-        else:
-            raise e
-    print("Default storage backend provisioning completed.")
-
-
 def handle_invalid_input():
     raise Exception("Invalid input!\nUsage: <bootstrap-config-file> "
                     "[--system] [--network] [--service]")
@@ -1034,7 +1009,6 @@ if __name__ == '__main__':
         populate_docker_config(client)
         controller = populate_controller_config(client)
         inventory_config_complete_wait(client, controller)
-        populate_default_storage_backend(client, controller)
         os.remove(config_file)
         if INITIAL_POPULATION:
             print("Successfully updated the initial system config.")
