@@ -106,7 +106,7 @@
 
 - name: Set apiserver SAN list
   set_fact:
-    apiserver_cert_list: "{{ [ cluster_floating_address, loopback_ip ] + apiserver_cert_sans }}"
+    apiserver_cert_list: "{{ [ cluster_floating_address, loopback_ip ] + apiserver_cert_sans + OAM_addresses}}"
 
 - name: Update Kube admin yaml with network info
   command: "{{ item }}"
