@@ -242,7 +242,7 @@ docker_registries:
 # =================
 #
 # WARNING: It is strongly recommended to store these settings in Ansible vault
-# file named "secret" under override files directory. Configuration parameters
+# file named "secrets.yml" under override files directory. Configuration parameters
 # stored in vault must start with vault_ prefix (i.e. vault_admin_username,
 # vault_admin_password).
 #
@@ -257,7 +257,7 @@ admin_password: St8rlingX*
 # bootstrap.
 #
 # WARNING: It is strongly recommended to store this setting in Ansible vault
-# file named "secret" under override files directory. Configuration parameters
+# file named "secrets.yml" under override files directory. Configuration parameters
 # stored in vault must start with vault_ prefix (i.e. vault_password_change_responses)
 #
 password_change: false

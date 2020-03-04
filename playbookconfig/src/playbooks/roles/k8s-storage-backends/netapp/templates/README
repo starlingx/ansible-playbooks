@@ -1,0 +1,14 @@
+Trident installer template files
+
+The templates in this file have been generated using the following command:
+    tridentctl -n trident install --generate-custom-yaml
+
+Some of the templates have been changed to make them compatible with StarlingX
+The parts of the code that have been changes are marked with an "STX_change" comment.
+
+Files changed:
+- trident-daemonset.yaml.j2
+- trident-clusterrolebinding.yaml.j2
+- trident-namespace.yaml.j2
+- trident-serviceaccount.yaml.j2
+- trident-deployment.yaml.j2
