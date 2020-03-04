@@ -710,6 +710,10 @@
       - "INITIAL_DB_POPULATED={{ initial_db_populated }}"
       - "INCOMPLETE_BOOTSTRAP={{ incomplete_bootstrap }}"
       - "APISERVER_SANS={{ apiserver_cert_sans | join(',') }}"
+      - "OIDC_ISSUER_URL={{ apiserver_oidc.issuer_url | default('undef') }}"
+      - "OIDC_CLIENT_ID={{ apiserver_oidc.client_id | default('undef') }}"
+      - "OIDC_USERNAME_CLAIM={{ apiserver_oidc.username_claim | default('undef') }}"
+      - "OIDC_GROUPS_CLAIM={{ apiserver_oidc.groups_claim | default('undef') }}"
 
   - name: Write simplex flag
     file:
