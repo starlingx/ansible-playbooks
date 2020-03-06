@@ -331,6 +331,15 @@
   - include: validate_address_range.yml
     with_dict: "{{ address_pairs }}"
 
+  - name: Set OAM address list
+    set_fact:
+      OAM_addresses: "{{ [external_oam_floating_address] }}"
+
+  - name: Update OAM address list for duplex
+    set_fact:
+      OAM_addresses: "{{ OAM_addresses + [ address_pairs['oam_node']['start'], address_pairs['oam_node']['end'] ] }}"
+    when: system_mode != 'simplex'
+
   - name: Set floating addresses based on subnets or start addresses
     set_fact:
       # Not sure why ipaddr('address') and ipsubnet filter did not extract
