@@ -760,6 +760,41 @@ def populate_docker_config(client):
         client.sysinv.service_parameter.create(**values)
         print("Kubernetes config completed.")
 
+    parameters = client.sysinv.service_parameter.list()
+
+    oidc_params = {
+        'OIDC_ISSUER_URL': sysinv_constants.SERVICE_PARAM_NAME_OIDC_ISSUER_URL,
+        'OIDC_CLIENT_ID': sysinv_constants.SERVICE_PARAM_NAME_OIDC_CLIENT_ID,
+        'OIDC_USERNAME_CLAIM': sysinv_constants.SERVICE_PARAM_NAME_OIDC_USERNAME_CLAIM,
+        'OIDC_GROUPS_CLAIM': sysinv_constants.SERVICE_PARAM_NAME_OIDC_GROUPS_CLAIM,
+    }
+
+    # remove old oidc parameters from previous runs
+    for parameter in parameters:
+        if parameter.name in oidc_params.values():
+            client.sysinv.service_parameter.delete(parameter.uuid)
+
+    parameters = {}
+
+    for ansible_oidc_param, sysinv_oidc_param in oidc_params.items():
+        bootstrap_value = CONF.get('BOOTSTRAP_CONFIG', ansible_oidc_param)
+        if bootstrap_value != 'undef':
+            parameters[sysinv_oidc_param] = bootstrap_value
+
+    if parameters:
+        values = {
+            'service': sysinv_constants.SERVICE_TYPE_KUBERNETES,
+            'section':
+                sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_APISERVER,
+            'personality': None,
+            'resource': None,
+            'parameters': parameters
+        }
+
+        print("Populating/Updating kube-apiserver config...")
+        client.sysinv.service_parameter.create(**values)
+        print("kube-apiserver config completed.")
+
 
 def get_management_mac_address():
     ifname = CONF.get('BOOTSTRAP_CONFIG', 'MANAGEMENT_INTERFACE')
