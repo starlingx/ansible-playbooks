@@ -133,12 +133,6 @@
 - set_fact:
     local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
 
-- name: Log in to local registry
-  docker_login:
-    registry: "{{ local_registry }}"
-    username: "{{ local_registry_credentials['username'] }}"
-    password: "{{ local_registry_credentials['password'] }}"
-
 - name: Download images and push to local registry
   script: download_images.py {{ download_images }}
   register: download_images_output
@@ -160,8 +154,3 @@
     - "{{ docker_registry }}"
   when: item.username is defined
   no_log: true
-
-- name: Log out of local registry
-  docker_login:
-    registry: "{{ local_registry }}"
-    state: absent
