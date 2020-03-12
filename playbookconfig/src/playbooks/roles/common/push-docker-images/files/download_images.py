@@ -7,6 +7,7 @@
 
 from eventlet import greenpool
 import docker
+import keyring
 import sys
 import time
 import os
@@ -24,6 +25,13 @@ DEFAULT_REGISTRIES = {
 }
 
 registries = json.loads(os.environ['REGISTRIES'])
+
+
+def get_local_registry_auth():
+    password = keyring.get_password("CGCS", "admin")
+    if not password:
+        raise Exception("Local registry password not found.")
+    return dict(username="admin", password=str(password))
 
 
 def download_an_image(img):
@@ -59,7 +67,10 @@ def download_an_image(img):
             client = docker.APIClient()
             client.pull(target_img)
             client.tag(target_img, local_img)
-            client.push(local_img)
+            # admin password may be changed by openstack client in parallel.
+            # So we cannot cache auth info, need refresh it each time.
+            auth = get_local_registry_auth()
+            client.push(local_img, auth_config=auth)
             print("Image download succeeded: %s" % target_img)
             print("Image push succeeded: %s" % local_img)
             return target_img, True
