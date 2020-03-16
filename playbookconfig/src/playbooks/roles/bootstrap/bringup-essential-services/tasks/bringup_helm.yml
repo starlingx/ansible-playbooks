@@ -111,7 +111,7 @@
   become_user: root
   with_items:
     - "{{ source_helm_bind_dir | regex_replace('^\\/', '') }}"
-  when: k8s_restore
+  when: mode == "restore"
 
 - block:
   - name: Create helm repository directories
