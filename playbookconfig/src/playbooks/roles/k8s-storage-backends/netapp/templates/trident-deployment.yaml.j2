@@ -1,0 +1,123 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trident-csi
+  labels:
+    app: controller.csi.trident.netapp.io
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: controller.csi.trident.netapp.io
+  template:
+    metadata:
+      labels:
+        app: controller.csi.trident.netapp.io
+    spec:
+      serviceAccount: trident-csi
+      hostNetwork: true
+      containers:
+      - name: trident-main
+        # STX_change: pull image from local registry
+        image: {{ local_registry }}/docker.io/netapp/trident:20.01.0
+        ports:
+        - containerPort: 8443
+        command:
+        - /usr/local/bin/trident_orchestrator
+        args:
+        - "--crd_persistence"
+        - "--k8s_pod"
+        - "--https_rest"
+        - "--https_port=8443"
+        - "--csi_node_name=$(KUBE_NODE_NAME)"
+        - "--csi_endpoint=$(CSI_ENDPOINT)"
+        - "--csi_role=controller"
+        - "--log_format=text"
+        - "--address=127.0.0.1"
+        # STX_change: change port
+        - "--port={{ trident_rest_api_port }}"
+        - "--metrics"
+        #- -debug
+        livenessProbe:
+          exec:
+            command:
+            - tridentctl
+            - -s
+            # STX_change: change port
+            - "127.0.0.1:{{ trident_rest_api_port }}"
+            - version
+          failureThreshold: 2
+          initialDelaySeconds: 120
+          periodSeconds: 120
+          timeoutSeconds: 90
+        env:
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: CSI_ENDPOINT
+          value: unix://plugin/csi.sock
+          # STX_change: change port
+        - name: TRIDENT_SERVER
+          value: "127.0.0.1:{{ trident_rest_api_port }}"
+        volumeMounts:
+        - name: socket-dir
+          mountPath: /plugin
+        - name: certs
+          mountPath: /certs
+          readOnly: true
+      - name: csi-provisioner
+        # STX_change: pull image from local registry
+        image: {{ local_registry }}/quay.io/k8scsi/csi-provisioner:v1.5.0
+        args:
+        - "--v=2"
+        - "--timeout=600s"
+        - "--csi-address=$(ADDRESS)"
+        env:
+        - name: ADDRESS
+          value: /var/lib/csi/sockets/pluginproxy/csi.sock
+        volumeMounts:
+        - name: socket-dir
+          mountPath: /var/lib/csi/sockets/pluginproxy/
+      - name: csi-attacher
+        # STX_change: pull image from local registry
+        image: {{ local_registry }}/quay.io/k8scsi/csi-attacher:v2.1.0
+        args:
+        - "--v=2"
+        - "--timeout=60s"
+        - "--retry-interval-start=10s"
+        - "--csi-address=$(ADDRESS)"
+        env:
+        - name: ADDRESS
+          value: /var/lib/csi/sockets/pluginproxy/csi.sock
+        volumeMounts:
+        - name: socket-dir
+          mountPath: /var/lib/csi/sockets/pluginproxy/
+      - name: csi-resizer
+        # STX_change: pull image from local registry
+        image: {{ local_registry }}/quay.io/k8scsi/csi-resizer:v0.4.0
+        args:
+        - "--v=2"
+        - "--csiTimeout=300s"
+        - "--csi-address=$(ADDRESS)"
+        env:
+        - name: ADDRESS
+          value: /var/lib/csi/sockets/pluginproxy/csi.sock
+        volumeMounts:
+        - name: socket-dir
+          mountPath: /var/lib/csi/sockets/pluginproxy/
+      nodeSelector:
+        # STX_change: launch only on master nodes
+        node-role.kubernetes.io/master: ""
+        kubernetes.io/os: linux
+        kubernetes.io/arch: amd64
+      volumes:
+      - name: socket-dir
+        emptyDir:
+      - name: certs
+        secret:
+          secretName: trident-csi

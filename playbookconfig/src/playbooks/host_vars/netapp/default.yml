@@ -1,0 +1,101 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# TRIDENT NETAPP ORCHESTRATOR INSTALL
+# ====================================
+# This is based on https://github.com/NetApp/trident/releases/download/v20.01.0/trident-installer-20.01.0.tar.gz
+trident_namespace: "trident"
+
+# The default port is 8000, which conflicts with the Armada app which also listens on port 8000
+# Choosing port 8677 because it is unassigned according to:
+# https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml?&page=112
+trident_rest_api_port: 8677
+
+# We don't yet know if trident pods need to run on all nodes or just controllers,
+# so we add a parameter to easily switch between the two
+# TODO: remove this and change the k8s daemonset template once tests are completed
+trident_deploy_only_on_controllers: false
+
+trident_force_reinstall: false
+trident_secret_name: "trident-local-registry-secret"
+
+# Flag so we can import the trident images using the push-docker-images role
+mode: "trident_install"
+
+# Images that need to be pulled to the local registry
+trident_images:
+  - docker.io/netapp/trident:20.01.0
+  - quay.io/k8scsi/csi-provisioner:v1.5.0
+  - quay.io/k8scsi/csi-attacher:v2.1.0
+  - quay.io/k8scsi/csi-resizer:v0.4.0
+  - quay.io/k8scsi/csi-node-driver-registrar:v1.2.0
+
+# OVERRIDE FILES DIRECTORY
+# ========================
+#
+# Default directory where user override file(s) can be found
+#
+override_files_dir: "{{ lookup('env', 'HOME') }}"
+
+# NETAPP BACKENDS CONFIGURATION
+# =============================
+# Configure each NetApp backend, for configuration options check:
+# https://netapp-trident.readthedocs.io/en/stable-v20.01/kubernetes/operations/tasks/backends/ontap.html#
+
+# Each backend needs two sets of definitions:
+#  1. Kubernetes storage class - see 'k8s_storageclass' section of 'netapp_backends'
+#  2. NetApp backend configuration - 'netapp_config' section of 'netapp_backends'
+#
+# You can add any option to these sections and they will be passed automatically to K8s and to the NetApp
+# config tool. See trident-installer/sample-input in trident-installer-X.Y.X.tar.gz
+#
+# 1. k8s_storageclass: Kubernetes storage class leads to a StorageClass e.g.:
+#
+#    apiVersion: storage.k8s.io/v1
+#    kind: StorageClass
+#    metadata:
+#      name: basic
+#    provisioner: netapp.io/trident
+#    parameters:
+#      backendType: "__BACKEND_TYPE__"
+#
+# 2. netapp_config: Main NetApp backend configuration options:
+#    version:  Always 1
+#    storageDriverName: “ontap-nas”, “ontap-nas-economy”, “ontap-nas-flexgroup”, “ontap-san”, “ontap-san-economy”
+#    backendName: Custom name for the storage backend
+#    managementLIF: IP address of a cluster or SVM management LIF
+#    dataLIF: IP address of protocol LIF
+#    svm: Storage virtual machine to use
+#    igroupName:  Name of the igroup for SAN volumes to use
+#    username:  Username to connect to the cluster/SVM
+#    password:  Password to connect to the cluster/SVM
+#    storagePrefix: Prefix used when provisioning new volumes in the SVM
+#    limitAggregateUsage: Fail provisioning if usage is above this percentage
+#    limitVolumeSize: Fail provisioning if requested volume size is above this value
+#    nfsMountOptions" Comma-separated list of NFS mount options (except ontap-san)
+#
+# WARNING: It is strongly recommended to store these settings in Ansible vault
+# file named "secrets.yml" under override files directory. Configuration parameters
+# stored in vault must start with vault_ prefix (i.e. vault_netapp_backends).
+
+netapp_backends:
+  - k8s_storageclass:
+      metadata:
+        name: netapp-nas-backend
+      provisioner: netapp.io/trident
+      parameters:
+        backendType: "ontap-nas"    # should be the same as config_options.storageDriverName
+    netapp_config:
+      version: 1
+      storageDriverName: "ontap-nas"     # should be the same as storageclass.parameters.backendType
+      backendName: "nas-backend"
+      managementLIF: "10.0.0.1"
+      dataLIF: "10.0.0.2"
+      svm: "svm_nfs"
+      username: "admin"
+      password: "secret"
+      # nfsMountOptions: "nfsvers=4"

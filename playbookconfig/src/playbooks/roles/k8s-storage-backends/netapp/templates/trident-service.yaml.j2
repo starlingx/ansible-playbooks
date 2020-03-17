@@ -1,0 +1,19 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trident-csi
+  labels:
+    app: controller.csi.trident.netapp.io
+spec:
+  selector:
+    app: controller.csi.trident.netapp.io
+  ports:
+  - name: https
+    protocol: TCP
+    port: 34571
+    targetPort: 8443
+  - name: metrics
+    protocol: TCP
+    port: 9220
+    targetPort: 8001

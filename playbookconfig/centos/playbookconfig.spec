@@ -17,6 +17,7 @@ Requires: python2-pexpect
 Requires: sshpass
 Requires: sysinv
 Requires: cgts-client
+Requires: trident-installer
 
 %description
 This package contains playbooks used for configuring StarlingX.

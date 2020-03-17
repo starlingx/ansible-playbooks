@@ -1,0 +1,50 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to configure a NetApp storage backend
+#
+
+# The backend creation command takes in a YAML file as input.
+# In order to avoid creating a temporary file on the node that would expose
+# credential, we use bash process substitution to pass a file descriptor
+# directly to the command.
+# NOTE: The default shell we use (/bin/sh) doesn't support process subtitution,
+#       so we must specifically use bash
+- name: Add NetApp backend
+  shell: tridentctl -n {{ trident_namespace }} create backend -f  <(echo "{{ backend.netapp_config | to_nice_json }}")
+  args:
+    chdir: "{{ trident_setup_dir }}"
+    executable: /usr/bin/bash
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+
+# Configure kubernetes storage class
+- name: Set StorageClass headers
+  set_fact:
+    storageclass_headers:
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+
+- name: Prepare StorageClass content
+  set_fact:
+    storageclass: "{{ storageclass_headers | combine(backend.k8s_storageclass) }}"
+
+# TODO(stefan.dinescu): the cleanup of these files will be handled in a separate commit that
+# will also address any integration issue
+- name: Create storage-class.yaml
+  copy:
+    content: "{{ storageclass | to_nice_yaml }}"
+    dest: "{{ trident_setup_dir }}/storage-class.yaml"
+
+- name: Remove storage class if it exists
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf delete storageclass {{ backend.k8s_storageclass.metadata.name }}"
+  failed_when: false
+
+# The storage class file doesn't expose any credentials or other
+# sensitive information, so it's safe to dump it to a file
+- name: Create K8s StorageClass
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ trident_setup_dir }}/storage-class.yaml"

@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2020 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -9,7 +9,7 @@
 #   from public/private registries and push to local registry.
 #
 
-- name: Get docker registries if upgrade kubernetes or k8s networking
+- name: Get docker registries if not in bootstap or restore mode
   include: get_docker_registry.yml registry={{ item }}
   with_items:
     - { name: 'k8s_registry', value: { url: 'k8s.gcr.io' } }
@@ -17,8 +17,10 @@
     - { name: 'quay_registry', value: { url: 'quay.io' } }
     - { name: 'docker_registry', value: { url: 'docker.io' } }
     - { name: 'elastic_registry', value: { url: 'docker.elastic.co' } }
-  when: upgrade_k8s_networking is defined or
-        upgrade_kubernetes is defined
+  when: mode == 'upgrade_k8s_networking' or
+        mode == 'upgrade_kubernetes' or
+        mode == 'trident_install'
+
 
 # Disable the log to not expose registry password
 - name: Get registry credentials if registry type is AWS ECR
@@ -37,55 +39,61 @@
   - set_fact:
       kubernetes_version: "{{ lookup('file', 'roles/common/files/kubeadm.yaml.erb') |
         regex_search('^kubernetesVersion: (.*)$', multiline=True) | regex_replace('^(.*): (.*)$', '\\2')}}"
-  when: (upgrade_kubernetes is not defined and
-         upgrade_k8s_networking is not defined)
+  when: mode == 'bootstrap' or
+        mode == 'restore'
 
-- name: Get the list of kubernetes images
-  shell: "kubeadm config images list --kubernetes-version {{ kubernetes_version }}"
-  register: kubernetes_images_output
+- block:
+  - name: Get the list of kubernetes images
+    shell: "kubeadm config images list --kubernetes-version {{ kubernetes_version }}"
+    register: kubernetes_images_output
+
+  - set_fact:
+      kubernetes_images: "{{ kubernetes_images_output.stdout_lines }}"
+
+  - include_vars:
+      dir: "vars/k8s-{{ kubernetes_version }}"
+      files_matching: "system-images.yml"
+
+  - name: Get the list of platform images
+    set_fact:
+      networking_images:
+        - "{{ calico_cni_img }}"
+        - "{{ calico_node_img }}"
+        - "{{ calico_kube_controllers_img }}"
+        - "{{ multus_img }}"
+        - "{{ sriov_cni_img }}"
+        - "{{ sriov_network_device_img }}"
+      tiller_armada_images:
+        - "{{ tiller_img }}"
+        - "{{ armada_img }}"
   when: kubernetes_version is defined
 
-- set_fact:
-    kubernetes_images: "{{ kubernetes_images_output.stdout_lines }}"
-
-- include_vars:
-    dir: "vars/k8s-{{ kubernetes_version }}"
-    files_matching: "system-images.yml"
-
-- name: Get the list of platform images
-  set_fact:
-    networking_images:
-      - "{{ calico_cni_img }}"
-      - "{{ calico_node_img }}"
-      - "{{ calico_kube_controllers_img }}"
-      - "{{ multus_img }}"
-      - "{{ sriov_cni_img }}"
-      - "{{ sriov_network_device_img }}"
-    tiller_armada_images:
-      - "{{ tiller_img }}"
-      - "{{ armada_img }}"
-
-# Download all system images and additional images if bootstrap
+# Download all system images and additional images if bootstrap or restore
 - name: Set download images list
   set_fact:
     download_images_list:
       "{{ (kubernetes_images + networking_images + tiller_armada_images + additional_local_registry_images)
       if (additional_local_registry_images is defined and additional_local_registry_images|length > 0)
       else (kubernetes_images + networking_images + tiller_armada_images) }}"
-  when: (upgrade_kubernetes is not defined and
-         upgrade_k8s_networking is not defined)
+  when: mode == 'bootstrap' or
+        mode == 'restore'
 
 # Only download k8s networking images if k8s networking upgrade
 - name: Set download images list to k8s network images if upgrading k8s networking
   set_fact:
     download_images_list: "{{ download_images_list|default([]) + networking_images }}"
-  when: upgrade_k8s_networking is defined and upgrade_k8s_networking
+  when: mode == 'upgrade_k8s_networking'
 
 # Only download kubernetes images if kubernetes upgrade
 - name: Set download images list to kubernetes images if upgrading kubernetes
   set_fact:
     download_images_list: "{{ download_images_list|default([]) + kubernetes_images }}"
-  when: upgrade_kubernetes is defined and upgrade_kubernetes
+  when: mode == 'upgrade_kubernetes'
+
+- name: Set download images list to netapp images if installing trident
+  set_fact:
+    download_images_list: "{{ download_images_list|default([]) + trident_images }}"
+  when: mode == 'trident_install'
 
 - set_fact:
     download_images: "{{ download_images_list | join(',') }}"
