@@ -60,6 +60,7 @@
         - "{{ calico_cni_img }}"
         - "{{ calico_node_img }}"
         - "{{ calico_kube_controllers_img }}"
+        - "{{ calico_flexvol_img }}"
         - "{{ multus_img }}"
         - "{{ sriov_cni_img }}"
         - "{{ sriov_network_device_img }}"

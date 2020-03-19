@@ -1,2 +1,2 @@
 # Overrides config file for kubelet
-KUBELET_EXTRA_ARGS=--cni-bin-dir={{ kubelet_cni_bin_dir }} --node-ip={{ node_ip }}
+KUBELET_EXTRA_ARGS=--cni-bin-dir={{ kubelet_cni_bin_dir }} --node-ip={{ node_ip }} --volume-plugin-dir={{ kubelet_vol_plugin_dir }}
