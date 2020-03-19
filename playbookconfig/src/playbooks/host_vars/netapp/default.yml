@@ -23,8 +23,17 @@ trident_deploy_only_on_controllers: false
 trident_force_reinstall: false
 trident_secret_name: "trident-local-registry-secret"
 
+# Extra parameters to be given to the tridentctl install command
+# If you want to configure Ipv6 add "--use-ipv6" to this list
+# For a full list of supported parameters use "tridentctl install -h" commmand on the setup
+trident_install_extra_params: ""
+
 # Flag so we can import the trident images using the push-docker-images role
 mode: "trident_install"
+
+# Clean trident_setup_dir where templates and other files are copied
+# Defaults to true, but you can set it to false for debug purposes
+trident_clean_folder: true
 
 # Images that need to be pulled to the local registry
 trident_images:

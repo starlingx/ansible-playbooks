@@ -76,7 +76,7 @@
   no_log: true
 
 - name: Install trident services
-  command: tridentctl -n {{ trident_namespace }} install --use-custom-yaml
+  command: tridentctl -n {{ trident_namespace }} install --use-custom-yaml {{ trident_install_extra_params }}
   args:
     chdir: "{{ trident_setup_dir }}"
   environment:
@@ -91,3 +91,9 @@
   with_items: "{{ vault_netapp_backends | default(netapp_backends) }}"
   loop_control:
     loop_var: backend
+
+- name: Clean staging folder
+  file:
+    path: "{{ trident_setup_dir }}"
+    state: absent
+  when: trident_clean_folder

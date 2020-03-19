@@ -8,19 +8,24 @@
 #   This role is to configure a NetApp storage backend
 #
 
-# The backend creation command takes in a YAML file as input.
-# In order to avoid creating a temporary file on the node that would expose
-# credential, we use bash process substitution to pass a file descriptor
-# directly to the command.
-# NOTE: The default shell we use (/bin/sh) doesn't support process subtitution,
-#       so we must specifically use bash
+- name: Set backend filename
+  set_fact:
+    backend_file: "{{ trident_setup_dir }}/backend-{{ backend.netapp_config.backendName }}.yaml"
+
+
+# We create, use and delete the backend configuration file, all under one task.
+# We do it under one task, because this configuration file may contain user
+# credential and doing these steps from 3 different tasks add security issues.
 - name: Add NetApp backend
-  shell: tridentctl -n {{ trident_namespace }} create backend -f  <(echo "{{ backend.netapp_config | to_nice_json }}")
+  shell: "{{ item }}"
   args:
     chdir: "{{ trident_setup_dir }}"
-    executable: /usr/bin/bash
   environment:
     KUBECONFIG: "/etc/kubernetes/admin.conf"
+  with_items:
+    - echo '{{ backend.netapp_config | to_nice_json }}' > {{ backend_file }}
+    - tridentctl -n {{ trident_namespace }} create backend -f {{ backend_file }}
+    - rm -f {{ backend_file }}
 
 # Configure kubernetes storage class
 - name: Set StorageClass headers
@@ -33,8 +38,6 @@
   set_fact:
     storageclass: "{{ storageclass_headers | combine(backend.k8s_storageclass) }}"
 
-# TODO(stefan.dinescu): the cleanup of these files will be handled in a separate commit that
-# will also address any integration issue
 - name: Create storage-class.yaml
   copy:
     content: "{{ storageclass | to_nice_yaml }}"
@@ -44,7 +47,5 @@
   command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf delete storageclass {{ backend.k8s_storageclass.metadata.name }}"
   failed_when: false
 
-# The storage class file doesn't expose any credentials or other
-# sensitive information, so it's safe to dump it to a file
 - name: Create K8s StorageClass
   command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ trident_setup_dir }}/storage-class.yaml"
