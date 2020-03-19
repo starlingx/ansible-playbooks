@@ -17,12 +17,14 @@
     postgres_config_dir: "{{ config_permdir + '/postgresql' }}"
     pxe_config_dir: "{{ config_permdir + '/pxelinux.cfg' }}"
     branding_config_dir: "{{ config_permdir + '/branding' }}"
+    ssl_ca_certs_dir: "{{ config_permdir + '/ssl_ca' }}"
 
 - debug:
     msg: >-
       postgres_config_dir: {{ postgres_config_dir }}
       pxe_config_dir: {{ pxe_config_dir }}
       branding_config_dir: {{ branding_config_dir }}
+      ssl_ca_certs_dir: {{ ssl_ca_certs_dir }}
 
 - name: Ensure Postres, PXE config directories exist
   file:
@@ -35,6 +37,14 @@
   with_items:
     - "{{ postgres_config_dir }}"
     - "{{ pxe_config_dir }}"
+
+- name: Ensure SSL CA certificates directory exists
+  file:
+    path: "{{ ssl_ca_certs_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0700
 
 - name: Get list of Postgres conf files
   find:
