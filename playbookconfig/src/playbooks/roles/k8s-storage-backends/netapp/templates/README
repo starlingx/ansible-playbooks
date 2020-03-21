@@ -12,3 +12,4 @@ Files changed:
 - trident-namespace.yaml.j2
 - trident-serviceaccount.yaml.j2
 - trident-deployment.yaml.j2
+- trident-service.yaml.j2

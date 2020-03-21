@@ -24,14 +24,16 @@ spec:
         # STX_change: pull image from local registry
         image: {{ local_registry }}/docker.io/netapp/trident:20.01.0
         ports:
-        - containerPort: 8443
+        # STX_change: change port
+        - containerPort: {{ trident_https_rest_api_port }}
         command:
         - /usr/local/bin/trident_orchestrator
         args:
         - "--crd_persistence"
         - "--k8s_pod"
         - "--https_rest"
-        - "--https_port=8443"
+        # STX_change: change https port
+        - "--https_port={{ trident_https_rest_api_port }}"
         - "--csi_node_name=$(KUBE_NODE_NAME)"
         - "--csi_endpoint=$(CSI_ENDPOINT)"
         - "--csi_role=controller"
@@ -40,6 +42,8 @@ spec:
         # STX_change: change port
         - "--port={{ trident_rest_api_port }}"
         - "--metrics"
+        # STX_change: change metrics port
+        - "--metrics_port={{ trident_metrics_port }}"
         #- -debug
         livenessProbe:
           exec:

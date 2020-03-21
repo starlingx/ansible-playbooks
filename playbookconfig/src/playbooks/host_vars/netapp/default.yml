@@ -11,9 +11,17 @@
 trident_namespace: "trident"
 
 # The default port is 8000, which conflicts with the Armada app which also listens on port 8000
-# Choosing port 8677 because it is unassigned according to:
-# https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml?&page=112
+# Also, on an HTTPS enabled setup, the default port for HTTPS REST API is 8443 which conflicts
+# with the port used by the platform Horizon dashboard.
+# Choosing ports 8677 and 8678 to replace the defaults because they are unassigned according to:
+# https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml
 trident_rest_api_port: 8677
+trident_https_rest_api_port: 8678
+
+# The default port opened by the service for metrics gathering is 8001.
+# For now, this doesn't seem to conflict with anything on our system,
+# but it's better to have it configurable.
+trident_metrics_port: 8001
 
 # We don't yet know if trident pods need to run on all nodes or just controllers,
 # so we add a parameter to easily switch between the two

@@ -12,8 +12,10 @@ spec:
   - name: https
     protocol: TCP
     port: 34571
-    targetPort: 8443
+    #STX_change: change port
+    targetPort: {{ trident_https_rest_api_port }}
   - name: metrics
     protocol: TCP
     port: 9220
-    targetPort: 8001
+    #STX_change: change metrics port
+    targetPort: {{ trident_metrics_port }}
