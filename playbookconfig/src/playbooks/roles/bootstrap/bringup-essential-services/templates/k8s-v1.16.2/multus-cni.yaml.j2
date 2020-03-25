@@ -1,6 +1,7 @@
-# Multus Version v3.2
+# Multus Version v3.4
 # Based on:
-# https://github.com/intel/multus-cni/blob/release-v3/images/multus-daemonset.yml
+# https://raw.githubusercontent.com/intel/multus-cni/v3.4/images/
+#             multus-daemonset.yml
 #
 # The following modifications have been made:
 #
@@ -14,13 +15,12 @@
 # - An updateStrategy was added to the DaemonSet spec to allow controlled template
 #   updates of pods with "kubectl apply".
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: network-attachment-definitions.k8s.cni.cncf.io
 spec:
   group: k8s.cni.cncf.io
-  version: v1
   scope: Namespaced
   names:
     plural: network-attachment-definitions
@@ -28,16 +28,22 @@ spec:
     kind: NetworkAttachmentDefinition
     shortNames:
     - net-attach-def
-  validation:
-    openAPIV3Schema:
-      properties:
-        spec:
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
           properties:
-            config:
-                 type: string
+            spec:
+              type: object
+              properties:
+                config:
+                  type: string
 ---
 kind: ClusterRole
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: multus
 rules:
@@ -56,7 +62,7 @@ rules:
       - update
 ---
 kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: multus
 roleRef:
@@ -83,13 +89,21 @@ metadata:
     tier: node
     app: multus
 data:
+  # NOTE: If you'd prefer to manually apply a configuration file, you may create one here.
+  # In the case you'd like to customize the Multus installation, you should change the arguments to the Multus pod
+  # change the "args" line below from
+  # - "--multus-conf-file=auto"
+  # to:
+  # "--multus-conf-file=/tmp/multus-conf/70-multus.conf"
+  # Additionally -- you should ensure that the name "70-multus.conf" is the alphabetically first name in the
+  # /etc/cni/net.d/ directory on each node, otherwise, it will not be used by the Kubelet.
   cni-conf.json: |
     {
       "name": "multus-cni-network",
       "type": "multus",
       "cniVersion": "0.3.1",
       "capabilities": {
-          "portMappings": true
+        "portMappings": true
       },
       "delegates": [
         {
@@ -129,8 +143,10 @@ data:
             {
               "type": "portmap",
               "snat": true,
-              "capabilities": {"portMappings": true}
-            }
+              "capabilities": {
+                "portMappings": true
+                }
+              }
           ]
         }
       ],
