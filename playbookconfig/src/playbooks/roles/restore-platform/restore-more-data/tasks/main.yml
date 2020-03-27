@@ -298,23 +298,12 @@
     shell: psql -c "update kube_app set status='uploaded' where name='platform-integ-apps'" sysinv
     become_user: postgres
 
-  # If stx-openstack app is in "applied" state, set it to "uploaded" state to
-  # avoid confusion. stx-openstack app will be brought up in stages after the
+  # If other applications are in "applied" state, set them to "uploaded" state to
+  # avoid confusion. The apps will be brought up in stages after the
   # platform is restored.
-  - name: Check stx-openstack app state
-    shell: psql -c "select status from kube_app where name='stx-openstack'" sysinv
+  - name: Set applied apps to "uploaded" state and inactive
+    shell: psql -c "update kube_app set status='uploaded',active='f' where status='applied'" sysinv
     become_user: postgres
-    register: app_res
-
-  - block:
-    - name: Set stx-openstack app to "uploaded" state
-      shell: psql -c "update kube_app set status='uploaded' where name='stx-openstack'" sysinv
-
-    - name: Set stx-openstack app to inactive
-      shell: psql -c "update kube_app set active='f' where name='stx-openstack'" sysinv
-
-    become_user: postgres
-    when: app_res.stdout is search('applied')
 
   - name: Restart services
     systemd:
