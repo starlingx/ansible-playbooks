@@ -1,0 +1,65 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   These tasks restore the etcd database.
+
+- block:
+  - name: Check if temporary etcd folder exists
+    stat:
+      path: '{{ etcd_tmp_dir }}'
+    register: dir_to_delete
+
+  - name: Remove temporary etcd folder if present
+    file:
+      path: "{{ etcd_tmp_dir }}"
+      state: absent
+    when: dir_to_delete.stat.exists
+
+  - name: Create temporary etcd folder
+    file:
+      path: "{{ etcd_tmp_dir }}"
+      state: directory
+      mode: 0755
+  become_user: root
+
+- name: Extract etcd database backup to temporary folder
+  command: >-
+    tar -C {{ etcd_tmp_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
+    --transform='s,.*/,,' '*/etcd-snapshot.db'
+  args:
+    warn: false
+
+- name: Restore etcd database from snapshot file to temp folder
+  command: etcdctl snapshot restore etcd-snapshot.db --endpoints=controller:2379
+  args:
+    chdir: "{{ etcd_tmp_dir }}"
+  environment:
+    ETCDCTL_API: 3
+
+- name: Stop etcd
+  service:
+    name: etcd
+    state: stopped
+
+- name: Remove old etcd database
+  file:
+    path: "/opt/etcd/{{ software_version }}/controller.etcd/member"
+    state: absent
+
+- name: Move etcd database from temp folder to persistent storage
+  command: mv "{{ etcd_tmp_dir }}/default.etcd/member" "/opt/etcd/{{ software_version }}/controller.etcd/"
+
+- name: Start etcd
+  service:
+    name: etcd
+    state: started
+
+- name: Remove temporary etcd folder
+  file:
+    path: "{{ etcd_tmp_dir }}"
+    state: absent
+  become_user: root

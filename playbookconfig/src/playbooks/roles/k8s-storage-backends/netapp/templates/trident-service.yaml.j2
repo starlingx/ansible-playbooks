@@ -1,0 +1,21 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trident-csi
+  labels:
+    app: controller.csi.trident.netapp.io
+spec:
+  selector:
+    app: controller.csi.trident.netapp.io
+  ports:
+  - name: https
+    protocol: TCP
+    port: 34571
+    #STX_change: change port
+    targetPort: {{ trident_https_rest_api_port }}
+  - name: metrics
+    protocol: TCP
+    port: 9220
+    #STX_change: change metrics port
+    targetPort: {{ trident_metrics_port }}

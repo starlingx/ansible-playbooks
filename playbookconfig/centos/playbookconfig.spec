@@ -13,9 +13,11 @@ Requires: python3
 Requires: python3-netaddr
 Requires: python3-ptyprocess
 Requires: python3-pexpect
+Requires: python3-pyparted
 Requires: sshpass
 Requires: sysinv
 Requires: cgts-client
+Requires: trident-installer
 
 %description
 This package contains playbooks used for configuring StarlingX.

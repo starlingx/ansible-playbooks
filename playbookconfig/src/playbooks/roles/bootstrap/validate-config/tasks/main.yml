@@ -331,6 +331,15 @@
   - include: validate_address_range.yml
     with_dict: "{{ address_pairs }}"
 
+  - name: Set OAM address list
+    set_fact:
+      OAM_addresses: "{{ [external_oam_floating_address] }}"
+
+  - name: Update OAM address list for duplex
+    set_fact:
+      OAM_addresses: "{{ OAM_addresses + [ address_pairs['oam_node']['start'], address_pairs['oam_node']['end'] ] }}"
+    when: system_mode != 'simplex'
+
   - name: Set floating addresses based on subnets or start addresses
     set_fact:
       # Not sure why ipaddr('address') and ipsubnet filter did not extract
@@ -710,6 +719,10 @@
       - "INITIAL_DB_POPULATED={{ initial_db_populated }}"
       - "INCOMPLETE_BOOTSTRAP={{ incomplete_bootstrap }}"
       - "APISERVER_SANS={{ apiserver_cert_sans | join(',') }}"
+      - "OIDC_ISSUER_URL={{ apiserver_oidc.issuer_url | default('undef') }}"
+      - "OIDC_CLIENT_ID={{ apiserver_oidc.client_id | default('undef') }}"
+      - "OIDC_USERNAME_CLAIM={{ apiserver_oidc.username_claim | default('undef') }}"
+      - "OIDC_GROUPS_CLAIM={{ apiserver_oidc.groups_claim | default('undef') }}"
 
   - name: Write simplex flag
     file:

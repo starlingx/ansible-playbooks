@@ -11,6 +11,7 @@ Source0: %{name}-%{version}.tar.gz
 Requires: ansible
 Requires: python
 Requires: python-netaddr
+Requires: python-parted
 Requires: python2-ptyprocess
 Requires: python2-pexpect
 Requires: sshpass

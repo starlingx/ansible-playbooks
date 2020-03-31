@@ -1,0 +1,139 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: trident-csi
+  labels:
+    app: node.csi.trident.netapp.io
+spec:
+  selector:
+    matchLabels:
+      app: node.csi.trident.netapp.io
+  template:
+    metadata:
+      labels:
+        app: node.csi.trident.netapp.io
+    spec:
+      serviceAccount: trident-csi
+      hostNetwork: true
+      hostIPC: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+      - name: trident-main
+        securityContext:
+          privileged: true
+          capabilities:
+            add: ["SYS_ADMIN"]
+          allowPrivilegeEscalation: true
+        # STX_change: pull image from local registry
+        image: {{ local_registry }}/docker.io/netapp/trident:20.01.0
+        command:
+        - /usr/local/bin/trident_orchestrator
+        args:
+        - "--no_persistence"
+        - "--rest=false"
+        - "--csi_node_name=$(KUBE_NODE_NAME)"
+        - "--csi_endpoint=$(CSI_ENDPOINT)"
+        - "--csi_role=node"
+        - "--log_format=text"
+        #- -debug
+        env:
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: CSI_ENDPOINT
+          value: unix://plugin/csi.sock
+        - name: PATH
+          value: /netapp:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        volumeMounts:
+        - name: plugin-dir
+          mountPath: /plugin
+        - name: plugins-mount-dir
+          mountPath: /var/lib/kubelet/plugins
+        - name: pods-mount-dir
+          mountPath: /var/lib/kubelet/pods
+          mountPropagation: "Bidirectional"
+        - name: dev-dir
+          mountPath: /dev
+        - name: sys-dir
+          mountPath: /sys
+        - name: host-dir
+          mountPath: /host
+          mountPropagation: "Bidirectional"
+        - name: trident-tracking-dir
+          mountPath: /var/lib/trident/tracking
+        - name: certs
+          mountPath: /certs
+          readOnly: true
+      - name: driver-registrar
+        # STX_change: pull image from local registry
+        image: {{ local_registry }}/quay.io/k8scsi/csi-node-driver-registrar:v1.2.0
+        args:
+        - "--v=2"
+        - "--csi-address=$(ADDRESS)"
+        - "--kubelet-registration-path=$(REGISTRATION_PATH)"
+        env:
+        - name: ADDRESS
+          value: /plugin/csi.sock
+        - name: REGISTRATION_PATH
+          value: "/var/lib/kubelet/plugins/csi.trident.netapp.io/csi.sock"
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        volumeMounts:
+        - name: plugin-dir
+          mountPath: /plugin
+        - name: registration-dir
+          mountPath: /registration
+      nodeSelector:
+        # STX_change: deploy only on controller nodes
+        # TODO: determine if this is needed or not
+        {% if trident_deploy_only_on_controllers is sameas true -%}
+        node-role.kubernetes.io/master: ""
+        {%- endif -%}
+        kubernetes.io/os: linux
+        kubernetes.io/arch: amd64
+      tolerations:
+      - effect: NoExecute
+        operator: Exists
+      - effect: NoSchedule
+        operator: Exists
+      volumes:
+      - name: plugin-dir
+        hostPath:
+          path: /var/lib/kubelet/plugins/csi.trident.netapp.io/
+          type: DirectoryOrCreate
+      - name: registration-dir
+        hostPath:
+          path: /var/lib/kubelet/plugins_registry/
+          type: Directory
+      - name: plugins-mount-dir
+        hostPath:
+          path: /var/lib/kubelet/plugins
+          type: DirectoryOrCreate
+      - name: pods-mount-dir
+        hostPath:
+          path: /var/lib/kubelet/pods
+          type: DirectoryOrCreate
+      - name: dev-dir
+        hostPath:
+          path: /dev
+          type: Directory
+      - name: sys-dir
+        hostPath:
+          path: /sys
+          type: Directory
+      - name: host-dir
+        hostPath:
+          path: /
+          type: Directory
+      - name: trident-tracking-dir
+        hostPath:
+          path: /var/lib/trident/tracking
+          type: DirectoryOrCreate
+      - name: certs
+        secret:
+          secretName: trident-csi

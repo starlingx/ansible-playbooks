@@ -1,0 +1,99 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to bring up NetApp and configure all its backends
+#
+
+# Initialize containers
+- name: Ensures trident setup folder is present
+  file:
+    path: "{{ trident_setup_dir }}/setup"
+    state: directory
+
+# TODO(stefan.dinescu): the cleanup of these files will be handled in a separate commit that
+# will also address any integration issues
+- name: Create trident template files
+  template:
+    src: "{{ item }}"
+    dest: "{{ trident_setup_dir }}/setup/{{ item | basename | regex_replace('\\.j2$', '') }}"
+  with_fileglob:
+  - ../templates/*.j2
+
+# To check if trident is already installed we make a call to the REST-API of the trident server
+# using tridentctl. If we force a reinstall, we don't need to check
+- name: Check if trident is already installed
+  command: tridentctl -n {{ trident_namespace }} get backend
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  failed_when: false
+  when: not trident_force_reinstall
+  register: tridentctl_rest_response
+
+- name: Uninstall trident services
+  command: tridentctl -n {{ trident_namespace }} uninstall
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  when: trident_force_reinstall
+
+# In order for compute nodes to be able to pull images from the local registry, we must create
+# a secret to be used as an imagePullSecret. But, to create a secret in the correct namespace,
+# we must first create the namespace.
+# We don't care if the namespace has already been created, so we ignore the error
+- name: Create namespace for trident installer
+  command: kubectl create ns {{ trident_namespace }}
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  failed_when: false
+  register: create_ns_output
+
+- name: Fail if creating namespace fails
+  fail:
+    msg: "Failed to create {{ trident_namespace }} namespace. Error: {{ create_ns_output.stderr }}"
+  when: create_ns_output.rc is defined and create_ns_output.rc !=0 and
+        create_ns_output.stderr is not search('AlreadyExists')
+
+- name: Check if secret exists
+  command: kubectl -n {{ trident_namespace }} get secret {{ trident_secret_name }}
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  failed_when: false
+  register: trident_get_secret_response
+
+# Set no_log to true so that we don't expose the local registry credentials
+- name: Create secret if it doesn't exist
+  command: >-
+    kubectl -n {{ trident_namespace }} create secret docker-registry {{ trident_secret_name }}
+    --docker-server={{ local_registry }}
+    --docker-username={{ local_registry_credentials['username'] }}
+    --docker-password={{ local_registry_credentials['password'] }}
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  when: trident_get_secret_response.rc != 0
+  no_log: true
+
+- name: Install trident services
+  command: tridentctl -n {{ trident_namespace }} install --use-custom-yaml {{ trident_install_extra_params }}
+  args:
+    chdir: "{{ trident_setup_dir }}"
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  when: (tridentctl_rest_response.rc is defined and
+         tridentctl_rest_response.rc != 0) or
+        trident_force_reinstall
+
+# Configure NetApp backends
+- name: Configure backends
+  include: configure-backend.yml
+  with_items: "{{ vault_netapp_backends | default(netapp_backends) }}"
+  loop_control:
+    loop_var: backend
+
+- name: Clean staging folder
+  file:
+    path: "{{ trident_setup_dir }}"
+    state: absent
+  when: trident_clean_folder

@@ -9,7 +9,7 @@
   gather_facts: no
 
   vars:
-    upgrade_kubernetes: true
+    mode: "upgrade_kubernetes"
 
   tasks:
     - name: Fail if kubernetes_version is not defined

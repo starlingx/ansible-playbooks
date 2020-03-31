@@ -50,7 +50,7 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: spec.nodeName
-        image: "{{ docker_registry.url }}/starlingx/intel-gpu-plugin:master-distroless-stable-latest"
+        image: "{{ docker_registry.url }}/starlingx/intel-gpu-plugin:stx.3.0-v0.11.0-103-g4f28657"
         imagePullPolicy: IfNotPresent
         securityContext:
           readOnlyRootFilesystem: true

@@ -6,6 +6,7 @@ helm_repo_name_platform: stx-platform
 kubelet_override_template: /usr/share/puppet/modules/platform/templates/kube-stx-override.conf.erb
 kubelet_pmond_template: /usr/share/puppet/modules/platform/templates/kubelet-pmond-conf.erb
 kubelet_cni_bin_dir: /usr/libexec/cni
+kubelet_vol_plugin_dir: /usr/libexec/kubernetes/kubelet-plugins/volume/exec/
 lighttpd_conf_template: /usr/share/puppet/modules/openstack/templates/lighttpd.conf.erb
 lighttpd_inc_conf_template: /usr/share/puppet/modules/openstack/templates/lighttpd-inc.conf.erb
 registry_config_template: /usr/share/puppet/modules/platform/templates/dockerdistribution.conf.erb
@@ -25,3 +26,8 @@ docker_cert_dir: /etc/docker/certs.d
 cgroup_root: /sys/fs/cgroup
 k8s_cgroup_name: k8s-infra
 kubeadm_pki_dir: /etc/kubernetes/pki
+etcd_tmp_dir: "{{ target_backup_dir }}/etcd_tmp_dir"
+k8s_restore: false
+
+# Kubernetes api server encryption provider configuration file
+encryption_provider_config: /etc/kubernetes/encryption-provider.yaml

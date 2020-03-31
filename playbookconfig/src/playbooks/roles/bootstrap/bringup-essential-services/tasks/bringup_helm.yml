@@ -104,36 +104,49 @@
     - "{{ source_helm_bind_dir }}"
     - "{{ target_helm_bind_dir }}"
 
-- name: Create helm repository directories
-  file:
-    path: "{{ item }}"
-    state: directory
-    owner: www
-    group: root
-    mode: 0755
+- name: Restore Helm charts if the host is bootstrapped in restore mode
+  command: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} {{ item }}
+  args:
+    warn: false
+  become_user: root
   with_items:
-    - "{{ source_helm_bind_dir }}/{{ helm_repo_name_apps }}"
-    - "{{ source_helm_bind_dir }}/{{ helm_repo_name_platform }}"
+    - "{{ source_helm_bind_dir | regex_replace('^\\/', '') }}"
+  when: mode == "restore"
 
-- name: Create service account for Tiller
-  command: >
-    kubectl --kubeconfig=/etc/kubernetes/admin.conf create serviceaccount
-    --namespace kube-system tiller
-
-- name: Patch pull secret into tiller service account
-  command: >
-    kubectl --kubeconfig=/etc/kubernetes/admin.conf patch serviceaccount
-    tiller -p '{"imagePullSecrets": [{"name": "registry-local-secret"}]}' -n kube-system
-
-- name: Create cluster role binding for Tiller service account
-  command: >
-    kubectl --kubeconfig=/etc/kubernetes/admin.conf create clusterrolebinding
-    tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
-
-# Adding temporary workaround using multiple helm init commands
-# and a sed command until helm and tiller provide a fix for
-# https://github.com/helm/helm/issues/6374
 - block:
+  - name: Create helm repository directories
+    file:
+      path: "{{ item }}"
+      state: directory
+      owner: www
+      group: root
+      mode: 0755
+    become_user: root
+    with_items:
+      - "{{ source_helm_bind_dir }}/{{ helm_repo_name_apps }}"
+      - "{{ source_helm_bind_dir }}/{{ helm_repo_name_platform }}"
+
+  - name: Create service account for Tiller
+    command: >
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf create serviceaccount
+      --namespace kube-system tiller
+
+  - name: Patch pull secret into tiller service account
+    command: >
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf patch serviceaccount
+      tiller -p '{"imagePullSecrets": [{"name": "registry-local-secret"}]}' -n kube-system
+
+  - name: Create cluster role binding for Tiller service account
+    command: >
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf create clusterrolebinding
+      tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
+
+  when: not k8s_restore
+
+- block:
+  # Adding temporary workaround using multiple helm init commands
+  # and a sed command until helm and tiller provide a fix for
+  # https://github.com/helm/helm/issues/6374
   - name: Initialize Helm (local host client only)
     command: helm init --client-only --skip-refresh
 
@@ -150,6 +163,7 @@
       --output yaml
       | sed 's@apiVersion: extensions/v1beta1@apiVersion: apps/v1@'
       | kubectl apply -f -
+    when: not k8s_restore
 
   become_user: sysadmin
   environment:
@@ -183,6 +197,7 @@
     environment:
       KUBECONFIG: /etc/kubernetes/admin.conf
       HOME: /home/sysadmin
+    when: not k8s_restore
 
   - name: Change helm directory ownership (remote host)
     file:

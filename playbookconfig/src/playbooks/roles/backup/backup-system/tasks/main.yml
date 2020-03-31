@@ -252,6 +252,21 @@
     - name: Create ceph crushmap backup
       command: "ceph osd getcrushmap -o {{ crushmap_file }}"
 
+    - name: Create etcd snapshot temp dir
+      file:
+        path: "{{ tempdir.path }}/etcd-snapshot"
+        state: directory
+      register: etcd_snapshot_dir
+
+    - name: Name etcd snapshot backup
+      set_fact:
+        etcd_snapshot_file: "{{ etcd_snapshot_dir.path }}/etcd-snapshot.db"
+
+    - name: Create etcd snapshot
+      command: "etcdctl snapshot save {{ etcd_snapshot_file }}"
+      environment:
+        ETCDCTL_API: 3
+
     - name: Create temp dir for override backup file
       file:
         path: "{{ tempdir.path }}/override"
@@ -302,11 +317,11 @@
            {{ extension_permdir }} \
            {{ patch_vault_permdir }} \
            {{ crushmap_file }} \
+           {{ etcd_snapshot_file }} \
            {{ ldap_db_backup }} \
            {{ postgres_dir.path }} \
-           {{ armada_permdir }}/platform-integ-apps \
-           {{ armada_permdir }}/admin.conf \
-           {{ helm_charts_permdir }}/stx-platform 2>/dev/null)"
+           {{ armada_permdir }} \
+           {{ helm_charts_permdir }} 2>/dev/null)"
       args:
         warn: false
 
