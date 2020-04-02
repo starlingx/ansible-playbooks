@@ -26,6 +26,7 @@
     - name: Set networking facts
       set_fact:
         kubelet_cni_bin_dir: "/usr/libexec/cni"
+        kubelet_vol_plugin_dir: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
         cluster_network_ipv4: "{{ cluster_pod_subnet | ipv4 }}"
         cluster_network_ipv6: "{{ cluster_pod_subnet | ipv6 }}"
         cluster_floating_address: "{{ cluster_host_floating_address }}"
