@@ -1,8 +1,9 @@
 ---
 # System images that are pre-pulled and pushed to local registry
 n3000_opae_img: docker.io/starlingx/n3000-opae:stx.4.0-v1.0.0
-tiller_img: gcr.io/kubernetes-helm/tiller:v2.13.1
+tiller_img: gcr.io/kubernetes-helm/tiller:v2.16.1
 armada_img: quay.io/airshipit/armada:8a1638098f88d92bf799ef4934abe569789b885e-ubuntu_bionic
+kubernetes_entrypoint_img: quay.io/stackanetes/kubernetes-entrypoint:v0.3.1
 calico_cni_img: quay.io/calico/cni:v3.12.0
 calico_node_img: quay.io/calico/node:v3.12.0
 calico_kube_controllers_img: quay.io/calico/kube-controllers:v3.12.0
