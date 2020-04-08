@@ -45,6 +45,10 @@
   args:
     warn: false
 
+- name: Create distributed cloud CA
+  include_tasks: create_dc_ca.yml
+  when: distributed_cloud_role == 'systemcontroller'
+
 - name: Remove config file from previous play
   file:
     path: "{{ last_bootstrap_config_file }}"

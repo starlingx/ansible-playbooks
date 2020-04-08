@@ -1,0 +1,33 @@
+---
+apiVersion: cert-manager.io/v1alpha2
+kind: Issuer
+metadata:
+  name: dc-selfsigning-issuer
+  namespace: dc-cert
+spec:
+  selfSigned: {}
+
+---
+apiVersion: cert-manager.io/v1alpha2
+kind: Certificate
+metadata:
+  name: dc-adminep-root-ca-certificate
+  namespace: dc-cert
+spec:
+  secretName: dc-adminep-root-ca-certificate
+  commonName: "{{ controller_floating_address }}"
+  isCA: true
+  issuerRef:
+    name: dc-selfsigning-issuer
+    kind: Issuer
+
+---
+apiVersion: cert-manager.io/v1alpha2
+kind: Issuer
+metadata:
+  name: dc-adminep-root-ca-issuer
+  namespace: dc-cert
+spec:
+  ca:
+    secretName: dc-adminep-root-ca-certificate
+
