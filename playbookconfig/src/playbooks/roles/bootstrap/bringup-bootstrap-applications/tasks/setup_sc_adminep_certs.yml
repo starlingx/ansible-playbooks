@@ -1,0 +1,85 @@
+---
+#
+# copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   These tasks set up certificates for https enabled admin endpoints on subcloud
+#
+
+- name: Install DC admin endpoint root CA certificate
+  copy:
+    dest: "/etc/pki/ca-trust/source/anchors/{{ dc_adminep_root_ca_cert }}"
+    content: "{{ dc_root_ca_cert | b64decode }}"
+    mode: 0400
+
+- name: Update trusted CA certficate list
+  command: /usr/bin/update-ca-trust extract
+
+- name: Create temporary working directory
+  file:
+    path: "{{ sc_adminep_temp_dir }}"
+    state: directory
+
+- name: Create admin endpoint k8s yaml file
+  template:
+    src: "setup-sc-adminep-certs.yaml.j2"
+    dest: "{{ sc_adminep_temp_dir }}/{{ setup_sc_adminep_certs_yaml }}"
+
+- name: Create subcloud admin endpoint certificate secret
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf apply
+    -f "{{ sc_adminep_temp_dir }}/{{ setup_sc_adminep_certs_yaml }}"
+
+# It takes a little while for secret to be available after the yaml file is applied.
+# So re-try up to 15 times with 1s interval to get the certificate.
+- name: Extract subcloud admin endpoint certificate
+  shell: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret "{{ sc_adminep_cert_secret }}"
+    -n "{{ sc_adminep_ca_cert_ns }}" -o=jsonpath='{.data.tls\.crt}'
+    | base64 --decode > "{{ sc_adminep_temp_dir }}/{{ sc_adminep_cert }}"
+  register: get_cert_result
+  until: "'(NotFound)' not in get_cert_result.stderr"
+  retries: 15
+  delay: 1
+
+# It takes a little while for secret to be available after the yaml file is applied.
+# So re-try up to 15 times with 1s interval to get the key.
+- name: Extract subcloud admin endpoint key
+  shell: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret "{{ sc_adminep_cert_secret }}"
+    -n "{{ sc_adminep_ca_cert_ns }}" -o=jsonpath='{.data.tls\.key}'
+    | base64 --decode > "{{ sc_adminep_temp_dir }}/{{ sc_adminep_key }}"
+  register: get_key_result
+  until: "'(NotFound)' not in get_key_result.stderr"
+  retries: 15
+  delay: 1
+
+- name: Create haproxy tls certifcate
+  shell: >-
+    cat "{{ sc_adminep_temp_dir }}/{{ sc_adminep_cert }}"
+    "{{ sc_adminep_temp_dir }}/{{ sc_adminep_key }}"
+    > "{{ sc_adminep_temp_dir }}/{{ haproxy_adminep_cert }}"
+
+- name: Install haproxy tls certficate
+  copy:
+    src: "{{ sc_adminep_temp_dir }}/{{ haproxy_adminep_cert }}"
+    dest: /etc/ssl/private
+    remote_src: yes
+    mode: 0400
+
+- name: Copy admin endpoint certficates to the shared filesystem directory
+  copy:
+    src: "{{ item }}"
+    dest: "{{ config_permdir }}"
+    remote_src: yes
+    mode: 0400
+  with_items:
+    - "/etc/ssl/private/{{ haproxy_adminep_cert }}"
+    - "/etc/pki/ca-trust/source/anchors/{{ dc_adminep_root_ca_cert }}"
+
+- name: Cleanup temporary working directory
+  file:
+    path: "{{ sc_adminep_temp_dir }}"
+    state: absent

@@ -49,6 +49,10 @@
   include_tasks: create_dc_ca.yml
   when: distributed_cloud_role == 'systemcontroller'
 
+- name: Set up subcloud admin endpoints certificates if host is a subcloud
+  include_tasks: setup_sc_adminep_certs.yml
+  when: distributed_cloud_role == 'subcloud'
+
 - name: Remove config file from previous play
   file:
     path: "{{ last_bootstrap_config_file }}"
