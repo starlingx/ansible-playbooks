@@ -29,10 +29,10 @@ registries = json.loads(os.environ['REGISTRIES'])
 
 
 def get_local_registry_auth():
-    password = str(keyring.get_password("CGCS", "admin"))
+    password = keyring.get_password("CGCS", "admin")
     if not password:
         raise Exception("Local registry password not found.")
-    return dict(username="admin", password=password)
+    return dict(username="admin", password=str(password))
 
 
 def download_an_image(img):
