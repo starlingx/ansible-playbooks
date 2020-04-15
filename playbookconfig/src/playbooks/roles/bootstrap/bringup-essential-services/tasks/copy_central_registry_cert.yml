@@ -17,12 +17,6 @@
     recurse: yes
     mode: 0700
 
-- name: Copy the central cloud registry certificate
-  copy:
-    src: "{{ docker_cert_dir }}/registry.local:9001/registry-cert.crt"
-    dest: "{{ docker_cert_dir }}/registry.central:9001/registry-cert.crt"
-    mode: preserve
-
 - name: Create the shared filesystem directory for central
   file:
     path: "{{ config_permdir }}/registry.central"
@@ -30,9 +24,41 @@
     recurse: yes
     mode: 0700
 
-- name: Store the central certificate to the shared filesystem
-  copy:
-    src: "{{ docker_cert_dir }}/registry.central:9001/registry-cert.crt"
-    dest: "{{ config_permdir }}/registry.central/registry-cert.crt"
-    remote_src: yes
-    mode: preserve
+- block:
+  - name: Copy the central cloud registry certificate
+    copy:
+      src: "{{ docker_cert_dir }}/registry.local:9001/registry-cert.crt"
+      dest: "{{ docker_cert_dir }}/registry.central:9001/registry-cert.crt"
+      mode: preserve
+
+  - name: Store the central certificate to the shared filesystem
+    copy:
+      src: "{{ docker_cert_dir }}/registry.central:9001/registry-cert.crt"
+      dest: "{{ config_permdir }}/registry.central/registry-cert.crt"
+      remote_src: yes
+      mode: preserve
+
+  when: mode == 'bootstrap'
+
+# Restore docker certificates for subcloud
+- block:
+  - name: Remove leading '/' from dir name
+    set_fact:
+      short_config_permdir: "{{ config_permdir | regex_replace('^\\/', '') }}"
+      short_docker_cert_dir: "{{ docker_cert_dir | regex_replace('^\\/', '') }}"
+
+  - name: Restore registry.central certs (/etc/docker/certs.d)
+    command: >-
+      tar -C {{ docker_cert_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
+      --overwrite --transform='s,{{ short_docker_cert_dir }},,' '{{ short_docker_cert_dir }}/registry.central*'
+    args:
+      warn: false
+
+  - name: Restore registry.central certs (opt/platform/config/...)
+    command: >-
+      tar -C {{ config_permdir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
+      --overwrite --transform='s,{{ short_config_permdir }},,' '{{ short_config_permdir }}/registry.central*'
+    args:
+      warn: false
+
+  when: mode == 'restore'
