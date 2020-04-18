@@ -1,5 +1,6 @@
 ---
 platform_conf_path: /etc/platform
+deploy_permdir: /opt/platform/deploy
 helm_charts_permdir: /opt/platform/helm_charts
 extension_permdir: /opt/extension
 patch_vault_permdir: /opt/patch-vault

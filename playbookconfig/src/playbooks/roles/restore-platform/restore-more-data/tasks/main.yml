@@ -245,6 +245,26 @@
     warn: false
   when: search_result.rc == 0
 
+- name: Remove leading '/' from deploy directory
+  set_fact:
+    short_deploy_permdir: "{{ deploy_permdir | regex_replace('^\\/', '') }}"
+
+- name: Look for deploy files
+  shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} |
+         grep {{ short_deploy_permdir }}"
+  args:
+    warn: false
+  failed_when: false
+  register: deploy_search_result
+
+- name: Restore files in deploy directory (/opt/platform/deploy/...)
+  command: >-
+    tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }}
+    {{ short_deploy_permdir}}
+  args:
+    warn: false
+  when: deploy_search_result.rc == 0
+
 # TODO: Restore ceph_external when it is supported
 
 - name: Create Helm overrides directory
