@@ -72,7 +72,7 @@
     - "sed -i '/<% end/d' /etc/lighttpd/lighttpd.conf"
     - "sed -i '/@tpm_object/,/%- end/d' /etc/lighttpd/lighttpd.conf"
   environment:
-    PORT_NUM: 80
+    PORT_NUM: 8080
 
 - name: Set up lighttpd-inc.conf
   copy:
@@ -244,7 +244,7 @@
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
     HOME: /home/sysadmin
-    PORT: 80
+    PORT: 8080
   with_items:
     - "{{ helm_repo_name_apps }}"
     - "{{ helm_repo_name_platform }}"
@@ -257,7 +257,7 @@
     environment:
       KUBECONFIG: /etc/kubernetes/admin.conf
       HOME: /home/sysadmin
-      PORT: 80
+      PORT: 8080
     with_items:
       - "{{ helm_repo_name_apps }}"
       - "{{ helm_repo_name_platform }}"

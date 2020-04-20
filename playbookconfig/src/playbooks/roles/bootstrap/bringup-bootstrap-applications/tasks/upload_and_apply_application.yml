@@ -1,0 +1,63 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Upload applications
+#   Apply overrides if specified
+#   Apply application
+#
+
+# application is specified by full path or the tar file
+# extract the name of the tar file
+- name: Set application tar name
+  set_fact:
+    current_application_tar_name: "{{ application.keys()[0].split('/')[-1] }}"
+
+# we assume the application tarball comes from a build and have the following format
+# application-name-version.tgz where version is x.y-z
+- name: Set application name
+  set_fact:
+    current_application_name: "{{ (current_application_tar_name.split('-')[0:-2]) | join('-') }}"
+
+- name: Check if application already exists
+  shell: "source /etc/platform/openrc; system application-list --nowrap | grep {{ current_application_name }}"
+  register: check_exist
+  # grep returns 1 when it can't find anything
+  failed_when: check_exist.rc != 0 and check_exist.rc != 1
+
+- block:
+  - name: Upload application
+    shell: "source /etc/platform/openrc;
+            system application-upload {{ application.keys()[0] }}"
+    when: check_exist.stdout == ""
+
+  - name: Wait until application is in the uploaded state
+    shell: "source /etc/platform/openrc; system application-show {{ current_application_name }}
+            --column status --format value"
+    register: check_uploaded
+    until: check_uploaded.stdout == "uploaded"
+    retries: 3
+    delay: 5
+
+  - name: Apply overrides for application
+    shell: "source /etc/platform/openrc; system helm-override-update {{ current_application_name }}
+            {{ override_item['chart'] }} {{ override_item['namespace'] }} --values {{ override_item['values-path'] }}"
+    loop: "{{ application[application.keys()[0]]['overrides'] }}"
+    loop_control:
+      loop_var: override_item
+    when: application[application.keys()[0]] and "overrides" in application[application.keys()[0]]
+
+  - name: Apply application
+    shell: "source /etc/platform/openrc; system application-apply {{ current_application_name }}"
+
+  - name: Wait until application is in the applied state
+    shell: "source /etc/platform/openrc; system application-show {{ current_application_name }}
+            --column status --format value"
+    register: check_applied
+    until: check_applied.stdout == "applied"
+    retries: 30
+    delay: 20
+  when: '"applied" not in check_exist.stdout'

@@ -28,7 +28,7 @@ k8s_cgroup_name: k8s-infra
 kubeadm_pki_dir: /etc/kubernetes/pki
 etcd_tmp_dir: "{{ target_backup_dir }}/etcd_tmp_dir"
 k8s_restore: false
-psp_file: "{{ role_path }}/files/psp-policies.yaml"
+psp_file: /usr/share/ansible/stx-ansible/playbooks/roles/bootstrap/bringup-essential-services/files/psp-policies.yaml
 
 # Kubernetes api server encryption provider configuration file
 encryption_provider_config: /etc/kubernetes/encryption-provider.yaml

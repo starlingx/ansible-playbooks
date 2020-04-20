@@ -300,3 +300,17 @@ k8s_plugins:
 #  intel-gpu-plugin: intelgpu=enabled
 #  intel-qat-plugin: intelqat=enabled
 #  intel-fpga-plugin: intelfpga=enabled
+
+# SYSTEM APPLICATIONS
+# ===================
+# System application tarballs are generated as part of a build and have the following format:
+# application-name-version.tgz where version is x.y-z
+# example application with overrides
+# - /usr/local/share/applications/helm/oidc-auth-apps-1.0-0.tgz:
+#     overrides:
+#       - chart: dex
+#         namespace: kube-system
+#         values-path: /home/sysinv/dex-overrides.yaml
+applications:
+  - /usr/local/share/applications/helm/nginx-ingress-controller-1.0-0.tgz:
+  - /usr/local/share/applications/helm/cert-manager-1.0-0.tgz:

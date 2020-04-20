@@ -21,6 +21,7 @@
     - { role: bootstrap/apply-bootstrap-manifest, when: not skip_play and not replayed, become: yes }
     - { role: bootstrap/persist-config, when: not skip_play, become: yes }
     - { role: bootstrap/bringup-essential-services, when: not skip_play, become: yes }
+    - { role: bootstrap/bringup-bootstrap-applications, when: not skip_play, become: yes }
 
   vars:
     skip_play: false

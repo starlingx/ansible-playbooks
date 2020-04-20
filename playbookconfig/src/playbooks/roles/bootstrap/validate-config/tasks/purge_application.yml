@@ -1,0 +1,37 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   remove and delete application from sysinv
+#
+
+- name: Get status of application to purge
+  shell: "source /etc/platform/openrc; system application-show {{ application }}
+          --column status --format value"
+  register: application_status_output
+
+- name: Fail if the application is in a bad state
+  fail:
+    msg: "{{ application }} is in a bad state, manually remove and rerun ansible"
+  when: application_status_output.stdout != "uploaded" and application_status_output.stdout != "applied"
+
+- block:
+  - name: Remove application
+    shell: "source /etc/platform/openrc; system application-remove {{ application }}"
+
+  - name: Wait until application is in the uploaded state
+    shell: "source /etc/platform/openrc; system application-show {{ application }}
+            --column status --format value"
+    register: check_applied
+    until: check_applied.stdout == "uploaded"
+    retries: 60
+    delay: 10
+  when: application_status_output.stdout == "applied"
+
+# expect applications to be in the uploaded state now
+# because of above check leaving 2 possible states and above code eliminating "applied"
+- name: Delete application
+  shell: "source /etc/platform/openrc; system application-delete {{ application }}"
