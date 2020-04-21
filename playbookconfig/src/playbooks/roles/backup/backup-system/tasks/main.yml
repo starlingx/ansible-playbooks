@@ -59,18 +59,12 @@
       args:
         warn: false
 
-    - name: Check if it is the primary region
-      command: grep -i "region_config\s*=\s*no" {{ platform_conf_path }}/platform.conf
-      register: check_region
-      failed_when: false
-
-    - name: Backup keystone db for primary region
+    - name: Backup keystone db data
       shell: >-
         sudo -u postgres pg_dump --format=plain --inserts --disable-triggers
         --data-only keystone > {{ postgres_dir.path }}/keystone.postgreSql.data
       args:
         warn: false
-      when: check_region.rc == 0
 
     - name: Check if it is dc controller
       command: >-
