@@ -94,6 +94,7 @@
       - Docker HTTP proxy is {{ docker_http_proxy }}
       - Docker HTTPS proxy is {{ docker_https_proxy }}
       - Docker no proxy list is {{ docker_no_proxy }}
+      - Applications are {{ applications }}
 
 # System parameters config validation
 - block:
@@ -562,6 +563,91 @@
     delegate_to: localhost
     when: (docker_images_archive_source is defined) and
           (docker_images_archive_source is not none)
+
+# System applications validation
+- name: Validate applications
+  include: validate_application.yml application={{ item }}
+  with_items: "{{ applications }}"
+
+- name: Build application list
+  set_fact:
+    all_applications: []
+
+- name: Append applications to application list
+  set_fact:
+    all_applications: "{{ all_applications }} + [ '{{ item.keys()[0] }}' ]"
+  with_items: "{{ applications }}"
+
+- name: Ensure mandatory applications are present in config
+  debug:
+    msg: "Mandatory application: {{ item }}"
+  failed_when: item not in all_applications
+  with_items: "{{ mandatory_applications }}"
+
+- block:
+  - name: Retrieve list of applications from sysinv
+    shell: "source /etc/platform/openrc; system application-list --nowrap | awk '{print $2}'"
+    register: application_list_output
+    failed_when: false
+
+  - name: Build list of existing applications
+    set_fact:
+      old_application_list: "{{ application_list_output.stdout.splitlines() }}"
+
+  # TODO: modify system application-list so this is no longer needed
+  # refer to system host-list's column and format options
+  # the output of system application-list has 3 lines of header
+  # ------
+  # application
+  # -----
+  # get rid of that in our output that we captured
+  - name: Remove header from application list output
+    set_fact:
+      old_application_list: "{{ old_application_list[3:] }}"
+
+  # we need to purge old applications here because the replay might involve a teardown
+  # of the kubernetes cluster. This would result in sysinv being unable to clean up
+  # the deployed applications on its side
+  - block:
+    - name: Find armada container
+      shell: "docker ps | grep armada | awk '{print $1}'"
+      register: armada_container
+
+    # Armada is unable to resolve tiller-deploy.kube-system.svc.cluster.
+    # local because it is running as a container on the host and only has
+    # access to the local resolv.conf for DNS servers. dnsmasq is not
+    # running prior to the unlock, so trying to install an application
+    # before the unlock will fail because it can't resolve the host that
+    # is only known to K8s coredns.
+
+    # If/when Armada runs as a Pod, it would then be able to resolve this
+    # address since it will be running in the K8s cluster. Therefore the
+    # k8s DNS service would not need to be temporarily added to the host
+    # resolv.conf.
+    - name: Update /etc/resolv.conf with coredns
+      command: "sed -i -e 's|nameserver {{ controller_floating_address }}|nameserver {{ (cluster_service_subnet |
+                ipaddr(10)).split('/')[0]}}|g' /etc/resolv.conf"
+      args:
+        warn: false
+
+    - name: Restart armada container to pick up resolv.conf changes
+      command: "docker restart {{ armada_container.stdout }}"
+      when: armada_container.stdout != ""
+
+    - name: Purge old applications
+      include: purge_application.yml application={{ item }}
+      with_items: "{{ old_application_list }}"
+
+    - name: Revert /etc/resolv.conf from coredns
+      command: "sed -i -e 's|nameserver {{ (cluster_service_subnet |
+                ipaddr(10)).split('/')[0]}}|nameserver {{ controller_floating_address }}|g' /etc/resolv.conf"
+      args:
+        warn: false
+    # we check the return code from sysinv to see that application-list ran successfully
+    # in a non replay, or weird replay cases, sysinv could be not up at which point
+    # there is no point in trying to purge applications
+    when: application_list_output.rc == 0 and old_application_list | length > 0
+  when: replayed
 
 - name: Validate apiserver_cert_sans list
   fail:
