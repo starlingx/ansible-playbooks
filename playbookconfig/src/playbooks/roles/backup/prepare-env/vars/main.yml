@@ -13,3 +13,7 @@ host_override_backup_file: "{{ inventory_hostname }}_override_backup.yml"
 # The max size of data in MB under /home directory that will be backed up.
 # If the amount of data is over this limit the backup will abort.
 max_home_dir_usage: 2000
+
+# Flag file to indicate if ceph backend is present
+#
+ceph_backend_flag: "{{ platform_conf_path }}/.node_ceph_configured"
