@@ -32,3 +32,24 @@ psp_file: /usr/share/ansible/stx-ansible/playbooks/roles/bootstrap/bringup-essen
 
 # Kubernetes api server encryption provider configuration file
 encryption_provider_config: /etc/kubernetes/encryption-provider.yaml
+
+# Patch content: tiller-deploy
+# This patch will look for and ensure that 4 sets of environment variables with
+# common prefixes are set in tiller's enviroment before allowing the service to
+# start.
+tiller_deploy_patch: |
+  spec:
+    template:
+      spec:
+        containers:
+        - name: tiller
+          command:
+          - /bin/sh
+          - -cex
+          - |
+            #!/bin/sh
+            env | grep -q -e ^TILLER_DEPLOY || exit
+            env | grep -q -e ^KUBE_DNS || exit
+            env | grep -q -e ^KUBERNETES_PORT || exit
+            env | grep -q -e ^KUBERNETES_SERVICE || exit
+            /tiller
