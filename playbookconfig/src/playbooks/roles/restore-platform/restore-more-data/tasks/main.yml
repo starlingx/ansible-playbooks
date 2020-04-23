@@ -243,7 +243,7 @@
     short_dc_vault_permdir: "{{ dc_vault_permdir | regex_replace('^\\/', '') }}"
 
 - name: Look for dc-vault filesystem
-  shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} | grep 'dc-vault'"
+  shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} | grep '{{ dc_vault_permdir|basename }}'"
   args:
     warn: false
   failed_when: false
@@ -428,11 +428,11 @@
       register: controllerfs_partitions_output
 
     # First extend the logical volumes
-    - name: Resize logical volumes (except database)
+    - name: Resize logical volumes (except database, dc-vault)
       command: "lvextend -L{{ item.size }}G /dev/cgts-vg/{{ item.logical_volume }}"
       failed_when: false
       with_items: "{{ controllerfs_partitions_output.stdout | from_yaml }}"
-      when: item.name != "database"
+      when: item.name != "database" and item.name != "{{ dc_vault_permdir|basename }}"
       register: lvextend_output
 
     # In cases where we try to resize an LV to the size it already is, lvextend
@@ -489,24 +489,6 @@
         msg: "{{ item.item }}  failed for the following reason: {{ item.stderr }}"
       when: item.rc != 0 and item.stderr is not search('Nothing to do!')
       with_items: "{{ resize2fs_output.results }}"
-
-    # The dc-vault drbd device is only present on a distributed cloud setup
-    # on the system controller,
-    - name: Resize dc-vault filesystem
-      command: "resize2fs /dev/drbd6"
-      register: resize2fs_patch_resize_output
-      failed_when: false
-      when: distributed_cloud_role == 'systemcontroller'
-
-    - name: Fail if resize of dc-vault filesystem fails
-      fail:
-        msg: "resize2fs /dev/drbd6 failed for the following reason: {{ resize2fs_patch_resize_output.stderr }}"
-      when: distributed_cloud_role == 'systemcontroller' and
-            resize2fs_patch_resize_output.rc is defined and
-            resize2fs_patch_resize_output.rc != 0 and
-            resize2fs_patch_resize_output.stderr is not search('Nothing to do!')
-    when: check_online.stdout == "online"
-
   # Restore ceph-mon data if ceph backend is configured
   - block:
     - block:
