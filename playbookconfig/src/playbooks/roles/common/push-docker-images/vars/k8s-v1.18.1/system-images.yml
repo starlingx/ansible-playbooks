@@ -9,3 +9,7 @@ calico_flexvol_img: quay.io/calico/pod2daemon-flexvol:v3.12.0
 multus_img: docker.io/nfvpe/multus:v3.4
 sriov_cni_img: docker.io/starlingx/k8s-cni-sriov:stx.3.0-v2.2
 sriov_network_device_img: docker.io/starlingx/k8s-plugins-sriov-network-device:stx.3.0-v3.1
+# Keep the snapshot-controller image in sync with the one provided at:
+# cluster/addons/volumesnapshots/volume-snapshot-controller/volume-snapshot-controller-deployment.yaml
+# in the kubernetes github repo
+snapshot_controller_img: quay.io/k8scsi/snapshot-controller:v2.0.0-rc2

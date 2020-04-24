@@ -5,3 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 trident_setup_dir: /tmp/trident
+
+# When we do a remote play, we don't want to change
+# the sysadmin user password.
+password_change: false
