@@ -198,7 +198,7 @@
         - "{{ patching_permdir }}"
         - "{{ patching_repo_permdir }}"
         - "{{ extension_permdir }}"
-        - "{{ patch_vault_permdir }}"
+        - "{{ dc_vault_permdir }}"
         - "{{ deploy_permdir }}"
         - "{{ postgres_dir.path }}"
         - "{{ armada_permdir }}"
@@ -316,7 +316,7 @@
            {{ patching_permdir }} \
            {{ patching_repo_permdir }} \
            {{ extension_permdir }} \
-           {{ patch_vault_permdir }} \
+           {{ dc_vault_permdir }} \
            {{ deploy_permdir }} \
            {{ crushmap_file }} \
            {{ etcd_snapshot_file }} \
