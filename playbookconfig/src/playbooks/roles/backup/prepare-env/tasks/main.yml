@@ -64,7 +64,7 @@
     patching_permdir: "/opt/patching"
     patching_repo_permdir: "/www/pages/updates"
     extension_permdir: "/opt/extension"
-    patch_vault_permdir: "/opt/patch-vault"
+    dc_vault_permdir: "/opt/dc-vault"
 
 - name: Create backup in progress flag file
   file:

@@ -3,7 +3,7 @@ platform_conf_path: /etc/platform
 deploy_permdir: /opt/platform/deploy
 helm_charts_permdir: /opt/platform/helm_charts
 extension_permdir: /opt/extension
-patch_vault_permdir: /opt/patch-vault
+dc_vault_permdir: /opt/dc-vault
 ldap_permdir: /var/lib/openldap-data
 crushmap_file: crushmap.bin.backup
 skip_ceph_osds_wipe_flag: /etc/platform/.skip_ceph_osds_wipe

@@ -226,21 +226,21 @@
     xargs -i crushtool -i {{ ceph_crushmap_dir }}/{{ crushmap_file }} --remove-item {}
     -o {{ ceph_crushmap_dir }}/{{ crushmap_file }}
 
-- name: Remove leading '/' from patch-vault directory
+- name: Remove leading '/' from dc-vault directory
   set_fact:
-    short_patch_vault_permdir: "{{ patch_vault_permdir | regex_replace('^\\/', '') }}"
+    short_dc_vault_permdir: "{{ dc_vault_permdir | regex_replace('^\\/', '') }}"
 
-- name: Look for patch-vault filesystem
-  shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} | grep 'patch-vault'"
+- name: Look for dc-vault filesystem
+  shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} | grep 'dc-vault'"
   args:
     warn: false
   failed_when: false
   register: search_result
 
-- name: Restore patch-vault filesystem
+- name: Restore dc-vault filesystem
   command: >-
     tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }}
-    {{ short_patch_vault_permdir }}
+    {{ short_dc_vault_permdir }}
   args:
     warn: false
   when: search_result.rc == 0
@@ -478,15 +478,15 @@
       when: item.rc != 0 and item.stderr is not search('Nothing to do!')
       with_items: "{{ resize2fs_output.results }}"
 
-    # The patch-vault drbd device is only present on a distributed cloud setup
+    # The dc-vault drbd device is only present on a distributed cloud setup
     # on the system controller,
-    - name: Resize patch-vault filesystem
+    - name: Resize dc-vault filesystem
       command: "resize2fs /dev/drbd6"
       register: resize2fs_patch_resize_output
       failed_when: false
       when: distributed_cloud_role == 'systemcontroller'
 
-    - name: Fail if resize of patch-vault filesystem fails
+    - name: Fail if resize of dc-vault filesystem fails
       fail:
         msg: "resize2fs /dev/drbd6 failed for the following reason: {{ resize2fs_patch_resize_output.stderr }}"
       when: distributed_cloud_role == 'systemcontroller' and
