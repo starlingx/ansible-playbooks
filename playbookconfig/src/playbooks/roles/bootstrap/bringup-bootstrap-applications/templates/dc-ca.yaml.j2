@@ -16,6 +16,8 @@ metadata:
 spec:
   secretName: dc-adminep-root-ca-certificate
   commonName: "{{ controller_floating_address }}"
+  duration: 43800h  # 1825 days or 5 years
+  renewBefore: 720h # 30 days
   isCA: true
   issuerRef:
     name: dc-selfsigning-issuer
