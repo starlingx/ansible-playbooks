@@ -26,6 +26,7 @@
   set_fact:
     short_platform_conf_path: "{{ platform_conf_path | regex_replace('^\\/', '') }}"
     short_config_permdir: "{{ config_permdir | regex_replace('^\\/', '') }}"
+    short_ceph_backend_flag: "{{ ceph_backend_flag | regex_replace('^\\/', '') }}"
 
 - name: Extract platform.conf from the backup tarball
   command: >-
@@ -194,37 +195,48 @@
   args:
     warn: false
 
-# Can't store ceph crushmap at sysinv_config_permdir (/opt/platform/sysinv/)
-# for AIO systems because when unlocking controller-0 for the first time,
-# the crushmap is set thru ceph puppet when /opt/platform is not mounted yet.
-# So for AIO systems store the crushmap at /etc/sysinv.
-- name: Set ceph crushmap directory to /etc/sysinv if it is AIO system
-  set_fact:
-    ceph_crushmap_dir: /etc/sysinv
-  when: system_type == 'All-in-one'
-
-- name: Set ceph crushmap directory to /opt/platform/sysinv if it is non-AIO system
-  set_fact:
-    ceph_crushmap_dir: "{{ sysinv_config_permdir }}"
-  when: system_type != 'All-in-one'
-
-- name: Restore ceph crush map
-  command: >-
-    tar -C {{ ceph_crushmap_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
-    --transform='s,.*/,,' '*/crushmap.bin.backup'
+- name: Look for the flag indicating that ceph is configured
+  shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} | grep '{{ short_ceph_backend_flag }}'"
   args:
     warn: false
+  failed_when: false
+  register: ceph_backend
 
-# Need to remove osd info from the crushmap before it is loaded into ceph.
-# When osds are created they will be inserted into the crushmap by ceph.
-# TODO: There might be a better command to do this, like the rebuild option
-# with the ceph-monstore-tool.
-- name: Remove osds from the crushmap
-  shell: >-
-    crushtool -i {{ ceph_crushmap_dir }}/{{ crushmap_file }} --tree |
-    awk /osd/'{print $NF}' |
-    xargs -i crushtool -i {{ ceph_crushmap_dir }}/{{ crushmap_file }} --remove-item {}
-    -o {{ ceph_crushmap_dir }}/{{ crushmap_file }}
+# Restore ceph crushmap if ceph backend is configured
+- block:
+  # Can't store ceph crushmap at sysinv_config_permdir (/opt/platform/sysinv/)
+  # for AIO systems because when unlocking controller-0 for the first time,
+  # the crushmap is set thru ceph puppet when /opt/platform is not mounted yet.
+  # So for AIO systems store the crushmap at /etc/sysinv.
+  - name: Set ceph crushmap directory to /etc/sysinv if it is AIO system
+    set_fact:
+      ceph_crushmap_dir: /etc/sysinv
+    when: system_type == 'All-in-one'
+
+  - name: Set ceph crushmap directory to /opt/platform/sysinv if it is non-AIO system
+    set_fact:
+      ceph_crushmap_dir: "{{ sysinv_config_permdir }}"
+    when: system_type != 'All-in-one'
+
+  - name: Restore ceph crush map
+    command: >-
+      tar -C {{ ceph_crushmap_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
+      --transform='s,.*/,,' '*/crushmap.bin.backup'
+    args:
+      warn: false
+
+  # Need to remove osd info from the crushmap before it is loaded into ceph.
+  # When osds are created they will be inserted into the crushmap by ceph.
+  # TODO: There might be a better command to do this, like the rebuild option
+  # with the ceph-monstore-tool.
+  - name: Remove osds from the crushmap
+    shell: >-
+      crushtool -i {{ ceph_crushmap_dir }}/{{ crushmap_file }} --tree |
+      awk /osd/'{print $NF}' |
+      xargs -i crushtool -i {{ ceph_crushmap_dir }}/{{ crushmap_file }} --remove-item {}
+      -o {{ ceph_crushmap_dir }}/{{ crushmap_file }}
+
+  when: ceph_backend.rc == 0
 
 - name: Remove leading '/' from dc-vault directory
   set_fact:
@@ -338,14 +350,14 @@
       psql -c "update i_host set administrative='locked', operational='disabled',
       availability='offline'" sysinv
     become_user: postgres
-    when: wipe_ceph_osds|bool
+    when: wipe_ceph_osds|bool and ceph_backend.rc == 0 or ceph_backend.rc != 0
 
   - name: Set all the hosts, except storage nodes to locked/disabled/offline state
     shell: >-
       psql -c "update i_host set administrative='locked', operational='disabled',
       availability='offline' where personality!='storage'" sysinv
     become_user: postgres
-    when: not wipe_ceph_osds|bool
+    when: not wipe_ceph_osds|bool and ceph_backend.rc == 0
 
   # Set platform-integ-apps to "uploaded" state, so that once ceph is up after
   # controller-0 is unlocked for the first time, the manifest will be applied.
@@ -495,7 +507,7 @@
             resize2fs_patch_resize_output.stderr is not search('Nothing to do!')
     when: check_online.stdout == "online"
 
-  # Restore ceph-mon data
+  # Restore ceph-mon data if ceph backend is configured
   - block:
     - block:
       # Recover procedure for systems with storage nodes is different from
@@ -543,11 +555,13 @@
 
       when: not wipe_ceph_osds|bool
 
-    - name: Inform user that restore_platform is run successfully
-      debug:
-        msg: >-
-          Controller-0 is now online. The next step is to unlock this controller.
-          Please refer to the system administration guide for more details.
+    when: check_online.stdout == "online" and ceph_backend.rc == 0
+
+  - name: Inform user that restore_platform is run successfully
+    debug:
+      msg: >-
+        Controller-0 is now online. The next step is to unlock this controller.
+        Please refer to the system administration guide for more details.
     when: check_online.stdout == "online"
 
   # Remove temporary staging area used by the copy module
