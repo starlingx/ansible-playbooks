@@ -1,0 +1,52 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to congigure snapshots for Kubernetes and
+#   bring-up the snapshot controller pod
+#
+
+- name: Ensures snapshot controller setup folder is present
+  file:
+    path: "{{ snapshot_controller_setup_dir }}/volume-snapshot-controller"
+    state: directory
+
+- name: Ensures snapshot CRD setup directory is present
+  file:
+    path: "{{ snapshot_controller_setup_dir }}/crd"
+    state: directory
+
+- name: Create snapshot-controller template files
+  template:
+    src: "{{ item }}"
+    dest: >-
+      {{ snapshot_controller_setup_dir }}/volume-snapshot-controller/{{ item | basename | regex_replace('\.j2$', '') }}
+  with_fileglob:
+  - ../templates/k8s-{{ kubernetes_version }}/volume-snapshot-controller/*.j2
+
+- name: Copy snapshots CRD files
+  copy:
+    src: "{{ item }}"
+    dest: "{{ snapshot_controller_setup_dir }}/crd/{{ item | basename }}"
+  with_fileglob:
+  - k8s-{{ kubernetes_version }}/crd/*.yaml
+
+- name: Add Snapshot CRDs
+  command: "kubectl apply -f {{ snapshot_controller_setup_dir }}/crd"
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+
+- name: Activate snapshot-controller service
+  command: "kubectl apply -f {{ snapshot_controller_setup_dir }}/volume-snapshot-controller"
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+
+- name: Wait for snapshot-controller service to be active
+  command: >-
+    kubectl wait --namespace=kube-system --for=condition=Ready pods --selector
+    app=volume-snapshot-controller --timeout=60s
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"

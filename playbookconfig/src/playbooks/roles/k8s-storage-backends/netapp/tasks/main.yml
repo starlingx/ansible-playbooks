@@ -92,6 +92,18 @@
   loop_control:
     loop_var: backend
 
+- name: Configure kubernetes storage classes
+  include: configure-storage-classes.yml
+  with_items: "{{ netapp_k8s_storageclasses }}"
+  loop_control:
+    loop_var: storage_class
+
+- name: Configure kubernetes snapshot storage classes
+  include: configure-snapshot-storage-classes.yml
+  with_items: "{{ netapp_k8s_snapshotstorageclasses | default([]) }}"
+  loop_control:
+    loop_var: snapshot_storage_class
+
 - name: Clean staging folder
   file:
     path: "{{ trident_setup_dir }}"

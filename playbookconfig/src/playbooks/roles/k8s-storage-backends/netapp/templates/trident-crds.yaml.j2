@@ -1,15 +1,24 @@
 
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: tridentversions.trident.netapp.io
 spec:
   group: trident.netapp.io
-  version: v1
   versions:
     - name: v1
       served: true
       storage: true
+      schema:
+          openAPIV3Schema:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - name: Version
+        type: string
+        description: The Trident version
+        priority: 0
+        jsonPath: .trident_version
   scope: Namespaced
   names:
     plural: tridentversions
@@ -21,24 +30,32 @@ spec:
     categories:
     - trident
     - trident-internal
-  additionalPrinterColumns:
-    - name: Version
-      type: string
-      description: The Trident version
-      priority: 0
-      JSONPath: .trident_version
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: tridentbackends.trident.netapp.io
 spec:
   group: trident.netapp.io
-  version: v1
   versions:
     - name: v1
       served: true
       storage: true
+      schema:
+          openAPIV3Schema:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - name: Backend
+        type: string
+        description: The backend name
+        priority: 0
+        jsonPath: .backendName
+      - name: Backend UUID
+        type: string
+        description: The backend UUID
+        priority: 0
+        jsonPath: .backendUUID
   scope: Namespaced
   names:
     plural: tridentbackends
@@ -50,29 +67,21 @@ spec:
     categories:
     - trident
     - trident-internal
-  additionalPrinterColumns:
-    - name: Backend
-      type: string
-      description: The backend name
-      priority: 0
-      JSONPath: .backendName
-    - name: Backend UUID
-      type: string
-      description: The backend UUID
-      priority: 0
-      JSONPath: .backendUUID
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: tridentstorageclasses.trident.netapp.io
 spec:
   group: trident.netapp.io
-  version: v1
   versions:
     - name: v1
       served: true
       storage: true
+      schema:
+          openAPIV3Schema:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
   scope: Namespaced
   names:
     plural: tridentstorageclasses
@@ -85,17 +94,55 @@ spec:
     - trident
     - trident-internal
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: tridentvolumes.trident.netapp.io
 spec:
   group: trident.netapp.io
-  version: v1
   versions:
     - name: v1
       served: true
       storage: true
+      schema:
+          openAPIV3Schema:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - name: Age
+        type: date
+        priority: 0
+        jsonPath: .metadata.creationTimestamp
+      - name: Size
+        type: string
+        description: The volume's size
+        priority: 1
+        jsonPath: .config.size
+      - name: Storage Class
+        type: string
+        description: The volume's storage class
+        priority: 1
+        jsonPath: .config.storageClass
+      - name: State
+        type: string
+        description: The volume's state
+        priority: 1
+        jsonPath: .state
+      - name: Protocol
+        type: string
+        description: The volume's protocol
+        priority: 1
+        jsonPath: .config.protocol
+      - name: Backend UUID
+        type: string
+        description: The volume's backend UUID
+        priority: 1
+        jsonPath: .backendUUID
+      - name: Pool
+        type: string
+        description: The volume's pool
+        priority: 1
+        jsonPath: .pool
   scope: Namespaced
   names:
     plural: tridentvolumes
@@ -107,53 +154,21 @@ spec:
     categories:
     - trident
     - trident-internal
-  additionalPrinterColumns:
-    - name: Age
-      type: date
-      priority: 0
-      JSONPath: .metadata.creationTimestamp
-    - name: Size
-      type: string
-      description: The volume's size
-      priority: 1
-      JSONPath: .config.size
-    - name: Storage Class
-      type: string
-      description: The volume's storage class
-      priority: 1
-      JSONPath: .config.storageClass
-    - name: State
-      type: string
-      description: The volume's state
-      priority: 1
-      JSONPath: .state
-    - name: Protocol
-      type: string
-      description: The volume's protocol
-      priority: 1
-      JSONPath: .config.protocol
-    - name: Backend UUID
-      type: string
-      description: The volume's backend UUID
-      priority: 1
-      JSONPath: .backendUUID
-    - name: Pool
-      type: string
-      description: The volume's pool
-      priority: 1
-      JSONPath: .pool
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: tridentnodes.trident.netapp.io
 spec:
   group: trident.netapp.io
-  version: v1
   versions:
     - name: v1
       served: true
       storage: true
+      schema:
+          openAPIV3Schema:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
   scope: Namespaced
   names:
     plural: tridentnodes
@@ -165,17 +180,20 @@ spec:
     - trident
     - trident-internal
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: tridenttransactions.trident.netapp.io
 spec:
   group: trident.netapp.io
-  version: v1
   versions:
     - name: v1
       served: true
       storage: true
+      schema:
+          openAPIV3Schema:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
   scope: Namespaced
   names:
     plural: tridenttransactions
@@ -187,17 +205,26 @@ spec:
     categories:
     - trident-internal
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: tridentsnapshots.trident.netapp.io
 spec:
   group: trident.netapp.io
-  version: v1
   versions:
     - name: v1
       served: true
       storage: true
+      schema:
+          openAPIV3Schema:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - name: State
+        type: string
+        description: The snapshot's state
+        priority: 1
+        jsonPath: .state
   scope: Namespaced
   names:
     plural: tridentsnapshots
@@ -210,9 +237,3 @@ spec:
     categories:
     - trident
     - trident-internal
-  additionalPrinterColumns:
-    - name: State
-      type: string
-      description: The snapshot's state
-      priority: 1
-      JSONPath: .state

@@ -1,0 +1,38 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to configure a Volumesnapshotclass for a Netapp backend
+#
+
+# Configure kubernetes storage class
+- name: Set VolumeSnapshotClass filename
+  set_fact:
+    snapshotstorageclass_file: >-
+      {{ trident_setup_dir }}/snapshot-storage-class-{{ snapshot_storage_class.metadata.name }}.yml
+
+- name: Set VolumeSnapshotClass headers
+  set_fact:
+    snapshotstorageclass_headers:
+      apiVersion: snapshot.storage.k8s.io/v1beta1
+      kind: VolumeSnapshotClass
+
+- name: Prepare VolumeSnapshotClass content
+  set_fact:
+    snapshotstorageclass: "{{ snapshotstorageclass_headers | combine(snapshot_storage_class) }}"
+
+- name: Create snapshot-storage-class.yaml
+  copy:
+    content: "{{ snapshotstorageclass | to_nice_yaml }}"
+    dest: "{{ snapshotstorageclass_file }}"
+
+- name: Remove VolumeSnapshotClass if it exists
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf delete volumesnapshotclass {{ snapshot_storage_class.metadata.name }}
+  failed_when: false
+
+- name: Create K8s VolumeSnapshotClass
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ snapshotstorageclass_file }}"

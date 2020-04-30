@@ -7,7 +7,7 @@
 
 # TRIDENT NETAPP ORCHESTRATOR INSTALL
 # ====================================
-# This is based on https://github.com/NetApp/trident/releases/download/v20.01.0/trident-installer-20.01.0.tar.gz
+# This is based on https://github.com/NetApp/trident/releases/download/v20.04.0/trident-installer-20.04.0.tar.gz
 trident_namespace: "trident"
 
 # The default port is 8000, which conflicts with the Armada app which also listens on port 8000
@@ -45,11 +45,12 @@ trident_clean_folder: true
 
 # Images that need to be pulled to the local registry
 trident_images:
-  - docker.io/netapp/trident:20.01.0
-  - quay.io/k8scsi/csi-provisioner:v1.5.0
-  - quay.io/k8scsi/csi-attacher:v2.1.0
-  - quay.io/k8scsi/csi-resizer:v0.4.0
-  - quay.io/k8scsi/csi-node-driver-registrar:v1.2.0
+  - docker.io/netapp/trident:20.04.0
+  - quay.io/k8scsi/csi-provisioner:v1.6.0
+  - quay.io/k8scsi/csi-attacher:v2.2.0
+  - quay.io/k8scsi/csi-resizer:v0.5.0
+  - quay.io/k8scsi/csi-node-driver-registrar:v1.3.0
+  - quay.io/k8scsi/csi-snapshotter:v2.1.0
 
 # OVERRIDE FILES DIRECTORY
 # ========================
@@ -60,17 +61,22 @@ override_files_dir: "{{ lookup('env', 'HOME') }}"
 
 # NETAPP BACKENDS CONFIGURATION
 # =============================
-# Configure each NetApp backend, for configuration options check:
-# https://netapp-trident.readthedocs.io/en/stable-v20.01/kubernetes/operations/tasks/backends/ontap.html#
+# Configure NetApp backends, for complete list of configuration options visit:
+# https://netapp-trident.readthedocs.io/en/stable-v20.04/kubernetes/operations/tasks/backends/ontap.html#
 
-# Each backend needs two sets of definitions:
-#  1. Kubernetes storage class - see 'k8s_storageclass' section of 'netapp_backends'
-#  2. NetApp backend configuration - 'netapp_config' section of 'netapp_backends'
+# Configurable option classes via this playbook are:
+#  1. Kubernetes storage class - see netapp_k8s_storageclasses
+#  2. Kubernetes snapshot storage class - see netapp_k8s_snapshotstorageclasses
+#  3. NetApp backend configuration - see netapp_backends
 #
-# You can add any option to these sections and they will be passed automatically to K8s and to the NetApp
-# config tool. See trident-installer/sample-input in trident-installer-X.Y.X.tar.gz
+# Configuration options, if specified, will be passed to K8S and/or Netapp config tool
+# accordingly. Use host overrides to change the default settings. For instance, to
+# skip the configuration of k8s_snapshotstorageclasses set:
+#     netapp_k8s_snapshotstorageclasses: []
+# in the host overrides file
+# See trident-installer/sample-input in trident-installer-X.Y.X.tar.gz
 #
-# 1. k8s_storageclass: Kubernetes storage class leads to a StorageClass e.g.:
+# 1. netapp_k8s_storageclass: Kubernetes storage class leads to a StorageClass e.g.:
 #
 #    apiVersion: storage.k8s.io/v1
 #    kind: StorageClass
@@ -80,7 +86,16 @@ override_files_dir: "{{ lookup('env', 'HOME') }}"
 #    parameters:
 #      backendType: "__BACKEND_TYPE__"
 #
-# 2. netapp_config: Main NetApp backend configuration options:
+# 2. netapp_k8s_snapshotstorageclasses: Kubernetes volume snapshot class leads to a VolumeSnapshotClass e.g.:
+#
+#   apiVersion: snapshot.storage.k8s.io/v1beta1
+#   kind: VolumeSnapshotClass
+#   metadata:
+#     name: csi-snapclass
+#   driver: csi.trident.netapp.io
+#   deletionPolicy: Delete
+#
+# 3. netapp_backends: Main NetApp backend configuration options:
 #    version:  Always 1
 #    storageDriverName: “ontap-nas”, “ontap-nas-economy”, “ontap-nas-flexgroup”, “ontap-san”, “ontap-san-economy”
 #    backendName: Custom name for the storage backend
@@ -99,20 +114,26 @@ override_files_dir: "{{ lookup('env', 'HOME') }}"
 # file named "secrets.yml" under override files directory. Configuration parameters
 # stored in vault must start with vault_ prefix (i.e. vault_netapp_backends).
 
+netapp_k8s_storageclass:
+  - metadata:
+      name: netapp-nas-backend
+    provisioner: netapp.io/trident
+    parameters:
+      backendType: "ontap-nas"    # should be the same as config_options.storageDriverName
+
+netapp_k8s_snapshotstorageclasses:
+  - metadata:
+      name: csi-snapclass
+    driver: csi.trident.netapp.io
+    deletionPolicy: Delete
+
 netapp_backends:
-  - k8s_storageclass:
-      metadata:
-        name: netapp-nas-backend
-      provisioner: netapp.io/trident
-      parameters:
-        backendType: "ontap-nas"    # should be the same as config_options.storageDriverName
-    netapp_config:
-      version: 1
-      storageDriverName: "ontap-nas"     # should be the same as storageclass.parameters.backendType
-      backendName: "nas-backend"
-      managementLIF: "10.0.0.1"
-      dataLIF: "10.0.0.2"
-      svm: "svm_nfs"
-      username: "admin"
-      password: "secret"
-      # nfsMountOptions: "nfsvers=4"
+  - version: 1
+    storageDriverName: "ontap-nas"     # should be the same as storageclass.parameters.backendType
+    backendName: "nas-backend"
+    managementLIF: "10.0.0.1"
+    dataLIF: "10.0.0.2"
+    svm: "svm_nfs"
+    username: "admin"
+    password: "secret"
+    # nfsMountOptions: "nfsvers=4"

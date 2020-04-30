@@ -164,4 +164,9 @@
     register: dns_pod_result
     failed_when: dns_pod_result.rc != 0
 
+  - name: Enable volume snapshot support
+    include_role:
+      name: k8s-storage-backends/snapshot-controller
+    when: enable_volume_snapshot_support|bool
+
   when: (not replayed) or (restart_services)

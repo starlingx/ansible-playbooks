@@ -40,7 +40,8 @@
       kubernetes_version: "{{ lookup('file', 'roles/common/files/kubeadm.yaml.erb') |
         regex_search('^kubernetesVersion: (.*)$', multiline=True) | regex_replace('^(.*): (.*)$', '\\2')}}"
   when: mode == 'bootstrap' or
-        mode == 'restore'
+        mode == 'restore' or
+        mode == 'trident_install'
 
 - block:
   - name: Get the list of kubernetes images
@@ -67,15 +68,17 @@
       tiller_armada_images:
         - "{{ tiller_img }}"
         - "{{ armada_img }}"
+      storage_images:
+        - "{{ snapshot_controller_img }}"
   when: kubernetes_version is defined
 
 # Download all system images and additional images if bootstrap or restore
 - name: Set download images list
   set_fact:
     download_images_list:
-      "{{ (kubernetes_images + networking_images + tiller_armada_images + additional_local_registry_images)
+      "{{ (kubernetes_images + networking_images + tiller_armada_images + storage_images + additional_local_registry_images)
       if (additional_local_registry_images is defined and additional_local_registry_images|length > 0)
-      else (kubernetes_images + networking_images + tiller_armada_images) }}"
+      else (kubernetes_images + networking_images + tiller_armada_images + storage_images) }}"
   when: mode == 'bootstrap' or
         mode == 'restore'
 
@@ -93,7 +96,7 @@
 
 - name: Set download images list to netapp images if installing trident
   set_fact:
-    download_images_list: "{{ download_images_list|default([]) + trident_images }}"
+    download_images_list: "{{ download_images_list|default([]) + trident_images + storage_images}}"
   when: mode == 'trident_install'
 
 - set_fact:
