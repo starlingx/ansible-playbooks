@@ -32,29 +32,22 @@
     kubectl --kubeconfig=/etc/kubernetes/admin.conf apply
     -f "{{ sc_adminep_temp_dir }}/{{ setup_sc_adminep_certs_yaml }}"
 
-# It takes a little while for secret to be available after the yaml file is applied.
-# So re-try up to 15 times with 1s interval to get the certificate.
+- name: Wait up to 30s for admin endpoint certificate to be ready
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf -n "{{ sc_adminep_ca_cert_ns }}"
+    wait --for=condition=ready certificate "{{ sc_adminep_cert_secret }}" --timeout=30s
+
 - name: Extract subcloud admin endpoint certificate
   shell: >-
     kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret "{{ sc_adminep_cert_secret }}"
     -n "{{ sc_adminep_ca_cert_ns }}" -o=jsonpath='{.data.tls\.crt}'
     | base64 --decode > "{{ sc_adminep_temp_dir }}/{{ sc_adminep_cert }}"
-  register: get_cert_result
-  until: "'(NotFound)' not in get_cert_result.stderr"
-  retries: 15
-  delay: 1
 
-# It takes a little while for secret to be available after the yaml file is applied.
-# So re-try up to 15 times with 1s interval to get the key.
 - name: Extract subcloud admin endpoint key
   shell: >-
     kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret "{{ sc_adminep_cert_secret }}"
     -n "{{ sc_adminep_ca_cert_ns }}" -o=jsonpath='{.data.tls\.key}'
     | base64 --decode > "{{ sc_adminep_temp_dir }}/{{ sc_adminep_key }}"
-  register: get_key_result
-  until: "'(NotFound)' not in get_key_result.stderr"
-  retries: 15
-  delay: 1
 
 - name: Create haproxy tls certifcate
   shell: >-
