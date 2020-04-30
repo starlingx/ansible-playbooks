@@ -66,6 +66,11 @@
     extension_permdir: "/opt/extension"
     dc_vault_permdir: "/opt/dc-vault"
 
+- name: Check if ceph is configured
+  stat:
+    path: "{{ ceph_backend_flag }}"
+  register: ceph_backend
+
 - name: Create backup in progress flag file
   file:
     path: "{{ backup_in_progress_flag }}"
