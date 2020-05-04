@@ -25,13 +25,17 @@
   with_items: "{{ applications }}"
   when: mode != 'restore'
 
-- name: Create distributed cloud CA
-  include_tasks: create_dc_ca.yml
-  when: distributed_cloud_role == 'systemcontroller'
+# Create DC CA and set up subcloud admin endpoint certificates for bootstrap mode.
+- block:
+  - name: Create distributed cloud CA
+    include_tasks: create_dc_ca.yml
+    when: distributed_cloud_role == 'systemcontroller'
 
-- name: Set up subcloud admin endpoints certificates if host is a subcloud
-  include_tasks: setup_sc_adminep_certs.yml
-  when: distributed_cloud_role == 'subcloud'
+  - name: Set up subcloud admin endpoints certificates if host is a subcloud
+    include_tasks: setup_sc_adminep_certs.yml
+    when: distributed_cloud_role == 'subcloud'
+
+  when: mode == 'bootstrap'
 
 - name: Remove config file from previous play
   file:
