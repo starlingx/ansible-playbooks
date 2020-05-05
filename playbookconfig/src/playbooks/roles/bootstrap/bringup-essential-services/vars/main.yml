@@ -39,6 +39,11 @@ encryption_provider_config: /etc/kubernetes/encryption-provider.yaml
 # start.
 tiller_deploy_patch: |
   spec:
+    strategy:
+       type: RollingUpdate
+       rollingUpdate:
+         maxUnavailable: 1
+         maxSurge: 1
     template:
       spec:
         containers:
