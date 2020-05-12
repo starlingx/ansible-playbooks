@@ -65,6 +65,7 @@
     patching_repo_permdir: "/www/pages/updates"
     extension_permdir: "/opt/extension"
     dc_vault_permdir: "/opt/dc-vault"
+    extra_permdir: "{{ platform_path }}/extra"
 
 - name: Check if ceph is configured
   stat:
