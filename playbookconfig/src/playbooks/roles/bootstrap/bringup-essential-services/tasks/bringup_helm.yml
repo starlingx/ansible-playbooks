@@ -144,7 +144,7 @@
       kubectl --kubeconfig=/etc/kubernetes/admin.conf create clusterrolebinding
       tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
 
-  when: not k8s_restore
+  when: mode == 'bootstrap'
 
 - block:
   # Adding temporary workaround using multiple helm init commands
@@ -167,7 +167,7 @@
       --output yaml
       | sed 's@apiVersion: extensions/v1beta1@apiVersion: apps/v1@'
       | kubectl apply -f -
-    when: not k8s_restore
+    when: mode == 'bootstrap'
 
   # This should be removed after moving to Helm v3
   - name: Patch tiller deployment (local host)
@@ -207,7 +207,7 @@
     environment:
       KUBECONFIG: /etc/kubernetes/admin.conf
       HOME: /home/sysadmin
-    when: not k8s_restore
+    when: mode == 'bootstrap'
 
   - name: Change helm directory ownership (remote host)
     file:
