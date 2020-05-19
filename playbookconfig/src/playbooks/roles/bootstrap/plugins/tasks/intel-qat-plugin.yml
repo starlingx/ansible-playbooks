@@ -6,4 +6,4 @@
 
 - name: Activate Intel QAT device plugin
   command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/intel-qat-daemonset.yaml"
-  when: not k8s_restore
+  when: mode == 'bootstrap'
