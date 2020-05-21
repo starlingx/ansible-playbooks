@@ -28,6 +28,13 @@ DEFAULT_REGISTRIES = {
 registries = json.loads(os.environ['REGISTRIES'])
 
 
+def get_local_registry_auth():
+    password = keyring.get_password("CGCS", "admin")
+    if not password:
+        raise Exception("Local registry password not found.")
+    return dict(username="admin", password=str(password))
+
+
 def download_an_image(img):
     # This function is to pull image from public/private
     # registry and push to local registry.
@@ -56,23 +63,25 @@ def download_an_image(img):
     local_img = 'registry.local:9001/' + new_img
     err_msg = " Image download failed: %s" % target_img
 
-    password = str(keyring.get_password("CGCS", "admin"))
-    if not password:
-        raise Exception("Local registry password not found.")
-    auth = '{0}:{1}'.format('admin', password)
-
     for i in range(MAX_DOWNLOAD_ATTEMPTS):
         try:
             client = docker.APIClient()
             client.pull(target_img)
             print("Image download succeeded: %s" % target_img)
             client.tag(target_img, local_img)
-            client.push(local_img)
+            # admin password may be changed by openstack client in parallel.
+            # So we cannot cache auth info, need refresh it each time.
+            auth = get_local_registry_auth()
+            client.push(local_img, auth_config=auth)
             print("Image push succeeded: %s" % local_img)
             # due to crictl doesn't support push function, docker client is used
             # to pull and push image to local registry, then crictl download image
             # from local registry.
-            subprocess.check_call(["crictl", "pull", "--creds", auth, local_img])
+            # admin password may be changed by openstack client in parallel.
+            # So we cannot cache auth info, need refresh it each time.
+            auth = get_local_registry_auth()
+            auth_str = '{0}:{1}'.format(auth['username'], auth['password'])
+            subprocess.check_call(["crictl", "pull", "--creds", auth_str, local_img])
             print("Image %s download succeeded by containerd" % target_img)
             # except armada/tiller, other docker images could be removed.
             # TODO: run armada with containerd.

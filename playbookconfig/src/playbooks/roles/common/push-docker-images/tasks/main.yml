@@ -17,8 +17,7 @@
     - { name: 'quay_registry', value: { url: 'quay.io' } }
     - { name: 'docker_registry', value: { url: 'docker.io' } }
     - { name: 'elastic_registry', value: { url: 'docker.elastic.co' } }
-  when: mode == 'upgrade_k8s_networking' or
-        mode == 'upgrade_kubernetes' or
+  when: mode is regex("^upgrade_") or
         mode == 'trident_install'
 
 
@@ -40,7 +39,8 @@
       kubernetes_version: "{{ lookup('file', 'roles/common/files/kubeadm.yaml.erb') |
         regex_search('^kubernetesVersion: (.*)$', multiline=True) | regex_replace('^(.*): (.*)$', '\\2')}}"
   when: mode == 'bootstrap' or
-        mode == 'restore'
+        mode == 'restore' or
+        mode == 'trident_install'
 
 - block:
   - name: Get the list of kubernetes images
@@ -67,17 +67,25 @@
       tiller_armada_images:
         - "{{ tiller_img }}"
         - "{{ armada_img }}"
+      storage_images:
+        - "{{ snapshot_controller_img }}"
   when: kubernetes_version is defined
 
 # Download all system images and additional images if bootstrap or restore
 - name: Set download images list
   set_fact:
     download_images_list:
-      "{{ (kubernetes_images + networking_images + tiller_armada_images + additional_local_registry_images)
+      "{{ (kubernetes_images + networking_images + tiller_armada_images + storage_images + additional_local_registry_images)
       if (additional_local_registry_images is defined and additional_local_registry_images|length > 0)
-      else (kubernetes_images + networking_images + tiller_armada_images) }}"
+      else (kubernetes_images + networking_images + tiller_armada_images + storage_images) }}"
   when: mode == 'bootstrap' or
         mode == 'restore'
+
+# Only download static images if static images upgrade
+- name: Set download images list to static images if upgrading static images
+  set_fact:
+    download_images_list: "{{ download_images_list|default([]) + tiller_armada_images }}"
+  when: mode == 'upgrade_static_images'
 
 # Only download k8s networking images if k8s networking upgrade
 - name: Set download images list to k8s network images if upgrading k8s networking
@@ -93,7 +101,7 @@
 
 - name: Set download images list to netapp images if installing trident
   set_fact:
-    download_images_list: "{{ download_images_list|default([]) + trident_images }}"
+    download_images_list: "{{ download_images_list|default([]) + trident_images + storage_images}}"
   when: mode == 'trident_install'
 
 - set_fact:
@@ -130,10 +138,10 @@
   vars:
     script_content: |
       import keyring
-      password = str(keyring.get_password("CGCS", "admin"))
+      password = keyring.get_password("CGCS", "admin")
       if not password:
           raise Exception("Local registry password not found.")
-      print dict(username='admin', password=password)
+      print dict(username='admin', password=str(password))
   shell: "{{ script_content }}"
   args:
     executable: /usr/bin/python
@@ -141,12 +149,6 @@
 
 - set_fact:
     local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
-
-- name: Log in to local registry
-  docker_login:
-    registry: "{{ local_registry }}"
-    username: "{{ local_registry_credentials['username'] }}"
-    password: "{{ local_registry_credentials['password'] }}"
 
 - name: Download images and push to local registry
   script: download_images.py {{ download_images }}
@@ -169,8 +171,3 @@
     - "{{ docker_registry }}"
   when: item.username is defined
   no_log: true
-
-- name: Log out of local registry
-  docker_login:
-    registry: "{{ local_registry }}"
-    state: absent

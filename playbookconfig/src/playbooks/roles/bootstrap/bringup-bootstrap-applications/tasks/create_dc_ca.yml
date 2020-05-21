@@ -1,0 +1,23 @@
+---
+- name: Create dc-cert namespace
+  shell: >
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace dc-cert --dry-run -o yaml |
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
+
+- name: Wait 60s for cert-manager running
+  shell: >
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf -n cert-manager
+          wait --for=condition=ready pod --all --timeout=60s
+
+- name: Create dc CA config
+  template:
+    src: "dc-ca.yaml.j2"
+    dest: /etc/kubernetes/dc-ca.yaml
+
+- name: Install dc root CA
+  shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply --validate=false -f /etc/kubernetes/dc-ca.yaml
+
+- name: Wait up to 30s for root ca cert ready
+  shell: >
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf -n dc-cert
+          wait --for=condition=ready certificate dc-adminep-root-ca-certificate --timeout=30s

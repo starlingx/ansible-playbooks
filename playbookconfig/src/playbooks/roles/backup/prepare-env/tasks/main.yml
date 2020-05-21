@@ -59,11 +59,17 @@
     sysinv_permdir: "{{ platform_path }}/sysinv/{{ software_version }}"
     puppet_permdir: "{{ platform_path }}/puppet/{{ software_version }}"
     armada_permdir: "{{ platform_path }}/armada/{{ software_version }}"
+    deploy_permdir: "{{ platform_path }}/deploy/{{ software_version }}"
     helm_charts_permdir: "{{ platform_path }}/helm_charts"
     patching_permdir: "/opt/patching"
     patching_repo_permdir: "/www/pages/updates"
     extension_permdir: "/opt/extension"
-    patch_vault_permdir: "/opt/patch-vault"
+    dc_vault_permdir: "/opt/dc-vault"
+
+- name: Check if ceph is configured
+  stat:
+    path: "{{ ceph_backend_flag }}"
+  register: ceph_backend
 
 - name: Create backup in progress flag file
   file:

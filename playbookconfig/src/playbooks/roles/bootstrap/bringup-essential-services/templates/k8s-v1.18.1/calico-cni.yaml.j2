@@ -6,6 +6,7 @@
 # The following modifications have been made:
 #
 # - Added node-role.kubernetes.io/master nodeSelector to calico-kube-controller
+# - Expand calico-node failsafe rules to include kube-apiserver port
 #
 # This is the calico configuration file for systems with less than 50 nodes.
 #
@@ -635,10 +636,10 @@ spec:
           env:
             # Configure inbound failsafe rules
             - name: FELIX_FAILSAFEINBOUNDHOSTPORTS
-              value: "tcp:22, udp:68, tcp:179"
+              value: "tcp:22, udp:68, tcp:179, tcp:6443"
             # Configure output failsafe rules
             - name: FELIX_FAILSAFEOUTBOUNDHOSTPORTS
-              value: "udp:53, udp:67, tcp:179"
+              value: "udp:53, udp:67, tcp:179, tcp:6443"
             # Use Kubernetes API as the backing datastore.
             - name: DATASTORE_TYPE
               value: "kubernetes"

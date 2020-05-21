@@ -59,18 +59,12 @@
       args:
         warn: false
 
-    - name: Check if it is the primary region
-      command: grep -i "region_config\s*=\s*no" {{ platform_conf_path }}/platform.conf
-      register: check_region
-      failed_when: false
-
-    - name: Backup keystone db for primary region
+    - name: Backup keystone db data
       shell: >-
         sudo -u postgres pg_dump --format=plain --inserts --disable-triggers
         --data-only keystone > {{ postgres_dir.path }}/keystone.postgreSql.data
       args:
         warn: false
-      when: check_region.rc == 0
 
     - name: Check if it is dc controller
       command: >-
@@ -198,7 +192,8 @@
         - "{{ patching_permdir }}"
         - "{{ patching_repo_permdir }}"
         - "{{ extension_permdir }}"
-        - "{{ patch_vault_permdir }}"
+        - "{{ dc_vault_permdir }}"
+        - "{{ deploy_permdir }}"
         - "{{ postgres_dir.path }}"
         - "{{ armada_permdir }}"
         - "{{ helm_charts_permdir }}"
@@ -239,18 +234,21 @@
     - name: Backup ldap db
       command: "slapcat -d 0 -F /etc/openldap/schema -l {{ ldap_db_backup }}"
 
-    - name: Create ceph temp dir
-      file:
-        path: "{{ tempdir.path }}/ceph"
-        state: directory
-      register: ceph_dir
+    - block:
+      - name: Create ceph temp dir
+        file:
+          path: "{{ tempdir.path }}/ceph"
+          state: directory
+        register: ceph_dir
 
-    - name: Name ceph crushmap backup
-      set_fact:
-        crushmap_file: "{{ ceph_dir.path }}/crushmap.bin.backup"
+      - name: Name ceph crushmap backup
+        set_fact:
+          crushmap_file: "{{ ceph_dir.path }}/crushmap.bin.backup"
 
-    - name: Create ceph crushmap backup
-      command: "ceph osd getcrushmap -o {{ crushmap_file }}"
+      - name: Create ceph crushmap backup
+        command: "ceph osd getcrushmap -o {{ crushmap_file }}"
+
+      when: ceph_backend.stat.exists
 
     - name: Create etcd snapshot temp dir
       file:
@@ -315,8 +313,9 @@
            {{ patching_permdir }} \
            {{ patching_repo_permdir }} \
            {{ extension_permdir }} \
-           {{ patch_vault_permdir }} \
-           {{ crushmap_file }} \
+           {{ dc_vault_permdir }} \
+           {{ deploy_permdir }} \
+           {{ crushmap_file | default(\"\") }} \
            {{ etcd_snapshot_file }} \
            {{ ldap_db_backup }} \
            {{ postgres_dir.path }} \

@@ -67,6 +67,13 @@
     args:
       warn: false
 
+  - name: Temporary add central OAM as registry.central in /etc/hosts for subcloud restore
+    lineinfile:
+      path: /etc/hosts
+      line: "{{ system_controller_oam_floating_address }}\tregistry.central"
+      insertbefore: EOF
+    when: distributed_cloud_role == 'subcloud'
+
   # Wei: I noticed that /etc/hosts and /opt/platform/config/<version>/hosts are always different
 
   when: mode == 'restore'

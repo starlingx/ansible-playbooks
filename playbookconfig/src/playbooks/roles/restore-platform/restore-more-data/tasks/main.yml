@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2020 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -26,6 +26,7 @@
   set_fact:
     short_platform_conf_path: "{{ platform_conf_path | regex_replace('^\\/', '') }}"
     short_config_permdir: "{{ config_permdir | regex_replace('^\\/', '') }}"
+    short_ceph_backend_flag: "{{ ceph_backend_flag | regex_replace('^\\/', '') }}"
 
 - name: Extract platform.conf from the backup tarball
   command: >-
@@ -68,6 +69,41 @@
 
 - name: Replace platform config file
   command: mv -f {{ staging_dir }}/platform.conf {{ platform_conf_path}}/platform.conf
+
+# While licences are not enforced, STX offers support for them through the "system license-install"
+# command. The licenses are stored in /etc/platform/.license and /opt/platform/config/<version>/.license
+# It is good practice to support license restoration, even if they are not enforced.
+- name: Check if license exists in backup config permdir (opt/platform/config)
+  command: tar -tf {{ target_backup_dir }}/{{ backup_filename }} '{{ short_config_permdir }}/.license'
+  register: check_permdir_license
+  failed_when: false
+  args:
+    warn: false
+
+- name: Restore license in config permdir (/opt/platform/config/...)
+  command: >-
+    tar -C {{ config_permdir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
+    --overwrite --transform='s,.*/,,' '{{ short_config_permdir }}/.license'
+  args:
+    warn: false
+  when: check_permdir_license.rc is defined and
+        check_permdir_license.rc == 0
+
+- name: Check if license exists in backup platform config (etc/platform)
+  command: tar -tf {{ target_backup_dir }}/{{ backup_filename }} '{{ short_platform_conf_path }}/.license'
+  register: check_platform_license
+  failed_when: false
+  args:
+    warn: false
+
+- name: Restore license in platform config (/etc/platform/)
+  command: >-
+    tar -C {{ platform_conf_path }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
+    --overwrite --transform='s,.*/,,' '{{ short_platform_conf_path }}/.license'
+  args:
+    warn: false
+  when: check_platform_license.rc is defined and
+        check_platform_license.rc == 0
 
 # Restore resolv.conf and dnsmaq
 - name: Extract resolv.conf from backup tarball
@@ -159,56 +195,87 @@
   args:
     warn: false
 
-# Can't store ceph crushmap at sysinv_config_permdir (/opt/platform/sysinv/)
-# for AIO systems because when unlocking controller-0 for the first time,
-# the crushmap is set thru ceph puppet when /opt/platform is not mounted yet.
-# So for AIO systems store the crushmap at /etc/sysinv.
-- name: Set ceph crushmap directory to /etc/sysinv if it is AIO system
-  set_fact:
-    ceph_crushmap_dir: /etc/sysinv
-  when: system_type == 'All-in-one'
-
-- name: Set ceph crushmap directory to /opt/platform/sysinv if it is non-AIO system
-  set_fact:
-    ceph_crushmap_dir: "{{ sysinv_config_permdir }}"
-  when: system_type != 'All-in-one'
-
-- name: Restore ceph crush map
-  command: >-
-    tar -C {{ ceph_crushmap_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
-    --transform='s,.*/,,' '*/crushmap.bin.backup'
+- name: Look for the flag indicating that ceph is configured
+  shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} | grep '{{ short_ceph_backend_flag }}'"
   args:
     warn: false
+  failed_when: false
+  register: ceph_backend
 
-# Need to remove osd info from the crushmap before it is loaded into ceph.
-# When osds are created they will be inserted into the crushmap by ceph.
-# TODO: There might be a better command to do this, like the rebuild option
-# with the ceph-monstore-tool.
-- name: Remove osds from the crushmap
-  shell: >-
-    crushtool -i {{ ceph_crushmap_dir }}/{{ crushmap_file }} --tree |
-    awk /osd/'{print $NF}' |
-    xargs -i crushtool -i {{ ceph_crushmap_dir }}/{{ crushmap_file }} --remove-item {}
-    -o {{ ceph_crushmap_dir }}/{{ crushmap_file }}
+# Restore ceph crushmap if ceph backend is configured
+- block:
+  # Can't store ceph crushmap at sysinv_config_permdir (/opt/platform/sysinv/)
+  # for AIO systems because when unlocking controller-0 for the first time,
+  # the crushmap is set thru ceph puppet when /opt/platform is not mounted yet.
+  # So for AIO systems store the crushmap at /etc/sysinv.
+  - name: Set ceph crushmap directory to /etc/sysinv if it is AIO system
+    set_fact:
+      ceph_crushmap_dir: /etc/sysinv
+    when: system_type == 'All-in-one'
 
-- name: Remove leading '/' from patch-vault directory
+  - name: Set ceph crushmap directory to /opt/platform/sysinv if it is non-AIO system
+    set_fact:
+      ceph_crushmap_dir: "{{ sysinv_config_permdir }}"
+    when: system_type != 'All-in-one'
+
+  - name: Restore ceph crush map
+    command: >-
+      tar -C {{ ceph_crushmap_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
+      --transform='s,.*/,,' '*/crushmap.bin.backup'
+    args:
+      warn: false
+
+  # Need to remove osd info from the crushmap before it is loaded into ceph.
+  # When osds are created they will be inserted into the crushmap by ceph.
+  # TODO: There might be a better command to do this, like the rebuild option
+  # with the ceph-monstore-tool.
+  - name: Remove osds from the crushmap
+    shell: >-
+      crushtool -i {{ ceph_crushmap_dir }}/{{ crushmap_file }} --tree |
+      awk /osd/'{print $NF}' |
+      xargs -i crushtool -i {{ ceph_crushmap_dir }}/{{ crushmap_file }} --remove-item {}
+      -o {{ ceph_crushmap_dir }}/{{ crushmap_file }}
+
+  when: ceph_backend.rc == 0
+
+- name: Remove leading '/' from dc-vault directory
   set_fact:
-    short_patch_vault_permdir: "{{ patch_vault_permdir | regex_replace('^\\/', '') }}"
+    short_dc_vault_permdir: "{{ dc_vault_permdir | regex_replace('^\\/', '') }}"
 
-- name: Look for patch-vault filesystem
-  shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} | grep 'patch-vault'"
+- name: Look for dc-vault filesystem
+  shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} | grep '{{ dc_vault_permdir|basename }}'"
   args:
     warn: false
   failed_when: false
   register: search_result
 
-- name: Restore patch-vault filesystem
+- name: Restore dc-vault filesystem
   command: >-
     tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }}
-    {{ short_patch_vault_permdir }}
+    {{ short_dc_vault_permdir }}
   args:
     warn: false
   when: search_result.rc == 0
+
+- name: Remove leading '/' from deploy directory
+  set_fact:
+    short_deploy_permdir: "{{ deploy_permdir | regex_replace('^\\/', '') }}"
+
+- name: Look for deploy files
+  shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} |
+         grep {{ short_deploy_permdir }}"
+  args:
+    warn: false
+  failed_when: false
+  register: deploy_search_result
+
+- name: Restore files in deploy directory (/opt/platform/deploy/...)
+  command: >-
+    tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }}
+    {{ short_deploy_permdir}}
+  args:
+    warn: false
+  when: deploy_search_result.rc == 0
 
 # TODO: Restore ceph_external when it is supported
 
@@ -283,14 +350,14 @@
       psql -c "update i_host set administrative='locked', operational='disabled',
       availability='offline'" sysinv
     become_user: postgres
-    when: wipe_ceph_osds|bool
+    when: wipe_ceph_osds|bool and ceph_backend.rc == 0 or ceph_backend.rc != 0
 
   - name: Set all the hosts, except storage nodes to locked/disabled/offline state
     shell: >-
       psql -c "update i_host set administrative='locked', operational='disabled',
       availability='offline' where personality!='storage'" sysinv
     become_user: postgres
-    when: not wipe_ceph_osds|bool
+    when: not wipe_ceph_osds|bool and ceph_backend.rc == 0
 
   # Set platform-integ-apps to "uploaded" state, so that once ceph is up after
   # controller-0 is unlocked for the first time, the manifest will be applied.
@@ -354,7 +421,75 @@
         guide for next step.
     when: check_online.stdout != "online"
 
-  # Restore ceph-mon data
+  # Resize drbd-backed partitions
+  - block:
+    - name: Get DRBD-synced partitions
+      shell: source /etc/platform/openrc; system controllerfs-list --format yaml
+      register: controllerfs_partitions_output
+
+    # First extend the logical volumes
+    - name: Resize logical volumes (except database, dc-vault)
+      command: "lvextend -L{{ item.size }}G /dev/cgts-vg/{{ item.logical_volume }}"
+      failed_when: false
+      with_items: "{{ controllerfs_partitions_output.stdout | from_yaml }}"
+      when: item.name != "database" and item.name != "{{ dc_vault_permdir|basename }}"
+      register: lvextend_output
+
+    # In cases where we try to resize an LV to the size it already is, lvextend
+    # will throw an error, but it's not an issue so we just ignore that error.
+    - name: Fail if resize of logical volumes fail
+      fail:
+        msg: "{{ item.item }}  failed for the following reason: {{ item.stderr }}"
+      when: item.rc is defined and item.rc != 0 and
+            item.stderr is not search('matches existing size')
+      with_items: "{{ lvextend_output.results }}"
+
+    # The database LV is twice the size that is stored in sysinv (in order to support
+    # upgrades), so we resize it seperately.
+    - name: Resize database logical volume
+      command: "lvextend -L{{ (item.size*2) }}G /dev/cgts-vg/{{ item.logical_volume }}"
+      failed_when: false
+      with_items: "{{ controllerfs_partitions_output.stdout | from_yaml }}"
+      when: item.name == "database"
+      register: lvextend_database_output
+
+    - name: Fail if resize of database logical volume fails
+      fail:
+        msg: "{{ item.item }}  failed for the following reason: {{ item.stderr }}"
+      when: item.rc is defined and item.rc != 0 and
+            item.stderr is not search('matches existing size')
+      with_items: "{{ lvextend_database_output.results }}"
+
+    - name: Resize DRBD resources
+      command: "drbdadm -- --assume-peer-has-space resize all"
+
+    # Resize the filesystem on top of DRBD resources.
+    # The information about which /dev/drbd<id> corresponds to each LV is hard-coded
+    # in puppet and is not available in sysinv, so we provide a static list of devices
+    # here as well.
+    # Keep this list in sync with the device names specified in the stx-puppet repo at:
+    # puppet-manifests/src/modules/platform/manifests/drbd.pp
+    # NOTE: Only devices present in the "system controllerfs-list" command output
+    #       need to be kept in sync. Filesystem that we don't allow resizing for
+    #       (for example rabbitmq) or those that don't use the controllerfs
+    #       command (for example cephmon) don't need to be kept in sync.
+    - name: Resize DRBD filesystems
+      command: "resize2fs {{ item }}"
+      register: resize2fs_output
+      failed_when: false
+      with_items:
+        - /dev/drbd0  # postgres
+        - /dev/drbd2  # platform
+        - /dev/drbd5  # extension
+        - /dev/drbd7  # etcd
+        - /dev/drbd8  # docker-distribution
+
+    - name: Fail if resize of DRBD filesystems fail
+      fail:
+        msg: "{{ item.item }}  failed for the following reason: {{ item.stderr }}"
+      when: item.rc != 0 and item.stderr is not search('Nothing to do!')
+      with_items: "{{ resize2fs_output.results }}"
+  # Restore ceph-mon data if ceph backend is configured
   - block:
     - block:
       # Recover procedure for systems with storage nodes is different from
@@ -402,11 +537,13 @@
 
       when: not wipe_ceph_osds|bool
 
-    - name: Inform user that restore_platform is run successfully
-      debug:
-        msg: >-
-          Controller-0 is now online. The next step is to unlock this controller.
-          Please refer to the system administration guide for more details.
+    when: check_online.stdout == "online" and ceph_backend.rc == 0
+
+  - name: Inform user that restore_platform is run successfully
+    debug:
+      msg: >-
+        Controller-0 is now online. The next step is to unlock this controller.
+        Please refer to the system administration guide for more details.
     when: check_online.stdout == "online"
 
   # Remove temporary staging area used by the copy module

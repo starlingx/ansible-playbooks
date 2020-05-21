@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  creationTimestamp: null
+  name: {{ sc_adminep_ca_cert_ns }}
+spec: {}
+status: {}
+
+---
+apiVersion: v1
+data:
+  tls.crt: {{ sc_ca_cert }}
+  tls.key: {{ sc_ca_key }}
+kind: Secret
+metadata:
+  name: {{ sc_adminep_ca_cert_secret }}
+  namespace: {{ sc_adminep_ca_cert_ns }}
+type: kubernetes.io/tls
+
+---
+apiVersion: cert-manager.io/v1alpha2
+kind: Issuer
+metadata:
+  name: sc-intermediate-ca-adminep-issuer
+  namespace: {{ sc_adminep_ca_cert_ns }}
+spec:
+  ca:
+    secretName: {{ sc_adminep_ca_cert_secret }}
+
+---
+apiVersion: cert-manager.io/v1alpha2
+kind: Certificate
+metadata:
+  name: {{ sc_adminep_cert_secret }}
+  namespace: {{ sc_adminep_ca_cert_ns }}
+spec:
+  secretName: {{ sc_adminep_cert_secret }}
+  duration: {{ sc_adminep_cert_duration }}
+  renewBefore: {{ sc_adminep_cert_renew_before }}
+  issuerRef:
+    name: sc-intermediate-ca-adminep-issuer
+    kind: Issuer
+  commonName: {{ controller_floating_address }}

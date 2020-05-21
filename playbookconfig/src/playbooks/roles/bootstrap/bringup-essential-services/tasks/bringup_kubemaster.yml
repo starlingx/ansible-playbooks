@@ -25,11 +25,6 @@
 #   - Reload systemd
 #
 
-- name: Check if we have to do k8s_restore or clean initialization
-  set_fact:
-    k8s_restore: true
-  when: mode == 'restore' and not wipe_ceph_osds|bool
-
 - name: Setup iptables for Kubernetes
   lineinfile:
     path: /etc/sysctl.d/k8s.conf
@@ -75,7 +70,7 @@
       dest: "{{ kubeadm_pki_dir }}/{{item.key}}"
     with_dict: "{{ k8s_pki_files }}"
 
-  when: k8s_pki_files is defined and not k8s_restore
+  when: k8s_pki_files is defined and mode == 'bootstrap'
 
 - name: Set kubelet node configuration
   set_fact:
@@ -100,7 +95,7 @@
     src: "encryption-provider.yaml.j2"
     dest: "{{ encryption_provider_config }}"
     mode: 0600
-  when: not k8s_restore
+  when: mode == 'bootstrap'
 
 - name: Create Kube admin yaml
   copy:
@@ -237,7 +232,7 @@
   - name: Restore etcd database
     import_tasks: restore_etcd.yml
 
-  when: k8s_restore
+  when: mode == 'restore'
 
 - name: Initializing Kubernetes master
   command: kubeadm init --ignore-preflight-errors=DirAvailable--var-lib-etcd --config=/etc/kubernetes/kubeadm.yaml
@@ -303,7 +298,7 @@
     command: kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system scale --replicas=1 deployment coredns
     when: system_mode == 'simplex'
 
-  when: not k8s_restore
+  when: mode == 'bootstrap'
 
 - name: Remove taint from master node
   shell: "kubectl --kubeconfig=/etc/kubernetes/admin.conf taint node controller-0 node-role.kubernetes.io/master- || true"
@@ -321,7 +316,7 @@
       dest: "{{ config_permdir }}/enabled_kube_plugins"
       mode: 0640
       group: sys_protected
-  when: k8s_plugins and not k8s_restore
+  when: k8s_plugins and mode == 'bootstrap'
 
 - name: Add kubelet service override
   copy:
@@ -368,6 +363,11 @@
     remote_src: yes
     force: yes
     mode: 0400
+
+- name: Apply pod security policy
+  command: >
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f
+    {{ psp_file }}
 
 - name: Mark Kubernetes config complete
   file:

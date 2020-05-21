@@ -88,6 +88,17 @@
   environment:
     CNI_BIN_DIR: "{{ kubelet_cni_bin_dir }}"
 
+- name: Determine the stream_server_address for containerd
+  set_fact:
+    stream_server_address: "{{ '127.0.0.1' if ipv6_addressing == False else '::1' }}"
+
+- name: Set the stream_server_address in config.toml
+  command: "sed -i -e 's|<%= @stream_server_address %>|'$STREAM_SERVER_ADDRESS'|g' /etc/containerd/config.toml"
+  args:
+    warn: false
+  environment:
+    STREAM_SERVER_ADDRESS: "{{ stream_server_address }}"
+
 - name: Restart containerd
   systemd:
     name: containerd
