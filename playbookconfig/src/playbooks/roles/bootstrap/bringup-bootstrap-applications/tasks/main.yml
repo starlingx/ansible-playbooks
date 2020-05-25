@@ -38,6 +38,7 @@
 - name: Upload and apply applications
   include: upload_and_apply_application.yml application={{ item }}
   with_items: "{{ applications }}"
+  when: mode != 'restore'
 
 - name: Revert /etc/resolv.conf from coredns
   command: "sed -i -e 's|nameserver {{ (cluster_service_subnet |
