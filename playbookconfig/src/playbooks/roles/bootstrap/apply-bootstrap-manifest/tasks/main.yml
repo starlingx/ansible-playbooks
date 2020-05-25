@@ -27,13 +27,16 @@
       msg: "Failed to create puppet hiera static config."
     when: static_config_result.rc != 0
 
-  - name: Write system controller keystone admin user and project Ids to static hieradata if it's subcloud
+  - name: Write required system controller keystone user and project Ids to static hieradata if it's subcloud
     lineinfile:
       path: "{{ hieradata_workdir }}/static.yaml"
       line: "{{ item }}"
     with_items:
       - "keystone::dc_admin_user_id: {{ system_controller_keystone_admin_user_id }}"
       - "keystone::dc_admin_project_id: {{ system_controller_keystone_admin_project_id }}"
+      - "openstack::keystone::bootstrap::dc_services_project_id: {{ system_controller_keystone_services_project_id }}"
+      - "platform::sysinv::bootstrap::dc_sysinv_user_id: {{ system_controller_keystone_sysinv_user_id }}"
+
     when: distributed_cloud_role == 'subcloud'
 
   when: mode == 'bootstrap'
