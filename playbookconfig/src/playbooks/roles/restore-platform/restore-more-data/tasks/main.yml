@@ -376,11 +376,10 @@
     shell: psql -c "update kube_app set status='uploaded' where name='platform-integ-apps'" sysinv
     become_user: postgres
 
-  # If other applications are in "applied" state, set them to "uploaded" state to
-  # avoid confusion. The apps will be brought up in stages after the
-  # platform is restored.
-  - name: Set applied apps to "uploaded" state and inactive
-    shell: psql -c "update kube_app set status='uploaded',active='f' where status='applied'" sysinv
+  # Container images will not be present after restore. Inform sysinv so it
+  # can download the images. Kubernetes will then start the apps.
+  - name: Set applied apps to "restore-requested" state
+    shell: psql -c "update kube_app set status='restore-requested' where status='applied'" sysinv
     become_user: postgres
 
   - name: Restart services
