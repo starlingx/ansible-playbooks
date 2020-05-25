@@ -20,6 +20,17 @@
     - "{{ puppet_permdir }}/hieradata/system.yaml"
     - "{{ puppet_permdir }}/hieradata/secure_system.yaml"
 
+# User postgres needs access files in this folder during restore
+# Permissions will be set back to 0750 when host is unlocked
+- name: Correct staging directory permissions for restore
+  file:
+    path: "{{ staging_dir }}"
+    state: directory
+    recurse: yes
+    owner: root
+    group: root
+    mode: 0755
+
 # To work around an ansible quirk that regex_replace filter
 # is ignored when it is applied to variables in the command module
 - name: Remove leading '/' from dir name
