@@ -189,6 +189,7 @@
         - "{{ sysinv_permdir }}"
         - "{{ puppet_permdir }}/hieradata"
         - "{{ keyring_permdir }}"
+        - "{{ extra_permdir }}"
         - "{{ patching_permdir }}"
         - "{{ patching_repo_permdir }}"
         - "{{ extension_permdir }}"
@@ -310,6 +311,7 @@
            {{ sysinv_permdir }} \
            {{ puppet_permdir }}/hieradata \
            {{ keyring_permdir }} \
+           {{ extra_permdir }} \
            {{ patching_permdir }} \
            {{ patching_repo_permdir }} \
            {{ extension_permdir }} \
