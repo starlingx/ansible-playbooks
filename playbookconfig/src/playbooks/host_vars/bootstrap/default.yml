@@ -322,4 +322,4 @@ k8s_plugins:
 #         values-path: /home/sysinv/dex-overrides.yaml
 applications:
   - /usr/local/share/applications/helm/nginx-ingress-controller-1.0-0.tgz:
-  - /usr/local/share/applications/helm/cert-manager-1.0-0.tgz:
+  - /usr/local/share/applications/helm/cert-manager-1.0-1.tgz:
