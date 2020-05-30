@@ -18,18 +18,10 @@
       helm_overrides_permdir: "{{ platform_path + '/helm/' + software_version }}"
       sysinv_config_permdir: "{{ platform_path + '/sysinv/' + software_version }}"
 
-  # To work around an ansible quirk that regex_replace filter
-  # is ignored when it is applied to variables in the command module
-  - name: Strip the leading slash in dirname and assign it to a new variable
-    set_fact:
-      short_branding_permdir: "{{ branding_permdir | regex_replace('^\\/', '') }}"
-      short_banner_permdir: "{{ banner_permdir | regex_replace('^\\/', '') }}"
-      short_config_permdir: "{{ config_permdir | regex_replace('^\\/', '') }}"
-
   - name: Restore branding tar file
     command: >-
-      tar -C /opt/branding -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
-      {{ short_branding_permdir }}
+      tar -C /opt/branding -xpf {{ restore_data_file }} --transform='s,.*/,,'
+      {{ archive_branding_permdir }}
     args:
       warn: false
 
@@ -39,7 +31,7 @@
       state: absent
 
   - name: Look for banner directory in the backup tarball
-    shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} | grep -F 'banner/etc'"
+    shell: "tar -tf {{ restore_data_file }} | grep -F 'banner/etc'"
     args:
       warn: false
     failed_when: false
@@ -53,8 +45,8 @@
 
     - name: Restore banner files if they exist in the backup tarball
       command: >-
-        tar -C /opt/banner -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
-        {{ short_banner_permdir }}
+        tar -C /opt/banner -xpf {{ restore_data_file }} --transform='s,.*/,,'
+        {{ archive_banner_permdir }}
       args:
         warn: false
 
@@ -66,7 +58,7 @@
 
   - name: Extract ssl_ca certifcate from backup archive
     command: >-
-      tar -xf {{ target_backup_dir }}/{{ backup_filename }} -C {{ temp_ssl_ca_dir }} -p --transform='s,.*/,,'
+      tar -xf {{ restore_data_file }} -C {{ temp_ssl_ca_dir }} -p --transform='s,.*/,,'
       */{{ temp_ssl_ca_file }}*
     args:
       warn: false
@@ -84,8 +76,8 @@
 
   - name: Extract enabled kubernetes plugin configuration from the backup archive
     command: >-
-      tar -C {{ temp_k8s_plugins_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
-      --overwrite --transform='s,.*/,,' '{{ short_config_permdir }}/enabled_kube_plugins'
+      tar -C {{ temp_k8s_plugins_dir }} -xpf {{ restore_data_file }}
+      --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/enabled_kube_plugins'
     args:
       warn: false
     ignore_errors: yes

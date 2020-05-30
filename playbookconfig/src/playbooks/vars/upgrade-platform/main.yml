@@ -1,0 +1,7 @@
+---
+initial_config_complete_flag: /etc/platform/.initial_config_complete
+restore_in_progress_flag: /etc/platform/.restore_in_progress
+wipe_ceph_osds: false
+migrate_hieradata: true
+supported_release_versions:
+  - "20.06"

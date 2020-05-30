@@ -51,19 +51,15 @@
   when: mode == 'bootstrap'
 
 - block:
-  - name: Strip the leading slash from config_permdir and assign it to a new variable
-    set_fact:
-      short_config_permdir: "{{ config_permdir | regex_replace('^\\/', '') }}"
-
   - name: restore /etc/hosts file
-    command: tar -C /etc -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,' etc/hosts
+    command: tar -C /etc -xpf {{ restore_data_file }} --transform='s,.*/,,' etc/hosts
     args:
       warn: false
 
   - name: restore hosts in config permdir
     command: >-
-      tar -C {{ config_permdir }} -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
-      {{ short_config_permdir }}/hosts
+      tar -C {{ config_permdir }} -xpf {{ restore_data_file }} --transform='s,.*/,,'
+      {{ archive_config_permdir }}/hosts
     args:
       warn: false
 

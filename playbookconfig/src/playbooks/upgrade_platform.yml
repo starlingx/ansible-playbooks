@@ -13,3 +13,6 @@
   roles:
     - common/prepare-env
     - upgrade-platform/prepare-env
+
+- name: Run bootstrap playbook with restore mode
+  import_playbook: bootstrap.yml mode='restore'

@@ -27,7 +27,7 @@ docker_cert_dir: /etc/docker/certs.d
 cgroup_root: /sys/fs/cgroup
 k8s_cgroup_name: k8s-infra
 kubeadm_pki_dir: /etc/kubernetes/pki
-etcd_tmp_dir: "{{ target_backup_dir }}/etcd_tmp_dir"
+etcd_tmp_dir: /opt/backups/etcd_tmp_dir
 psp_file: /usr/share/ansible/stx-ansible/playbooks/roles/bootstrap/bringup-essential-services/files/psp-policies.yaml
 
 armada_domain: armada-domain

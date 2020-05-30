@@ -115,16 +115,10 @@
       group: root
       mode: 0755
 
-  # To work around an ansible quirk that regex_replace filter
-  # is ignored when it is applied to variables in the command module
-  - name: Strip the leading '/' from keyring directory and assign it to a new variable
-    set_fact:
-      short_keyring_permdir: "{{ keyring_permdir | regex_replace('^\\/', '') }}/python_keyring"
-
   - name: Prefetch the keyring from the tarball
     command: >-
-      tar -C {{ temp_keyring_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
-      {{ short_keyring_permdir }}
+      tar -C {{ temp_keyring_dir }} -xpf {{ restore_data_file }} --transform='s,.*/,,'
+      {{ archive_keyring_permdir }}
     args:
       warn: false
 

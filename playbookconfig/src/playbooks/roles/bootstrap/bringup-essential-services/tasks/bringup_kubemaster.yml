@@ -222,7 +222,7 @@
 
 - block:
   - name: Restore kubernetes certificates
-    shell: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} {{ item }}
+    shell: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
     args:
       warn: false
     with_items:
@@ -230,7 +230,7 @@
     become_user: root
 
   - name: Restore encryption provider config
-    shell: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} {{ item }}
+    shell: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
     args:
       warn: false
     with_items:
