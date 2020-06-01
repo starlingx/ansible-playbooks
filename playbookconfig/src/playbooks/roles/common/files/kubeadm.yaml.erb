@@ -34,7 +34,6 @@ controllerManager:
     node-monitor-period: "2s"
     node-monitor-grace-period: "20s"
     pod-eviction-timeout: "30s"
-    experimental-cluster-signing-duration: "730h"
     feature-gates: "TTLAfterFinished=true"
     flex-volume-plugin-dir: <%= @ctrl_mgr_flex_vol_plugin_dir %>
 controlPlaneEndpoint: <%= @apiserver_advertise_address %>
