@@ -17,6 +17,7 @@
 #   - Prepare SRIOV config and activate SRIOV networking
 #   - Prepare SRIOV device plugin config and activate SRIOV device plugin
 #   - Restore Helm charts if the host is bootstrapped in restore mode
+#   - Prepare and apply coredns config
 #   - Restrict coredns to master node and set anti-affnity (duplex system)
 #   - Restrict coredns to 1 pod (simplex system)
 #   - Remove taint from master node
@@ -212,6 +213,11 @@
     src: "k8s-{{ kubernetes_version }}/sriov-plugin.yaml.j2"
     dest: /etc/kubernetes/sriovdp-daemonset.yaml
 
+- name: Create coredns config file
+  template:
+    src: "coredns.yaml.j2"
+    dest: /etc/kubernetes/coredns.yaml
+
 - block:
   - name: Restore kubernetes certificates
     shell: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} {{ item }}
@@ -280,6 +286,9 @@
 
   - name: Activate SRIOV device plugin
     command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/sriovdp-daemonset.yaml"
+
+  - name: Apply coredns config
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/coredns.yaml"
 
     # Restrict coredns to master node and use anti-affinity for core dns for duplex systems
   - block:
