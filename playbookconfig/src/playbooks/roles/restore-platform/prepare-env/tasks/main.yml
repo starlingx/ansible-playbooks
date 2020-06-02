@@ -48,12 +48,15 @@
 
     - name: Prepare to rename override file
       set_fact:
-        override_filename: "{{ (search_result.stdout_lines[0] | basename).split('_override_backup')[0] }}.yml"
+        override_filename: restore_platform_overrides.yml
 
     - name: Rename override file for bootstrap
       command: >-
         mv -f {{ override_files_dir }}/{{ (search_result.stdout_lines[0] | basename) }}
         {{ override_files_dir }}/{{ override_filename }}
+
+    - name: Include override data
+      include_vars: "{{ override_files_dir }}/{{ override_filename }}"
 
     when: search_result.rc == 0
 

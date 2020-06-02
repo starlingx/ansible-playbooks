@@ -263,10 +263,15 @@
 
 # Install certificate if SSL CA certifcate is configured
 - block:
+  - name: Set source for copying certificate
+    set_fact:
+      ssl_ca_source: "{{ mode == 'restore' }}"
+
   - name: Copy ssl_ca certificate
     copy:
       src: "{{ ssl_ca_cert }}"
       dest: "{{ temp_ssl_ca }}"
+      remote_src: "{{ ssl_ca_source }}"
 
   - name: Remove ssl_ca complete flag
     file:
