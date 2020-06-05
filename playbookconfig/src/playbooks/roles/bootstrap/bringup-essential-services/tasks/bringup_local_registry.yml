@@ -88,29 +88,6 @@
   environment:
     CNI_BIN_DIR: "{{ kubelet_cni_bin_dir }}"
 
-- name: Get local registry credentials
-  vars:
-    script_content: |
-      import keyring
-      password = keyring.get_password("CGCS", "admin")
-      if not password:
-          raise Exception("Local registry password not found.")
-      print dict(username='admin', password=str(password))
-  shell: "{{ script_content }}"
-  args:
-    executable: /usr/bin/python
-  register: local_registry_credentials_output
-
-- set_fact:
-    local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
-
-- name: Update config.toml with registry auth
-  command: "sed -i -e 's|<%= @registry_auth %>|$REG_AUTH|g' /etc/containerd/config.toml"
-  args:
-    warn: false
-  environment:
-    REG_AUTH: "{{ (local_registry_credentials['username'] + ':' + local_registry_credentials['password']) | b64encode }}"
-
 - name: Determine the stream_server_address for containerd
   set_fact:
     stream_server_address: "{{ '127.0.0.1' if ipv6_addressing == False else '::1' }}"
