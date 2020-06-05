@@ -10,11 +10,13 @@
   gather_facts: no
 
   vars_files:
+    - vars/common/main.yml
     - host_vars/bootstrap/default.yml
 
   # Main play
   roles:
     - common/prepare-env
+    - common/validate-target
     - bootstrap/prepare-env
     - { role: bootstrap/validate-config, become: yes }
     - { role: bootstrap/store-passwd, when: save_password, become: yes }

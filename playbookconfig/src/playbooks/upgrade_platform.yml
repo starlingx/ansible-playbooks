@@ -8,11 +8,20 @@
   gather_facts: no
 
   vars_files:
+    - vars/common/main.yml
     - host_vars/upgrade-platform/default.yml
 
   roles:
     - common/prepare-env
+    - common/validate-target
     - upgrade-platform/prepare-env
+    - restore-platform/restore-sw-patches
 
 - name: Run bootstrap playbook with restore mode
   import_playbook: bootstrap.yml mode='restore'
+
+- hosts: all
+  gather_facts: no
+
+  roles:
+    - { role: restore-platform/restore-more-data, become: yes }

@@ -44,12 +44,12 @@
 - block:
   - name: Remove leading '/' from dir name
     set_fact:
-      short_docker_cert_dir: "{{ docker_cert_dir | regex_replace('^\\/', '') }}"
+      archive_docker_cert_dir: "{{ docker_cert_dir | regex_replace('^\\/', '') }}"
 
   - name: Restore registry.central certs (/etc/docker/certs.d)
     command: >-
       tar -C {{ docker_cert_dir }} -xpf {{ restore_data_file }}
-      --overwrite --transform='s,{{ short_docker_cert_dir }},,' '{{ short_docker_cert_dir }}/registry.central*'
+      --overwrite --transform='s,{{ archive_docker_cert_dir }},,' '{{ archive_docker_cert_dir }}/registry.central*'
     args:
       warn: false
 

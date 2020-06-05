@@ -55,11 +55,11 @@
 
   - name: Migrate static hieradata to new version
     command: >
-      "sed -i 's/{{ upgrade_metadata.from_release }}/{{ upgrade_metadata.to_release }}/g'
-      {{ hieradata_workdir }}/static.yaml"
+      sed -i 's/{{ upgrade_metadata.from_release }}/{{ upgrade_metadata.to_release }}/g'
+      {{ hieradata_workdir }}/static.yaml
     args:
       warn: false
-    when: migrate_hieradata is defined and migrate_hieradata
+    when: migrate_platform_data is defined and migrate_platform_data
 
   - name: Look for ssh_config dir in the backup tarball
     shell: "tar -tf {{ restore_data_file }} | grep 'opt/platform/config/.*/ssh_config'"

@@ -11,7 +11,7 @@
   block:
     - name: Restore ceph.conf file
       command: >-
-        tar -C / -xpf {{ target_backup_dir }}/{{ backup_filename }}
+        tar -C / -xpf {{ restore_data_file }}
         'etc/ceph/ceph.conf'
       args:
         warn: false

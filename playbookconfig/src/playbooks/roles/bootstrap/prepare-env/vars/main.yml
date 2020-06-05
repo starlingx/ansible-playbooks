@@ -3,8 +3,6 @@ image_brand: StarlingX
 platform_path: /opt/platform
 puppet_path: /opt/platform/puppet
 standard_root_disk_size: 500
-supported_release_versions:
-  - "20.06"
 temp_ssl_ca_dir: "/tmp"
 temp_ssl_ca_file: "ca-cert.pem"
 temp_k8s_plugins_dir: "/tmp"

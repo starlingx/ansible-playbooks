@@ -9,16 +9,11 @@
 #   during platform restore.
 #
 
-# These hieradata were generated after persist-config role was run. They
-# will be re-generated when sysinv is restarted after postgres db is restored
-- name: Remove newly generated hieradata data
-  file:
-    path: "{{ item }}"
-    state: absent
-  with_items:
-    - "{{ puppet_permdir }}/hieradata/{{ controller_floating_address|ipmath(1) }}.yaml"
-    - "{{ puppet_permdir }}/hieradata/system.yaml"
-    - "{{ puppet_permdir }}/hieradata/secure_system.yaml"
+- name: Set parameters for archive paths
+  set_fact:
+    archive_dc_vault_permdir: "{{ dc_vault_permdir | regex_replace('^\\/', '') }}"
+    archive_platform_conf_path: "{{ platform_conf_path | regex_replace('^\\/', '') }}"
+    archive_ceph_backend_flag: "{{ ceph_backend_flag | regex_replace('^\\/', '') }}"
 
 # User postgres needs access files in this folder during restore
 # Permissions will be set back to 0750 when host is unlocked
@@ -31,55 +26,61 @@
     group: root
     mode: 0755
 
-# To work around an ansible quirk that regex_replace filter
-# is ignored when it is applied to variables in the command module
-- name: Remove leading '/' from dir name
-  set_fact:
-    short_platform_conf_path: "{{ platform_conf_path | regex_replace('^\\/', '') }}"
-    short_config_permdir: "{{ config_permdir | regex_replace('^\\/', '') }}"
-    short_ceph_backend_flag: "{{ ceph_backend_flag | regex_replace('^\\/', '') }}"
+- block:
+  # These hieradata were generated after persist-config role was run. They
+  # will be re-generated when sysinv is restarted after postgres db is restored
+  - name: Remove newly generated hieradata data
+    file:
+      path: "{{ item }}"
+      state: absent
+    with_items:
+      - "{{ puppet_permdir }}/hieradata/{{ controller_floating_address|ipmath(1) }}.yaml"
+      - "{{ puppet_permdir }}/hieradata/system.yaml"
+      - "{{ puppet_permdir }}/hieradata/secure_system.yaml"
 
-- name: Extract platform.conf from the backup tarball
-  command: >-
-    tar -C {{ staging_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}  --transform='s,.*/,,'
-    {{ short_platform_conf_path }}/platform.conf
-  args:
-    warn: false
+  - name: Extract platform.conf from the backup tarball
+    command: >-
+      tar -C {{ staging_dir }} -xpf {{ restore_data_file }}  --transform='s,.*/,,'
+      {{ archive_platform_conf_path }}/platform.conf
+    args:
+      warn: false
 
-- name: Search for the new INSTALL_UUID in /etc/platform/platform.conf
-  shell: grep INSTALL_UUID {{ platform_conf_path }}/platform.conf
-  register: result
+  - name: Search for the new INSTALL_UUID in /etc/platform/platform.conf
+    shell: grep INSTALL_UUID {{ platform_conf_path }}/platform.conf
+    register: result
 
-- name: Replace INSTALL_UUID with the new one
-  lineinfile:
-    dest: "{{ staging_dir }}/platform.conf"
-    regexp: 'INSTALL_UUID'
-    line: "{{ result.stdout }}"
+  - name: Replace INSTALL_UUID with the new one
+    lineinfile:
+      dest: "{{ staging_dir }}/platform.conf"
+      regexp: 'INSTALL_UUID'
+      line: "{{ result.stdout }}"
 
-- name: Strip out entries that are host specific
-  lineinfile:
-    dest: "{{ staging_dir }}/platform.conf"
-    regexp: "{{ item }}"
-    state: absent
-  with_items:
-    - '^oam_interface='
-    - '^cluster_host_interface='
-    - '^UUID='
+  - name: Strip out entries that are host specific
+    lineinfile:
+      dest: "{{ staging_dir }}/platform.conf"
+      regexp: "{{ item }}"
+      state: absent
+    with_items:
+      - '^oam_interface='
+      - '^cluster_host_interface='
+      - '^UUID='
 
-- name: Search for the management_interface in /etc/platform/platform.conf
-  shell: grep management_interface {{ platform_conf_path }}/platform.conf
-  failed_when: false
-  register: result
+  - name: Search for the management_interface in /etc/platform/platform.conf
+    shell: grep management_interface {{ platform_conf_path }}/platform.conf
+    failed_when: false
+    register: result
 
-- name: Replace management_interface with the new one
-  lineinfile:
-    dest: "{{ staging_dir }}/platform.conf"
-    regexp: '^management_interface='
-    line: "{{ result.stdout }}"
-  when: result.rc == 0
+  - name: Replace management_interface with the new one
+    lineinfile:
+      dest: "{{ staging_dir }}/platform.conf"
+      regexp: '^management_interface='
+      line: "{{ result.stdout }}"
+    when: result.rc == 0
 
-- name: Replace platform config file
-  command: mv -f {{ staging_dir }}/platform.conf {{ platform_conf_path}}/platform.conf
+  - name: Replace platform config file
+    command: mv -f {{ staging_dir }}/platform.conf {{ platform_conf_path}}/platform.conf
+
+  when: migrate_platform_data is not defined or not migrate_platform_data
 
 # For subcloud, the DC root CA certificate and admin endpoint certificate need to be
 # restored from backup into /opt/platform/config directory so that
@@ -88,7 +89,7 @@
   # Restore admin endpoint certificate for DC if it exists in backup
   - name: Check if admin endpoint certficate exists in backup config permdir (opt/platform/config)
     command: >-
-      tar -tf {{ target_backup_dir }}/{{ backup_filename }} '{{ short_config_permdir }}/admin-ep-cert.pem'
+      tar -tf {{ restore_data_file }} '{{ archive_config_permdir }}/admin-ep-cert.pem'
     register: check_admin_cert
     failed_when: false
     args:
@@ -96,8 +97,8 @@
 
   - name: Restore admin endpoint certificate into config permdir (/opt/platform/config/...)
     command: >-
-      tar -C {{ config_permdir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
-      --overwrite --transform='s,.*/,,' '{{ short_config_permdir }}/admin-ep-cert.pem'
+      tar -C {{ config_permdir }} -xpf {{ restore_data_file}}
+      --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/admin-ep-cert.pem'
     args:
       warn: false
     when: check_admin_cert.rc is defined and
@@ -106,8 +107,8 @@
   # Restore admin endpoint root CA certificate for DC if it exists in backup
   - name: Check if admin endpoint root CA certficate exists in backup config permdir (opt/platform/config)
     command: >-
-      tar -tf {{ target_backup_dir }}/{{ backup_filename }}
-      '{{ short_config_permdir }}/dc-adminep-root-ca.crt'
+      tar -tf {{ restore_data_file }}
+      '{{ archive_config_permdir }}/dc-adminep-root-ca.crt'
     register: check_ca_cert
     failed_when: false
     args:
@@ -115,8 +116,8 @@
 
   - name: Restore admin endpoint root CA certificate into config permdir (/opt/platform/config/...)
     command: >-
-      tar -C {{ config_permdir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
-      --overwrite --transform='s,.*/,,' '{{ short_config_permdir }}/dc-adminep-root-ca.crt'
+      tar -C {{ config_permdir }} -xpf {{ restore_data_file }}
+      --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/dc-adminep-root-ca.crt'
     args:
       warn: false
     when: check_ca_cert.rc is defined and
@@ -126,7 +127,7 @@
 # command. The licenses are stored in /etc/platform/.license and /opt/platform/config/<version>/.license
 # It is good practice to support license restoration, even if they are not enforced.
 - name: Check if license exists in backup config permdir (opt/platform/config)
-  command: tar -tf {{ target_backup_dir }}/{{ backup_filename }} '{{ short_config_permdir }}/.license'
+  command: tar -tf {{ restore_data_file }} '{{ archive_platform_conf_path }}/.license'
   register: check_permdir_license
   failed_when: false
   args:
@@ -134,15 +135,15 @@
 
 - name: Restore license in config permdir (/opt/platform/config/...)
   command: >-
-    tar -C {{ config_permdir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
-    --overwrite --transform='s,.*/,,' '{{ short_config_permdir }}/.license'
+    tar -C {{ config_permdir }} -xpf {{ restore_data_file }}
+    --overwrite --transform='s,.*/,,' '{{ archive_platform_conf_path }}/.license'
   args:
     warn: false
   when: check_permdir_license.rc is defined and
         check_permdir_license.rc == 0
 
 - name: Check if license exists in backup platform config (etc/platform)
-  command: tar -tf {{ target_backup_dir }}/{{ backup_filename }} '{{ short_platform_conf_path }}/.license'
+  command: tar -tf {{ restore_data_file }} '{{ archive_platform_conf_path }}/.license'
   register: check_platform_license
   failed_when: false
   args:
@@ -150,8 +151,8 @@
 
 - name: Restore license in platform config (/etc/platform/)
   command: >-
-    tar -C {{ platform_conf_path }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
-    --overwrite --transform='s,.*/,,' '{{ short_platform_conf_path }}/.license'
+    tar -C {{ platform_conf_path }} -xpf {{ restore_data_file }}
+    --overwrite --transform='s,.*/,,' '{{ archive_platform_conf_path }}/.license'
   args:
     warn: false
   when: check_platform_license.rc is defined and
@@ -160,39 +161,36 @@
 # Restore resolv.conf and dnsmaq
 - name: Extract resolv.conf from backup tarball
   command: >-
-    tar -C /etc -xpf {{ target_backup_dir }}/{{ backup_filename }} --overwrite
+    tar -C /etc -xpf {{ restore_data_file }} --overwrite
     --transform='s,.*/,,' etc/resolv.conf
   args:
     warn: false
 
 - name: Restore resolv.conf in config permdir (/opt/platform/config/...)
   command: >-
-    tar -C {{ config_permdir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
-    --overwrite --transform='s,.*/,,' '{{ short_config_permdir }}/resolv.conf'
+    tar -C {{ config_permdir }} -xpf {{ restore_data_file }}
+    --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/resolv.conf'
   args:
     warn: false
 
 - name: Restore dnsmaq in config permdir (/opt/platform/config/...)
   command: >-
-    tar -C {{ config_permdir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
-    --overwrite --transform='s,.*/,,' '{{ short_config_permdir }}/dnsmasq*'
+    tar -C {{ config_permdir }} -xpf {{ restore_data_file }}
+    --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/dnsmasq*'
   args:
     warn: false
-
-- name: Remove leading '/' from directory name
-  set_fact:
-    short_pxe_config_permdir: "{{ pxe_config_permdir | regex_replace('^\\/', '') }}"
 
 - name: Restore boot files in pxelinux.cfg dir
   command: >-
-    tar -C {{ pxe_config_permdir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
-    --overwrite --transform='s,.*/,,' '{{ short_pxe_config_permdir }}/*-*-*'
+    tar -C {{ pxe_config_permdir }} -xpf {{ restore_data_file }}
+    --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/pxelinux.cfg/*-*-*'
   args:
     warn: false
+  when: migrate_platform_data is not defined or not migrate_platform_data
 
 - name: Extract ldap.db to staging directory
   command: >-
-    tar -C {{ staging_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
+    tar -C {{ staging_dir }} -xpf {{ restore_data_file }}
     --transform='s,.*/,,' '*/ldap.db'
   args:
     warn: false
@@ -226,13 +224,13 @@
     state: absent
 
 - name: Restore home directory
-  shell: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} 'home/*'
+  shell: tar -C / --overwrite -xpf {{ restore_data_file }} 'home/*'
   args:
     warn: false
   become_user: root
 
 - name: Restore armada manifests and extension filesystem
-  command: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} {{ item }}
+  command: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
   args:
     warn: false
   become_user: root
@@ -242,13 +240,13 @@
 
 - name: Restore sysinv default configuration file
   command: >-
-    tar -C {{ sysinv_config_permdir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
+    tar -C {{ sysinv_config_permdir }} -xpf {{ restore_data_file }}
     --transform='s,.*/,,' '*/sysinv.conf.default'
   args:
     warn: false
 
 - name: Look for the flag indicating that ceph is configured
-  shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} | grep '{{ short_ceph_backend_flag }}'"
+  shell: "tar -tf {{ restore_data_file }} | grep '{{ archive_ceph_backend_flag }}'"
   args:
     warn: false
   failed_when: false
@@ -272,7 +270,7 @@
 
   - name: Restore ceph crush map
     command: >-
-      tar -C {{ ceph_crushmap_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
+      tar -C {{ ceph_crushmap_dir }} -xpf {{ restore_data_file }}
       --transform='s,.*/,,' '*/crushmap.bin.backup'
     args:
       warn: false
@@ -290,12 +288,8 @@
 
   when: ceph_backend.rc == 0
 
-- name: Remove leading '/' from dc-vault directory
-  set_fact:
-    short_dc_vault_permdir: "{{ dc_vault_permdir | regex_replace('^\\/', '') }}"
-
 - name: Look for dc-vault filesystem
-  shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} | grep '{{ dc_vault_permdir|basename }}'"
+  shell: "tar -tf {{ restore_data_file }} | grep '{{ dc_vault_permdir|basename }}'"
   args:
     warn: false
   failed_when: false
@@ -303,19 +297,15 @@
 
 - name: Restore dc-vault filesystem
   command: >-
-    tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }}
-    {{ short_dc_vault_permdir }}
+    tar -C / --overwrite -xpf {{ restore_data_file }}
+    {{ archive_dc_vault_permdir }}
   args:
     warn: false
   when: search_result.rc == 0
 
-- name: Remove leading '/' from deploy directory
-  set_fact:
-    short_deploy_permdir: "{{ deploy_permdir | regex_replace('^\\/', '') }}"
-
 - name: Look for deploy files
-  shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} |
-         grep {{ short_deploy_permdir }}"
+  shell: "tar -tf {{ restore_data_file }} |
+         grep {{ archive_deploy_permdir }}"
   args:
     warn: false
   failed_when: false
@@ -323,8 +313,8 @@
 
 - name: Restore files in deploy directory (/opt/platform/deploy/...)
   command: >-
-    tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }}
-    {{ short_deploy_permdir}}
+    tar -C / --overwrite -xpf {{ restore_data_file }}
+    {{ archive_deploy_permdir}}
   args:
     warn: false
   when: deploy_search_result.rc == 0
@@ -360,38 +350,51 @@
       - sysinv-agent
       - openstack-barbican-api
 
-  - name: Create staging directory for postgres data
-    file:
-      path: "{{ staging_dir }}/postgres"
-      state: directory
-      recurse: yes
-      owner: root
-      group: root
-      mode: 0755
+  - block:
+    - name: Create staging directory for postgres data
+      file:
+        path: "{{ staging_dir }}/postgres"
+        state: directory
+        recurse: yes
+        owner: root
+        group: root
+        mode: 0755
 
-  - name: Extract postgres db to staging directory
-    command: >-
-      tar -C {{ staging_dir }}/postgres -xpf {{ target_backup_dir }}/{{ backup_filename }}
-      --transform='s,.*/,,' '*/*\.postgreSql\.*'
-    args:
-      warn: false
+    - name: Extract postgres db to staging directory
+      command: >-
+        tar -C {{ staging_dir }}/postgres -xpf {{ restore_data_file }}
+        --transform='s,.*/,,' '*/*\.postgreSql\.*'
+      args:
+        warn: false
 
-  - name: Restore postgres db
-    shell: "psql -f {{ item }} {{ (item|basename).split('.')[0] }}"
-    become_user: postgres
-    with_items:
-      - "{{ staging_dir }}/postgres/postgres.postgreSql.config"
-      - "{{ staging_dir }}/postgres/postgres.postgreSql.data"
-      - "{{ staging_dir }}/postgres/template1.postgreSql.data"
-      - "{{ staging_dir }}/postgres/sysinv.postgreSql.data"
-      - "{{ staging_dir }}/postgres/keystone.postgreSql.data"
-      - "{{ staging_dir }}/postgres/fm.postgreSql.data"
-      - "{{ staging_dir }}/postgres/barbican.postgreSql.data"
+    - name: Restore postgres db
+      shell: "psql -f {{ item }} {{ (item|basename).split('.')[0] }}"
+      become_user: postgres
+      with_items:
+        - "{{ staging_dir }}/postgres/postgres.postgreSql.config"
+        - "{{ staging_dir }}/postgres/postgres.postgreSql.data"
+        - "{{ staging_dir }}/postgres/template1.postgreSql.data"
+        - "{{ staging_dir }}/postgres/sysinv.postgreSql.data"
+        - "{{ staging_dir }}/postgres/keystone.postgreSql.data"
+        - "{{ staging_dir }}/postgres/fm.postgreSql.data"
+        - "{{ staging_dir }}/postgres/barbican.postgreSql.data"
 
-  - name: Remove postgres staging directory
-    file:
-      path: "{{ staging_dir }}/postgres"
-      state: absent
+    - name: Remove postgres staging directory
+      file:
+        path: "{{ staging_dir }}/postgres"
+        state: absent
+
+    when: migrate_platform_data is not defined or not migrate_platform_data
+
+  - block:
+    - name: Migrate databases and platform data
+      command: "upgrade_controller_simplex {{ restore_data_file }}"
+      register: migration_output
+
+    - debug:
+        var: migration_output.stdout_lines
+
+    when: migrate_platform_data is defined and migrate_platform_data
 
   # Set all the hosts including controller-0 to locked/disabled/offline state.
   # After the services are restarted, mtce will update controller-0 to

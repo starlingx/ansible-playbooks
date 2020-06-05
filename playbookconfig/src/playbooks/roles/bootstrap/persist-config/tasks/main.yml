@@ -377,10 +377,10 @@
 - block:
   - name: Strip the leading '/' from directories and assign them to new variables
     set_fact:
-      short_extra_permdir: "{{ extra_permdir | regex_replace('^\\/', '') }}"
+      archive_extra_permdir: "{{ extra_permdir | regex_replace('^\\/', '') }}"
 
   - name: Look for extra dir in backup archive
-    shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} | grep '{{ short_extra_permdir }}'"
+    shell: "tar -tf {{ restore_data_file }} | grep '{{ archive_extra_permdir }}'"
     args:
       warn: false
     failed_when: false
@@ -388,8 +388,8 @@
 
   - name: Restore extra dir
     command: >-
-      tar -C {{ extra_permdir }} -xpf {{ target_backup_dir }}/{{ backup_filename }} --strip-components=3
-      '{{ short_extra_permdir }}'
+      tar -C {{ extra_permdir }} -xpf {{ restore_data_file }} --strip-components=3
+      '{{ archive_extra_permdir }}'
     args:
       warn: false
     when: search_result.rc == 0

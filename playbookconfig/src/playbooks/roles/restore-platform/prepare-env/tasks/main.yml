@@ -69,21 +69,6 @@
 
   delegate_to: localhost
 
-- name: Retrieve software version number
-  # lookup module does not work with /etc/build.info as it does not have ini
-  # format. Resort to shell source.
-  shell: source /etc/build.info; echo $SW_VERSION
-  register: sw_version_result
-
-- name: Fail if software version is not defined
-  fail:
-    msg: "SW_VERSION is missing in /etc/build.info"
-  when: sw_version_result.stdout_lines|length == 0
-
-- name: Set software version fact
-  set_fact:
-    software_version: "{{ sw_version_result.stdout_lines[0] }}"
-
 - name: Set archive parameters for bootstrap
   set_fact:
     archive_puppet_permdir: "opt/platform/puppet/{{ software_version }}/hieradata"
@@ -92,6 +77,7 @@
     archive_keyring_permdir: "opt/platform/.keyring/{{ software_version }}/python_keyring"
     archive_branding_permdir: "opt/platform/config/{{ software_version }}/branding"
     archive_banner_permdir: "opt/platform/config/{{ software_version }}/banner/etc"
+    archive_deploy_permdir: "opt/platform/deploy/{{ software_version }}"
 
 - block:
   # Bail if the host has been unlocked

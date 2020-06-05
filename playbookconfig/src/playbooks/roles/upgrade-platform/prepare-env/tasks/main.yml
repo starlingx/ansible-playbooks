@@ -67,7 +67,7 @@
 
   - name: Set upgrade_data value
     set_fact:
-      restore_data_file: upgrade_data_find_output.path
+      restore_data_file: "{{ upgrade_data_find_output.files[0].path }}"
 
   when: upgrade_data_file is not defined or upgrade_data_file is none
 
@@ -170,7 +170,7 @@
 - name: Check for correct upgrade version
   fail:
     msg: "Incorrect software load installed. Expecting {{ upgrade_metadata.to_release }}"
-  when: not upgrade_metadata.to_release in supported_release_versions
+  when: upgrade_metadata.to_release != software_version
 
 - name: Set archive parameters for bootstrap
   set_fact:
@@ -180,3 +180,4 @@
     archive_keyring_permdir: "opt/platform/.keyring/{{ upgrade_metadata.from_release }}/python_keyring"
     archive_branding_permdir: "opt/platform/config/{{ upgrade_metadata.from_release }}/branding"
     archive_banner_permdir: "opt/platform/config/{{ upgrade_metadata.from_release }}/banner/etc"
+    archive_deploy_permdir: "opt/platform/deploy/{{ upgrade_metadata.from_release }}"
