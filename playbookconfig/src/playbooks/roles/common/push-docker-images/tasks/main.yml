@@ -135,21 +135,24 @@
   when: item.username is defined
   no_log: true
 
-- name: Get local registry credentials
-  vars:
-    script_content: |
-      import keyring
-      password = keyring.get_password("CGCS", "admin")
-      if not password:
-          raise Exception("Local registry password not found.")
-      print dict(username='admin', password=str(password))
-  shell: "{{ script_content }}"
-  args:
-    executable: /usr/bin/python
-  register: local_registry_credentials_output
+# Retrieve local registry credentials unless it has been already
+- block:
+  - name: Get local registry credentials
+    vars:
+      script_content: |
+        import keyring
+        password = keyring.get_password("CGCS", "admin")
+        if not password:
+            raise Exception("Local registry password not found.")
+        print dict(username='admin', password=str(password))
+    shell: "{{ script_content }}"
+    args:
+      executable: /usr/bin/python
+    register: local_registry_credentials_output
 
-- set_fact:
-    local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
+  - set_fact:
+      local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
+  when: local_registry_credentials is not defined
 
 - name: Download images and push to local registry
   script: download_images.py {{ download_images }}
