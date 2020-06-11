@@ -26,7 +26,7 @@
 
 - block:  # Revert changes done by kubeadm init, clear data cache
   - name: Shut down and remove Kubernetes components
-    command: kubeadm reset -f --cri-socket /var/run/containerd/containerd.sock
+    command: kubeadm --kubeconfig=/etc/kubernetes/admin.conf reset -f --cri-socket /var/run/containerd/containerd.sock
     register: reset_info
 
   - debug: var=reset_info.stdout_lines

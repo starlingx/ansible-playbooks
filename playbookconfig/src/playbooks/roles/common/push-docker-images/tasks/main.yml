@@ -44,7 +44,7 @@
 
 - block:
   - name: Get the list of kubernetes images
-    shell: "kubeadm config images list --kubernetes-version {{ kubernetes_version }}"
+    shell: "kubeadm --kubeconfig=/etc/kubernetes/admin.conf config images list --kubernetes-version {{ kubernetes_version }}"
     register: kubernetes_images_output
 
   - set_fact:
