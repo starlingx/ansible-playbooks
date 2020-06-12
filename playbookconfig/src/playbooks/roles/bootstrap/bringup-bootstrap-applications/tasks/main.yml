@@ -20,31 +20,10 @@
 - pause:
     seconds: 30
 
-# we need to do this or the armada container will fail on hostname resolution when deploying applications
-- name: Update /etc/resolv.conf with coredns
-  command: "sed -i -e 's|nameserver {{ controller_floating_address }}|nameserver {{ (cluster_service_subnet |
-            ipaddr(10)).split('/')[0]}}|g' /etc/resolv.conf"
-  args:
-    warn: false
-
-- name: Find armada container
-  shell: "docker ps | grep armada | awk '{print $1}'"
-  register: armada_container
-
-- name: Restart armada container to pick up resolv.conf changes
-  command: "docker restart {{ armada_container.stdout }}"
-  when: armada_container.stdout != ""
-
 - name: Upload and apply applications
   include: upload_and_apply_application.yml application={{ item }}
   with_items: "{{ applications }}"
   when: mode != 'restore'
-
-- name: Revert /etc/resolv.conf from coredns
-  command: "sed -i -e 's|nameserver {{ (cluster_service_subnet |
-            ipaddr(10)).split('/')[0]}}|nameserver {{ controller_floating_address }}|g' /etc/resolv.conf"
-  args:
-    warn: false
 
 - name: Create distributed cloud CA
   include_tasks: create_dc_ca.yml

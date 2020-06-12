@@ -101,7 +101,6 @@
         - k8s-app=kube-proxy
         - app=multus
         - app=sriov-cni
-        - app=helm
         - component=kube-apiserver
         - component=kube-controller-manager
         - component=kube-scheduler
@@ -123,14 +122,24 @@
 
     when: mode == 'restore'
 
-  - name: Start parallel tasks to wait for Kubernetes component, Networking and Tiller pods to reach ready state
+  - name: Start parallel tasks to wait for Kubernetes component and Networking pods to reach ready state
     command: >-
-      kubectl --kubeconfig=/etc/kubernetes/admin.conf wait  --namespace=kube-system
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --namespace=kube-system
       --for=condition=Ready pods --selector {{ item }} --timeout=30s
     async: "{{ async_timeout }}"
     poll: 0
     with_items: "{{ kube_component_list }}"
-    register: wait_for_pods
+    register: wait_for_kube_system_pods
+
+  - name: Start wait for armada pods to reach ready state
+    command: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --namespace={{ armada_namespace }}
+      --for=condition=Ready pods --selector {{ item }} --timeout=30s
+    async: "{{ async_timeout }}"
+    poll: 0
+    with_items:
+      - application=armada
+    register: wait_for_armada_pods
 
   - name: Get wait tasks results
     async_status:
@@ -148,11 +157,13 @@
     # at least 1 pod from every deployment is up and running. If there are none active
     # from a particular deployment it will be caught in the next task.
     failed_when: false
-    with_items: "{{ wait_for_pods.results }}"
+    with_items:
+      - "{{ wait_for_kube_system_pods.results }}"
+      - "{{ wait_for_armada_pods.results }}"
 
-  - name: Fail if any of the Kubernetes component, Networking and Tiller pods is not ready by this time
+  - name: Fail if any of the Kubernetes component, Networking or Armada pods are not ready by this time
     fail:
-      msg: "Pod {{ item._ansible_item_label._ansible_item_label }} is still not ready."
+      msg: "Pod {{ item.item.item }} is still not ready."
     when: item.stdout is not search(" condition met")
     with_items: "{{ wait_job_result.results }}"
 

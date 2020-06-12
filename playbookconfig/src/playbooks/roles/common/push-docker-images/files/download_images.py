@@ -83,11 +83,8 @@ def download_an_image(img):
             auth_str = '{0}:{1}'.format(auth['username'], auth['password'])
             subprocess.check_call(["crictl", "pull", "--creds", auth_str, local_img])
             print("Image %s download succeeded by containerd" % target_img)
-            # except armada/tiller, other docker images could be removed.
-            # TODO: run armada with containerd.
-            if not ('armada' in target_img or 'tiller' in target_img):
-                client.remove_image(target_img)
-                client.remove_image(local_img)
+            client.remove_image(target_img)
+            client.remove_image(local_img)
             return target_img, True
         except docker.errors.NotFound as e:
             print(err_msg + str(e))

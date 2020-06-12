@@ -3,6 +3,7 @@ source_helm_bind_dir: /opt/platform/helm_charts
 target_helm_bind_dir: /www/pages/helm_charts
 helm_repo_name_apps: starlingx
 helm_repo_name_platform: stx-platform
+helm_repo_port: 8080
 kubelet_override_template: /usr/share/puppet/modules/platform/templates/kube-stx-override.conf.erb
 kubelet_pmond_template: /usr/share/puppet/modules/platform/templates/kubelet-pmond-conf.erb
 kubelet_cni_bin_dir: /usr/libexec/cni
@@ -29,31 +30,10 @@ kubeadm_pki_dir: /etc/kubernetes/pki
 etcd_tmp_dir: "{{ target_backup_dir }}/etcd_tmp_dir"
 psp_file: /usr/share/ansible/stx-ansible/playbooks/roles/bootstrap/bringup-essential-services/files/psp-policies.yaml
 
+armada_domain: armada-domain
+armada_user: armada
+armada_namespace: armada
+armada_secret_name: default-registry-key
+
 # Kubernetes api server encryption provider configuration file
 encryption_provider_config: /etc/kubernetes/encryption-provider.yaml
-
-# Patch content: tiller-deploy
-# This patch will look for and ensure that 4 sets of environment variables with
-# common prefixes are set in tiller's enviroment before allowing the service to
-# start.
-tiller_deploy_patch: |
-  spec:
-    strategy:
-       type: RollingUpdate
-       rollingUpdate:
-         maxUnavailable: 1
-         maxSurge: 1
-    template:
-      spec:
-        containers:
-        - name: tiller
-          command:
-          - /bin/sh
-          - -cex
-          - |
-            #!/bin/sh
-            env | grep -q -e ^TILLER_DEPLOY || exit
-            env | grep -q -e ^KUBE_DNS || exit
-            env | grep -q -e ^KUBERNETES_PORT || exit
-            env | grep -q -e ^KUBERNETES_SERVICE || exit
-            /tiller

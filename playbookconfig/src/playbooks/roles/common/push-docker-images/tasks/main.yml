@@ -68,6 +68,7 @@
         - "{{ tiller_img }}"
         - "{{ armada_img }}"
         - "{{ n3000_opae_img }}"
+        - "{{ kubernetes_entrypoint_img }}"
       storage_images:
         - "{{ snapshot_controller_img }}"
   when: kubernetes_version is defined
@@ -102,7 +103,7 @@
 
 - name: Set download images list to netapp images if installing trident
   set_fact:
-    download_images_list: "{{ download_images_list|default([]) + trident_images + storage_images}}"
+    download_images_list: "{{ download_images_list|default([]) + trident_images + storage_images }}"
   when: mode == 'trident_install'
 
 - set_fact:
