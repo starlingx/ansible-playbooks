@@ -1,5 +1,4 @@
 ---
-initial_config_complete_flag: /etc/platform/.initial_config_complete
-restore_in_progress_flag: /etc/platform/.restore_in_progress
 default_upgrade_data_dir: /opt/platform-backup
-wipe_ceph_osds: false
+temp_upgrade_platform_dir: /tmp/ansible_upgrade_platform
+override_filename: upgrade_platform_overrides.yml

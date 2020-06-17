@@ -216,7 +216,7 @@
 - block:
   - name: Restore certificate and key files
     command: >-
-      tar -C /etc/ssl/private -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+      tar -C /etc/ssl/private -xpf {{ restore_data_file }} --transform='s,.*/,,'
       'etc/ssl/private/*cert*'
     args:
       warn: false

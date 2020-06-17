@@ -105,7 +105,7 @@
     - "{{ target_helm_bind_dir }}"
 
 - name: Restore Helm charts if the host is bootstrapped in restore mode
-  command: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} {{ item }}
+  command: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
   args:
     warn: false
   become_user: root
