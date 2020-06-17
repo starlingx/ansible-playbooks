@@ -1,0 +1,83 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to verify the host environment and collect the necessary data for the rest of
+#   the playbook
+#
+- block:
+  - name: Set default upgrade_data_file path
+    set_fact:
+      upgrade_data_dir: "{{ default_upgrade_data_dir }}"
+
+  # The upgrade data file will be placed under the default_upgrade_data_dir during upgrade-start
+  # The name is formatted upgrade_data_<date_time>_<software_upgrade_uuid>.tgz
+  - name: Find upgrade_data tar file
+    find:
+      paths: "{{ upgrade_data_dir }}"
+      patterns: 'upgrade_data*.tgz'
+    register: upgrade_data_find_output
+
+  - name: Check presence of upgrade_data
+    fail:
+      msg: >
+       "Could not find upgrade_data file in {{ upgrade_data_dir }}.
+        Found {{ upgrade_data_find_output.matched }} matches."
+    when: upgrade_data_find_output.matched != 1
+
+  - name: Set upgrade_data value
+    set_fact:
+      upgrade_data_file_path: upgrade_data_find_output.path
+
+  when: upgrade_data_file is not defined or upgrade_data_file is none
+
+- block:
+  - name: Check for upgrade_data on host
+    stat:
+      path: "{{ upgrade_data_file }}"
+    register: host_upgrade_data_file
+
+  - name: Fail if the upgrade_data file is not found
+    fail:
+      msg: "Upgrade data file '{{ upgrade_data_file }}' not found."
+    when: not host_upgrade_data_file.stat.exists
+
+  - name: Set upgrade_data value
+    set_fact:
+      upgrade_data_file_path: "{{ upgrade_data_file }}"
+
+  when: upgrade_data_file is defined and upgrade_data_file is not none
+
+# TODO move these checks to a common location for B&R/upgrades
+- block:
+  # Bail if the host has been unlocked
+  - name: Check initial config flag
+    stat:
+      path: "{{ initial_config_complete_flag }}"
+    register: initial_config_done
+
+  - name: Fail if the host has been unlocked
+    fail:
+      msg: "Host {{ ansible_host }} has been unlocked. Cannot perform restore."
+    when: initial_config_done.stat.exists
+
+  - name: Check if restore is in progress
+    stat:
+      path: "{{ restore_in_progress_flag }}"
+    register: restore_in_progress
+
+  - name: Fail if restore is already in progress
+    fail:
+      msg: " Restore is already in progress!"
+    when: restore_in_progress.stat.exists
+
+  - name: Create {{ restore_in_progress_flag }} flag file
+    file:
+      path: "{{ restore_in_progress_flag }}"
+      state: touch
+
+  become: yes
+  become_user: root
