@@ -25,6 +25,13 @@
   with_items: "{{ applications }}"
   when: mode != 'restore'
 
+# While Armada indicates pods are ready, some bugs were raised indicating
+# cert-manager webhook validation is not fully setup. Adding an indirect check
+# here to test a certificate issuer
+- name: Test cert-manager resource creation
+  import_tasks: test_cert_manager_creation.yml
+  when: mode != 'restore'
+
 # Create DC CA and set up subcloud admin endpoint certificates for bootstrap mode.
 - block:
   - name: Create distributed cloud CA
