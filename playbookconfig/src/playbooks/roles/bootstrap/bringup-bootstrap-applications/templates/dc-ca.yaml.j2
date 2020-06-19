@@ -22,6 +22,11 @@ spec:
   issuerRef:
     name: dc-selfsigning-issuer
     kind: Issuer
+  subject:
+    organizationalUnits:
+    - 'StarlingX DC Root CA'
+    organizations:
+    - StarlingX
 
 ---
 apiVersion: cert-manager.io/v1alpha2
@@ -33,3 +38,18 @@ spec:
   ca:
     secretName: dc-adminep-root-ca-certificate
 
+---
+apiVersion: cert-manager.io/v1alpha3
+kind: Certificate
+metadata:
+  name: dc-adminep-certificate
+  namespace: dc-cert
+spec:
+  commonName: "{{ controller_floating_address }}"
+  duration: 4320h
+  isCA: false
+  issuerRef:
+    kind: Issuer
+    name: dc-adminep-root-ca-issuer
+  renewBefore: 30h
+  secretName: dc-adminep-certificate
