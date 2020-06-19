@@ -1,9 +1,19 @@
 #!/bin/sh
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2020 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
+
+# WORKAROUND: For script module become user issue.
+#             It doesn't detected correctly the BECOME-SUCCESS
+#             message of become. It happens for tasks quick to produce
+#             output. The python scripts seem not to be affected by
+#             this due to overhead of loading the interpreter.
+#
+#             Upstream reports of this:
+#             - https://github.com/ansible/ansible/issues/70092
+sleep 2
 
 part_type_guid_str="Partition GUID code"
 CEPH_OSD_GUID="4FBD7E29-9D25-41B8-AFD0-062C0CEFF05D"
