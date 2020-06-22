@@ -199,6 +199,7 @@
         - "{{ armada_permdir }}"
         - "{{ helm_charts_permdir }}"
         - "{{ mariadb_dir.path }}"
+        - "{{ helm_overrides_permdir }}"
         - "{{ helm_overrides_dir.path }}"
       register: size_output
 
@@ -322,6 +323,7 @@
            {{ ldap_db_backup }} \
            {{ postgres_dir.path }} \
            {{ armada_permdir }} \
+           {{ helm_overrides_permdir }} \
            {{ helm_charts_permdir }} 2>/dev/null)"
       args:
         warn: false

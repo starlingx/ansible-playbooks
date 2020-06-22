@@ -78,6 +78,7 @@
     archive_branding_permdir: "opt/platform/config/{{ software_version }}/branding"
     archive_banner_permdir: "opt/platform/config/{{ software_version }}/banner/etc"
     archive_deploy_permdir: "opt/platform/deploy/{{ software_version }}"
+    archive_helm_permdir: "opt/platform/helm/{{ software_version }}"
 
 - block:
   # Bail if the host has been unlocked
