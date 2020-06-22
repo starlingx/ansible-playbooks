@@ -238,6 +238,12 @@
     - "{{ armada_permdir | regex_replace('^\\/', '') }}"
     - "{{ extension_permdir | regex_replace('^\\/', '') }}"
 
+- name: Restore helm overrides
+  command: tar -C / --overwrite -xpf {{ restore_data_file }} {{ archive_helm_permdir }}
+  args:
+    warn: false
+  become_user: root
+
 - name: Restore sysinv default configuration file
   command: >-
     tar -C {{ sysinv_config_permdir }} -xpf {{ restore_data_file }}
@@ -320,15 +326,6 @@
   when: deploy_search_result.rc == 0
 
 # TODO: Restore ceph_external when it is supported
-
-- name: Create Helm overrides directory
-  file:
-    path: "{{ helm_overrides_permdir }}"
-    state: directory
-    recurse: yes
-    owner: root
-    group: root
-    mode: 0755
 
 - block:
   - name: Shutdown mtce

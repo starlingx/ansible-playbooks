@@ -181,3 +181,4 @@
     archive_branding_permdir: "opt/platform/config/{{ upgrade_metadata.from_release }}/branding"
     archive_banner_permdir: "opt/platform/config/{{ upgrade_metadata.from_release }}/banner/etc"
     archive_deploy_permdir: "opt/platform/deploy/{{ upgrade_metadata.from_release }}"
+    archive_helm_permdir: "opt/platform/helm/{{ upgrade_metadata.from_release }}"
