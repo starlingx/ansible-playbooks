@@ -416,6 +416,7 @@
   - name: Set platform-integ-apps to "uploaded" state
     shell: psql -c "update kube_app set status='uploaded' where name='platform-integ-apps'" sysinv
     become_user: postgres
+    when: migrate_platform_data is not defined or not migrate_platform_data
 
   # Container images will not be present after restore. Inform sysinv so it
   # can download the images. Kubernetes will then start the apps.
