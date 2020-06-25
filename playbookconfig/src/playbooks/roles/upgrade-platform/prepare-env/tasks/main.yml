@@ -88,15 +88,20 @@
 
   when: upgrade_data_file is defined and upgrade_data_file is not none
 
-- name: Remove temporary data
+- name: Ensure temporary data path is present
   file:
-    path: "{{ temp_upgrade_platform_dir }}"
-    state: absent
+    path: "{{ temp_upgrade_platform_path }}"
+    state: directory
 
 - name: Create temporary data directory
-  file:
-    path: "{{ temp_upgrade_platform_dir }}"
+  tempfile:
     state: directory
+    path: "{{ temp_upgrade_platform_path }}"
+  register: upgrade_tempdir
+
+- name: Set temporary directory value
+  set_fact:
+    temp_upgrade_platform_dir: "{{ upgrade_tempdir.path }}"
 
 - name: Look for override backup file in the backup tarball
   shell: "tar -tf {{ restore_data_file }} | grep '_override_backup.yml'"
@@ -182,3 +187,15 @@
     archive_banner_permdir: "opt/platform/config/{{ upgrade_metadata.from_release }}/banner/etc"
     archive_deploy_permdir: "opt/platform/deploy/{{ upgrade_metadata.from_release }}"
     archive_helm_permdir: "opt/platform/helm/{{ upgrade_metadata.from_release }}"
+
+- name: Remove temporary data
+  file:
+    path: "{{ temp_upgrade_platform_dir }}"
+    state: absent
+
+- name: Remove temporary data from master
+  local_action:
+    module: file
+    path: "{{ temp_upgrade_platform_dir }}"
+    state: absent
+  when: inventory_hostname != 'localhost'
