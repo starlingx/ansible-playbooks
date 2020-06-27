@@ -61,13 +61,14 @@
   - name: Check presence of upgrade_data
     fail:
       msg: >
-       "Could not find upgrade_data file in {{ upgrade_data_dir }}.
-        Found {{ upgrade_data_find_output.matched }} matches."
-    when: upgrade_data_find_output.matched != 1
+       "Could not find upgrade_data file in {{ upgrade_data_dir }}."
+    when: upgrade_data_find_output.matched == 0
 
   - name: Set upgrade_data value
     set_fact:
-      restore_data_file: "{{ upgrade_data_find_output.files[0].path }}"
+      restore_data_file: "{{ latest_upgrade_data.path }}"
+    vars:
+      latest_upgrade_data: "{{ upgrade_data_find_output.files | sort(attribute='ctime', reverse=True) | first }}"
 
   when: upgrade_data_file is not defined or upgrade_data_file is none
 
