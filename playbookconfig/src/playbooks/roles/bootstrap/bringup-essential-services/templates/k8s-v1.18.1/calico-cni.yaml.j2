@@ -665,7 +665,7 @@ spec:
             - name: IP
               value: "autodetect"
             - name: IP_AUTODETECTION_METHOD
-              value: "can-reach={{ cluster_floating_address }}"
+              value: "can-reach={{ controller_0_cluster_host }}"
             # Enable IPIP
             - name: CALICO_IPV4POOL_IPIP
               value: "Always"
@@ -685,7 +685,7 @@ spec:
             - name: IP6
               value: "autodetect"
             - name: IP6_AUTODETECTION_METHOD
-              value: "can-reach={{ cluster_floating_address }}"
+              value: "can-reach={{ controller_0_cluster_host }}"
             # The default IPv6 pool to create on startup if none exists. Pod IPs will be
             # chosen from this range. Changing this value after installation will have
             # no effect. This should fall within `--cluster-cidr`.
