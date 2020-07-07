@@ -106,6 +106,10 @@
     download_images_list: "{{ download_images_list|default([]) + trident_images + storage_images }}"
   when: mode == 'trident_install'
 
+- name: Remove duplicate images from the download list
+  set_fact:
+    download_images_list: "{{ download_images_list | unique }}"
+
 - set_fact:
     download_images: "{{ download_images_list | join(',') }}"
 
