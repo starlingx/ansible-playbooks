@@ -239,7 +239,7 @@
   # Configure sane node label values that work with armada node selector
   - name: Create Armada node label
     command: >
-      kubectl label node controller-0 armada=enabled
+      kubectl label node controller-0 armada=enabled --overwrite=true
 
   # To prevent helm-upload requiring sudo and a tty for password,
   # become the intended www user.
