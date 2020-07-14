@@ -103,11 +103,13 @@
   environment:
     INITIAL_CONFIG_PRIMARY: "true"
     LC_ALL: "en_US.UTF-8"
+  failed_when: false
 
 - name: Fail if puppet manifest apply script returns an error
   fail:
     msg: >-
-         Failed to apply bootstrap manifest. See /var/log/puppet/latest/puppet.log
+         Failed to apply bootstrap manifest. Please re-install host {{ansible_host}}
+         before attempting to bootstrap it again. See /var/log/puppet/latest/puppet.log
          for details.
   when: bootstrap_manifest.rc != 0
 
