@@ -1,0 +1,117 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to perform tasks that configure and launch containerized Armada.
+#
+
+- name: Set Armada overrides
+  set_fact:
+    helm_charts_url: "http://{{ controller_floating_address | ipwrap }}:{{ helm_repo_port }}/helm_charts"
+
+- name: Configure and launch containerized Armada
+  block:
+  - name: Add Helm repos
+    command: /sbin/helm repo add "{{ item }}" "http://127.0.0.1:{{ helm_repo_port }}/helm_charts/{{ item }}" --debug
+    with_items:
+      - "{{ helm_repo_name_apps }}"
+      - "{{ helm_repo_name_platform }}"
+
+  - name: Update Helm repos
+    command: /sbin/helm repo update --debug
+
+  - name: Create Armada overrides
+    template:
+      src: "roles/common/armada-helm/templates/armada-overrides.yaml.j2"
+      dest: "/tmp/armada-overrides.yaml"
+    become_user: sysadmin
+
+  - name: Create namespace for Armada
+    command: >
+      kubectl create namespace {{ armada_namespace }}
+    failed_when: false
+    register: create_ns
+
+  - name: Fail if creating namespace fails
+    fail:
+      msg: "Failed to create {{ armada_namespace }} namespace. Error: {{ create_ns.stderr }}"
+    when: create_ns.rc is defined and create_ns.rc !=0 and
+          create_ns.stderr is not search('AlreadyExists')
+
+  # Retrieve local registry credentials if it's unknown
+  - block:
+    - name: Get local registry credentials
+      vars:
+        script_content: |
+          import keyring
+          password = keyring.get_password("sysinv", "services")
+          if not password:
+              raise Exception("Local registry password not found.")
+          print dict(username='sysinv', password=str(password))
+      shell: "{{ script_content }}"
+      args:
+        executable: /usr/bin/python
+      register: local_registry_credentials_output
+
+    - set_fact:
+        local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
+        local_registry: "registry.local:9001"
+    when: local_registry_credentials is not defined
+
+  - name: Check if secret exists
+    command: kubectl -n {{ armada_namespace }} get secret {{ armada_secret_name }}
+    failed_when: false
+    register: armada_get_secret
+
+  - name: Create secret if it doesn't exist
+    command: >-
+      kubectl -n {{ armada_namespace }} create secret docker-registry {{ armada_secret_name }}
+      --docker-server={{ local_registry }}
+      --docker-username={{ local_registry_credentials['username'] }}
+      --docker-password={{ local_registry_credentials['password'] }}
+    when: armada_get_secret.rc is defined and armada_get_secret.rc !=0 and
+          armada_get_secret.stderr is search('NotFound')
+
+  # Configure sane node label values that work with armada node selector
+  - name: Create Armada node label
+    command: >
+      kubectl label node controller-0 armada=enabled --overwrite=true
+
+  # To prevent helm-upload requiring sudo and a tty for password,
+  # become the intended www user.
+  - name: Upload Armada charts
+    become_user: www
+    command: >
+      /usr/local/sbin/helm-upload stx-platform /opt/extracharts/armada-0.1.0.tgz
+
+  - name: Update info of available charts from chart repos
+    command: >
+      /sbin/helm repo update --debug
+
+  - name: Check if Armada revisions exists
+    command: >-
+      /sbin/helm status armada
+      --namespace {{ armada_namespace }}
+    failed_when: false
+    register: armada_check
+
+  - name: Uninstall Armada revisions
+    command: >-
+      /sbin/helm uninstall
+      --namespace {{ armada_namespace }} armada
+    when: armada_check.rc == 0
+
+  - name: Launch Armada with Helm v3
+    command: >-
+      /sbin/helm upgrade --install armada stx-platform/armada
+      --namespace {{ armada_namespace }}
+      --values /tmp/armada-overrides.yaml
+      --debug
+
+  become_user: sysadmin
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+    HOME: /home/sysadmin
