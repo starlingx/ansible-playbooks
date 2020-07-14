@@ -213,15 +213,19 @@
         label: "{{ item.item }}"
 
     - name: Check if there is enough free space in the archive dir to create backup
-      shell: "df -k /opt/backups --output=avail | tail -1"
-      register: available_disk_size
+      shell: "df -k {{ backup_dir }} --output=avail | tail -1"
+      register: df_output
+
+    - name: Parse backup directory size
+      set_fact:
+        available_disk_size: "{{ df_output.stdout | int }}"
 
     - name: Fail if there is not enough free space in the archive dir to create backup
       fail:
         msg: >-
            Not enough free space in {{ backup_dir }}. It has {{ available_disk_size }}K.
            It needs at least {{ total_size_estimation }}K.
-      when: available_disk_size < total_size_estimation
+      when: available_disk_size|int < total_size_estimation|int
 
     - name: Create ldap temp dir
       file:
