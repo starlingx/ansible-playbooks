@@ -13,7 +13,8 @@
       regex_search('^kubernetesVersion: (.*)$', multiline=True) | regex_replace('^(.*): (.*)$', '\\2')}}"
   when: mode == 'bootstrap' or
         mode == 'restore' or
-        mode == 'trident_install'
+        mode == 'trident_install' or
+        mode == 'backup'
 
 - block:
   - name: Get the list of kubernetes images

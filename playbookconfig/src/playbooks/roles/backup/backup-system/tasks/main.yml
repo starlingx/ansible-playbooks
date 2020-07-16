@@ -177,10 +177,9 @@
         mode: 0755
         content: '{{ updates_list | default("") }}'
 
-
     # Now Postgres data and MariaDB data are stored in staging dir, we can estimate
     # the disk size requirement for the backup archive.
-    - name: Check the size (in kilobyte) of directories that will be backed up
+    - name: Check the size (in KiB) of directories that will be backed up for platform
       shell: "du -sh -k  {{ item }} | awk '{print $1}'"
       with_items:
         - /etc
@@ -198,21 +197,20 @@
         - "{{ postgres_dir.path }}"
         - "{{ armada_permdir }}"
         - "{{ helm_charts_permdir }}"
-        - "{{ mariadb_dir.path }}"
         - "{{ helm_overrides_permdir }}"
         - "{{ helm_overrides_dir.path }}"
-      register: size_output
+      register: size_output_platform
 
     # Estimate the backup size. We add 128M overhead for things like ceph crushmap,
     # ldap data, etc. that will be generated and stored in the staging dir later on.
-    - name: Estimate the total required disk size for backup archive
+    - name: Estimate the total required disk size for platform backup archive
       set_fact:
-        total_size_estimation: "{{ total_size_estimation|default(1024*128)|int + item.stdout|int }}"
-      with_items: "{{ size_output.results }}"
+        total_platform_size_estimation: "{{ total_platform_size_estimation|default(1024*128)|int + item.stdout|int }}"
+      with_items: "{{ size_output_platform.results }}"
       loop_control:
         label: "{{ item.item }}"
 
-    - name: Check if there is enough free space in the archive dir to create backup
+    - name: Check the free space in the archive dir
       shell: "df -k {{ backup_dir }} --output=avail | tail -1"
       register: df_output
 
@@ -220,12 +218,49 @@
       set_fact:
         available_disk_size: "{{ df_output.stdout | int }}"
 
-    - name: Fail if there is not enough free space in the archive dir to create backup
+    - name: Fail if there is not enough free space in the archive dir to create platform backup
       fail:
         msg: >-
-           Not enough free space in {{ backup_dir }}. It has {{ available_disk_size }}K.
-           It needs at least {{ total_size_estimation }}K.
-      when: available_disk_size|int < total_size_estimation|int
+           Not enough free space in {{ backup_dir }}. It has {{ available_disk_size }}KiB.
+           It needs at least {{ total_platform_size_estimation }}KiB.
+      when: available_disk_size|int < total_platform_size_estimation|int
+
+    - name: Estimate remaining space after reserving space for platform backup
+      set_fact:
+        remaining_disk_size_estimation: "{{ available_disk_size|int - total_platform_size_estimation|int }}"
+
+    - block:
+      # Estimate the disk size requirement for the openstack backup archive.
+      - name: Check the size (in KiB) of directories that will be backed up for openstack
+        shell: "du -sh -k  {{ item }} | awk '{print $1}'"
+        with_items:
+          - "{{ mariadb_dir.path }}"
+          - "{{ helm_overrides_dir.path }}"
+          - "{{ armada_permdir }}/stx-openstack"
+          - "{{ helm_charts_permdir }}/starlingx"
+        register: size_output_openstack
+
+      # Estimate the openstack backup size.
+      - name: Estimate the total required disk size for platform openstack archive
+        set_fact:
+          total_openstack_size_estimation: "{{ total_openstack_size_estimation|default(0)|int + item.stdout|int }}"
+        with_items: "{{ size_output_openstack.results }}"
+        loop_control:
+          label: "{{ item.item }}"
+
+      - name: Fail if there is not enough free space in the archive dir to create openstack backup
+        fail:
+          msg: >-
+             Not enough free space in {{ backup_dir }}.
+             Free space available is estimated to {{ remaining_disk_size_estimation }}KiB.
+             It needs at least {{ total_openstack_size_estimation }}KiB.
+        when: remaining_disk_size_estimation|int < total_openstack_size_estimation|int
+
+      - name: Estimate remaining space after reserving space for openstack backup
+        set_fact:
+          remaining_disk_size_estimation: "{{ remaining_disk_size_estimation|int - total_openstack_size_estimation|int }}"
+
+      when: check_mariadb_pod.rc == 0 or openstack_status.stdout == "uploaded"
 
     - name: Create ldap temp dir
       file:
@@ -295,13 +330,28 @@
         marker: ""
         block: "{{ registries|default({}) | to_nice_yaml(indent=2) }}"
 
-    - name: Attach timestamp to the platform backup filename
+    - name: Use current timestamp as backups timestamp
       set_fact:
-        platform_backup_file: "{{ platform_backup_filename_prefix }}_{{ lookup('pipe', 'date +%Y_%m_%d_%H_%M_%S') }}.tgz"
+        backup_timestamp: "{{ lookup('pipe', 'date +%Y_%m_%d_%H_%M_%S') }}"
 
-    - name: Set platform backup file absolute path
+    - name: Attach timestamp to backups filename
+      set_fact:
+        platform_backup_file: "{{ platform_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
+        docker_local_registry_backup_file: "{{ docker_local_registry_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
+        openstack_backup_file: "{{ openstack_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
+
+    - name: Set backup files absolute path
       set_fact:
         platform_backup_file_path: "{{ backup_dir }}/{{ platform_backup_file }}"
+        docker_local_registry_backup_file_path: "{{ backup_dir }}/{{ docker_local_registry_backup_file }}"
+        openstack_backup_file_path: "{{ backup_dir }}/{{ openstack_backup_file }}"
+
+    - name: Save user uploaded images from local registry to an archive
+      import_tasks: export-user-local-registry-images.yml
+      vars:
+        export_file_path: "{{ docker_local_registry_backup_file_path }}"
+        kilo_free_size: "{{ remaining_disk_size_estimation }}"
+      when: backup_user_local_registry is defined and backup_user_local_registry
 
     # Archive module has a known bug that doesn't handle empty symbolic links
     # well. Restore to tar command. Can add -P option to keep the leading
@@ -332,23 +382,14 @@
       args:
         warn: false
 
-    - block:
-      - name: Attach timestamp to the OpenStack backup filename
-        set_fact:
-          openstack_backup_file: "{{ openstack_backup_filename_prefix }}_{{ lookup('pipe', 'date +%Y_%m_%d_%H_%M_%S') }}.tgz"
-
-      - name: Set SpenStack backup file absolute path
-        set_fact:
-          openstack_backup_file_path: "{{ backup_dir }}/{{ openstack_backup_file }}"
-
-      - name: Create a tgz archive for OpenStack backup
-        shell: "tar -czf {{ openstack_backup_file_path }} $(ls -d \
-             {{ armada_permdir }}/stx-openstack \
-             {{ helm_charts_permdir }}/starlingx \
-             {{ mariadb_dir.path }} \
-             {{ helm_overrides_dir.path }} 2>/dev/null)"
-        args:
-          warn: false
+    - name: Create a tgz archive for OpenStack backup
+      shell: "tar -czf {{ openstack_backup_file_path }} $(ls -d \
+           {{ armada_permdir }}/stx-openstack \
+           {{ helm_charts_permdir }}/starlingx \
+           {{ mariadb_dir.path }} \
+           {{ helm_overrides_dir.path }} 2>/dev/null)"
+      args:
+        warn: false
       when: check_mariadb_pod.rc == 0 or openstack_status.stdout == "uploaded"
 
     - name: Notify the user backup tar file(s) are available
@@ -369,6 +410,11 @@
           dest: "{{ host_backup_dir }}/"
           flat: yes
         when: check_mariadb_pod.rc == 0 or openstack_status.stdout == "uploaded"
+
+      # TODO transfer docker image archive which may be very big during remote play.
+      # Fetch module fills the memory and has a very slow transfer rate due to base64 encoding
+      # Maybe use synchronize module after upgrading ansible, backup-restore/transfer-file
+      # role shows a github issue regarding why it can't be used now.
 
       - name: Notify the user where the backup tar file(s) can be found
         debug:
