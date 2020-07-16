@@ -7,8 +7,29 @@
 # ROLE DESCRIPTION:
 #   This role is to restore the CEPH Monitor data
 
+
 - name: Restore CEPH Monitor data
   block:
+
+    # Check if Ceph osd partitions are present
+    - name: Run ceph-disk cmd
+      command: ceph-disk list --format=json
+      register: ceph_disk_out
+
+    - name: Parse output of ceph-disk
+      set_fact:
+        ceph_disk_parsed: "{{ ceph_disk_out.stdout | from_json | selectattr('partitions', 'defined') | list }}"
+
+    - name: Get Ceph partitions
+      set_fact:
+        ceph_osd_parts: "{% for e in ceph_disk_parsed if 'cluster' in e.partitions.0
+                         and e.partitions.0.cluster == 'ceph' and e.partitions.0.type == 'data' %}{{ e }}{% endfor %}"
+
+    - name: Fail if there are no Ceph osd partitions
+      fail:
+        msg: "No Ceph osd partition found, aborting restore operation"
+      when: not ceph_osd_parts
+
     - name: Restore ceph.conf file
       command: >-
         tar -C / -xpf {{ restore_data_file }}
