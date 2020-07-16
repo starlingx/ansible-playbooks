@@ -34,44 +34,9 @@
         registry.value.type == 'aws-ecr'
   no_log: true
 
-- block:
-  - set_fact:
-      kubernetes_version: "{{ lookup('file', 'roles/common/files/kubeadm.yaml.erb') |
-        regex_search('^kubernetesVersion: (.*)$', multiline=True) | regex_replace('^(.*): (.*)$', '\\2')}}"
-  when: mode == 'bootstrap' or
-        mode == 'restore' or
-        mode == 'trident_install'
-
-- block:
-  - name: Get the list of kubernetes images
-    shell: "kubeadm --kubeconfig=/etc/kubernetes/admin.conf config images list --kubernetes-version {{ kubernetes_version }}"
-    register: kubernetes_images_output
-
-  - set_fact:
-      kubernetes_images: "{{ kubernetes_images_output.stdout_lines }}"
-
-  - include_vars:
-      dir: "vars/k8s-{{ kubernetes_version }}"
-      files_matching: "system-images.yml"
-
-  - name: Get the list of platform images
-    set_fact:
-      networking_images:
-        - "{{ calico_cni_img }}"
-        - "{{ calico_node_img }}"
-        - "{{ calico_kube_controllers_img }}"
-        - "{{ calico_flexvol_img }}"
-        - "{{ multus_img }}"
-        - "{{ sriov_cni_img }}"
-        - "{{ sriov_network_device_img }}"
-      static_images:
-        - "{{ tiller_img }}"
-        - "{{ armada_img }}"
-        - "{{ n3000_opae_img }}"
-        - "{{ kubernetes_entrypoint_img }}"
-      storage_images:
-        - "{{ snapshot_controller_img }}"
-  when: kubernetes_version is defined
+- name: Get platform images information
+  import_role:
+    name: common/load-images-information
 
 # Download all system images and additional images if bootstrap or restore
 - name: Set download images list
