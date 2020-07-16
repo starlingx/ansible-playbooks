@@ -1,0 +1,43 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role exists to import container images from an archive.
+#   It pushes images starting with `registry.local:9001`, thus
+#   the images meant to be pushed to local registry.
+#
+
+- block:
+    - name: Check that backup archive exists
+      stat:
+        path: "{{ docker_images_backup }}"
+      register: file_result
+
+    - block:
+        - name: Import docker images
+          command: docker load -i {{ docker_images_backup }}
+
+        - name: Get image list to push to local registry
+          shell: docker image ls | grep -s '^registry.local:9001' | awk -F' ' '{print($1":"$2)}'
+          register: image_list_query
+
+        - debug: var=image_list_query.stdout_lines
+
+        - name: Push to local registry if any image tagged as such
+          script: >
+            roles/common/push-docker-images/files/push_pull_local_registry.py push \
+              "{{ image_list_query.stdout_lines | join(',') }}"
+          when: image_list_query.stdout_lines|length > 0
+
+      when: file_result.stat.exists
+
+  when: docker_images_backup is defined
+
+  always:
+    - name: Remove the {{ restore_user_images_in_progress_flag }} file
+      file:
+        path: "{{ restore_user_images_in_progress_flag }}"
+        state: absent

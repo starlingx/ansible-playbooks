@@ -1,0 +1,43 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role verifies if user images restore should proceed
+#
+- name: Fail if backup_filename is not defined or set
+  fail:
+    msg: "Mandatory configuration parameter backup_filename is not defined or set."
+  when: backup_filename is not defined or backup_filename is none
+
+- name: Fail if initial_backup_dir is not defined or set
+  fail:
+    msg: "Mandatory configuration parameter initial_backup_dir is not defined or set."
+  when: initial_backup_dir is not defined or initial_backup_dir is none
+
+- name: Check if restoring user images is already in progress
+  stat:
+    path: "{{ restore_user_images_in_progress_flag }}"
+  register: restore_user_images_in_progress
+
+- name: Fail if restoring user images is already in progress
+  fail:
+    msg: "Restoring user images is already in progress!"
+  when: restore_user_images_in_progress.stat.exists
+
+- name: Create {{ restore_user_images_in_progress_flag }} flag file
+  file:
+    path: "{{ restore_user_images_in_progress_flag }}"
+    state: touch
+
+- name: For remote play set target_backup_dir to {{ backup_dir }}
+  set_fact:
+    target_backup_dir: "{{ backup_dir }}"
+  when: inventory_hostname != "localhost"
+
+- name: For local play set target_backup_dir to initial_backup_dir
+  set_fact:
+    target_backup_dir: "{{ initial_backup_dir }}"
+  when: inventory_hostname == "localhost"
