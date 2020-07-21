@@ -9,7 +9,7 @@
 #   - Remove stale data at the end of LV block device
 #
 
-- name: Resize filesystems (default)
+- name: Resize logical volume {{ item.lv }}
   command: "lvextend -L{{ item.size }} {{ item.lv }}"
   register: res
   failed_when: false
