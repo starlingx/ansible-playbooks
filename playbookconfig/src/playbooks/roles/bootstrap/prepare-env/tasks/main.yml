@@ -408,6 +408,18 @@
   failed_when: false
   become: yes
 
+- name: Check for valid Platform Backup partition
+  command: "/usr/bin/validate-platform-backup.sh"
+  register: validate_result
+  failed_when: false
+  become: yes
+
+- name: Fail if Platform Backup partition is not valid
+  fail:
+    msg: "Platform Backup partition is not valid.
+          Error log: {{ validate_result.stdout }}"
+  when: validate_result.rc != 0
+
 # Workaround an Ansible quirk
 - name: Update root disk index for remote play
   set_fact:
