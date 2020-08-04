@@ -89,6 +89,49 @@
 
   when: upgrade_data_file is defined and upgrade_data_file is not none
 
+- block:
+  # The upgrade image data file will be placed under the default_upgrade_data_dir during upgrade-start
+  # The name is formatted upgrade_images_data_<date_time>_<software_upgrade_uuid>.tgz
+  # The file extension will be .tgz.zero if no images were present during the backup
+  - name: Find upgrade_images_data tar file
+    find:
+      paths: "{{ upgrade_data_dir }}"
+      patterns:
+        - 'upgrade_images_data*.tgz'
+        - 'upgrade_images_data*.tgz.zero'
+    register: upgrade_images_find_output
+
+  - name: Check presence of upgrade_images_data
+    fail:
+      msg: >
+       "Could not find upgrade_images_data file in {{ upgrade_data_dir }}."
+    when: upgrade_images_find_output.matched == 0
+
+  - name: Set upgrade_images_data value
+    set_fact:
+      docker_images_backup: "{{ latest_upgrade_images_data.path }}"
+    vars:
+      latest_upgrade_images_data: "{{ upgrade_images_find_output.files | sort(attribute='ctime', reverse=True) | first }}"
+
+  when: upgrade_images_data_file is not defined or upgrade_images_data_file is none
+
+- block:
+  - name: Check for upgrade_images_data on host
+    stat:
+      path: "{{ upgrade_images_data_file }}"
+    register: host_upgrade_images_data_file
+
+  - name: Fail if the upgrade_images_data file is not found
+    fail:
+      msg: "Upgrade data file '{{ upgrade_images_data_file }}' not found."
+    when: not host_upgrade_images_data_file.stat.exists
+
+  - name: Set upgrade_images_data value
+    set_fact:
+      docker_images_backup: "{{ upgrade_images_data_file }}"
+
+  when: upgrade_images_data_file is defined and upgrade_images_data_file is not none
+
 - name: Ensure temporary data path is present
   file:
     path: "{{ temp_upgrade_platform_path }}"

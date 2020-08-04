@@ -35,3 +35,9 @@ override_files_dir: "{{ lookup('env', 'HOME') }}"
 # If this option is not specified this playbook will attempt to find the file on the host under
 # /opt/platform-backup/
 upgrade_data_file:
+
+# The full path and filename of the upgrade_images_data file.
+# eg /opt/platform-backup/upgrade_images_data_2020-07-16T215224_a75eec9a-c27b-4878-8df9-9e76ac9f1bc3.tgz
+# If this option is not specified this playbook will attempt to find the file on the host under
+# /opt/platform-backup/
+upgrade_images_data_file:

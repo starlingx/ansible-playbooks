@@ -25,3 +25,5 @@
 
   roles:
     - { role: restore-platform/restore-more-data, become: yes }
+    - { role: restore-user-images/restore-local-registry-images, become: yes }
+    - upgrade-platform/unlock-host

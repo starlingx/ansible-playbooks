@@ -603,13 +603,3 @@
     file:
       path: "{{ ansible_remote_tmp }}"
       state: absent
-
-# Unlock controller-0 for subcloud upgrades
-# # Retry for 5 mins as the first unlock can require a call to update_sriov_config
-- name: Unlock host
-  shell: source /etc/platform/openrc; system host-unlock controller-0
-  retries: 10
-  delay: 30
-  register: result
-  until: result.rc == 0
-  when: migrate_platform_data is defined and migrate_platform_data and distributed_cloud_role == 'subcloud'

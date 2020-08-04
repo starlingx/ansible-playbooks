@@ -32,7 +32,7 @@
               "{{ image_list_query.stdout_lines | join(',') }}"
           when: image_list_query.stdout_lines|length > 0
 
-      when: file_result.stat.exists
+      when: file_result.stat.exists and file_result.stat.size > 0
 
   when: docker_images_backup is defined
 
