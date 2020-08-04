@@ -568,6 +568,7 @@
 - name: Validate applications
   include: validate_application.yml application={{ item }}
   with_items: "{{ applications }}"
+  when: applications
 
 - name: Build application list
   set_fact:
@@ -578,11 +579,33 @@
     all_applications: "{{ all_applications }} + [ '{{ item.keys()[0] }}' ]"
   with_items: "{{ applications }}"
 
-- name: Ensure mandatory applications are present in config
-  debug:
-    msg: "Mandatory application: {{ item }}"
-  failed_when: item not in all_applications
-  with_items: "{{ mandatory_applications }}"
+- name: Get the name of the nginx tarball
+  find:
+    paths: "/usr/local/share/applications/helm/"
+    patterns: 'nginx-ingress-controller-[^-]*-[^-]*\.tgz'
+    use_regex: yes
+  register: find_nginx_tarball_output
+
+- name: Get the name of the cert manager tarball
+  find:
+    paths: "/usr/local/share/applications/helm/"
+    patterns: 'cert-manager-[^-]*-[^-]*\.tgz'
+    use_regex: yes
+  register: find_cert_manager_tarball_output
+
+# we prepend nginx and append cert manager to try and enforce ordering
+# nginx need to be applied before cert manager
+- name: Append default nginx entry if not present
+  set_fact:
+    applications: "[ {'{{ item.path }}': None}] + {{ applications }}"
+  with_items: "{{ find_nginx_tarball_output.files }}"
+  when: item.path not in all_applications
+
+- name: Append default cert manager entry if not present
+  set_fact:
+    applications: "{{ applications }} + [ {'{{ item.path }}': None}]"
+  with_items: "{{ find_cert_manager_tarball_output.files }}"
+  when: item.path not in all_applications
 
 - block:
   - name: Retrieve list of applications from sysinv
