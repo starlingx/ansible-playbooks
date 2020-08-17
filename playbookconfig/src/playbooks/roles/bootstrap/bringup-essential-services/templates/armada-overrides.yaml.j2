@@ -54,21 +54,21 @@ endpoints:
   identity:
     auth:
       armada:
-        password: {{ armada_default_password }}
+        password: "{{ armada_default_password }}"
         project_domain_name: default
         project_name: default
         region_name: RegionOne
         user_domain_name: default
         username: admin
       armada:
-        password: {{ armada_password }}
+        password: "{{ armada_password }}"
         project_domain_name: {{ armada_domain }}
         project_name: service
         region_name: RegionOne
         user_domain_name: {{ armada_domain }}
-        username: {{ armada_user }}
+        username: "{{ armada_user }}"
     host_fqdn_override:
-      default: {{ controller_floating_address }}
+      default: "{{ controller_floating_address }}"
 dependencies:
   static:
     api:
