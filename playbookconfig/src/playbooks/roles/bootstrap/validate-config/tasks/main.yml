@@ -119,6 +119,21 @@
        system_mode != 'duplex-direct') and
       (system_type == 'All-in-one')
 
+  - name: Validate virtual system setting
+    fail:
+      msg: "virtual_system is misconfigured. Valid value is either 'True' or 'False'."
+    when: >
+      (virtual_system is defined and
+       not virtual_system | type_debug == 'bool')
+
+  - name: Fail if virtual system type is not All-in-one
+    fail:
+      msg: "Virtual system setting is only supported for All-in-one system"
+    when: >
+      (virtual_system is defined and
+       virtual_system|bool and
+       system_type != 'All-in-one')
+
   - name: Validate distributed cloud role
     fail:
       msg: "Invalid distributed cloud role. Valid values are: none, systemcontroller, or subcloud."
@@ -127,13 +142,22 @@
        distributed_cloud_role != 'systemcontroller' and
        distributed_cloud_role != 'subcloud')
 
-  - name: Validate system type and system mode if distributed cloud role is system controller
-    fail:
-      msg: "A simplex All-in-one controller cannot be configured as Distributed Cloud System Controller"
+  - block:
+    - name: Validate system type and system mode if distributed cloud role is system controller
+      fail:
+        msg: "A simplex All-in-one controller cannot be configured as Distributed Cloud System Controller"
+      when: system_mode == 'simplex'
+
+    - name: Validate virtual system setting if distributed cloud role is system controller
+      fail:
+        msg: "Virtual system setting is not supported for Distributed Cloud System Controller"
+      when: >
+        (virtual_system is defined and
+         virtual_system|bool)
+
     when: >
       (distributed_cloud_role == 'systemcontroller' and
-       system_type == 'All-in-one' and
-       system_mode == 'simplex')
+       system_type == 'All-in-one')
 
   - name: Checking registered timezones
     stat:
@@ -762,6 +786,7 @@
       - "CONTROLLER_HOSTNAME=controller-0"
       - "SYSTEM_TYPE={{ system_type }}"
       - "SYSTEM_MODE={{ system_mode }}"
+      - "VIRTUAL_SYSTEM={{ virtual_system | default(False) }}"
       - "TIMEZONE={{ timezone }}"
       - "DISTRIBUTED_CLOUD_ROLE={{ distributed_cloud_role }}"
       - "REGION_NAME={{ region_name }}"
