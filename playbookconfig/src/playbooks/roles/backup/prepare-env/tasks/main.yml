@@ -48,6 +48,15 @@
     msg: "system_mode is not set in /etc/platform/platform.conf"
   when: check_system_mode.rc != 0
 
+- name: Check if portieris application is applied
+  shell: source /etc/platform/openrc; system application-list | grep -i "portieris" | grep -v "uploaded" || true
+  register: portieris_applied
+
+- name: Fail if portieris application is applied
+  fail:
+    msg: "Unable to take backup when portieris application applied"
+  when: portieris_applied.stdout
+
 - name: set system_mode
   set_fact:
     system_mode: "{{ check_system_mode.stdout.split('=')[1] }}"
