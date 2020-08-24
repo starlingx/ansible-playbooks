@@ -122,6 +122,28 @@
   environment:
     STREAM_SERVER_ADDRESS: "{{ stream_server_address }}"
 
+- name: Remove central cloud registry config on non-subclouds
+  replace:
+    path: /etc/containerd/config.toml
+    after: '# Central cloud registry config for distributed cloud subclouds'
+    regexp: '^(<%- if @distributed_cloud_role.+)\n(.+)\n(.+)\n(.+end -%>)'
+    replace: ''
+  when: distributed_cloud_role != 'subcloud'
+
+- name: Remove erb if tag start for central cloud registry config on subclouds
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: "^(# Central cloud registry.+)\n(.+role == 'subcloud' -%>)"
+    replace: '# Central cloud registry config for distributed cloud subclouds'
+  when: distributed_cloud_role == 'subcloud'
+
+- name: Remove erb if tag end for central cloud registry config on subclouds
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: "^(<%- end -%>)\n(.+config for distributed cloud subclouds)"
+    replace: '# End central cloud registry config for distributed cloud subclouds'
+  when: distributed_cloud_role == 'subcloud'
+
 - name: Restart containerd
   systemd:
     name: containerd
