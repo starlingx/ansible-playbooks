@@ -328,6 +328,13 @@
 # TODO: Restore ceph_external when it is supported
 
 - block:
+  - name: Check if the system is a DC controller
+    command: >-
+      grep -i "distributed_cloud_role\s*=\s*systemcontroller"
+      {{ platform_conf_path }}/platform.conf
+    register: check_dc_controller
+    failed_when: false
+
   - name: Shutdown mtce
     command: /usr/lib/ocf/resource.d/platform/mtcAgent stop
     environment:
@@ -375,6 +382,14 @@
         - "{{ staging_dir }}/postgres/keystone.postgreSql.data"
         - "{{ staging_dir }}/postgres/fm.postgreSql.data"
         - "{{ staging_dir }}/postgres/barbican.postgreSql.data"
+
+    - name: Restore postgres db for DC systemcontroller
+      shell: "psql -f {{ item }} {{ (item|basename).split('.')[0] }}"
+      become_user: postgres
+      with_items:
+        - "{{ staging_dir }}/postgres/dcmanager.postgreSql.data"
+        - "{{ staging_dir }}/postgres/dcorch.postgreSql.data"
+      when: check_dc_controller.rc == 0
 
     - name: Remove postgres staging directory
       file:
