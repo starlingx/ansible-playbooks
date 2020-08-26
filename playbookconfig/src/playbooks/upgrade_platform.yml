@@ -15,7 +15,8 @@
     - common/prepare-env
     - common/validate-target
     - upgrade-platform/prepare-env
-    - restore-platform/restore-sw-patches
+    - { role: restore-platform/restore-sw-patches,
+        when: not ( skip_patching is defined and skip_patching | bool ) }
 
 - name: Run bootstrap playbook with restore mode
   import_playbook: bootstrap.yml mode='restore'
