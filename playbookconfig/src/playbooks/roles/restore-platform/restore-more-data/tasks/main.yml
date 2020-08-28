@@ -413,8 +413,9 @@
 
   # Set platform-integ-apps to "uploaded" state, so that once ceph is up after
   # controller-0 is unlocked for the first time, the manifest will be applied.
+  # Set only for the active app.
   - name: Set platform-integ-apps to "uploaded" state
-    shell: psql -c "update kube_app set status='uploaded' where name='platform-integ-apps'" sysinv
+    shell: psql -c "update kube_app set status='uploaded' where name='platform-integ-apps' and status!='inactive'" sysinv
     become_user: postgres
     when: migrate_platform_data is not defined or not migrate_platform_data
 
