@@ -44,6 +44,8 @@
         command: >-
           kubectl create namespace --kubeconfig=/etc/kubernetes/admin.conf {{ rvmc_namespace }}
         when: get_namespace.stdout_lines|length == 0
+        register: result
+        failed_when: (result.rc != 0) and ("'AlreadyExists' not in result.stderr")
 
       - name: Get default registry key
         command: >-
