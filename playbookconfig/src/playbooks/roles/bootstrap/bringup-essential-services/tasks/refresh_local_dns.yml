@@ -35,11 +35,25 @@
       - "{{ controller_1_cluster_host }}\tcontroller-1-infra"
       - "{{ derived_network_params.nfs_management_address_2 }}\tcontroller-nfs"
 
-  - name: Update /etc/hosts for subcloud
-    lineinfile:
-      path: /etc/hosts
-      line: "{{ system_controller_oam_floating_address }}\tregistry.central"
-      insertbefore: EOF
+  - block:
+    - name: Set central registry for subcloud
+      set_fact:
+        # For virtual subcloud (StarlingX running in Openstack Nova VM - QEMU/KVM),
+        # central-cloud's local registry has to be exposed on the MGMT interface
+        # instead of the OAM interface as there is no physical OAM interface on
+        # subcloud to access central registry via OAM interface, so set
+        # "registry.central" to system controller's MGMT IP on subcloud to allow
+        # subcloud pull images from central registry
+        registry_central_address:
+          "{{ system_controller_floating_address
+           if (virtual_system is defined and virtual_system|bool)
+           else system_controller_oam_floating_address}}"
+
+    - name: Update /etc/hosts for subcloud
+      lineinfile:
+        path: /etc/hosts
+        line: "{{ registry_central_address }}\tregistry.central"
+        insertbefore: EOF
     when: distributed_cloud_role == 'subcloud'
 
   - name: Save hosts file to permanent location
