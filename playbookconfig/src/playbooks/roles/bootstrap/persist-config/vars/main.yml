@@ -9,4 +9,4 @@ region_config: no
 # The default disk size thresholds must align with the ones in
 #   config/.../sysinv/common/constants.py
 small_root_disk_size: 240
-minimum_small_root_disk_size: 154
+minimum_small_root_disk_size: 181
