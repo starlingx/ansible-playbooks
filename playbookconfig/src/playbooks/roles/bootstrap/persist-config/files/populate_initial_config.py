@@ -209,7 +209,7 @@ def populate_load_config(client):
              'compatible_version': "N/A",
              'required_patches': "N/A"}
     try:
-        client.sysinv.load.create(**patch)
+        client.sysinv.load.create(patch)
     except Exception as e:
         if INCOMPLETE_BOOTSTRAP:
             loads = client.sysinv.load.list()
