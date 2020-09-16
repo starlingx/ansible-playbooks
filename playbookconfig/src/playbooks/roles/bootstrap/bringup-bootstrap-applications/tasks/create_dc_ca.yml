@@ -16,6 +16,10 @@
 
 - name: Install dc root CA
   shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply --validate=false -f /etc/kubernetes/dc-ca.yaml
+  register: install_dc_ca
+  until: install_dc_ca is not failed
+  retries: 10
+  delay: 30
 
 - name: Wait up to 30s for root ca cert ready
   shell: >
