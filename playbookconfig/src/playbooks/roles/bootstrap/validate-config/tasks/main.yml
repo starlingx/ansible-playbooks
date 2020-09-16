@@ -702,7 +702,7 @@
   when: apiserver_cert_sans | type_debug != 'list'
 
 - name: Validate apiserver_cert_sans entries
-  include: validate_address.yml  input_address={{ item }}
+  include: validate_address.yml input_address={{ item }}
   with_items: "{{ apiserver_cert_sans }}"
 
 - name: Verify that either both Kubernetes root ca cert and key are defined or not at all
