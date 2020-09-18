@@ -79,7 +79,8 @@ def pull_image_from_local_registry(image):
     for i in range(MAX_DOWNLOAD_ATTEMPTS):
         try:
             client = docker.APIClient()
-            for line in client.pull(image, stream=True):
+            auth = get_local_registry_auth()
+            for line in client.pull(image, auth_config=auth, stream=True):
                 j = json.loads(line)
                 if 'errorDetail' in j:
                     raise Exception("Error: " + str(j['errorDetail']))
