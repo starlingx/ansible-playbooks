@@ -426,14 +426,6 @@
     become_user: postgres
     when: not wipe_ceph_osds|bool and ceph_backend.rc == 0
 
-  # Set platform-integ-apps to "uploaded" state, so that once ceph is up after
-  # controller-0 is unlocked for the first time, the manifest will be applied.
-  # Set only for the active app.
-  - name: Set platform-integ-apps to "uploaded" state
-    shell: psql -c "update kube_app set status='uploaded' where name='platform-integ-apps' and status!='inactive'" sysinv
-    become_user: postgres
-    when: migrate_platform_data is not defined or not migrate_platform_data
-
   # Container images will not be present after restore. Inform sysinv so it
   # can download the images. Kubernetes will then start the apps.
   - name: Set applied apps to "restore-requested" state
@@ -606,6 +598,9 @@
       when: not wipe_ceph_osds|bool
 
     when: check_online.stdout == "online" and ceph_backend.rc == 0
+
+  - name: Set restore in progress for sysinv
+    shell: "source /etc/platform/openrc; system restore-start"
 
   - name: Inform user that restore_platform is run successfully
     debug:
