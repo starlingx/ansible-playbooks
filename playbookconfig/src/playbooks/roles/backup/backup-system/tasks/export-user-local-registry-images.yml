@@ -32,8 +32,19 @@
       path: "{{ tempfile_on_remote.path }}"
       mode: 0644
 
+  - name: Set list of apps whose images will be backed up
+    set_fact:
+      merged_backup_include_apps: "{{ backup_include_apps }}"
+
+  - name: Update list of apps whose images will be backed up on DC system controller
+    set_fact:
+      merged_backup_include_apps: "{{ merged_backup_include_apps | union(backup_include_dc_controller_apps) }}"
+    when: check_dc_controller.rc == 0
+
   - name: Save list of local registry images excluding apps images to file
-    command: "/usr/bin/sysinv-utils local-registry-list {{ tempfile_on_remote.path }} --no-apps"
+    command: >-
+      /usr/bin/sysinv-utils local-registry-list {{ tempfile_on_remote.path }}
+      --apps {{ " ".join(merged_backup_include_apps) }}
 
   - name: Read file
     command: cat {{ tempfile_on_remote.path }}
