@@ -33,9 +33,23 @@
     - name: Restore ceph.conf file
       command: >-
         tar -C / -xpf {{ restore_data_file }}
-        'etc/ceph/ceph.conf'
+        '{{ ceph_conf[1:] }}'
       args:
         warn: false
+
+    - name: Get list of OSDs defined in {{ ceph_conf }}
+      shell: grep "\[osd\.[0-9]*\]" {{ ceph_conf }} | grep -oh "osd\.[0-9]*"
+      register: ceph_conf_osd_list
+      failed_when: false
+
+    # Allow starting ceph with a ceph.conf from a backup done on controller-1
+    # w/o this it will try to initialize OSDs that are not configured on controller-0.
+    - name: Remove "[osd.*]" sections from {{ ceph_conf }}
+      ini_file:
+        path: "{{ ceph_conf }}"
+        section: "{{ item }}"
+        state: absent
+      with_items: "{{ ceph_conf_osd_list.stdout_lines }}"
 
     - name: Set initial ceph-mon name
       set_fact:
@@ -91,7 +105,7 @@
 
     - name: Allow Ceph to start with a single monitor on a Standard deployment
       ini_file:
-        path: "/etc/ceph/ceph.conf"
+        path: "{{ ceph_conf }}"
         section: global
         option: mon_initial_members
         value: controller-0
@@ -177,7 +191,7 @@
 
     - name: Remove Ceph option to start with a single monitor on a Standard deployment
       ini_file:
-        path: "/etc/ceph/ceph.conf"
+        path: "{{ ceph_conf }}"
         section: global
         option: mon_initial_members
         state: absent
