@@ -104,12 +104,29 @@
 - set_fact:
     local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
 
+- name: Get guest local registry credentials
+  vars:
+    script_content: |
+      import keyring
+      password = keyring.get_password("mtce", "services")
+      if not password:
+          raise Exception("Local registry password not found.")
+      print dict(username='mtce', password=str(password))
+  shell: "{{ script_content }}"
+  args:
+    executable: /usr/bin/python
+  register: guest_local_registry_credentials_output
+
+- set_fact:
+    guest_local_registry_credentials: "{{ guest_local_registry_credentials_output.stdout }}"
+
 - name: Update config.toml with registry auth
   command: "sed -i -e 's|<%= @registry_auth %>|$REG_AUTH|g' /etc/containerd/config.toml"
   args:
     warn: false
   environment:
-    REG_AUTH: "{{ (local_registry_credentials['username'] + ':' + local_registry_credentials['password']) | b64encode }}"
+    REG_AUTH: "{{ (guest_local_registry_credentials['username'] + ':'
+               + guest_local_registry_credentials['password']) | b64encode }}"
 
 - name: Determine the stream_server_address for containerd
   set_fact:
