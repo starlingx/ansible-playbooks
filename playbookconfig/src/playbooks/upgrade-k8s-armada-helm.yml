@@ -8,6 +8,7 @@
 - hosts: all
 
   vars:
+    mode: "upgrade_k8s_armada_helm"
     overrides_file: "/tmp/upgrade-armada-overrides.yaml"
     playbooks_root: "/usr/share/ansible/stx-ansible/playbooks"
 

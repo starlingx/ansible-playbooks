@@ -65,6 +65,52 @@
       warn: false
     when: migrate_platform_data is defined and migrate_platform_data
 
+  # The helmv2 database is new in the release stx5.0. The AIO-SX
+  # upgrade from stx4.0 to stx5.0 requires a password to be generated
+  # and written into hieradata to access the DB. This can be removed
+  # in the release that follows stx5.0
+  - block:
+    - name: Generate helmv2 database password and store in keyring
+      vars:
+        script_content: |
+          import keyring
+          import os
+          from sysinv.common import utils
+
+          helmv2_db_pw = keyring.get_password("helmv2", "database")
+          if helmv2_db_pw:
+              print helmv2_db_pw
+              exit()
+
+          os.environ['XDG_DATA_HOME'] = '/tmp'
+          try:
+              helmv2_db_pw = utils.generate_random_password(length=16)
+              keyring.set_password("helmv2", "database", helmv2_db_pw)
+              print helmv2_db_pw
+          except Exception as e:
+              raise Exception("Failed to generate password for helmv2:%s" % e)
+          finally:
+              del os.environ['XDG_DATA_HOME']
+      shell: "{{ script_content }}"
+      args:
+        executable: /usr/bin/python
+      register: helmv2_db_pw_output
+      no_log: true
+
+    - name: Write helmv2 database username to hieradata
+      lineinfile:
+        path: "{{ hieradata_workdir }}/static.yaml"
+        line: "platform::helm::v2::db::postgresql::user: admin-helmv2"
+
+    - name: Write helmv2 database password to hieradata
+      lineinfile:
+        path: "{{ hieradata_workdir }}/secure_static.yaml"
+        line: "platform::helm::v2::db::postgresql::password: {{ helmv2_db_pw_output.stdout }}"
+
+    when: (migrate_platform_data is defined and
+           migrate_platform_data and
+           upgrade_metadata.from_release == "20.06")
+
   - name: Restore etcd certificates.
     shell: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
     args:
