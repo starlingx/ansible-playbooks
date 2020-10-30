@@ -124,18 +124,21 @@
 
   - name: Resize filesystems (default)
     command: "{{ item }}"
-    register: resize_result
     failed_when: false
     with_items:
       - resize2fs /dev/cgts-vg/backup-lv
       - xfs_growfs /dev/cgts-vg/docker-lv
       - resize2fs /dev/cgts-vg/kubelet-lv
       - resize2fs /dev/cgts-vg/scratch-lv
-      - drbdadm -- --assume-peer-has-space resize all
-      - resize2fs /dev/drbd0
-      - resize2fs /dev/drbd2
-      - resize2fs /dev/drbd7
-      - resize2fs /dev/drbd8
+
+  - name: Resize drbd filesystems (default)
+    include: resize_drbd.yml
+    with_items:
+    - { resource: "drbd-pgsql/0", device: "drbd0" }
+    - { resource: "drbd-platform/0", device: "drbd2" }
+    - { resource: "drbd-etcd/0", device: "drbd7" }
+    - { resource: "drbd-dockerdistribution/0", device: "drbd8" }
+
   when: root_disk_size|int >= minimum_small_root_disk_size
 
 - block:
@@ -147,10 +150,13 @@
 
   - name: Resize filesystems
     command: "{{ item }}"
-    register: resize_result
     failed_when: false
     with_items:
       - resize2fs /dev/cgts-vg/backup-lv
-      - drbdadm -- --assume-peer-has-space resize all
-      - resize2fs /dev/drbd0
+
+  - name: Further resize drbd filesystems
+    include: resize_drbd.yml
+    with_items:
+    - { resource: "drbd-pgsql/0", device: "drbd0" }
+
   when: root_disk_size|int > small_root_disk_size
