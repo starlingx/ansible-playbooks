@@ -1,0 +1,126 @@
+---
+#
+# Copyright (c) 2020 Intel Corporation
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   Create etcd server and client certs and key.
+
+- name: Generate private key for etcd server and client
+  openssl_privatekey:
+    path: "/etc/etcd/{{ item }}.key"
+    type: RSA
+    size: 4096
+    state: present
+    force: true
+  with_items:
+    - "etcd-server"
+    - "apiserver-etcd-client"
+    - "etcd-client"
+
+- name: Generate CSRs for etcd server and client
+  openssl_csr:
+    path: "/etc/etcd/{{ item }}.csr"
+    privatekey_path: "/etc/etcd/{{ item }}.key"
+    common_name: "{{ item }}"
+    key_usage:
+      - digitalSignature
+    extended_key_usage:
+      - serverAuth
+      - clientAuth
+    subject_alt_name:
+      - IP:{{ default_cluster_host_start_address }}
+      - IP:127.0.0.1
+    force: true
+  with_items:
+    - "etcd-server"
+    - "apiserver-etcd-client"
+
+- name: Generate CSRs for etcd root client
+  openssl_csr:
+    path: "/etc/etcd/{{ item }}.csr"
+    privatekey_path: "/etc/etcd/{{ item }}.key"
+    common_name: "root"
+    key_usage:
+      - digitalSignature
+    extended_key_usage:
+      - serverAuth
+      - clientAuth
+    force: true
+  with_items:
+    - "etcd-client"
+
+- name: Check if CA exist
+  shell: ls /etc/kubernetes/pki/ca.crt
+  ignore_errors: true
+  register: find_exist_ca_output
+
+- name: Copy existed CA
+  copy:
+    src: "/etc/kubernetes/pki/{{ item }}"
+    dest: "/etc/etcd/{{ item }}"
+    remote_src: yes
+    force: yes
+  with_items:
+    - "ca.crt"
+    - "ca.key"
+  when: find_exist_ca_output|succeeded
+
+- name: copy user specified CA
+  copy:
+    src: "{{ item }}"
+    dest: "/etc/etcd/{{ item }}"
+    remote_src: yes
+    force: yes
+  with_items:
+    - "{{k8s_root_ca_cert}}"
+    - "{{k8s_root_ca_key}}"
+  when: (k8s_root_ca_cert)
+
+- block:
+  - name: Generate private key for CA
+    openssl_privatekey:
+      path: "/etc/etcd/ca.key"
+      type: RSA
+      size: 4096
+      state: present
+      force: true
+
+  - name: Generate CSR for CA
+    openssl_csr:
+      path: "/etc/etcd/ca.csr"
+      privatekey_path: "/etc/etcd/ca.key"
+      common_name: ca
+      organization_name: "Etcd CA"
+      basic_constraints:
+        - CA:true
+        - pathlen:1
+      basic_constraints_critical: True
+      key_usage:
+        - keyCertSign
+        - digitalSignature
+      force: true
+
+  - name: Generate self-signed CA certificate
+    openssl_certificate:
+      path: "/etc/etcd/ca.crt"
+      privatekey_path: "/etc/etcd/ca.key"
+      csr_path: "/etc/etcd/ca.csr"
+      provider: selfsigned
+      force: true
+
+  when: find_exist_ca_output|failed and k8s_root_ca_cert == ''
+
+- name: Generate certs signed with etcd CA certificate"
+  openssl_certificate:
+    path: "/etc/etcd/{{ item }}.crt"
+    csr_path: "/etc/etcd/{{ item }}.csr"
+    ownca_path: "/etc/etcd/ca.crt"
+    ownca_privatekey_path: "/etc/etcd/ca.key"
+    provider: ownca
+    force: true
+  with_items:
+    - "etcd-server"
+    - "apiserver-etcd-client"
+    - "etcd-client"

@@ -301,8 +301,15 @@
       set_fact:
         etcd_snapshot_file: "{{ etcd_snapshot_dir.path }}/etcd-snapshot.db"
 
+    - name: Get etcd endpoints
+      shell: |
+        source /etc/platform/openrc
+        system addrpool-list | awk '/cluster-host-subnet/{print$14}'
+      register: etcd_endpoint
+
     - name: Create etcd snapshot
-      command: "etcdctl snapshot save {{ etcd_snapshot_file }}"
+      command: "etcdctl --endpoints https://{{ etcd_endpoint.stdout }}:2379 --cert=/etc/etcd/etcd-client.crt
+                --key=/etc/etcd/etcd-client.key --cacert=/etc/etcd/ca.crt snapshot save {{ etcd_snapshot_file }}"
       environment:
         ETCDCTL_API: 3
 
