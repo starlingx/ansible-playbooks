@@ -22,6 +22,7 @@
   - set_fact:
       running_registry: "{{ running_registry|default({}) | combine({inner_item.name:inner_item.value}) }}"
     with_items: "{{ running_registry_output.stdout | from_yaml }}"
+    no_log: true
     loop_control:
       loop_var: inner_item
 
@@ -63,8 +64,8 @@
     - set_fact:
         registry_filtered: "{{ registry_filtered|default({}) | combine({inner_item.key: inner_item.value}) }}"
       when: inner_item.key not in ['auth-secret']
-      with_dict:
-        - "{{ running_registry }}"
+      with_dict: "{{ running_registry }}"
+      no_log: true
       loop_control:
         loop_var: inner_item
 
