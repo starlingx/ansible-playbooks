@@ -354,6 +354,12 @@
       - sysinv-agent
       - openstack-barbican-api
 
+  - name: Stop sysinv-fpga-agent service if it is AIO system
+    systemd:
+      name: sysinv-fpga-agent
+      state: stopped
+    when: system_type == 'All-in-one'
+
   - block:
     - name: Create staging directory for postgres data
       file:
@@ -444,6 +450,12 @@
       - sysinv-conductor
       - sysinv-agent
       - openstack-barbican-api
+
+  - name: Restart sysinv-fpga-agent service if it is AIO system
+    systemd:
+      name: sysinv-fpga-agent
+      state: restarted
+    when: system_type == 'All-in-one'
 
   - name: Bring up Maintenance Agent
     command: /usr/lib/ocf/resource.d/platform/mtcAgent start
