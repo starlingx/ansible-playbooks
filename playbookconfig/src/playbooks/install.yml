@@ -55,11 +55,11 @@
 
       - name: Copy default-registry-key to rvmc namespace
         shell: >-
-          kubectl --kubeconfig=/etc/kubernetes/admin.conf get \
-            secret default-registry-key --namespace=kube-system -o yaml \
-            | sed s/"namespace: kube-system"/"namespace: {{ rvmc_namespace }}"/ \
-            | kubectl apply --namespace={{ rvmc_namespace }} -f -
-        failed_when: false
+          kubectl get secret default-registry-key --namespace=kube-system -o yaml
+          | sed 's/namespace: kube-system/namespace: {{ rvmc_namespace }}/'
+          | kubectl apply --namespace={{ rvmc_namespace }} -f -
+        environment:
+          KUBECONFIG: "/etc/kubernetes/admin.conf"
         when: get_default_registry_key.stdout == ""
 
       - name: Create Redfish Virtual Media Controller resource file
