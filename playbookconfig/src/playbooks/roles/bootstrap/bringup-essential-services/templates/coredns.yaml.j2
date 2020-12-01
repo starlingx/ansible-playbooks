@@ -26,7 +26,9 @@ data:
         forward . /etc/resolv.conf {
             policy sequential
         }
-        cache 30
+        cache 30 {
+            denial 9984 5
+        }
         loop
         reload
         loadbalance
