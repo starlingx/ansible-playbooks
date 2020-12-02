@@ -1,0 +1,30 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   - Resize drbd filesytems
+#   - After issuing the drbdadm resize, a pause is also required prior to
+#   performing the resize2fs operation.
+#
+#   There does not appear to be much observability into drbdadm resize
+#   at /proc/drbd or drbd-overview, so a pause is introduced. The pause needed
+#   to be at least 1 second as per observations in virtual and hardware labs,
+#   AIO and Standard controllers.
+#
+
+- name: Resize drbd resource {{ item.resource }}
+  command: "drbdadm -- --assume-peer-has-space resize {{ item.resource }}"
+  failed_when: false
+  register: resize_result
+
+- name: Pause 3 seconds for drbd resize
+  pause:
+    seconds: 3
+
+- name: Resize filesystem {{ item.device }}
+  command: "resize2fs /dev/{{ item.device }}"
+  failed_when: false
+  when: resize_result.rc !=0

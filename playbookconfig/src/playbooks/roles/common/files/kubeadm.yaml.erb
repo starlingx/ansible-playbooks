@@ -7,7 +7,6 @@ nodeRegistration:
 ---
 apiVersion: kubeadm.k8s.io/v1beta2
 kind: ClusterConfiguration
-
 apiServer:
   certSANs:
 <% @apiserver_certsans.each do |item| -%>
@@ -34,10 +33,9 @@ controllerManager:
     node-monitor-period: "2s"
     node-monitor-grace-period: "20s"
     pod-eviction-timeout: "30s"
-    experimental-cluster-signing-duration: "730h"
     feature-gates: "TTLAfterFinished=true"
     flex-volume-plugin-dir: <%= @ctrl_mgr_flex_vol_plugin_dir %>
-controlPlaneEndpoint: <%= @apiserver_advertise_address %>
+controlPlaneEndpoint: <%= @controlplane_endpoint %>
 etcd:
   external:
     endpoints:

@@ -2,14 +2,16 @@
 
 parseable: true
 
-quiet: true
+quiet: false
 
 # rulesdir:
 
 # All errors below should be cleaned up in ansible and removed from the skip_list
 skip_list:
+  - '106' # Role name {} does not match ``^[a-z][a-z0-9_]+$`` pattern
   - '204' # [E204] Lines should be no longer than 160 chars
   - '206' # [E206] Variables should have spaces before and after: {{ var_name }
+  - '208' # [E208] File permissions not mentioned
   - '301' # [E301] Commands should not change things if nothing needs doing
   - '303' # [E303] systemctl used in place of systemd module
   - '305' # [E305] Use shell only when shell functionality is required

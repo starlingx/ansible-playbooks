@@ -17,6 +17,7 @@
 #   - Prepare SRIOV config and activate SRIOV networking
 #   - Prepare SRIOV device plugin config and activate SRIOV device plugin
 #   - Restore Helm charts if the host is bootstrapped in restore mode
+#   - Prepare and apply coredns config
 #   - Restrict coredns to master node and set anti-affnity (duplex system)
 #   - Restrict coredns to 1 pod (simplex system)
 #   - Remove taint from master node
@@ -115,14 +116,16 @@
   args:
     warn: false
   with_items:
-    - "sed -i -e 's|<%= @apiserver_advertise_address %>|'$CLUSTER_IP'|g' /etc/kubernetes/kubeadm.yaml"
+    - "sed -i -e 's|<%= @apiserver_advertise_address %>|'$APISERVER_ADVERTISE_ADDRESS'|g' /etc/kubernetes/kubeadm.yaml"
+    - "sed -i -e 's|<%= @controlplane_endpoint %>|'$CONTROLPLANE_ENDPOINT'|g' /etc/kubernetes/kubeadm.yaml"
     - "sed -i -e 's|<%= @etcd_endpoint %>|'$ETCD_ENDPOINT'|g' /etc/kubernetes/kubeadm.yaml"
     - "sed -i -e 's|<%= @service_domain %>|'cluster.local'|g' /etc/kubernetes/kubeadm.yaml"
     - "sed -i -e 's|<%= @pod_network_cidr %>|'$POD_NETWORK_CIDR'|g' /etc/kubernetes/kubeadm.yaml"
     - "sed -i -e 's|<%= @service_network_cidr %>|'$SERVICE_NETWORK_CIDR'|g' /etc/kubernetes/kubeadm.yaml"
     - "sed -i -e 's|<%= @ctrl_mgr_flex_vol_plugin_dir %>|'$VOLUME_PLUGIN_DIR'|g' /etc/kubernetes/kubeadm.yaml"
   environment:
-    CLUSTER_IP: "{{ cluster_floating_address }}"
+    APISERVER_ADVERTISE_ADDRESS: "{{ controller_0_cluster_host }}"
+    CONTROLPLANE_ENDPOINT: "{{ cluster_floating_address }}"
     ETCD_ENDPOINT: "http://{{ cluster_floating_address | ipwrap }}:2379"
     POD_NETWORK_CIDR: "{{ cluster_pod_subnet }}"
     SERVICE_NETWORK_CIDR: "{{ cluster_service_subnet }}"
@@ -212,9 +215,14 @@
     src: "k8s-{{ kubernetes_version }}/sriov-plugin.yaml.j2"
     dest: /etc/kubernetes/sriovdp-daemonset.yaml
 
+- name: Create coredns config file
+  template:
+    src: "coredns.yaml.j2"
+    dest: /etc/kubernetes/coredns.yaml
+
 - block:
   - name: Restore kubernetes certificates
-    shell: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} {{ item }}
+    shell: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
     args:
       warn: false
     with_items:
@@ -222,7 +230,7 @@
     become_user: root
 
   - name: Restore encryption provider config
-    shell: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} {{ item }}
+    shell: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
     args:
       warn: false
     with_items:
@@ -280,6 +288,9 @@
 
   - name: Activate SRIOV device plugin
     command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/sriovdp-daemonset.yaml"
+
+  - name: Apply coredns config
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/coredns.yaml"
 
     # Restrict coredns to master node and use anti-affinity for core dns for duplex systems
   - block:

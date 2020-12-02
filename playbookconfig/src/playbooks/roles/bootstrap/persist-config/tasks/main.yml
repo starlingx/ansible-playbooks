@@ -263,10 +263,15 @@
 
 # Install certificate if SSL CA certifcate is configured
 - block:
+  - name: Set source for copying certificate
+    set_fact:
+      ssl_ca_source: "{{ mode == 'restore' }}"
+
   - name: Copy ssl_ca certificate
     copy:
       src: "{{ ssl_ca_cert }}"
       dest: "{{ temp_ssl_ca }}"
+      remote_src: "{{ ssl_ca_source }}"
 
   - name: Remove ssl_ca complete flag
     file:
@@ -355,3 +360,38 @@
 
 - name: Invalidate name service caching server
   command: nscd -i hosts
+
+- name: Set config path facts
+  set_fact:
+    extra_permdir: "{{ platform_path }}/extra"
+
+- name: Ensure extra dir exist
+  file:
+    path: "{{ extra_permdir }}"
+    state: directory
+    recurse: yes
+    owner: "root"
+    group: "root"
+    mode: 0755
+
+- block:
+  - name: Strip the leading '/' from directories and assign them to new variables
+    set_fact:
+      archive_extra_permdir: "{{ extra_permdir | regex_replace('^\\/', '') }}"
+
+  - name: Look for extra dir in backup archive
+    shell: "tar -tf {{ restore_data_file }} | grep '{{ archive_extra_permdir }}'"
+    args:
+      warn: false
+    failed_when: false
+    register: search_result
+
+  - name: Restore extra dir
+    command: >-
+      tar -C {{ extra_permdir }} -xpf {{ restore_data_file }} --strip-components=3
+      '{{ archive_extra_permdir }}'
+    args:
+      warn: false
+    when: search_result.rc == 0
+
+  when: mode == 'restore'

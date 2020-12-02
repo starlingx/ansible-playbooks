@@ -21,33 +21,36 @@
       state: directory
 
   - block:
-    - name: Get the checksum of the build.info file of the installed load
-      stat:
-        path: /etc/build.info
-        get_checksum: yes
-      register: installed_buildinfo_check
+    - block:
+      - name: Get the checksum of the build.info file of the installed load
+        stat:
+          path: /etc/build.info
+          get_checksum: yes
+        register: installed_buildinfo_check
 
-    - name: Retrieve build.info file from backup
-      command: >-
-        tar -C {{ patching_staging_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
-        etc/build.info
-      args:
-        warn: false
+      - name: Retrieve build.info file from backup
+        command: >-
+          tar -C {{ patching_staging_dir }} -xpf {{ restore_data_file }} --transform='s,.*/,,'
+          etc/build.info
+        args:
+          warn: false
 
-    - name: Get the checksum of the build.info file from the backup
-      stat:
-        path: "{{ patching_staging_dir }}/build.info"
-        get_checksum: yes
-      register: backup_buildinfo_check
+      - name: Get the checksum of the build.info file from the backup
+        stat:
+          path: "{{ patching_staging_dir }}/build.info"
+          get_checksum: yes
+        register: backup_buildinfo_check
 
-    - name: Fail if load version of backup does not match the version of the installed load
-      fail:
-        msg: "Load version of backup does not match the version of the installed load."
-      when: installed_buildinfo_check.stat.checksum != backup_buildinfo_check.stat.checksum
+      - name: Fail if load version of backup does not match the version of the installed load
+        fail:
+          msg: "Load version of backup does not match the version of the installed load."
+        when: installed_buildinfo_check.stat.checksum != backup_buildinfo_check.stat.checksum
+
+      when: not skip_version_check
 
     - name: Retrieve platform.conf file from the backup
       command: >-
-        tar -C {{ patching_staging_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+        tar -C {{ patching_staging_dir }} -xpf {{ restore_data_file }} --transform='s,.*/,,'
         etc/platform/platform.conf
       args:
         warn: false
@@ -100,7 +103,7 @@
 
       - name: Restore patching
         command: >-
-          tar -C /opt -xpf {{ target_backup_dir }}/{{ backup_filename }} --strip-components=1
+          tar -C /opt -xpf {{ restore_data_file }} --strip-components=1
           {{ short_patching_permdir }}
         args:
           warn: false
@@ -112,7 +115,7 @@
 
       - name: Restore patching repo
         command: >-
-          tar -C /www/pages -xpf {{ target_backup_dir }}/{{ backup_filename }} --strip-components=2
+          tar -C /www/pages -xpf {{ restore_data_file }} --strip-components=2
           {{ short_patching_repo_permdir }}
         args:
           warn: false

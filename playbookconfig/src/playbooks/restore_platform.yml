@@ -8,10 +8,12 @@
   gather_facts: no
 
   vars_files:
+    - vars/common/main.yml
     - host_vars/backup-restore/default.yml
 
   roles:
     - common/prepare-env
+    - common/validate-target
     - restore-platform/prepare-env
     - backup-restore/transfer-file
     - restore-platform/restore-sw-patches

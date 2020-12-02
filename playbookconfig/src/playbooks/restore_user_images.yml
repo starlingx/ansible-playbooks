@@ -1,0 +1,19 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- hosts: all
+  gather_facts: no
+
+  vars_files:
+    - host_vars/backup-restore/default.yml
+
+  roles:
+    - { role: common/prepare-env }
+    - { role: restore-user-images/prepare-env, become: yes }
+    - { role: backup-restore/prepare-env }
+    - { role: backup-restore/transfer-file }
+    - { role: restore-user-images/restore-local-registry-images, become: yes,
+        docker_images_backup: "{{ target_backup_dir }}/{{ backup_filename }}" }

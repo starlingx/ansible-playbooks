@@ -48,12 +48,15 @@
 
     - name: Prepare to rename override file
       set_fact:
-        override_filename: "{{ (search_result.stdout_lines[0] | basename).split('_override_backup')[0] }}.yml"
+        override_filename: restore_platform_overrides.yml
 
     - name: Rename override file for bootstrap
       command: >-
         mv -f {{ override_files_dir }}/{{ (search_result.stdout_lines[0] | basename) }}
         {{ override_files_dir }}/{{ override_filename }}
+
+    - name: Include override data
+      include_vars: "{{ override_files_dir }}/{{ override_filename }}"
 
     when: search_result.rc == 0
 
@@ -65,6 +68,17 @@
     when: search_result.rc != 0
 
   delegate_to: localhost
+
+- name: Set archive parameters for bootstrap
+  set_fact:
+    archive_puppet_permdir: "opt/platform/puppet/{{ software_version }}/hieradata"
+    archive_ssh_config_permdir: "opt/platform/config/{{ software_version }}/ssh_config"
+    archive_config_permdir: "opt/platform/config/{{ software_version }}"
+    archive_keyring_permdir: "opt/platform/.keyring/{{ software_version }}/python_keyring"
+    archive_branding_permdir: "opt/platform/config/{{ software_version }}/branding"
+    archive_banner_permdir: "opt/platform/config/{{ software_version }}/banner/etc"
+    archive_deploy_permdir: "opt/platform/deploy/{{ software_version }}"
+    archive_helm_permdir: "opt/platform/helm/{{ software_version }}"
 
 - block:
   # Bail if the host has been unlocked
@@ -102,6 +116,10 @@
     set_fact:
       target_backup_dir: "{{ initial_backup_dir }}"
     when: inventory_hostname == "localhost"
+
+  - name: Set restore file parameter
+    set_fact:
+      restore_data_file: "{{ target_backup_dir }}/{{ backup_filename }}"
 
   become: yes
   become_user: root

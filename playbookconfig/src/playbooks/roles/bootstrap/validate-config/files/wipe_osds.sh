@@ -1,9 +1,19 @@
 #!/bin/sh
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2020 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
+
+# WORKAROUND: For script module become user issue.
+#             It doesn't detected correctly the BECOME-SUCCESS
+#             message of become. It happens for tasks quick to produce
+#             output. The python scripts seem not to be affected by
+#             this due to overhead of loading the interpreter.
+#
+#             Upstream reports of this:
+#             - https://github.com/ansible/ansible/issues/70092
+sleep 2
 
 part_type_guid_str="Partition GUID code"
 CEPH_OSD_GUID="4FBD7E29-9D25-41B8-AFD0-062C0CEFF05D"
@@ -39,13 +49,20 @@ for f in /dev/disk/by-path/*; do
         sgdisk_part_info=$(flock ${dev} sgdisk -i ${part_no} ${dev} || true)
         guid=$(echo "${sgdisk_part_info}" | \
             grep "$part_type_guid_str" | awk '{print $4;}')
-        if [ "${guid}" == "$CEPH_OSD_GUID" ] || \
-           [ "${guid}" == "$CEPH_JOURNAL_GUID" ]; then
-            echo "Found Ceph partition #${part_no} ${part}, erasing!"
+        if [ "${guid}" == "$CEPH_OSD_GUID" ]; then
+            echo "Found Ceph OSD partition #${part_no} ${part}, erasing!"
             dd if=/dev/zero of=${part} bs=512 count=34 2>/dev/null
             seek_end=$((`blockdev --getsz ${part}` - 34))
             dd if=/dev/zero of=${part} \
                 bs=512 count=34 seek=${seek_end} 2>/dev/null
+            parted -s ${dev} rm ${part_no}
+            ceph_disk="true"
+        elif [ "${guid}" == "$CEPH_JOURNAL_GUID" ]; then
+            echo "Found Ceph journal partition #${part_no} ${part}, erasing!"
+            dd if=/dev/zero of=${part} bs=1M count=100 2>/dev/null
+            seek_end=$((`blockdev --getsz ${part}` / (1024 * 2) - 100 ))
+            dd if=/dev/zero of=${part} \
+                bs=1M count=100 seek=${seek_end} 2>/dev/null
             parted -s ${dev} rm ${part_no}
             ceph_disk="true"
         fi

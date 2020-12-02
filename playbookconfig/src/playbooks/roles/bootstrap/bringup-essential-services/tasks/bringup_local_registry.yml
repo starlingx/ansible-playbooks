@@ -88,6 +88,46 @@
   environment:
     CNI_BIN_DIR: "{{ kubelet_cni_bin_dir }}"
 
+- name: Get local registry credentials
+  vars:
+    script_content: |
+      import keyring
+      password = keyring.get_password("sysinv", "services")
+      if not password:
+          raise Exception("Local registry password not found.")
+      print dict(username='sysinv', password=str(password))
+  shell: "{{ script_content }}"
+  args:
+    executable: /usr/bin/python
+  register: local_registry_credentials_output
+
+- set_fact:
+    local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
+
+- name: Get guest local registry credentials
+  vars:
+    script_content: |
+      import keyring
+      password = keyring.get_password("mtce", "services")
+      if not password:
+          raise Exception("Local registry password not found.")
+      print dict(username='mtce', password=str(password))
+  shell: "{{ script_content }}"
+  args:
+    executable: /usr/bin/python
+  register: guest_local_registry_credentials_output
+
+- set_fact:
+    guest_local_registry_credentials: "{{ guest_local_registry_credentials_output.stdout }}"
+
+- name: Update config.toml with registry auth
+  command: "sed -i -e 's|<%= @registry_auth %>|$REG_AUTH|g' /etc/containerd/config.toml"
+  args:
+    warn: false
+  environment:
+    REG_AUTH: "{{ (guest_local_registry_credentials['username'] + ':'
+               + guest_local_registry_credentials['password']) | b64encode }}"
+
 - name: Determine the stream_server_address for containerd
   set_fact:
     stream_server_address: "{{ '127.0.0.1' if ipv6_addressing == False else '::1' }}"
@@ -98,6 +138,28 @@
     warn: false
   environment:
     STREAM_SERVER_ADDRESS: "{{ stream_server_address }}"
+
+- name: Remove central cloud registry config on non-subclouds
+  replace:
+    path: /etc/containerd/config.toml
+    after: '# Central cloud registry config for distributed cloud subclouds'
+    regexp: '^(<%- if @distributed_cloud_role.+)\n(.+)\n(.+)\n(.+end -%>)'
+    replace: ''
+  when: distributed_cloud_role != 'subcloud'
+
+- name: Remove erb if tag start for central cloud registry config on subclouds
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: "^(# Central cloud registry.+)\n(.+role == 'subcloud' -%>)"
+    replace: '# Central cloud registry config for distributed cloud subclouds'
+  when: distributed_cloud_role == 'subcloud'
+
+- name: Remove erb if tag end for central cloud registry config on subclouds
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: "^(<%- end -%>)\n(.+config for distributed cloud subclouds)"
+    replace: '# End central cloud registry config for distributed cloud subclouds'
+  when: distributed_cloud_role == 'subcloud'
 
 - name: Restart containerd
   systemd:
@@ -193,7 +255,7 @@
 - block:
   - name: Restore certificate and key files
     command: >-
-      tar -C /etc/ssl/private -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+      tar -C /etc/ssl/private -xpf {{ restore_data_file }} --transform='s,.*/,,'
       'etc/ssl/private/*cert*'
     args:
       warn: false

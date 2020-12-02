@@ -209,7 +209,7 @@ def populate_load_config(client):
              'compatible_version': "N/A",
              'required_patches': "N/A"}
     try:
-        client.sysinv.load.create(**patch)
+        client.sysinv.load.create(patch)
     except Exception as e:
         if INCOMPLETE_BOOTSTRAP:
             loads = client.sysinv.load.list()
@@ -618,9 +618,6 @@ def populate_dns_config(client):
 
 
 def populate_docker_config(client):
-    if not INITIAL_POPULATION and not RECONFIGURE_SERVICE:
-        return
-
     http_proxy = CONF.get('BOOTSTRAP_CONFIG', 'DOCKER_HTTP_PROXY')
     https_proxy = CONF.get('BOOTSTRAP_CONFIG', 'DOCKER_HTTPS_PROXY')
     no_proxy = CONF.get('BOOTSTRAP_CONFIG', 'DOCKER_NO_PROXY')
@@ -794,6 +791,42 @@ def populate_docker_config(client):
         print("Populating/Updating kube-apiserver config...")
         client.sysinv.service_parameter.create(**values)
         print("kube-apiserver config completed.")
+
+
+def populate_platform_config(client):
+    # Remove old platform config entries that might have
+    # been created in the previous failed run.
+    parameters = client.sysinv.service_parameter.list()
+    for parameter in parameters:
+        if parameter.name == sysinv_constants.SERVICE_PARAM_NAME_PLAT_CONFIG_VIRTUAL:
+            client.sysinv.service_parameter.delete(parameter.uuid)
+
+    virtual_system = CONF.getboolean('BOOTSTRAP_CONFIG', 'VIRTUAL_SYSTEM')
+    if virtual_system:
+        parameters = {}
+
+        parameters[
+            sysinv_constants.SERVICE_PARAM_NAME_PLAT_CONFIG_VIRTUAL] = "True"
+
+        values = {
+            'service': sysinv_constants.SERVICE_TYPE_PLATFORM,
+            'section':
+                sysinv_constants.SERVICE_PARAM_SECTION_PLATFORM_CONFIG,
+            'personality': None,
+            'resource': None,
+            'parameters': parameters
+        }
+
+        print("Populating/Updating service parameter platform config...")
+        client.sysinv.service_parameter.create(**values)
+        print("Service parameter system platform completed.")
+
+
+def populate_service_parameter_config(client):
+    if not INITIAL_POPULATION and not RECONFIGURE_SERVICE:
+        return
+    populate_platform_config(client)
+    populate_docker_config(client)
 
 
 def get_management_mac_address():
@@ -1041,7 +1074,7 @@ if __name__ == '__main__':
         populate_load_config(client)
         populate_network_config(client)
         populate_dns_config(client)
-        populate_docker_config(client)
+        populate_service_parameter_config(client)
         controller = populate_controller_config(client)
         inventory_config_complete_wait(client, controller)
         os.remove(config_file)

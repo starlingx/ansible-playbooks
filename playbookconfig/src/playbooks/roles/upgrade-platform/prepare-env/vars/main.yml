@@ -1,0 +1,4 @@
+---
+default_upgrade_data_dir: /opt/platform-backup
+temp_upgrade_platform_path: /tmp/ansible_upgrade_platform
+override_filename: upgrade_platform_overrides.yml

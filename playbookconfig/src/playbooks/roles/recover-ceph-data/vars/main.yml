@@ -3,3 +3,4 @@ ceph_mon_manifest_apply_log: /tmp/ceph_mon_apply_manifest.log
 ceph_wait_time: 60
 drbd_cephmon_res: /etc/drbd.d/drbd-cephmon.res
 tmp_drbd_cephmon_res: /tmp/drbd-cephmon.res
+ceph_conf: /etc/ceph/ceph.conf

@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2020 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -109,43 +109,54 @@
     - "grubby --update-kernel={{ grub_kernel_output.stdout_lines[0] }} --args='{{ default_security_feature }}'"
     - "grubby --efi --update-kernel={{ grub_kernel_output.stdout_lines[0] }} --args='{{ default_security_feature }}'"
 
-- name: Resize filesystems (default)
-  command: "{{ item }}"
-  register: resize_result
-  failed_when: false
-  with_items:
-    - lvextend -L10G /dev/cgts-vg/pgsql-lv
-    - lvextend -L16G /dev/cgts-vg/dockerdistribution-lv
-    - lvextend -L20G /dev/cgts-vg/backup-lv
-    - resize2fs /dev/cgts-vg/backup-lv
-    - drbdadm -- --assume-peer-has-space resize all
-    - resize2fs /dev/drbd0
-    - resize2fs /dev/drbd8
+- block:
+  - name: Resize logical volumes
+    include: resize_logical_volume.yml
+    with_items:
+    - { size: "10G", lv: "/dev/cgts-vg/pgsql-lv" }
+    - { size: "10G", lv: "/dev/cgts-vg/platform-lv" }
+    - { size: "5G", lv: "/dev/cgts-vg/etcd-lv" }
+    - { size: "16G", lv: "/dev/cgts-vg/dockerdistribution-lv" }
+    - { size: "20G", lv: "/dev/cgts-vg/backup-lv" }
+    - { size: "30G", lv: "/dev/cgts-vg/docker-lv" }
+    - { size: "10G", lv: "/dev/cgts-vg/kubelet-lv" }
+    - { size: "16G", lv: "/dev/cgts-vg/scratch-lv" }
 
-- name: Fail if file system resizing failed for a reason other than it has been done already
-  fail:
-    msg: "{{ item.item }} failed for the following reason: {{ item.stderr }}."
-  when: item.rc !=0 and item.stderr is not search('matches existing size') and
-        item.stderr is not search('not larger than existing size')
-  with_items: "{{ resize_result.results }}"
+  - name: Resize filesystems (default)
+    command: "{{ item }}"
+    failed_when: false
+    with_items:
+      - resize2fs /dev/cgts-vg/backup-lv
+      - xfs_growfs /dev/cgts-vg/docker-lv
+      - resize2fs /dev/cgts-vg/kubelet-lv
+      - resize2fs /dev/cgts-vg/scratch-lv
 
+  - name: Resize drbd filesystems (default)
+    include: resize_drbd.yml
+    with_items:
+    - { resource: "drbd-pgsql/0", device: "drbd0" }
+    - { resource: "drbd-platform/0", device: "drbd2" }
+    - { resource: "drbd-etcd/0", device: "drbd7" }
+    - { resource: "drbd-dockerdistribution/0", device: "drbd8" }
+
+  when: root_disk_size|int >= minimum_small_root_disk_size
 
 - block:
   - name: Further resize if root disk size is larger than 240G
+    include: resize_logical_volume.yml
+    with_items:
+      - { size: "20G", lv: "/dev/cgts-vg/pgsql-lv" }
+      - { size: "25G", lv: "/dev/cgts-vg/backup-lv" }
+
+  - name: Resize filesystems
     command: "{{ item }}"
-    register: resize_result
     failed_when: false
     with_items:
-      - lvextend -L20G /dev/cgts-vg/pgsql-lv
-      - lvextend -L25G /dev/cgts-vg/backup-lv
       - resize2fs /dev/cgts-vg/backup-lv
-      - drbdadm -- --assume-peer-has-space resize all
-      - resize2fs /dev/drbd0
 
-  - name: Fail if additional resizing failed for a reason other than it has been done already
-    fail:
-      msg: "{{ item.item }} failed for the following reason: {{ item.stderr }}."
-    when: item.rc !=0 and item.stderr is not search('matches existing size') and
-          item.stderr is not search('Nothing to do!')
-    with_items: "{{ resize_result.results }}"
-  when: root_disk_size|int > minimum_root_disk_size
+  - name: Further resize drbd filesystems
+    include: resize_drbd.yml
+    with_items:
+    - { resource: "drbd-pgsql/0", device: "drbd0" }
+
+  when: root_disk_size|int > small_root_disk_size

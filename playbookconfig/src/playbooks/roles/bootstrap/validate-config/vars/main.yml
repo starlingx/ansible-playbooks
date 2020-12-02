@@ -15,6 +15,3 @@ system_controller_floating_address: none
 system_controller_subnet: none
 system_controller_oam_floating_address: none
 system_controller_oam_subnet: none
-mandatory_applications:
-  - /usr/local/share/applications/helm/nginx-ingress-controller-1.0-0.tgz
-  - /usr/local/share/applications/helm/cert-manager-1.0-0.tgz

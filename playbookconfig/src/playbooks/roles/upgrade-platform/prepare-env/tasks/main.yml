@@ -1,0 +1,245 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to verify the host environment and collect the necessary data for the rest of
+#   the playbook
+#
+
+# These common vars are used throughout the playbook.
+# As these vars need to be present in an imported playbook we must use include_vars
+- name: Include common vars
+  include_vars: vars/upgrade-platform/main.yml
+
+# Check that we're in a valid state for an upgrade
+# TODO move these checks to a common location for B&R/upgrades
+- block:
+  - name: Check initial config flag
+    stat:
+      path: "{{ initial_config_complete_flag }}"
+    register: initial_config_done
+
+  - name: Fail if the host has been unlocked
+    fail:
+      msg: "Host {{ ansible_host }} has been unlocked. Cannot perform restore."
+    when: initial_config_done.stat.exists
+
+  - name: Check if restore is in progress
+    stat:
+      path: "{{ restore_in_progress_flag }}"
+    register: restore_in_progress
+
+  - name: Fail if restore is already in progress
+    fail:
+      msg: " Restore is already in progress!"
+    when: restore_in_progress.stat.exists
+
+  - name: Create {{ restore_in_progress_flag }} flag file
+    file:
+      path: "{{ restore_in_progress_flag }}"
+      state: touch
+
+  become: yes
+  become_user: root
+
+- block:
+  - name: Set default upgrade_data_file path
+    set_fact:
+      upgrade_data_dir: "{{ default_upgrade_data_dir }}"
+
+  # The upgrade data file will be placed under the default_upgrade_data_dir during upgrade-start
+  # The name is formatted upgrade_data_<date_time>_<software_upgrade_uuid>.tgz
+  - name: Find upgrade_data tar file
+    find:
+      paths: "{{ upgrade_data_dir }}"
+      patterns: 'upgrade_data*.tgz'
+    register: upgrade_data_find_output
+
+  - name: Check presence of upgrade_data
+    fail:
+      msg: >
+       "Could not find upgrade_data file in {{ upgrade_data_dir }}."
+    when: upgrade_data_find_output.matched == 0
+
+  - name: Set upgrade_data value
+    set_fact:
+      restore_data_file: "{{ latest_upgrade_data.path }}"
+    vars:
+      latest_upgrade_data: "{{ upgrade_data_find_output.files | sort(attribute='ctime', reverse=True) | first }}"
+
+  when: upgrade_data_file is not defined or upgrade_data_file is none
+
+- block:
+  - name: Check for upgrade_data on host
+    stat:
+      path: "{{ upgrade_data_file }}"
+    register: host_upgrade_data_file
+
+  - name: Fail if the upgrade_data file is not found
+    fail:
+      msg: "Upgrade data file '{{ upgrade_data_file }}' not found."
+    when: not host_upgrade_data_file.stat.exists
+
+  - name: Set upgrade_data value
+    set_fact:
+      restore_data_file: "{{ upgrade_data_file }}"
+
+  when: upgrade_data_file is defined and upgrade_data_file is not none
+
+- block:
+  # The upgrade image data file will be placed under the default_upgrade_data_dir during upgrade-start
+  # The name is formatted upgrade_images_data_<date_time>_<software_upgrade_uuid>.tgz
+  # The file extension will be .tgz.zero if no images were present during the backup
+  - name: Find upgrade_images_data tar file
+    find:
+      paths: "{{ upgrade_data_dir }}"
+      patterns:
+        - 'upgrade_images_data*.tgz'
+        - 'upgrade_images_data*.tgz.zero'
+    register: upgrade_images_find_output
+
+  - name: Check presence of upgrade_images_data
+    fail:
+      msg: >
+       "Could not find upgrade_images_data file in {{ upgrade_data_dir }}."
+    when: upgrade_images_find_output.matched == 0
+
+  - name: Set upgrade_images_data value
+    set_fact:
+      docker_images_backup: "{{ latest_upgrade_images_data.path }}"
+    vars:
+      latest_upgrade_images_data: "{{ upgrade_images_find_output.files | sort(attribute='ctime', reverse=True) | first }}"
+
+  when: upgrade_images_data_file is not defined or upgrade_images_data_file is none
+
+- block:
+  - name: Check for upgrade_images_data on host
+    stat:
+      path: "{{ upgrade_images_data_file }}"
+    register: host_upgrade_images_data_file
+
+  - name: Fail if the upgrade_images_data file is not found
+    fail:
+      msg: "Upgrade data file '{{ upgrade_images_data_file }}' not found."
+    when: not host_upgrade_images_data_file.stat.exists
+
+  - name: Set upgrade_images_data value
+    set_fact:
+      docker_images_backup: "{{ upgrade_images_data_file }}"
+
+  when: upgrade_images_data_file is defined and upgrade_images_data_file is not none
+
+- name: Ensure temporary data path is present
+  file:
+    path: "{{ temp_upgrade_platform_path }}"
+    state: directory
+
+- name: Create temporary data directory
+  tempfile:
+    state: directory
+    path: "{{ temp_upgrade_platform_path }}"
+  register: upgrade_tempdir
+
+- name: Set temporary directory value
+  set_fact:
+    temp_upgrade_platform_dir: "{{ upgrade_tempdir.path }}"
+
+- name: Look for override backup file in the backup tarball
+  shell: "tar -tf {{ restore_data_file }} | grep '_override_backup.yml'"
+  args:
+    warn: false
+  failed_when: false
+  register: search_result
+
+- name: Fail if override file is missing
+  fail:
+    msg: >-
+      Cannot find {{ restore_data_file }} in the backup tarball!
+  when: search_result.rc != 0
+
+- name: Extract override file from backup tarball
+  shell: >-
+    tar -C {{ temp_upgrade_platform_dir }} -xf {{ restore_data_file }} --transform='s,.*/,,'
+    {{ search_result.stdout_lines[0] }}
+  args:
+    warn: false
+
+- name: Rename override file for bootstrap
+  command: >-
+    mv -f {{ temp_upgrade_platform_dir }}/{{ (search_result.stdout_lines[0] | basename) }}
+    {{ temp_upgrade_platform_dir }}/{{ override_filename }}
+
+# Copy the override data to the master if necessary
+- block:
+  - name: Gather override data
+    command: "cat {{ temp_upgrade_platform_dir }}/{{ override_filename }}"
+    register: override_contents
+
+  - name: Create temporary data directory
+    local_action:
+      module: file
+      path: "{{ temp_upgrade_platform_dir }}"
+      state: directory
+
+  - name: Write out override data
+    local_action:
+      module: copy
+      force: yes
+      content: "{{ override_contents.stdout }}"
+      dest: "{{ temp_upgrade_platform_dir }}/{{ override_filename }}"
+
+  when: inventory_hostname != 'localhost'
+
+- name: Include override data
+  include_vars: "{{ temp_upgrade_platform_dir }}/{{ override_filename }}"
+
+- name: Extract the upgrade metadata
+  unarchive:
+    src: "{{ restore_data_file }}"
+    dest: "{{ temp_upgrade_platform_dir }}"
+    extra_opts:
+    - opt/platform/config/*/upgrades/metadata
+    - --transform
+    - s,.*/,,
+    remote_src: yes
+
+- name: Load upgrade metadata
+  command: "cat {{ temp_upgrade_platform_dir }}/metadata"
+  register: metadata_contents
+
+- name: Set upgrade metadata variable
+  vars:
+    metadata_json: "{{ metadata_contents.stdout | from_json }}"
+  set_fact:
+    upgrade_metadata: "{{metadata_json.upgrade}}"
+
+- name: Check for correct upgrade version
+  fail:
+    msg: "Incorrect software load installed. Expecting {{ upgrade_metadata.to_release }}"
+  when: upgrade_metadata.to_release != software_version
+
+- name: Set archive parameters for bootstrap
+  set_fact:
+    archive_puppet_permdir: "opt/platform/puppet/{{ upgrade_metadata.from_release }}/hieradata"
+    archive_ssh_config_permdir: "opt/platform/config/{{ upgrade_metadata.from_release }}/ssh_config"
+    archive_config_permdir: "opt/platform/config/{{ upgrade_metadata.from_release }}"
+    archive_keyring_permdir: "opt/platform/.keyring/{{ upgrade_metadata.from_release }}/python_keyring"
+    archive_branding_permdir: "opt/platform/config/{{ upgrade_metadata.from_release }}/branding"
+    archive_banner_permdir: "opt/platform/config/{{ upgrade_metadata.from_release }}/banner/etc"
+    archive_deploy_permdir: "opt/platform/deploy/{{ upgrade_metadata.from_release }}"
+    archive_helm_permdir: "opt/platform/helm/{{ upgrade_metadata.from_release }}"
+
+- name: Remove temporary data
+  file:
+    path: "{{ temp_upgrade_platform_dir }}"
+    state: absent
+
+- name: Remove temporary data from master
+  local_action:
+    module: file
+    path: "{{ temp_upgrade_platform_dir }}"
+    state: absent
+  when: inventory_hostname != 'localhost'

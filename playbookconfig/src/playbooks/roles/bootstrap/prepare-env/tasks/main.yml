@@ -21,505 +21,487 @@
   fail: msg='Host {{ ansible_host }} does not have the right image!.'
   when: packages_installed.rc > 0
 
-# Bail if the host has been unlocked
+# The following parameters should exist in default.yml. If any of them is
+# not available, the file is invalid.
+- name: Fail if any of the mandatory configurations are not defined
+  fail:
+    msg: "Mandatory configuration parameter {{ item }} is not defined."
+  when: item is not defined
+  with_items:
+    - system_mode
+    - timezone
+    - pxeboot_subnet
+    - management_subnet
+    - cluster_host_subnet
+    - cluster_pod_subnet
+    - cluster_service_subnet
+    - external_oam_subnet
+    - external_oam_gateway_address
+    - external_oam_floating_address
+    - management_multicast_subnet
+    - management_dynamic_address_allocation
+    - cluster_host_dynamic_address_allocation
+    - dns_servers
+    - docker_registries
+    - admin_username
+    - admin_password
+    - override_files_dir
+
+- name: Set config path facts
+  set_fact:
+    keyring_permdir: "{{ platform_path + '/.keyring/' + software_version }}"
+    config_permdir: "{{ platform_path + '/config/' + software_version }}"
+    sysinv_permdir: "{{ platform_path + '/sysinv/' + software_version }}"
+    puppet_permdir: "{{ platform_path + '/puppet/' + software_version }}"
+
 - name: Check initial config flag
   stat:
     path: /etc/platform/.initial_config_complete
   register: initial_config_complete
 
-- block:
-  - name: Set skip_play flag for host
-    set_fact:
-      skip_play: true
+- name: Check if bootstrap_finalized flag exists on host
+  stat:
+    path: "{{ config_permdir }}/.bootstrap_finalized"
+  register: bootstrap_finalized_flag
 
-  - name: Skip remaining tasks if host is already unlocked
-    debug: msg="Host {{ ansible_host }} has been unlocked. There's nothing to play!"
+- name: Fail if host is unlocked or host configurations have already started
+  fail:
+    msg: >
+      "The bootstrap of host {{ ansible_host }} has already been finalized.
+      Please re-install before attempting to bootstrap it again."
+  when: bootstrap_finalized_flag.stat.exists or initial_config_complete.stat.exists
 
-  - name: Stop playing if this is the only target host
-    meta: end_play
-    when: play_hosts | length == 1
+- name: Set initial address facts if not defined. They will be updated later
+  set_fact:
+    pxeboot_start_address: "{{ pxeboot_start_address | default('derived') }}"
+    pxeboot_end_address: "{{ pxeboot_end_address | default('derived') }}"
+    management_start_address: "{{ management_start_address | default('derived') }}"
+    management_end_address: "{{ management_end_address | default('derived') }}"
+    cluster_host_start_address: "{{ cluster_host_start_address | default('derived') }}"
+    cluster_host_end_address: "{{ cluster_host_end_address | default('derived') }}"
+    cluster_pod_start_address: "{{ cluster_pod_start_address | default('derived') }}"
+    cluster_pod_end_address: "{{ cluster_pod_end_address | default('derived') }}"
+    cluster_service_start_address: "{{ cluster_service_start_address | default('derived') }}"
+    cluster_service_end_address: "{{ cluster_service_end_address | default('derived') }}"
+    external_oam_start_address: "{{ external_oam_start_address | default('derived') }}"
+    external_oam_end_address: "{{ external_oam_end_address | default('derived') }}"
+    management_multicast_start_address: "{{ management_multicast_start_address | default('derived') }}"
+    management_multicast_end_address: "{{ management_multicast_end_address | default('derived') }}"
+    external_oam_node_0_address: "{{ external_oam_node_0_address | default('derived') }}"
+    external_oam_node_1_address: "{{ external_oam_node_1_address | default('derived') }}"
 
-  when: initial_config_complete.stat.exists
+- set_fact:
+    docker_registries: "{{ vault_docker_registries }}"
+  when: vault_docker_registries is defined
 
-# Proceed only if skip_play flag is not turned on
-- block:
-  # The following parameters should exist in default.yml. If any of them is
-  # not available, the file is invalid.
-  - name: Fail if any of the mandatory configurations are not defined
-    fail:
-      msg: "Mandatory configuration parameter {{ item }} is not defined."
-    when: item is not defined
-    with_items:
-      - system_mode
-      - timezone
-      - pxeboot_subnet
-      - management_subnet
-      - cluster_host_subnet
-      - cluster_pod_subnet
-      - cluster_service_subnet
-      - external_oam_subnet
-      - external_oam_gateway_address
-      - external_oam_floating_address
-      - management_multicast_subnet
-      - management_dynamic_address_allocation
-      - cluster_host_dynamic_address_allocation
-      - dns_servers
-      - docker_registries
-      - admin_username
-      - admin_password
-      - override_files_dir
-
-  - name: Retrieve software version number
-    # lookup module does not work with /etc/build.info as it does not have ini
-    # format. Resort to shell source.
-    shell: source /etc/build.info; echo $SW_VERSION
-    register: sw_version_result
-
-  - name: Fail if software version is not defined
-    fail:
-      msg: "SW_VERSION is missing in /etc/build.info"
-    when: sw_version_result.stdout_lines|length == 0
-
-  - name: Retrieve system type
-    shell: source /etc/platform/platform.conf; echo $system_type
-    register: system_type_result
-
-  - name: Fail if system type is not defined
-    fail:
-      msg: "system_type is missing in /etc/platform/platform.conf"
-    when: system_type_result.stdout_lines|length == 0
-
-  - name: Set software version, system type config path facts
-    set_fact:
-      software_version: "{{ sw_version_result.stdout_lines[0] }}"
-      system_type: "{{ system_type_result.stdout_lines[0] }}"
-
-  - name: Fail if host software version is not supported by this playbook
-    fail:
-      msg: "This playbook is not compatible with StarlingX software version {{ software_version }}."
-    when: software_version not in supported_release_versions
-
-  - name: Set config path facts
-    set_fact:
-      keyring_permdir: "{{ platform_path + '/.keyring/' + software_version }}"
-      config_permdir: "{{ platform_path + '/config/' + software_version }}"
-      sysinv_permdir: "{{ platform_path + '/sysinv/' + software_version }}"
-      puppet_permdir: "{{ platform_path + '/puppet/' + software_version }}"
-
-  - name: Set initial address facts if not defined. They will be updated later
-    set_fact:
-      pxeboot_start_address: "{{ pxeboot_start_address | default('derived') }}"
-      pxeboot_end_address: "{{ pxeboot_end_address | default('derived') }}"
-      management_start_address: "{{ management_start_address | default('derived') }}"
-      management_end_address: "{{ management_end_address | default('derived') }}"
-      cluster_host_start_address: "{{ cluster_host_start_address | default('derived') }}"
-      cluster_host_end_address: "{{ cluster_host_end_address | default('derived') }}"
-      cluster_pod_start_address: "{{ cluster_pod_start_address | default('derived') }}"
-      cluster_pod_end_address: "{{ cluster_pod_end_address | default('derived') }}"
-      cluster_service_start_address: "{{ cluster_service_start_address | default('derived') }}"
-      cluster_service_end_address: "{{ cluster_service_end_address | default('derived') }}"
-      external_oam_start_address: "{{ external_oam_start_address | default('derived') }}"
-      external_oam_end_address: "{{ external_oam_end_address | default('derived') }}"
-      management_multicast_start_address: "{{ management_multicast_start_address | default('derived') }}"
-      management_multicast_end_address: "{{ management_multicast_end_address | default('derived') }}"
-      external_oam_node_0_address: "{{ external_oam_node_0_address | default('derived') }}"
-      external_oam_node_1_address: "{{ external_oam_node_1_address | default('derived') }}"
-
-  - set_fact:
-      docker_registries: "{{ vault_docker_registries }}"
-    when: vault_docker_registries is defined
-
-  - name: Set default registries dictionary
-    set_fact:
-      default_docker_registries:
-        k8s.gcr.io:
-          url: k8s.gcr.io
-        gcr.io:
-          url: gcr.io
-        quay.io:
-          url: quay.io
-        docker.io:
-          url: docker.io
-        docker.elastic.co:
-          url: docker.elastic.co
-
-  - name: Merge user and default registries dictionaries
-    set_fact:
-      docker_registries: "{{ default_docker_registries | combine(docker_registries) }}"
-
-  - name: Initialize some flags to be used in subsequent roles/tasks
-    set_fact:
-      system_config_update: false
-      network_config_update: false
-      docker_config_update: false
-      save_password: true
-      save_config_to_db: true
-      use_docker_proxy: false
-      use_defaults_registry: false
-      restart_services: false
-      reconfigure_endpoints: false
-      dc_role_changed: false
-
-      # Replay related flags
-      last_config_file_exists: false
-      incomplete_bootstrap: false
-      initial_db_populated: false
-
-  - name: Set initial facts
-    set_fact:
-      system_params:
-        'system_mode': "{{ system_mode }}"
-        'timezone': "{{ timezone }}"
-      root_disk_size: "{{ standard_root_disk_size }}"
-      root_disk_idx: 0
-      localhost_name_ip_mapping: "127.0.0.1\tlocalhost\tlocalhost.localdomain localhost4 localhost4.localdomain4"
-      network_params:
-        'pxeboot_subnet': "{{ pxeboot_subnet }}"
-        'management_subnet': "{{ management_subnet }}"
-        'cluster_host_subnet': "{{ cluster_host_subnet }}"
-        'cluster_pod_subnet': "{{ cluster_pod_subnet }}"
-        'cluster_service_subnet': "{{ cluster_service_subnet }}"
-        'external_oam_subnet': "{{ external_oam_subnet }}"
-        'external_oam_gateway_address': "{{ external_oam_gateway_address }}"
-        'external_oam_floating_address': "{{ external_oam_floating_address }}"
-        'management_multicast_subnet': "{{ management_multicast_subnet }}"
-      # Set this placeholder here to workaround an Ansible quirk
-      derived_network_params:
-        place_holder: place_holder
-      ansible_remote_tmp: "{{ ansible_remote_tmp | default('/tmp/.ansible-${USER}/tmp') }}"
-      pods_wait_time: "{{ pods_wait_time | default(120) }}"
-      bootstrap_completed_flag: "{{ config_permdir }}/.bootstrap_completed"
-      initial_db_populated_flag: "{{ config_permdir }}/.initial_db_population_completed"
-
-  - name: Turn on use_docker_proxy flag
-    set_fact:
-      use_docker_proxy: true
-    when: (docker_http_proxy is defined and docker_http_proxy is not none) or
-          (docker_https_proxy is defined and docker_https_proxy is not none)
-
-  - name: Set default values for individual platform registries and registry secrets
-    set_fact:
-      default_k8s_registry:
+- name: Set default registries dictionary
+  set_fact:
+    default_docker_registries:
+      k8s.gcr.io:
         url: k8s.gcr.io
-      default_gcr_registry:
+      gcr.io:
         url: gcr.io
-      default_quay_registry:
+      quay.io:
         url: quay.io
-      default_docker_registry:
+      docker.io:
         url: docker.io
-      default_elastic_registry:
+      docker.elastic.co:
         url: docker.elastic.co
 
-  - name: Set default values for additional images list
+- name: Merge user and default registries dictionaries
+  set_fact:
+    docker_registries: "{{ default_docker_registries | combine(docker_registries) }}"
+
+- name: Initialize some flags to be used in subsequent roles/tasks
+  set_fact:
+    system_config_update: false
+    network_config_update: false
+    docker_config_update: false
+    save_password: true
+    save_config_to_db: true
+    use_docker_proxy: false
+    use_defaults_registry: false
+    restart_services: false
+    reconfigure_endpoints: false
+    dc_role_changed: false
+
+    # Replay related flags
+    last_config_file_exists: false
+    incomplete_bootstrap: false
+    initial_db_populated: false
+
+- name: Set initial facts
+  set_fact:
+    system_params:
+      'system_mode': "{{ system_mode }}"
+      'timezone': "{{ timezone }}"
+    root_disk_size: "{{ standard_root_disk_size }}"
+    root_disk_idx: 0
+    localhost_name_ip_mapping: "127.0.0.1\tlocalhost\tlocalhost.localdomain localhost4 localhost4.localdomain4"
+    network_params:
+      'pxeboot_subnet': "{{ pxeboot_subnet }}"
+      'management_subnet': "{{ management_subnet }}"
+      'cluster_host_subnet': "{{ cluster_host_subnet }}"
+      'cluster_pod_subnet': "{{ cluster_pod_subnet }}"
+      'cluster_service_subnet': "{{ cluster_service_subnet }}"
+      'external_oam_subnet': "{{ external_oam_subnet }}"
+      'external_oam_gateway_address': "{{ external_oam_gateway_address }}"
+      'external_oam_floating_address': "{{ external_oam_floating_address }}"
+      'management_multicast_subnet': "{{ management_multicast_subnet }}"
+    # Set this placeholder here to workaround an Ansible quirk
+    derived_network_params:
+      place_holder: place_holder
+    ansible_remote_tmp: "{{ ansible_remote_tmp | default('/tmp/.ansible-${USER}/tmp') }}"
+    pods_wait_time: "{{ pods_wait_time | default(120) }}"
+    bootstrap_completed_flag: "{{ config_permdir }}/.bootstrap_completed"
+    initial_db_populated_flag: "{{ config_permdir }}/.initial_db_population_completed"
+
+- name: Turn on use_docker_proxy flag
+  set_fact:
+    use_docker_proxy: true
+  when: (docker_http_proxy is defined and docker_http_proxy is not none) or
+        (docker_https_proxy is defined and docker_https_proxy is not none)
+
+- name: Set default values for individual platform registries and registry secrets
+  set_fact:
+    default_k8s_registry:
+      url: k8s.gcr.io
+    default_gcr_registry:
+      url: gcr.io
+    default_quay_registry:
+      url: quay.io
+    default_docker_registry:
+      url: docker.io
+    default_elastic_registry:
+      url: docker.elastic.co
+
+- name: Set default values for additional images list
+  set_fact:
+    additional_local_registry_images: "{{ additional_local_registry_images | default([]) }}"
+
+- name: Set default values for OpenID connect
+  set_fact:
+    apiserver_oidc: "{{ apiserver_oidc | default({}) }}"
+
+- name: Set default values for docker proxies if not defined
+  set_fact:
+    docker_http_proxy: "{{ docker_http_proxy | default('undef') }}"
+    docker_https_proxy: "{{ docker_https_proxy | default('undef') }}"
+    docker_no_proxy: "{{ docker_no_proxy | default([]) }}"
+
+- name: Set default values for kubernetes certificate parameters if not defined
+  set_fact:
+    k8s_root_ca_cert: "{{ k8s_root_ca_cert | default('') }}"
+    k8s_root_ca_key: "{{ k8s_root_ca_key | default('') }}"
+    apiserver_cert_sans: "{{ apiserver_cert_sans | default([]) }}"
+
+# Give the bootstrap config output file on the host a generic name so the
+# same file is referenced if the host is bootstrapped locally and remotely
+# in whatever order.
+- name: Set bootstrap output file
+  set_fact:
+    last_bootstrap_config_file: "{{ config_permdir }}/last_bootstrap_config.yml"
+
+- name: Check Docker status
+  command: systemctl status docker
+  failed_when: false
+  register: docker
+
+- name: Look for openrc file
+  stat:
+    path: /etc/platform/openrc
+  register: openrc_file
+
+- block:
+  - name: Turn on replayed flag
     set_fact:
-      additional_local_registry_images: "{{ additional_local_registry_images | default([]) }}"
+      replayed: true
 
-  - name: Set default values for OpenID connect
+  # If the bootstrap manifest has been applied, prevent password regeneration upon
+  # replay.
+  # TODO(tngo): Revise this logic once the decision has been made to continue
+  #             storing admin password using python keyring or switching to
+  #             barbican as the frontend and possibly backend changes to support password
+  #             regeneration in bootstrap replays differ considerably between the
+  #             two storage approaches.
+  - name: Turn off save_password flag
     set_fact:
-      apiserver_oidc: "{{ apiserver_oidc | default({}) }}"
+      save_password: false
+  when: openrc_file.stat.exists and docker.rc == 0
 
-  - name: Set default values for docker proxies if not defined
-    set_fact:
-      docker_http_proxy: "{{ docker_http_proxy | default('undef') }}"
-      docker_https_proxy: "{{ docker_https_proxy | default('undef') }}"
-      docker_no_proxy: "{{ docker_no_proxy | default([]) }}"
-
-  - name: Set default values for kubernetes certificate parameters if not defined
-    set_fact:
-      k8s_root_ca_cert: "{{ k8s_root_ca_cert | default('') }}"
-      k8s_root_ca_key: "{{ k8s_root_ca_key | default('') }}"
-      apiserver_cert_sans: "{{ apiserver_cert_sans | default([]) }}"
-
-  # Give the bootstrap config output file on the host a generic name so the
-  # same file is referenced if the host is bootstrapped locally and remotely
-  # in whatever order.
-  - name: Set bootstrap output file
-    set_fact:
-      last_bootstrap_config_file: "{{ config_permdir }}/last_bootstrap_config.yml"
-
-  - name: Check Docker status
-    command: systemctl status docker
-    failed_when: false
-    register: docker
-
-  - name: Look for openrc file
+- block:  # executed if it is a replay
+  - name: Check the overall status of the previous play
     stat:
-      path: /etc/platform/openrc
-    register: openrc_file
+      path: "{{ bootstrap_completed_flag }}"
+    register: bootstrap_completed
 
-  - block:
-    - name: Turn on replayed flag
+  - block:  # executed when previous play did not complete
+    - name: Turn on incomplete_bootstrap flag if the previous play did not complete
       set_fact:
-        replayed: true
+        incomplete_bootstrap: true
+        restart_services: true
 
-    # If the bootstrap manifest has been applied, prevent password regeneration upon
-    # replay.
-    # TODO(tngo): Revise this logic once the decision has been made to continue
-    #             storing admin password using python keyring or switching to
-    #             barbican as the frontend and possibly backend changes to support password
-    #             regeneration in bootstrap replays differ considerably between the
-    #             two storage approaches.
-    - name: Turn off save_password flag
-      set_fact:
-        save_password: false
-    when: openrc_file.stat.exists and docker.rc == 0
-
-  - block:  # executed if it is a replay
-    - name: Check the overall status of the previous play
+    - name: Check the initial database population status
       stat:
+        path: "{{ initial_db_populated_flag }}"
+      register: initial_db_population_completed
+
+    - name: Turn on initial_db_populated and restart_services flags if initial db population did complete
+      set_fact:
+        initial_db_populated: true
+      when: initial_db_population_completed.stat.exists
+
+    when: not bootstrap_completed.stat.exists
+
+  - block:  # executed when previous play completed
+    - name: Remove bootstrap_completed flag for the current play if the previous play succeeded
+      file:
         path: "{{ bootstrap_completed_flag }}"
-      register: bootstrap_completed
+        state: absent
+      become: yes
 
-    - block:  # executed when previous play did not complete
-      - name: Turn on incomplete_bootstrap flag if the previous play did not complete
+    - name: Turn on initial_db_populated flag
+      set_fact:
+        initial_db_populated: true
+    when: not incomplete_bootstrap
+
+  # The previous play failed but the one before that did. Execute the following
+  # block if initial db population completed.
+  - block:
+    - name: Find previous config file for this host
+      stat:
+        path: "{{ last_bootstrap_config_file }}"
+      register: last_config_file
+
+    - block:  # exexcuted if the last config file exists
+      - name: Turn on last_config_file_exists flag
         set_fact:
-          incomplete_bootstrap: true
+          last_config_file_exists: true
+
+      - name: Set last config file to import (local)
+        set_fact:
+          last_config: "{{ last_bootstrap_config_file }}"
+        when: inventory_hostname == 'localhost'
+
+      # Currently Ansible include_vars only works with local file.
+      - block:
+        # Give a host specific name in case the playbook is used to bootstrap
+        # multiple remote hosts simultaneously
+        - name: Set last config file to import (remote)
+          set_fact:
+            last_config: "/tmp/{{ (last_bootstrap_config_file | basename | splitext)[0] }}_{{ inventory_hostname }}.yml"
+
+        - name: Fetch previous config file from this host
+          fetch:
+            src: "{{ last_bootstrap_config_file }}"
+            dest: "{{ last_config }}"
+            flat: yes
+        when: inventory_hostname != 'localhost'
+
+      - name: Read in last config values
+        include_vars:
+          file: "{{ last_config }}"
+
+      - name: Turn on system attributes reconfiguration flag
+        set_fact:
+          system_config_update: true
+        when: (prev_system_mode != system_mode) or
+              (prev_timezone != timezone) or
+              (prev_dns_servers.split(',') | sort != dns_servers | sort) or
+              (prev_distributed_cloud_role != distributed_cloud_role)
+
+      - name: Convert previous docker no proxy config value for comparison
+        set_fact:
+          prev_docker_no_proxy:
+            "{{ (prev_docker_no_proxy.split(',') | sort) if prev_docker_no_proxy else [] }}"
+
+      - name: Turn on docker reconfiguration flag if docker config is changed
+        set_fact:
+          docker_config_update: true
+        when: (prev_docker_registries != docker_registries) or
+              ((use_docker_proxy) and
+               (prev_docker_http_proxy != docker_http_proxy or
+                prev_docker_https_proxy != docker_https_proxy or
+                prev_docker_no_proxy != docker_no_proxy | sort)) or
+              (prev_apiserver_cert_sans != apiserver_cert_sans) or
+              (prev_k8s_root_ca_cert != k8s_root_ca_cert) or
+              (prev_k8s_root_ca_key != k8s_root_ca_key)
+
+      - name: Turn on service endpoints reconfiguration flag if management and/or oam network config is changed
+        set_fact:
+          reconfigure_endpoints: true
+        when: (prev_management_subnet != management_subnet) or
+              (prev_management_start_address != management_start_address) or
+              (prev_external_oam_subnet != external_oam_subnet) or
+              (prev_external_oam_gateway_address != external_oam_gateway_address) or
+              (prev_external_oam_floating_address != external_oam_floating_address) or
+              (prev_external_oam_start_address != external_oam_start_address) or
+              (prev_external_oam_end_address != external_oam_end_address) or
+              (prev_external_oam_node_0_address != external_oam_node_0_address) or
+              (prev_external_oam_node_1_address != external_oam_node_1_address)
+
+      - name: Turn on service endpoints reconfiguration flag if distributed_cloud_role is changed
+        set_fact:
+          reconfigure_endpoints: true
+          dc_role_changed: true
+        when: distributed_cloud_role == 'systemcontroller' and
+              prev_distributed_cloud_role != distributed_cloud_role
+
+      - name: Turn on network reconfiguration flag if any of the network related config is changed
+        set_fact:
+          network_config_update: true
+        when: reconfigure_endpoints or
+              (prev_management_dynamic_address_allocation != management_dynamic_address_allocation) or
+              (prev_cluster_host_dynamic_address_allocation != cluster_host_dynamic_address_allocation) or
+              (prev_management_end_address != management_end_address) or
+              (prev_pxeboot_subnet != pxeboot_subnet) or
+              (prev_pxeboot_start_address != pxeboot_start_address) or
+              (prev_pxeboot_end_address != pxeboot_end_address) or
+              (prev_management_multicast_subnet != management_multicast_subnet) or
+              (prev_management_multicast_start_address != management_multicast_start_address) or
+              (prev_management_multicast_end_address != management_multicast_end_address) or
+              (prev_cluster_host_subnet != cluster_host_subnet) or
+              (prev_cluster_host_start_address != cluster_host_start_address) or
+              (prev_cluster_host_end_address != cluster_host_end_address) or
+              (prev_cluster_pod_subnet != cluster_pod_subnet) or
+              (prev_cluster_pod_start_address != cluster_pod_start_address) or
+              (prev_cluster_pod_end_address != cluster_pod_end_address) or
+              (prev_cluster_service_subnet != cluster_service_subnet) or
+              (prev_cluster_service_start_address != cluster_service_start_address) or
+              (prev_cluster_service_end_address != cluster_service_end_address)
+
+      - name: Turn on restart services flag if management/oam/cluster network or docker config is changed
+        set_fact:
           restart_services: true
+        when: reconfigure_endpoints or
+              docker_config_update or
+              (prev_cluster_host_subnet != cluster_host_subnet) or
+              (prev_cluster_pod_subnet != cluster_pod_subnet) or
+              (prev_cluster_service_subnet != cluster_service_subnet)
 
-      - name: Check the initial database population status
-        stat:
-          path: "{{ initial_db_populated_flag }}"
-        register: initial_db_population_completed
-
-      - name: Turn on initial_db_populated and restart_services flags if initial db population did complete
+      - name: Turn on restart services flag if Kubernetes OpenID config is changed
         set_fact:
-          initial_db_populated: true
-        when: initial_db_population_completed.stat.exists
+          restart_services: true
+        when: (prev_apiserver_oidc|default({})) != (apiserver_oidc)
 
-      when: not bootstrap_completed.stat.exists
-
-    - block:  # executed when previous play completed
-      - name: Remove bootstrap_completed flag for the current play if the previous play succeeded
-        file:
-          path: "{{ bootstrap_completed_flag }}"
-          state: absent
-        become: yes
-
-      - name: Turn on initial_db_populated flag
+      # Re-evaluate the condition to persist config data to sysinv database
+      - name: Turn off save_config_to_db flag
         set_fact:
-          initial_db_populated: true
-      when: not incomplete_bootstrap
+          save_config_to_db: false
+        when: not system_config_update and
+              not network_config_update and
+              not docker_config_update and
+              not incomplete_bootstrap
 
-    # The previous play failed but the one before that did. Execute the following
-    # block if initial db population completed.
-    - block:
-      - name: Find previous config file for this host
-        stat:
-          path: "{{ last_bootstrap_config_file }}"
-        register: last_config_file
+      when: last_config_file.stat.exists
+    when: initial_db_populated
+  when: replayed  # bootstrap manifest has been applied
 
-      - block:  # exexcuted if the last config file exists
-        - name: Turn on last_config_file_exists flag
-          set_fact:
-            last_config_file_exists: true
+- name: Check volume groups
+  command: vgdisplay cgts-vg
+  register: vg_result
+  become: yes
 
-        - name: Set last config file to import (local)
-          set_fact:
-            last_config: "{{ last_bootstrap_config_file }}"
-          when: inventory_hostname == 'localhost'
+- name: Check size of root disk
+  script: check_root_disk_size.py {{ standard_root_disk_size }}
+  register: disk_size_check_result
+  failed_when: false
+  become: yes
 
-        # Currently Ansible include_vars only works with local file.
-        - block:
-          # Give a host specific name in case the playbook is used to bootstrap
-          # multiple remote hosts simultaneously
-          - name: Set last config file to import (remote)
-            set_fact:
-              last_config: "/tmp/{{ (last_bootstrap_config_file | basename | splitext)[0] }}_{{ inventory_hostname }}.yml"
-
-          - name: Fetch previous config file from this host
-            fetch:
-              src: "{{ last_bootstrap_config_file }}"
-              dest: "{{ last_config }}"
-              flat: yes
-          when: inventory_hostname != 'localhost'
-
-        - name: Read in last config values
-          include_vars:
-            file: "{{ last_config }}"
-
-        - name: Turn on system attributes reconfiguration flag
-          set_fact:
-            system_config_update: true
-          when: (prev_system_mode != system_mode) or
-                (prev_timezone != timezone) or
-                (prev_dns_servers.split(',') | sort != dns_servers | sort) or
-                (prev_distributed_cloud_role != distributed_cloud_role)
-
-        - name: Convert previous docker no proxy config value for comparison
-          set_fact:
-            prev_docker_no_proxy:
-              "{{ (prev_docker_no_proxy.split(',') | sort) if prev_docker_no_proxy else [] }}"
-
-        - name: Turn on docker reconfiguration flag if docker config is changed
-          set_fact:
-            docker_config_update: true
-          when: (prev_docker_registries != docker_registries) or
-                ((use_docker_proxy) and
-                 (prev_docker_http_proxy != docker_http_proxy or
-                  prev_docker_https_proxy != docker_https_proxy or
-                  prev_docker_no_proxy != docker_no_proxy | sort)) or
-                (prev_apiserver_cert_sans != apiserver_cert_sans) or
-                (prev_k8s_root_ca_cert != k8s_root_ca_cert) or
-                (prev_k8s_root_ca_key != k8s_root_ca_key)
-
-        - name: Turn on service endpoints reconfiguration flag if management and/or oam network config is changed
-          set_fact:
-            reconfigure_endpoints: true
-          when: (prev_management_subnet != management_subnet) or
-                (prev_management_start_address != management_start_address) or
-                (prev_external_oam_subnet != external_oam_subnet) or
-                (prev_external_oam_gateway_address != external_oam_gateway_address) or
-                (prev_external_oam_floating_address != external_oam_floating_address) or
-                (prev_external_oam_start_address != external_oam_start_address) or
-                (prev_external_oam_end_address != external_oam_end_address) or
-                (prev_external_oam_node_0_address != external_oam_node_0_address) or
-                (prev_external_oam_node_1_address != external_oam_node_1_address)
-
-        - name: Turn on service endpoints reconfiguration flag if distributed_cloud_role is changed
-          set_fact:
-            reconfigure_endpoints: true
-            dc_role_changed: true
-          when: distributed_cloud_role == 'systemcontroller' and
-                prev_distributed_cloud_role != distributed_cloud_role
-
-        - name: Turn on network reconfiguration flag if any of the network related config is changed
-          set_fact:
-            network_config_update: true
-          when: reconfigure_endpoints or
-                (prev_management_dynamic_address_allocation != management_dynamic_address_allocation) or
-                (prev_cluster_host_dynamic_address_allocation != cluster_host_dynamic_address_allocation) or
-                (prev_management_end_address != management_end_address) or
-                (prev_pxeboot_subnet != pxeboot_subnet) or
-                (prev_pxeboot_start_address != pxeboot_start_address) or
-                (prev_pxeboot_end_address != pxeboot_end_address) or
-                (prev_management_multicast_subnet != management_multicast_subnet) or
-                (prev_management_multicast_start_address != management_multicast_start_address) or
-                (prev_management_multicast_end_address != management_multicast_end_address) or
-                (prev_cluster_host_subnet != cluster_host_subnet) or
-                (prev_cluster_host_start_address != cluster_host_start_address) or
-                (prev_cluster_host_end_address != cluster_host_end_address) or
-                (prev_cluster_pod_subnet != cluster_pod_subnet) or
-                (prev_cluster_pod_start_address != cluster_pod_start_address) or
-                (prev_cluster_pod_end_address != cluster_pod_end_address) or
-                (prev_cluster_service_subnet != cluster_service_subnet) or
-                (prev_cluster_service_start_address != cluster_service_start_address) or
-                (prev_cluster_service_end_address != cluster_service_end_address)
-
-        - name: Turn on restart services flag if management/oam/cluster network or docker config is changed
-          set_fact:
-            restart_services: true
-          when: reconfigure_endpoints or
-                docker_config_update or
-                (prev_cluster_host_subnet != cluster_host_subnet) or
-                (prev_cluster_pod_subnet != cluster_pod_subnet) or
-                (prev_cluster_service_subnet != cluster_service_subnet)
-
-        - name: Turn on restart services flag if Kubernetes OpenID config is changed
-          set_fact:
-            restart_services: true
-          when: (prev_apiserver_oidc|default({})) != (apiserver_oidc)
-
-        # Re-evaluate the condition to persist config data to sysinv database
-        - name: Turn off save_config_to_db flag
-          set_fact:
-            save_config_to_db: false
-          when: not system_config_update and
-                not network_config_update and
-                not docker_config_update and
-                not incomplete_bootstrap
-
-        when: last_config_file.stat.exists
-      when: initial_db_populated
-    when: replayed  # bootstrap manifest has been applied
-
-  - name: Check volume groups
-    command: vgdisplay cgts-vg
-    register: vg_result
-    become: yes
-
-  - name: Check size of root disk
-    script: check_root_disk_size.py {{ standard_root_disk_size }}
-    register: disk_size_check_result
+# If StarlingX in Openstack Nova VM(QEMU/KVM environment),
+# skip the platform backup partition check as backup&restore
+# is not supported
+- block:
+  - name: Check for valid Platform Backup partition
+    command: "/usr/bin/validate-platform-backup.sh"
+    register: validate_result
     failed_when: false
     become: yes
 
-  # Workaround an Ansible quirk
-  - name: Update root disk index for remote play
-    set_fact:
-      root_disk_idx: "{{ root_disk_idx + 1 }}"
-    when: ansible_connection != "local"
-
-  - name: Set root disk and root disk size facts
-    set_fact:
-      root_disk: "{{ disk_size_check_result.stdout_lines[root_disk_idx|int] }}"
-      root_disk_size: "{{ disk_size_check_result.stdout_lines[root_disk_idx|int + 1] }}"
-
-  - debug:
-      msg: >-
-         [WARNING]: Root disk {{ root_disk }} size is {{ root_disk_size }}GB which is
-         less than the standard size of {{ standard_root_disk_size }}GB. Please consult
-         the Software Installation Guide for details.
-    when: disk_size_check_result.rc != 0
-
-  # Do restore related preparation
-  - include_tasks: restore_prep_tasks.yml
-    when: mode == 'restore'
-
-  - name: Look for branding tar file
-    find:
-      paths: /opt/branding
-      patterns: '*.tgz'
-    register: find_tar_result
-
-  - name: Fail if there are more than one branding tar files
+  - name: Fail if Platform Backup partition is not valid
     fail:
-      msg: >-
-           Only one branding tarball is permitted in /opt/branding. Refer to
-           the branding section of the documentation.
-    when: find_tar_result.matched > 1
+      msg: "Platform Backup partition is not valid.
+            Error log: {{ validate_result.stdout }}"
+    when: validate_result.rc != 0
+  when: >
+    (system_mode == 'simplex' and
+     virtual_system is defined and
+     not virtual_system|bool)
 
-  - name: Look for other branding files
-    find:
-      paths: /opt/branding
-      excludes: '*.tgz,applied'
-    register: find_result
+# Workaround an Ansible quirk
+- name: Update root disk index for remote play
+  set_fact:
+    root_disk_idx: "{{ root_disk_idx + 1 }}"
+  when: ansible_connection != "local"
 
-  - name: Fail if the branding filename is not valid
-    fail:
-      msg: >
-        {{ find_result.files[0].path }} is not a valid branding
-        filename. Refer to the branding section of the documentation.
-    when: find_result.matched > 0
+- name: Set root disk and root disk size facts
+  set_fact:
+    root_disk: "{{ disk_size_check_result.stdout_lines[root_disk_idx|int] }}"
+    root_disk_size: "{{ disk_size_check_result.stdout_lines[root_disk_idx|int + 1] }}"
 
-  - name: Mark environment as Ansible bootstrap
-    file:
-      path: /var/run/.ansible_bootstrap
-      state: touch
-    become: yes
+- debug:
+    msg: >-
+       [WARNING]: Root disk {{ root_disk }} size is {{ root_disk_size }}GB which is
+       less than the standard size of {{ standard_root_disk_size }}GB. Please consult
+       the Software Installation Guide for details.
+  when: disk_size_check_result.rc != 0
 
-  # Set up the remote tmp dir beforehand to get rid of the annoying warning
-  # when pipelining is turned on for better performance.
-  - name: Set up Ansible remote tmp dir
-    file:
-      path: "{{ ansible_remote_tmp }}"
-      state: directory
-      owner: sysadmin
-      group: sys_protected
-      mode: 0755
-    become: yes
+# Do restore related preparation
+- include_tasks: restore_prep_tasks.yml
+  when: mode == 'restore'
 
-  - debug:
-      msg: >-
-        system_config_update flag: {{ system_config_update }},
-        network_config_update flag: {{ network_config_update }},
-        docker_config_update flag: {{ docker_config_update }},
-        restart_services flag:  {{ restart_services }},
-        endpoints_reconfiguration_flag: {{ reconfigure_endpoints }},
-        save_password flag: {{ save_password }},
-        save_config_to_db flag: {{ save_config_to_db }},
-        skip_play flag: {{ skip_play }},
-        incomplete_bootstrap flag: {{ incomplete_bootstrap }},
-        initial_db_populated_flag: {{ initial_db_populated }},
-        dc_role_changed_flag: {{ dc_role_changed }}
+- name: Look for branding tar file
+  find:
+    paths: /opt/branding
+    patterns: '*.tgz'
+  register: find_tar_result
 
-  when: not skip_play
+- name: Fail if there are more than one branding tar files
+  fail:
+    msg: >-
+         Only one branding tarball is permitted in /opt/branding. Refer to
+         the branding section of the documentation.
+  when: find_tar_result.matched > 1
+
+- name: Look for other branding files
+  find:
+    paths: /opt/branding
+    excludes: '*.tgz,applied'
+  register: find_result
+
+- name: Fail if the branding filename is not valid
+  fail:
+    msg: >
+      {{ find_result.files[0].path }} is not a valid branding
+      filename. Refer to the branding section of the documentation.
+  when: find_result.matched > 0
+
+- name: Mark environment as Ansible bootstrap
+  file:
+    path: /var/run/.ansible_bootstrap
+    state: touch
+  become: yes
+
+# Set up the remote tmp dir beforehand to get rid of the annoying warning
+# when pipelining is turned on for better performance.
+- name: Set up Ansible remote tmp dir
+  file:
+    path: "{{ ansible_remote_tmp }}"
+    state: directory
+    owner: sysadmin
+    group: sys_protected
+    mode: 0755
+  become: yes
+
+- debug:
+    msg: >-
+      system_config_update flag: {{ system_config_update }},
+      network_config_update flag: {{ network_config_update }},
+      docker_config_update flag: {{ docker_config_update }},
+      restart_services flag:  {{ restart_services }},
+      endpoints_reconfiguration_flag: {{ reconfigure_endpoints }},
+      save_password flag: {{ save_password }},
+      save_config_to_db flag: {{ save_config_to_db }},
+      incomplete_bootstrap flag: {{ incomplete_bootstrap }},
+      initial_db_populated_flag: {{ initial_db_populated }},
+      dc_role_changed_flag: {{ dc_role_changed }}

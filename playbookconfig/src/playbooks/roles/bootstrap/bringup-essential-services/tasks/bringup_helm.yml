@@ -72,7 +72,7 @@
     - "sed -i '/<% end/d' /etc/lighttpd/lighttpd.conf"
     - "sed -i '/@tpm_object/,/%- end/d' /etc/lighttpd/lighttpd.conf"
   environment:
-    PORT_NUM: 8080
+    PORT_NUM: "{{ helm_repo_port }}"
 
 - name: Set up lighttpd-inc.conf
   copy:
@@ -105,7 +105,7 @@
     - "{{ target_helm_bind_dir }}"
 
 - name: Restore Helm charts if the host is bootstrapped in restore mode
-  command: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} {{ item }}
+  command: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
   args:
     warn: false
   become_user: root
@@ -114,7 +114,7 @@
   when: mode == "restore"
 
 - block:
-  - name: Create helm repository directories
+  - name: Create Helm repository directories
     file:
       path: "{{ item }}"
       state: directory
@@ -125,111 +125,17 @@
     with_items:
       - "{{ source_helm_bind_dir }}/{{ helm_repo_name_apps }}"
       - "{{ source_helm_bind_dir }}/{{ helm_repo_name_platform }}"
-
-  # This should be removed after moving to Helm v3
-  - name: Create service account for Tiller
-    command: >
-      kubectl --kubeconfig=/etc/kubernetes/admin.conf create serviceaccount
-      --namespace kube-system tiller
-
-  # This should be removed after moving to Helm v3
-  - name: Patch pull secret into tiller service account
-    command: >
-      kubectl --kubeconfig=/etc/kubernetes/admin.conf patch serviceaccount
-      tiller -p '{"imagePullSecrets": [{"name": "registry-local-secret"}]}' -n kube-system
-
-  # This should be removed after moving to Helm v3
-  - name: Create cluster role binding for Tiller service account
-    command: >
-      kubectl --kubeconfig=/etc/kubernetes/admin.conf create clusterrolebinding
-      tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
-
   when: mode == 'bootstrap'
 
-- block:
-  # Adding temporary workaround using multiple helm init commands
-  # and a sed command until helm and tiller provide a fix for
-  # https://github.com/helm/helm/issues/6374
-  - name: Initialize Helm (local host client only)
-    command: helm init --client-only --skip-refresh
-
-  # Tiller options should be removed after moving to Helm v3
-  - name: Initialize Helm (local host tiller)
-    shell: >-
-      helm init
-      --skip-refresh
-      --service-account tiller
-      --node-selectors "node-role.kubernetes.io/master"=""
-      --tiller-image={{ local_registry }}/{{ tiller_img }}
-      --override spec.template.spec.hostNetwork=true
-      --override spec.selector.matchLabels.app=helm
-      --override spec.selector.matchLabels.name=tiller
-      --output yaml
-      | sed 's@apiVersion: extensions/v1beta1@apiVersion: apps/v1@'
-      | kubectl apply -f -
-    when: mode == 'bootstrap'
-
-  # This should be removed after moving to Helm v3
-  - name: Patch tiller deployment (local host)
-    shell: >-
-      kubectl patch deployment -n kube-system tiller-deploy -p {{ tiller_deploy_patch | quote }}
-
-  become_user: sysadmin
+# Note that /opt/platform/helm_charts are owned by www
+# NOTE: helm --debug option displays vital information, no harm enabling.
+# These only show in ansible.log on failure.
+- name: Generate Helm repo indicies
+  command: /sbin/helm repo index "{{ source_helm_bind_dir }}/{{ item }}" --debug
+  become_user: www
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
     HOME: /home/sysadmin
-  when: inventory_hostname == 'localhost'
-
-# Workaround for helm init remotely. Not sure why the task cannot be executed
-# successfully as sysadmin on remote host.
-# This also has the workaround for https://github.com/helm/helm/issues/6374
-- block:
-  - name: Initialize Helm (remote host client only)
-    command: helm init --client-only --skip-refresh
-    environment:
-      KUBECONFIG: /etc/kubernetes/admin.conf
-      HOME: /home/sysadmin
-
-  # Tiller options should be removed after moving to Helm v3
-  - name: Initialize Helm (remote host tiller)
-    shell: >-
-      helm init
-      --skip-refresh
-      --service-account tiller
-      --node-selectors "node-role.kubernetes.io/master"=""
-      --tiller-image={{ local_registry }}/{{ tiller_img }}
-      --override spec.template.spec.hostNetwork=true
-      --override spec.selector.matchLabels.app=helm
-      --override spec.selector.matchLabels.name=tiller
-      --output yaml
-      | sed 's@apiVersion: extensions/v1beta1@apiVersion: apps/v1@'
-      | kubectl apply -f -
-    environment:
-      KUBECONFIG: /etc/kubernetes/admin.conf
-      HOME: /home/sysadmin
-    when: mode == 'bootstrap'
-
-  - name: Change helm directory ownership (remote host)
-    file:
-      dest: /home/sysadmin/.helm
-      owner: sysadmin
-      group: sys_protected
-      mode: 0755
-      recurse: yes
-
-  # This should be removed after moving to Helm v3
-  - name: Patch tiller deployment (remote host)
-    shell: >-
-      kubectl patch deployment -n kube-system tiller-deploy -p {{ tiller_deploy_patch | quote }}
-    environment:
-      KUBECONFIG: /etc/kubernetes/admin.conf
-      HOME: /home/sysadmin
-
-  when: inventory_hostname != 'localhost'
-
-- name: Generate Helm repo indicies
-  command: helm repo index "{{ source_helm_bind_dir }}/{{ item }}"
-  become_user: www
   with_items:
     - "{{ helm_repo_name_apps }}"
     - "{{ helm_repo_name_platform }}"
@@ -257,57 +163,107 @@
     name: lighttpd
     state: restarted
 
-- name: Add Helm repos (local host)
-  command: helm repo add "{{ item }}" "http://127.0.0.1:$PORT/helm_charts/{{ item }}"
-  become_user: sysadmin
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-    HOME: /home/sysadmin
-    PORT: 8080
-  with_items:
-    - "{{ helm_repo_name_apps }}"
-    - "{{ helm_repo_name_platform }}"
-  when: inventory_hostname == 'localhost'
-
-# Workaround for helm repo add remotely
 - block:
-  - name: Add Helm repos (remote host)
-    command: helm repo add "{{ item }}" "http://127.0.0.1:$PORT/helm_charts/{{ item }}"
-    environment:
-      KUBECONFIG: /etc/kubernetes/admin.conf
-      HOME: /home/sysadmin
-      PORT: 8080
+  # NOTE: helm --debug option displays vital information, no harm enabling.
+  # These only show in ansible.log on failure.
+  - name: Add Helm repos
+    command: /sbin/helm repo add "{{ item }}" "http://127.0.0.1:{{ helm_repo_port }}/helm_charts/{{ item }}" --debug
     with_items:
       - "{{ helm_repo_name_apps }}"
       - "{{ helm_repo_name_platform }}"
 
-  - name: Change helm directory ownership to pick up newly generated files (remote host)
-    file:
-      dest: /home/sysadmin/.helm
-      owner: sysadmin
-      group: sys_protected
-      mode: 0755
-      recurse: yes
-  when: inventory_hostname != 'localhost'
+  # NOTE: helm --debug option displays vital information, no harm enabling.
+  # These only show in ansible.log on failure.
+  - name: Update Helm repos
+    command: /sbin/helm repo update --debug
 
-- name: Update info of available charts locally from chart repos
-  command: helm repo update
   become_user: sysadmin
-  when: inventory_hostname == 'localhost'
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+    HOME: /home/sysadmin
 
-# Workaround for helm update remotely. Not sure why the task cannot be executed
-# successfully as sysadmin on remote host.
 - block:
-  - name: Update info of available charts locally from chart repos (remote host)
-    command: helm repo update
-    environment:
-      HOME: /home/sysadmin
+  - name: Set Armada overrides
+    set_fact:
+      helm_charts_url: "http://{{ controller_floating_address | ipwrap }}:{{ helm_repo_port }}/helm_charts"
+      armada_default_password: "{{ lookup('password', '/dev/null chars=ascii_letters length=16') | b64encode }}"
+      armada_password: "{{ lookup('password', '/dev/null chars=ascii_letters length=16') | b64encode }}"
 
-  - name: Change helm directory ownership (remote host)
-    file:
-      dest: /home/sysadmin/.helm
-      owner: sysadmin
-      group: sys_protected
-      mode: 0755
-      recurse: yes
-  when: inventory_hostname != 'localhost'
+  - name: Create keystone credentials for armada domain (local host client only)
+    shell: "source /etc/platform/openrc; \
+            openstack domain create {{ armada_domain }}; \
+            openstack project create --domain {{ armada_domain }} 'service'; \
+            openstack user create --domain {{ armada_domain }} \
+            --project service --project-domain {{ armada_domain }} \
+            --password {{ armada_password }} {{ armada_user }}; \
+            openstack role add --project-domain {{ armada_domain }} \
+            --user-domain {{ armada_domain }} --user {{ armada_user }} \
+            --project service admin"
+    args:
+      executable: /bin/bash
+    no_log: true
+
+  - name: Create Armada overrides
+    template:
+      src: "armada-overrides.yaml.j2"
+      dest: "/tmp/armada-overrides.yaml"
+
+  - name: Create namespace for Armada
+    command: >
+      kubectl create namespace {{ armada_namespace }}
+    failed_when: false
+    register: create_ns_output
+
+  - name: Fail if creating namespace fails
+    fail:
+      msg: "Failed to create {{ armada_namespace }} namespace. Error: {{ create_ns_output.stderr }}"
+    when: create_ns_output.rc is defined and create_ns_output.rc !=0 and
+          create_ns_output.stderr is not search('AlreadyExists')
+
+  - name: Check if secret exists
+    command: kubectl -n {{ armada_namespace }} get secret {{ armada_secret_name }}
+    failed_when: false
+    register: armada_get_secret_response
+
+  # Set no_log to true so that we don't expose the local registry credentials
+  - name: Create secret if it doesn't exist
+    command: >-
+      kubectl -n {{ armada_namespace }} create secret docker-registry {{ armada_secret_name }}
+      --docker-server={{ local_registry }}
+      --docker-username={{ local_registry_credentials['username'] }}
+      --docker-password={{ local_registry_credentials['password'] }}
+    when: armada_get_secret_response.rc != 0
+    no_log: true
+
+  # Workaround for helm v3 issue with null overrides.
+  # Configure sane node label values that work with armada node selector
+  - name: Create Armada node label
+    command: >
+      kubectl label node controller-0 armada=enabled --overwrite=true
+
+  # To prevent helm-upload requiring sudo and a tty for password,
+  # become the intended www user.
+  - name: Upload Armada charts
+    become_user: www
+    command: >
+      /usr/local/sbin/helm-upload stx-platform /opt/extracharts/armada-0.1.0.tgz
+
+  # NOTE: helm --debug option displays vital information, no harm enabling.
+  # These only show in ansible.log on failure.
+  - name: Update info of available charts from chart repos
+    command: >
+      /sbin/helm repo update --debug
+
+  # NOTE: helm --debug option displays vital information, no harm enabling.
+  # These only show in ansible.log on failure.
+  - name: Launch Armada with Helm v3
+    command: >-
+      /sbin/helm upgrade --install armada stx-platform/armada
+      --namespace {{ armada_namespace }}
+      --values /tmp/armada-overrides.yaml
+      --debug
+
+  become_user: sysadmin
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+    HOME: /home/sysadmin

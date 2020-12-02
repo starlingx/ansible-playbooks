@@ -1,0 +1,43 @@
+---
+# INITIAL PASSWORD CHANGE RESPONSE SEQUENCE
+# =========================================
+#
+# The following two parameters are only relevant when the target host is bootstrapped
+# remotely and the user wishes to change the initial sysadmin password as part of the
+# bootstrap.
+#
+# WARNING: It is strongly recommended to store this setting in Ansible vault
+# file named "secret" under override files directory. Configuration parameters
+# stored in vault must start with vault_ prefix (i.e. vault_password_change_responses)
+#
+password_change: false
+
+password_change_responses:
+  yes/no: 'yes'
+  sysadmin*: 'sysadmin'
+  \(current\) UNIX password: 'sysadmin'
+  (?i)New password: 'St8rlingX*'
+  (?i)Retype new password: 'St8rlingX*'
+
+# OVERRIDE FILES DIRECTORY
+# ========================
+#
+# Default directory where user override file(s) can be found
+#
+override_files_dir: "{{ lookup('env', 'HOME') }}"
+
+# Upgrade Platform
+# ================
+#
+# The full path and filename of the upgrade_data file.
+# This is the data file generated during the upgrade start process.
+# eg /opt/platform-backup/upgrade_data_2020-04-30T203932_ea22cf73-047b-4bc9-a43e-78e25e719473.tgz
+# If this option is not specified this playbook will attempt to find the file on the host under
+# /opt/platform-backup/
+upgrade_data_file:
+
+# The full path and filename of the upgrade_images_data file.
+# eg /opt/platform-backup/upgrade_images_data_2020-07-16T215224_a75eec9a-c27b-4878-8df9-9e76ac9f1bc3.tgz
+# If this option is not specified this playbook will attempt to find the file on the host under
+# /opt/platform-backup/
+upgrade_images_data_file:

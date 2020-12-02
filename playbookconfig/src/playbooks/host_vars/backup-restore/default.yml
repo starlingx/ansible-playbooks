@@ -58,6 +58,11 @@ backup_dir: /opt/backups
 #
 platform_backup_filename_prefix: "{{ inventory_hostname }}_platform_backup"
 
+# The local registry images backup tarball will be named in this format:
+# <docker_local_registry_backup_filename_prefix>_<timestamp>.tgz
+#
+docker_local_registry_backup_filename_prefix: "{{ inventory_hostname }}_docker_local_registry_backup"
+
 # The stx-openstack application backup tarball will be named in this format:
 # <openstack_backup_filename_prefix>_<timestamp>.tgz
 #

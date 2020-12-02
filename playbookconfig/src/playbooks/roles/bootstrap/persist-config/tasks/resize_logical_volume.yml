@@ -1,0 +1,26 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   - Resize some filesytems
+#   - Remove stale data at the end of LV block device
+#
+
+- name: Resize logical volume {{ item.lv }}
+  command: "lvextend -L{{ item.size }} {{ item.lv }}"
+  register: res
+  failed_when: false
+
+- name: Fail if file system resizing failed for a reason other than it has been done already
+  fail:
+    msg: "{{ item.lv }} resize failed for the following reason: {{ res.stderr }}."
+  when: res.rc !=0 and res.stderr is not search('matches existing size') and
+        res.stderr is not search('not larger than existing size')
+
+- name: Remove stale data at the end of LV block device
+  shell: "seek_end=$(($(blockdev --getsz {{ item.lv }})/2048 - 10));
+         dd if=/dev/zero of={{ item.lv }} bs=1M count=10 seek=${seek_end} "
+  when: res.rc == 0

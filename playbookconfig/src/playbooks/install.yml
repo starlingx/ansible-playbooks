@@ -19,11 +19,12 @@
         job_wait_time: "{{ job_wait_time | default(900) }}"
         boot_wait_time: " {{ boot_wait_time | default(600) }}"
         wait_for_timeout: " {{ wait_for_timeout | default(3600) }}"
+        rvmc_namespace: "rvmc"
 
     # The following block is executed locally
     - block:
       - name: Clean up the Redfish Virtual Media Controller from previous run if it has not been cleaned automatically
-        command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf delete job {{ rvmc_name }}"
+        command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }} delete job {{ rvmc_name }}"
         register: deleted_job
         failed_when: false
         no_log: true
@@ -32,6 +33,34 @@
         wait_for:
           timeout: 60
         when: deleted_job.rc == 0
+
+      - name: Get rvmc_namespace
+        command: >-
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf get namespace {{ rvmc_namespace }}
+        register: get_namespace
+        failed_when: false
+
+      - name: Ensure rvmc_namespace is created
+        command: >-
+          kubectl create namespace --kubeconfig=/etc/kubernetes/admin.conf {{ rvmc_namespace }}
+        when: get_namespace.stdout_lines|length == 0
+        register: result
+        failed_when: (result.rc != 0) and ("'AlreadyExists' not in result.stderr")
+
+      - name: Get default registry key
+        command: >-
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret default-registry-key --namespace={{ rvmc_namespace }}
+        failed_when: false
+        register: get_default_registry_key
+
+      - name: Copy default-registry-key to rvmc namespace
+        shell: >-
+          kubectl get secret default-registry-key --namespace=kube-system -o yaml
+          | sed 's/namespace: kube-system/namespace: {{ rvmc_namespace }}/'
+          | kubectl apply --namespace={{ rvmc_namespace }} -f -
+        environment:
+          KUBECONFIG: "/etc/kubernetes/admin.conf"
+        when: get_default_registry_key.stdout == ""
 
       - name: Create Redfish Virtual Media Controller resource file
         template:
@@ -43,7 +72,7 @@
 
       - name: Get the pod name that created by Redfish Virtual Media Controller batch job
         command: >-
-          kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -l job-name={{ rvmc_name }}
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }} get pods -l job-name={{ rvmc_name }}
           --output=jsonpath='{.items[*].metadata.name}'
         failed_when: pod_name.stdout == ""
         register: pod_name
@@ -54,7 +83,7 @@
 
         - name: Wait for {{ pod_schedule_time }} seconds for {{ rvmc_pod_name }} to be ready
           command: >-
-            kubectl --kubeconfig=/etc/kubernetes/admin.conf wait
+            kubectl --kubeconfig=/etc/kubernetes/admin.conf wait -n {{ rvmc_namespace }}
             --for=condition=Ready pod/{{ rvmc_pod_name }}
             --timeout={{ pod_schedule_time }}s
           failed_when: false
@@ -62,7 +91,7 @@
 
         - block:
           - name: Save Redfish Virtual Media Controller logs if {{ rvmc_pod_name }} is not ready
-            command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf logs {{ rvmc_pod_name }}"
+            command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }} logs {{ rvmc_pod_name }}"
             register: pod_logs
 
           - debug:
@@ -81,13 +110,13 @@
 
         - name: Check if the Redfish Virtual Media Controller is in an error state
           command: >-
-            kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -l job-name={{ rvmc_name }}
+            kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }} get pods -l job-name={{ rvmc_name }}
             --field-selector=status.phase!=Running,status.phase!=Succeeded
           register: pod_has_error
 
         - block:
           - name: Save Redfish Virtual Media Controller logs if it is in an error state
-            command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf logs {{ rvmc_pod_name }}"
+            command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }} logs {{ rvmc_pod_name }}"
             register: pod_error_logs
 
           - debug:
@@ -100,13 +129,13 @@
 
       - name: Wait for {{ job_wait_time }} seconds for Redfish Virtual Media Controller to complete
         command: >-
-          kubectl --kubeconfig=/etc/kubernetes/admin.conf wait
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }} wait
           --for=condition=complete job/{{ rvmc_name }} --timeout={{ job_wait_time }}s
         failed_when: false
         register: wait_for_rvmc
 
       - name: Store Redfish Virtual Media Controller log after the job is completed
-        command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf logs job/{{ rvmc_name }}"
+        command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }} logs job/{{ rvmc_name }}"
         register: rvmc_logs
 
       - debug:

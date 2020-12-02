@@ -30,6 +30,7 @@
         cluster_network_ipv4: "{{ cluster_pod_subnet | ipv4 }}"
         cluster_network_ipv6: "{{ cluster_pod_subnet | ipv6 }}"
         cluster_floating_address: "{{ cluster_host_floating_address }}"
+        controller_0_cluster_host: "{{ cluster_host_node_0_address }}"
 
     - name: Upgrade k8s networking images
       import_role:

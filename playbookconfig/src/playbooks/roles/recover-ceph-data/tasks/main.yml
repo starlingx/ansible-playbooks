@@ -7,14 +7,49 @@
 # ROLE DESCRIPTION:
 #   This role is to restore the CEPH Monitor data
 
+
 - name: Restore CEPH Monitor data
   block:
+
+    # Check if Ceph osd partitions are present
+    - name: Run ceph-disk cmd
+      command: ceph-disk list --format=json
+      register: ceph_disk_out
+
+    - name: Parse output of ceph-disk
+      set_fact:
+        ceph_disk_parsed: "{{ ceph_disk_out.stdout | from_json | selectattr('partitions', 'defined') | list }}"
+
+    - name: Get Ceph partitions
+      set_fact:
+        ceph_osd_parts: "{% for e in ceph_disk_parsed if 'cluster' in e.partitions.0
+                         and e.partitions.0.cluster == 'ceph' and e.partitions.0.type == 'data' %}{{ e }}{% endfor %}"
+
+    - name: Fail if there are no Ceph osd partitions
+      fail:
+        msg: "No Ceph osd partition found, aborting restore operation"
+      when: not ceph_osd_parts
+
     - name: Restore ceph.conf file
       command: >-
-        tar -C / -xpf {{ target_backup_dir }}/{{ backup_filename }}
-        'etc/ceph/ceph.conf'
+        tar -C / -xpf {{ restore_data_file }}
+        '{{ ceph_conf[1:] }}'
       args:
         warn: false
+
+    - name: Get list of OSDs defined in {{ ceph_conf }}
+      shell: grep "\[osd\.[0-9]*\]" {{ ceph_conf }} | grep -oh "osd\.[0-9]*"
+      register: ceph_conf_osd_list
+      failed_when: false
+
+    # Allow starting ceph with a ceph.conf from a backup done on controller-1
+    # w/o this it will try to initialize OSDs that are not configured on controller-0.
+    - name: Remove "[osd.*]" sections from {{ ceph_conf }}
+      ini_file:
+        path: "{{ ceph_conf }}"
+        section: "{{ item }}"
+        state: absent
+      with_items: "{{ ceph_conf_osd_list.stdout_lines }}"
 
     - name: Set initial ceph-mon name
       set_fact:
@@ -70,7 +105,7 @@
 
     - name: Allow Ceph to start with a single monitor on a Standard deployment
       ini_file:
-        path: "/etc/ceph/ceph.conf"
+        path: "{{ ceph_conf }}"
         section: global
         option: mon_initial_members
         value: controller-0
@@ -156,7 +191,7 @@
 
     - name: Remove Ceph option to start with a single monitor on a Standard deployment
       ini_file:
-        path: "/etc/ceph/ceph.conf"
+        path: "{{ ceph_conf }}"
         section: global
         option: mon_initial_members
         state: absent

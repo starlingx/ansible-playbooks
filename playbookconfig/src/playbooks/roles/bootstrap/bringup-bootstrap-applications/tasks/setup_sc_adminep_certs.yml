@@ -27,10 +27,58 @@
     src: "setup-sc-adminep-certs.yaml.j2"
     dest: "{{ sc_adminep_temp_dir }}/{{ setup_sc_adminep_certs_yaml }}"
 
-- name: Create subcloud admin endpoint certificate secret
-  command: >-
-    kubectl --kubeconfig=/etc/kubernetes/admin.conf apply
-    -f "{{ sc_adminep_temp_dir }}/{{ setup_sc_adminep_certs_yaml }}"
+- name: Create Subcloud ICA Issuer and Admin Endpoint Certificate Block
+  block:
+    - name: Create Subcloud ICA Issuer and Admin Endpoint Certificate
+      command: >-
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply
+        -f "{{ sc_adminep_temp_dir }}/{{ setup_sc_adminep_certs_yaml }}"
+      register: create_subcloud_ep
+      until: create_subcloud_ep is not failed
+      retries: 10
+      delay: 30
+  rescue:
+    - name: System app-list
+      shell: "source /etc/platform/openrc; system application-list"
+      register: sys_app_list_output
+    - debug:
+        msg: "{{ sys_app_list_output.stdout_lines }}"
+
+    - name: Get all pods
+      command: kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods --all-namespaces -o wide
+      register: all_pods_output
+    - debug:
+        msg: "{{ all_pods_output.stdout_lines }}"
+
+    - name: Get all resouces from cert-manager namespace
+      command: kubectl --kubeconfig=/etc/kubernetes/admin.conf get all -n cert-manager -o wide
+      register: all_cm_output
+    - debug:
+        msg: "{{ all_cm_output.stdout_lines }}"
+
+    - name: Get all resources from sc-cert namespace
+      command: >-
+         kubectl --kubeconfig=/etc/kubernetes/admin.conf get issuers -n sc-cert -o wide;
+         kubectl --kubeconfig=/etc/kubernetes/admin.conf get certs -n sc-cert -o wide;
+         kubectl --kubeconfig=/etc/kubernetes/admin.conf get secrets -n sc-cert -o wide
+      register: all_sc_cert_output
+    - debug:
+        msg: "{{ all_sc_cert_output.stdout_lines }}"
+
+    - name: Get details of all resouces from cert-manager namespace
+      command: kubectl --kubeconfig=/etc/kubernetes/admin.conf get all -n cert-manager -o yaml
+      register: all_cm_yaml_output
+    - debug:
+        msg: "{{ all_cm_yaml_output.stdout_lines }}"
+
+    - name: Get details of all resources from sc-cert namespace
+      command: >-
+         kubectl --kubeconfig=/etc/kubernetes/admin.conf get issuers -n sc-cert -o yaml;
+         kubectl --kubeconfig=/etc/kubernetes/admin.conf get certs -n sc-cert -o yaml;
+         kubectl --kubeconfig=/etc/kubernetes/admin.conf get secrets -n sc-cert -o yaml
+      register: all_sc_cert_yaml_output
+    - debug:
+        msg: "{{ all_sc_cert_yaml_output.stdout_lines }}"
 
 - name: Wait up to 30s for admin endpoint certificate to be ready
   command: >-

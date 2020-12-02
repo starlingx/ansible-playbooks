@@ -29,10 +29,10 @@ registries = json.loads(os.environ['REGISTRIES'])
 
 
 def get_local_registry_auth():
-    password = keyring.get_password("CGCS", "admin")
+    password = keyring.get_password("sysinv", "services")
     if not password:
         raise Exception("Local registry password not found.")
-    return dict(username="admin", password=str(password))
+    return dict(username="sysinv", password=str(password))
 
 
 def download_an_image(img):
@@ -83,9 +83,10 @@ def download_an_image(img):
             auth_str = '{0}:{1}'.format(auth['username'], auth['password'])
             subprocess.check_call(["crictl", "pull", "--creds", auth_str, local_img])
             print("Image %s download succeeded by containerd" % target_img)
-            # except armada/tiller, other docker images could be removed.
-            # TODO: run armada with containerd.
-            if not ('armada' in target_img or 'tiller' in target_img):
+            # Clean up docker images except for n3000-opae
+            # as opae container runs via docker.
+            # TODO: run opae with containerd.
+            if not ('n3000-opae' in target_img):
                 client.remove_image(target_img)
                 client.remove_image(local_img)
             return target_img, True

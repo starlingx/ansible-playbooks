@@ -27,13 +27,17 @@
       msg: "Failed to create puppet hiera static config."
     when: static_config_result.rc != 0
 
-  - name: Write system controller keystone admin user and project Ids to static hieradata if it's subcloud
+  - name: Write required system controller keystone user and project Ids to static hieradata if it's subcloud
     lineinfile:
       path: "{{ hieradata_workdir }}/static.yaml"
       line: "{{ item }}"
     with_items:
       - "keystone::dc_admin_user_id: {{ system_controller_keystone_admin_user_id }}"
       - "keystone::dc_admin_project_id: {{ system_controller_keystone_admin_project_id }}"
+      - "openstack::keystone::bootstrap::dc_services_project_id: {{ system_controller_keystone_services_project_id }}"
+      - "platform::sysinv::bootstrap::dc_sysinv_user_id: {{ system_controller_keystone_sysinv_user_id }}"
+      - "platform::dcmanager::bootstrap::dc_dcmanager_user_id: {{system_controller_keystone_dcmanager_user_id}}"
+
     when: distributed_cloud_role == 'subcloud'
 
   when: mode == 'bootstrap'
@@ -43,22 +47,23 @@
     set_fact:
       temp_ssh_config_dir: /tmp/config/ssh_config
 
-  # To work around an ansible quirk that regex_replace filter
-  # is ignored when it is applied to variables in the command module
-  - name: Strip the leading '/' from directories and assign them to new variables
-    set_fact:
-      short_puppet_permdir: "{{ puppet_permdir | regex_replace('^\\/', '') }}/hieradata"
-      short_ssh_config_permdir: "{{ ssh_config_permdir | regex_replace('^\\/', '') }}"
-
   - name: Prefetch static hieradata
     command: >-
-      tar -C {{ hieradata_workdir }} -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
-      '{{ short_puppet_permdir }}/*static.yaml'
+      tar -C {{ hieradata_workdir }} -xpf {{ restore_data_file }} --transform='s,.*/,,'
+      '{{ archive_puppet_permdir }}/*static.yaml'
     args:
       warn: false
 
+  - name: Migrate static hieradata to new version
+    command: >
+      sed -i 's/{{ upgrade_metadata.from_release }}/{{ upgrade_metadata.to_release }}/g'
+      {{ hieradata_workdir }}/static.yaml
+    args:
+      warn: false
+    when: migrate_platform_data is defined and migrate_platform_data
+
   - name: Look for ssh_config dir in the backup tarball
-    shell: "tar -tf {{ target_backup_dir }}/{{ backup_filename }} | grep 'opt/platform/config/.*/ssh_config'"
+    shell: "tar -tf {{ restore_data_file }} | grep 'opt/platform/config/.*/ssh_config'"
     args:
       warn: false
     failed_when: false
@@ -75,8 +80,8 @@
 
     - name: Prefetch ssh_config
       command: >-
-        tar -C {{ temp_ssh_config_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
-        {{ short_ssh_config_permdir }}
+        tar -C {{ temp_ssh_config_dir }} -xpf {{ restore_data_file }} --transform='s,.*/,,'
+        {{ archive_ssh_config_permdir }}
       args:
         warn: false
 
@@ -98,11 +103,13 @@
   environment:
     INITIAL_CONFIG_PRIMARY: "true"
     LC_ALL: "en_US.UTF-8"
+  failed_when: false
 
 - name: Fail if puppet manifest apply script returns an error
   fail:
     msg: >-
-         Failed to apply bootstrap manifest. See /var/log/puppet/latest/puppet.log
+         Failed to apply bootstrap manifest. Please re-install host {{ansible_host}}
+         before attempting to bootstrap it again. See /var/log/puppet/latest/puppet.log
          for details.
   when: bootstrap_manifest.rc != 0
 

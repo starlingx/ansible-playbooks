@@ -1,0 +1,131 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role exists to save user images from local registry.
+#   Pull them through docker. Save them to a tar.
+#
+
+- block:
+  - name: Get platform images information
+    import_role:
+      name: common/load-images-information
+
+  - name: Set platform images list
+    set_fact:
+      platform_images_list:
+        "{{ (kubernetes_images + networking_images + static_images + storage_images) }}"
+
+  # The sysinv-utils utility may print logs to stdout, so pipe information
+  # through a file to communicate only relevant data.
+  - name: Create a temporary file on remote
+    tempfile:
+      state: file
+      suffix: backup
+    register: tempfile_on_remote
+
+  - name: Correct permissions for temporary file on remote
+    file:
+      path: "{{ tempfile_on_remote.path }}"
+      mode: 0644
+
+  - name: Set list of apps whose images will be backed up
+    set_fact:
+      merged_backup_include_apps: "{{ backup_include_apps }}"
+
+  - name: Update list of apps whose images will be backed up on DC system controller
+    set_fact:
+      merged_backup_include_apps: "{{ merged_backup_include_apps | union(backup_include_dc_controller_apps) }}"
+    when: check_dc_controller.rc == 0
+
+  - name: Save list of local registry images excluding apps images to file
+    command: >-
+      /usr/bin/sysinv-utils local-registry-list {{ tempfile_on_remote.path }}
+      --apps {{ " ".join(merged_backup_include_apps) }}
+
+  - name: Read file
+    command: cat {{ tempfile_on_remote.path }}
+    register: tempfile_on_remote_output
+
+  - name: Load list of local registry images from file
+    set_fact:
+      all_image_list: "{{ tempfile_on_remote_output.stdout | from_yaml }}"
+
+  - name: Subtract platform images from local registry images
+    set_fact:
+      user_and_apps_image_list: "{{ all_image_list['images'] | difference(platform_images_list) }}"
+
+  - name: Append local registry host:port to image names
+    set_fact:
+      image_list: "{{ user_and_apps_image_list |  map('regex_replace', '^(.*)$', 'registry.local:9001/\\1') | list }}"
+
+  - debug: var=image_list
+
+  - block:
+    - name: Pull images from local registry to docker filesystem
+      script: >
+        roles/common/push-docker-images/files/push_pull_local_registry.py pull \
+          "{{ image_list | join(',') }}"
+
+    # Use raw string for go-template style string
+    - name: Set format parameter for docker inspect to retrieve only the size
+      set_fact:
+        format_param: !unsafe "{{ .Size }}"
+
+    - name: Get docker images size in bytes
+      command: docker inspect --format='{{ format_param }}' {{ item }}
+      loop: "{{ image_list }}"
+      register: size_output
+
+    - name: Parse docker images size
+      set_fact:
+        docker_images_size: "{{ docker_images_size | default(0)|int + item.stdout|int }}"
+      loop: "{{ size_output.results }}"
+
+    - debug: var=docker_images_size
+
+    # From the 28 test images only one had a 4.2% increase in size when
+    # exporting from docker. The rest were below 4% size increase.
+    - name: Scale to KiB and reserve 5% for docker metadata inside exported archive
+      set_fact:
+        docker_images_size_estimation: "{{ (docker_images_size|float * 1.05 / 1024)
+                                        | round(0,'ceil') | int  }}"
+
+    - name: Fail if there is not enough free space to create docker images backup archive
+      fail:
+        msg: >-
+           Not enough free space for {{ export_file_path }}.
+           Free space available is {{ kilo_free_size }}KiB.
+           Estimation shows it needs at least {{ docker_images_size_estimation }}KiB.
+      when: kilo_free_size|int < docker_images_size_estimation|int
+
+    - name: Save images to a tar {{ export_file_path }}
+      command: docker save {{ image_list | join(' ') }} -o {{ export_file_path }}
+
+    # Implication is that if the image tag referencing registry.local was present
+    # before the backup procedure was called it will be deleted.
+    - name: Remove pulled images
+      command: docker rmi {{ image_list | join(' ') }}
+
+    - name: Correct permissions for docker backup file
+      file:
+        path: "{{ export_file_path }}"
+        mode: 0644
+
+    when: image_list|length > 0
+
+  - name: Create a file to indicate there were no images to be backed up
+    file:
+      path: "{{ export_file_path }}.zero"
+      mode: 0644
+      state: touch
+    when: image_list|length == 0
+
+  always:
+  - name: Remove the temporary file from remote
+    file:
+      path: "{{ tempfile_on_remote.path }}"
+      state: absent

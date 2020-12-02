@@ -1,0 +1,55 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Armada makes sure that cert-manager application has ns, crd, pods up & running
+#   but webhooks are not ready to be used immediately. These tasks
+#   test and wait until cert-manager resources are ready to be created.
+#
+
+# Confirm cert-manager-cainjector pods are up
+- name: Wait for cert-manager cainjector pods running
+  shell: >
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf -n cert-manager
+          wait --for=condition=ready pod --all --timeout=60s | grep cert-manager-cainjector
+  register: cainjectorpod
+  until: cainjectorpod.rc == 0
+  retries: 6
+  delay: 10
+
+# Confirm cert-manager-webhook pods are up
+- name: Wait for cert-manager webhook pods running
+  shell: >
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf -n cert-manager
+          wait --for=condition=ready pod --all --timeout=60s | grep cert-manager-webhook
+  register: webhookpod
+  until: webhookpod.rc == 0
+  retries: 6
+  delay: 10
+
+# Create test-issuer.yaml from template
+- name: Create test issuer config
+  template:
+    src: "test-issuer.yaml.j2"
+    dest: /etc/kubernetes/test-issuer.yaml
+
+# Create test issuer
+- name: Create test issuer
+  shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/test-issuer.yaml
+  register: create_issuer
+  until: create_issuer is not failed
+  retries: 30
+  delay: 10
+
+# Wait for issuer to come up
+- name: Wait for issuer
+  shell: >
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf -n cert-manager
+          wait --for=condition=ready clusterissuer --all --timeout=60s | grep test-selfsigning-issuer
+
+# Remove test issuer
+- name: Remove test issuer
+  shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf delete -f /etc/kubernetes/test-issuer.yaml

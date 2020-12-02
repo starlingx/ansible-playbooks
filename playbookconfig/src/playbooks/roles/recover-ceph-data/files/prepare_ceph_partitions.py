@@ -66,7 +66,7 @@ class CgtsClient(object):
                 os_user_domain_name=self.conf['user_domain'],
                 os_region_name=self.conf['region_name'],
                 os_service_type='platform',
-                os_endpoint_type='admin')
+                os_endpoint_type='internal')
         return self._sysinv
 
 

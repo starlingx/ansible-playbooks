@@ -1,0 +1,38 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role performs checks to ensure the target is combatiable for these playbooks
+#
+- name: Retrieve software version number
+  # lookup module does not work with /etc/build.info as it does not have ini
+  # format. Resort to shell source.
+  shell: source /etc/build.info; echo $SW_VERSION
+  register: sw_version_result
+
+- name: Fail if software version is not defined
+  fail:
+    msg: "SW_VERSION is missing in /etc/build.info"
+  when: sw_version_result.stdout_lines|length == 0
+
+- name: Retrieve system type
+  shell: source /etc/platform/platform.conf; echo $system_type
+  register: system_type_result
+
+- name: Fail if system type is not defined
+  fail:
+    msg: "system_type is missing in /etc/platform/platform.conf"
+  when: system_type_result.stdout_lines|length == 0
+
+- name: Set software version, system type config path facts
+  set_fact:
+    software_version: "{{ sw_version_result.stdout_lines[0] }}"
+    system_type: "{{ system_type_result.stdout_lines[0] }}"
+
+- name: Fail if host software version is not supported by this playbook
+  fail:
+    msg: "This playbook is not compatible with StarlingX software version {{ software_version }}."
+  when: software_version not in supported_release_versions

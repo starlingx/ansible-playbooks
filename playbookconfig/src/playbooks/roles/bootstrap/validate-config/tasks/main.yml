@@ -119,6 +119,21 @@
        system_mode != 'duplex-direct') and
       (system_type == 'All-in-one')
 
+  - name: Validate virtual system setting
+    fail:
+      msg: "virtual_system is misconfigured. Valid value is either 'True' or 'False'."
+    when: >
+      (virtual_system is defined and
+       not virtual_system | type_debug == 'bool')
+
+  - name: Fail if virtual system type is not All-in-one
+    fail:
+      msg: "Virtual system setting is only supported for All-in-one system"
+    when: >
+      (virtual_system is defined and
+       virtual_system|bool and
+       system_type != 'All-in-one')
+
   - name: Validate distributed cloud role
     fail:
       msg: "Invalid distributed cloud role. Valid values are: none, systemcontroller, or subcloud."
@@ -127,13 +142,22 @@
        distributed_cloud_role != 'systemcontroller' and
        distributed_cloud_role != 'subcloud')
 
-  - name: Validate system type and system mode if distributed cloud role is system controller
-    fail:
-      msg: "A simplex All-in-one controller cannot be configured as Distributed Cloud System Controller"
+  - block:
+    - name: Validate system type and system mode if distributed cloud role is system controller
+      fail:
+        msg: "A simplex All-in-one controller cannot be configured as Distributed Cloud System Controller"
+      when: system_mode == 'simplex'
+
+    - name: Validate virtual system setting if distributed cloud role is system controller
+      fail:
+        msg: "Virtual system setting is not supported for Distributed Cloud System Controller"
+      when: >
+        (virtual_system is defined and
+         virtual_system|bool)
+
     when: >
       (distributed_cloud_role == 'systemcontroller' and
-       system_type == 'All-in-one' and
-       system_mode == 'simplex')
+       system_type == 'All-in-one')
 
   - name: Checking registered timezones
     stat:
@@ -568,6 +592,7 @@
 - name: Validate applications
   include: validate_application.yml application={{ item }}
   with_items: "{{ applications }}"
+  when: applications
 
 - name: Build application list
   set_fact:
@@ -578,11 +603,33 @@
     all_applications: "{{ all_applications }} + [ '{{ item.keys()[0] }}' ]"
   with_items: "{{ applications }}"
 
-- name: Ensure mandatory applications are present in config
-  debug:
-    msg: "Mandatory application: {{ item }}"
-  failed_when: item not in all_applications
-  with_items: "{{ mandatory_applications }}"
+- name: Get the name of the nginx tarball
+  find:
+    paths: "/usr/local/share/applications/helm/"
+    patterns: 'nginx-ingress-controller-[^-]*-[^-]*\.tgz'
+    use_regex: yes
+  register: find_nginx_tarball_output
+
+- name: Get the name of the cert manager tarball
+  find:
+    paths: "/usr/local/share/applications/helm/"
+    patterns: 'cert-manager-[^-]*-[^-]*\.tgz'
+    use_regex: yes
+  register: find_cert_manager_tarball_output
+
+# we prepend nginx and append cert manager to try and enforce ordering
+# nginx need to be applied before cert manager
+- name: Append default nginx entry if not present
+  set_fact:
+    applications: "[ {'{{ item.path }}': None}] + {{ applications }}"
+  with_items: "{{ find_nginx_tarball_output.files }}"
+  when: item.path not in all_applications
+
+- name: Append default cert manager entry if not present
+  set_fact:
+    applications: "{{ applications }} + [ {'{{ item.path }}': None}]"
+  with_items: "{{ find_cert_manager_tarball_output.files }}"
+  when: item.path not in all_applications
 
 - block:
   - name: Retrieve list of applications from sysinv
@@ -655,7 +702,7 @@
   when: apiserver_cert_sans | type_debug != 'list'
 
 - name: Validate apiserver_cert_sans entries
-  include: validate_address.yml  input_address={{ item }}
+  include: validate_address.yml input_address={{ item }}
   with_items: "{{ apiserver_cert_sans }}"
 
 - name: Verify that either both Kubernetes root ca cert and key are defined or not at all
@@ -677,7 +724,7 @@
 - name: Check for ssl_ca_cert file
   fail:
     msg: "ssl_ca_cert file not found. ({{ ssl_ca_cert }})"
-  when: ssl_ca_cert is defined and (not ssl_ca_cert is file)
+  when: mode != 'restore' and ssl_ca_cert is defined and (not ssl_ca_cert is file)
 
 - name: Check OpenID Connect parameters
   fail:
@@ -739,6 +786,7 @@
       - "CONTROLLER_HOSTNAME=controller-0"
       - "SYSTEM_TYPE={{ system_type }}"
       - "SYSTEM_MODE={{ system_mode }}"
+      - "VIRTUAL_SYSTEM={{ virtual_system | default(False) }}"
       - "TIMEZONE={{ timezone }}"
       - "DISTRIBUTED_CLOUD_ROLE={{ distributed_cloud_role }}"
       - "REGION_NAME={{ region_name }}"

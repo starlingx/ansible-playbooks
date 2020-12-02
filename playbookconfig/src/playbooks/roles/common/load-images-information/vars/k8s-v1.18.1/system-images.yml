@@ -1,14 +1,16 @@
 ---
 # System images that are pre-pulled and pushed to local registry
-tiller_img: gcr.io/kubernetes-helm/tiller:v2.13.1
+n3000_opae_img: docker.io/starlingx/n3000-opae:stx.4.0-v1.0.0
+tiller_img: gcr.io/kubernetes-helm/tiller:v2.16.1
 armada_img: quay.io/airshipit/armada:8a1638098f88d92bf799ef4934abe569789b885e-ubuntu_bionic
+kubernetes_entrypoint_img: quay.io/stackanetes/kubernetes-entrypoint:v0.3.1
 calico_cni_img: quay.io/calico/cni:v3.12.0
 calico_node_img: quay.io/calico/node:v3.12.0
 calico_kube_controllers_img: quay.io/calico/kube-controllers:v3.12.0
 calico_flexvol_img: quay.io/calico/pod2daemon-flexvol:v3.12.0
 multus_img: docker.io/nfvpe/multus:v3.4
 sriov_cni_img: docker.io/starlingx/k8s-cni-sriov:stx.3.0-v2.2
-sriov_network_device_img: docker.io/starlingx/k8s-plugins-sriov-network-device:stx.3.0-v3.1
+sriov_network_device_img: docker.io/starlingx/k8s-plugins-sriov-network-device:stx.4.0-v3.2-16-g4e0302ae
 # Keep the snapshot-controller image in sync with the one provided at:
 # cluster/addons/volumesnapshots/volume-snapshot-controller/volume-snapshot-controller-deployment.yaml
 # in the kubernetes github repo
