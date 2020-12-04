@@ -297,6 +297,7 @@
     src: "{{ registry_cert_crt }}"
     dest: "{{ docker_cert_dir }}/registry.local:9001"
     remote_src: yes
+    mode: preserve
 
 - name: Start registry token server
   systemd:
