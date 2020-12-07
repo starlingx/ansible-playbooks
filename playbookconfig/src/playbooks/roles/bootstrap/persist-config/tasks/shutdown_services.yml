@@ -25,9 +25,9 @@
 
 
 - block:  # Revert changes done by kubeadm init, clear data cache
-  - name: Shut down and remove Kubernetes components
-    command: kubeadm --kubeconfig=/etc/kubernetes/admin.conf reset -f --cri-socket /var/run/containerd/containerd.sock
-    register: reset_info
+#  - name: Shut down and remove Kubernetes components
+#    command: kubeadm --kubeconfig=/etc/kubernetes/admin.conf reset -f --cri-socket /var/run/containerd/containerd.sock
+#    register: reset_info
 
   - debug: var=reset_info.stdout_lines
 
@@ -37,16 +37,16 @@
   # contents.
   # That bug was re-broken by this commit in k8s 1.16
   # https://github.com/kubernetes/kubernetes/commit/6845c66efbb888d2f73e1a1c17f0e06b34d8e261
-  - name: Mount kubelet-lv
-    command: bash -c 'mountpoint -q /var/lib/kubelet || mount /var/lib/kubelet'
-    args:
-      warn: false
+#  - name: Mount kubelet-lv
+#    command: bash -c 'mountpoint -q /var/lib/kubelet || mount /var/lib/kubelet'
+#    args:
+#      warn: false
 
   # it looks like k8s 1.16 unmounts the folder before clearing it
-  - name: Clear kubelet data
-    shell: /bin/rm -rf /var/lib/kubelet/*
-    args:
-      warn: false
+#  - name: Clear kubelet data
+#    shell: /bin/rm -rf /var/lib/kubelet/*
+#    args:
+#      warn: false
 
   - name: Clear etcd data cache
     shell: /bin/rm -rf /opt/etcd/{{ software_version }}/controller.etcd/*

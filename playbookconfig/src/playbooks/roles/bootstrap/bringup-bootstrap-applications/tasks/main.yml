@@ -20,17 +20,17 @@
 - pause:
     seconds: 30
 
-- name: Upload and apply applications
-  include: upload_and_apply_application.yml application={{ item }}
-  with_items: "{{ applications }}"
-  when: mode != 'restore'
+#- name: Upload and apply applications
+#  include: upload_and_apply_application.yml application={{ item }}
+#  with_items: "{{ applications }}"
+#  when: mode != 'restore'
 
 # While Armada indicates pods are ready, some bugs were raised indicating
 # cert-manager webhook validation is not fully setup. Adding an indirect check
 # here to test a certificate issuer
-- name: Test cert-manager resource creation
-  import_tasks: test_cert_manager_creation.yml
-  when: mode != 'restore'
+#- name: Test cert-manager resource creation
+#  import_tasks: test_cert_manager_creation.yml
+#  when: mode != 'restore'
 
 # Create DC CA and set up subcloud admin endpoint certificates for bootstrap mode.
 - block:
@@ -92,10 +92,10 @@
     - "prev_management_multicast_end_address: {{ management_multicast_end_address }}"
     - "prev_external_oam_node_0_address: {{ external_oam_node_0_address }}"
     - "prev_external_oam_node_1_address: {{ external_oam_node_1_address }}"
-    - "prev_apiserver_cert_sans: {{ apiserver_cert_sans | to_yaml }}"
-    - "prev_k8s_root_ca_cert: {{ k8s_root_ca_cert }}"
-    - "prev_k8s_root_ca_key: {{ k8s_root_ca_key }}"
-    - "prev_apiserver_oidc: {{ apiserver_oidc | to_yaml }}"
+#    - "prev_apiserver_cert_sans: {{ apiserver_cert_sans | to_yaml }}"
+#    - "prev_k8s_root_ca_cert: {{ k8s_root_ca_cert }}"
+#    - "prev_k8s_root_ca_key: {{ k8s_root_ca_key }}"
+#    - "prev_apiserver_oidc: {{ apiserver_oidc | to_yaml }}"
     # Nested dictionaries are picky about having things on the same line
     - "prev_docker_registries: "
     - "{{ docker_registries | to_yaml }}"
