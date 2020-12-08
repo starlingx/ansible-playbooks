@@ -1,0 +1,68 @@
+---
+#
+# Copyright (c) 2021 Intel Corporation
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# These tasks enable edgeworkers joining to STX Kubernetes cluster
+#
+# 1. Prepare kubelet and containerd configuration
+# 2. Join to STX Kubernetes
+# 3. Pull Kubernetes images to the edgeworker nodes
+#
+- name: Add node ip and containerd runtime to kubelet config
+  lineinfile:
+    path: "{{ kubelet_extra_config_file }}"
+    state: present
+    regexp: '^KUBELET_EXTRA_ARGS='
+    line: >-
+      "KUBELET_EXTRA_ARGS=--node-ip={{ ansible_ssh_host }} --container-runtime=remote
+      --container-runtime-endpoint=unix:///run/containerd/containerd.sock"
+    create: yes
+  notify: Restart kubelet
+
+- name: Check if kubelet config exists
+  stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf_st
+
+- name: Join the {{ inventory_hostname }} with k8s cluster
+  shell: >-
+    kubeadm join --token {{ hostvars['localhost']['kubeadm_token'] }}
+    --discovery-token-ca-cert-hash {{ hostvars['localhost']['kubeadm_ca_cert_hash'] }}
+    --skip-phases preflight {{ hostvars['localhost']['kubeadm_master'] }}
+  environment:
+    no_proxy: "{{ no_proxy }}"
+  when: not kubelet_conf_st.stat.exists
+
+- name: Modify the default cni bin directory if the Linux distribution is Ubuntu
+  lineinfile:
+    path: "{{ kubelet_extra_config_file }}"
+    regexp: "^(KUBELET_EXTRA_ARGS=.*)$"
+    line: '\1 --cni-bin-dir /usr/libexec/cni'
+    backrefs: yes
+  when: ansible_facts['distribution'] == "Ubuntu"
+
+- name: Get the controller registry credentials
+  vars:
+    script_content: |
+      import keyring
+      password = str(keyring.get_password("CGCS", "admin"))
+      if not password:
+          raise Exception("Local registry password not found.")
+      print dict(username='admin', password=password)
+    ansible_connection: local
+  shell: "{{ script_content }}"
+  args:
+    executable: /usr/bin/python
+  register: local_registry_credentials_output
+
+- set_fact:
+    local_registry: "registry.local:9001"
+    local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
+
+- name: Pull k8s gcr images from controller registry to {{ inventory_hostname }}
+  shell: >-
+    kubeadm config images list --kubernetes-version {{ k8s_version }} --image-repository {{ local_registry }}/k8s.gcr.io |
+    xargs -i sudo crictl pull --creds
+    {{ local_registry_credentials['username'] }}:{{ local_registry_credentials['password'] }} {}
