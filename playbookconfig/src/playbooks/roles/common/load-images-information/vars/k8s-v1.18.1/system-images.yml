@@ -15,3 +15,4 @@ sriov_network_device_img: docker.io/starlingx/k8s-plugins-sriov-network-device:s
 # cluster/addons/volumesnapshots/volume-snapshot-controller/volume-snapshot-controller-deployment.yaml
 # in the kubernetes github repo
 snapshot_controller_img: quay.io/k8scsi/snapshot-controller:v2.0.0-rc2
+rvmc_img: docker.io/starlingx/rvmc:stx.5.0-v1.0.0
