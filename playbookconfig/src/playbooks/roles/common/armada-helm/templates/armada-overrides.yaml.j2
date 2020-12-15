@@ -50,25 +50,6 @@ pod:
             periodSeconds: 10
             successThreshold: 1
             timeoutSeconds: 1
-endpoints:
-  identity:
-    auth:
-      armada:
-        password: "{{ armada_default_password }}"
-        project_domain_name: default
-        project_name: default
-        region_name: RegionOne
-        user_domain_name: default
-        username: admin
-      armada:
-        password: "{{ armada_password }}"
-        project_domain_name: {{ armada_domain }}
-        project_name: service
-        region_name: RegionOne
-        user_domain_name: {{ armada_domain }}
-        username: "{{ armada_user }}"
-    host_fqdn_override:
-      default: "{{ controller_floating_address }}"
 dependencies:
   static:
     api:
@@ -85,6 +66,7 @@ manifests:
   job_ks_service: false
   job_ks_endpoints: false
   job_ks_user: false
+  secret_keystone: false
 conf:
   tiller:
     charts_url: {{ helm_charts_url }}

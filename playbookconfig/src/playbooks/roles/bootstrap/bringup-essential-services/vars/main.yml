@@ -30,10 +30,5 @@ kubeadm_pki_dir: /etc/kubernetes/pki
 etcd_tmp_dir: /opt/backups/etcd_tmp_dir
 psp_file: /usr/share/ansible/stx-ansible/playbooks/roles/bootstrap/bringup-essential-services/files/psp-policies.yaml
 
-armada_domain: armada-domain
-armada_user: armada
-armada_namespace: armada
-armada_secret_name: default-registry-key
-
 # Kubernetes api server encryption provider configuration file
 encryption_provider_config: /etc/kubernetes/encryption-provider.yaml
