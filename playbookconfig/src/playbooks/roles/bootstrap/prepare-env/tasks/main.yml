@@ -108,6 +108,10 @@
       docker.elastic.co:
         url: docker.elastic.co
 
+- name: Save the list of user defined registry keys
+  set_fact:
+    user_defined_registry_keys: "{{ docker_registries.keys() | list }}"
+
 - name: Merge user and default registries dictionaries
   set_fact:
     docker_registries: "{{ default_docker_registries | combine(docker_registries) }}"
