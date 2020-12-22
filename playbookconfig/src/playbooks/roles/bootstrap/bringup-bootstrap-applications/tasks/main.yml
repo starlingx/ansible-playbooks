@@ -32,6 +32,11 @@
   import_tasks: test_cert_manager_creation.yml
   when: mode != 'restore'
 
+# Create a generic namespace to be shared by deployed platform resources as needed
+- name: Create 'deployment' namespace
+  shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace deployment --dry-run -o yaml |
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
+
 # Create DC CA and set up subcloud admin endpoint certificates for bootstrap mode.
 - block:
   - name: Create distributed cloud CA
