@@ -40,6 +40,9 @@ etcd:
   external:
     endpoints:
     - <%= @etcd_endpoint %>
+    caFile: /etc/kubernetes/pki/ca.crt
+    certFile: /etc/kubernetes/pki/apiserver-etcd-client.crt
+    keyFile: /etc/kubernetes/pki/apiserver-etcd-client.key
 imageRepository: "registry.local:9001/k8s.gcr.io"
 kubernetesVersion: v1.18.1
 networking:

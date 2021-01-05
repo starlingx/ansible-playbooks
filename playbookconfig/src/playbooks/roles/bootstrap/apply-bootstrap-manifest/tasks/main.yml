@@ -40,6 +40,9 @@
 
     when: distributed_cloud_role == 'subcloud'
 
+  - name: Create cert for etcd server and client
+    import_role:
+      name: common/create-etcd-certs
   when: mode == 'bootstrap'
 
 - block:
@@ -61,6 +64,47 @@
     args:
       warn: false
     when: migrate_platform_data is defined and migrate_platform_data
+
+  - name: Restore etcd certificates.
+    shell: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
+    args:
+      warn: false
+    with_items:
+      - "{{ '/etc/etcd' | regex_replace('^\\/', '') }}"
+    become_user: root
+
+  - name: Check if etcd certs are exist.
+    find:
+      paths: "/etc/etcd"
+      patterns:
+        - '*.crt'
+        - '*.key'
+    register: etcd_certs_find_output
+
+    # This is for simplex upgrade from STX 4.0 to 5.0
+  - block:
+    - name: set kubeadm_pki_dir
+      set_fact:
+        kubeadm_pki_dir: /etc/kubernetes/pki
+
+    - name: Create pki directory for kubernetes certificates
+      file:
+        path: "{{ kubeadm_pki_dir }}"
+        state: directory
+        mode: 0700
+
+    - name: Restore CA
+      shell: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
+      args:
+        warn: false
+      with_items:
+        - "{{ kubeadm_pki_dir | regex_replace('^\\/', '') }}"
+      become_user: root
+
+    - name: Create certs for etcd server and client for simplex upgrade
+      import_role:
+        name: common/create-etcd-certs
+    when: etcd_certs_find_output.matched == 0
 
   - name: Look for ssh_config dir in the backup tarball
     shell: "tar -tf {{ restore_data_file }} | grep 'opt/platform/config/.*/ssh_config'"
@@ -92,6 +136,26 @@
 
     when: search_ssh_config.rc == 0
   when: mode == 'restore'
+
+- name: Set the ip version of etcd listen address to its default value
+  set_fact:
+    etcd_listen_address_version: 4
+
+- name: Update the ip version of etcd listen address to ipv6
+  set_fact:
+    etcd_listen_address_version: 6
+  when: ipv6_addressing != False
+
+  # Add etcd security info to static hieradata so that etcd is configured with security
+  # when etc puppet manifest is applied before Kubernetes master is initialized in the later role.
+- name: Write security settings to static hieradata
+  lineinfile:
+    path: "{{ hieradata_workdir }}/static.yaml"
+    line: "{{ item }}"
+  with_items:
+    - "platform::etcd::params::security_enabled: true"
+    - "platform::etcd::params::bind_address: {{ default_cluster_host_start_address }}"
+    - "platform::etcd::params::bind_address_version: {{ etcd_listen_address_version }}"
 
 - name: Applying puppet bootstrap manifest
   command: >

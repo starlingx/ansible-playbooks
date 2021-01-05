@@ -18,6 +18,7 @@
     pxe_config_dir: "{{ config_permdir + '/pxelinux.cfg' }}"
     branding_config_dir: "{{ config_permdir + '/branding' }}"
     ssl_ca_certs_dir: "{{ config_permdir + '/ssl_ca' }}"
+    etcd_certs_dir: "{{ config_permdir + '/etcd' }}"
 
 - debug:
     msg: >-
@@ -25,6 +26,7 @@
       pxe_config_dir: {{ pxe_config_dir }}
       branding_config_dir: {{ branding_config_dir }}
       ssl_ca_certs_dir: {{ ssl_ca_certs_dir }}
+      etcd_certs_dir: {{ etcd_certs_dir }}
 
 - name: Ensure Postres, PXE config directories exist
   file:
@@ -38,13 +40,16 @@
     - "{{ postgres_config_dir }}"
     - "{{ pxe_config_dir }}"
 
-- name: Ensure SSL CA certificates directory exists
+- name: Ensure SSL CA and etcd certs directories exist
   file:
-    path: "{{ ssl_ca_certs_dir }}"
+    path: "{{ item }}"
     state: directory
     owner: root
     group: root
     mode: 0700
+  with_items:
+    - "{{ ssl_ca_certs_dir }}"
+    - "{{ etcd_certs_dir }}"
 
 - name: Get list of Postgres conf files
   find:
@@ -61,6 +66,29 @@
     group: postgres
     remote_src: yes
   with_items: "{{ postgres_result.files }}"
+
+- name: Find etcd certs files
+  find:
+    paths: "/etc/etcd"
+    patterns:
+      - '*.crt'
+      - '*.key'
+  register: etcd_certs_find_output
+
+- name: Copy etcd certificates to etcd certs directory
+  copy:
+    src: "/etc/etcd/{{ item }}"
+    dest: "{{ etcd_certs_dir }}/{{ item }}"
+    remote_src: yes
+    force: yes
+  with_items:
+    - "etcd-server.crt"
+    - "etcd-server.key"
+    - "ca.crt"
+    - "ca.key"
+    - "etcd-client.crt"
+    - "etcd-client.key"
+  when: etcd_certs_find_output.matched != 0
 
 - name: Create a symlink to PXE config files
   file:
