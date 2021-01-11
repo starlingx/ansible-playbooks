@@ -9,6 +9,11 @@
 #   from public/private registries and push to local registry.
 #
 
+- name: Set default values for docker_http_proxy and docker_https_proxy if they are undefined
+  set_fact:
+    docker_http_proxy: "{{ docker_http_proxy|default('') }}"
+    docker_https_proxy: "{{ docker_https_proxy|default('') }}"
+
 - name: Get docker registries if not in bootstap or restore mode
   include: get_docker_registry.yml registry={{ item }}
   with_items:
