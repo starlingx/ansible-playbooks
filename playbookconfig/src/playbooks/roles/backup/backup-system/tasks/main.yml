@@ -40,7 +40,7 @@
       args:
         warn: false
 
-    - name: Backup postgres, template1, sysinv, barbican db data
+    - name: Backup postgres, template1, sysinv, barbican, helmv2 db data
       shell: >-
         sudo -u postgres pg_dump --format=plain --inserts --disable-triggers --data-only
         {{ item }} > {{ postgres_dir.path }}/{{ item }}.postgreSql.data
@@ -51,6 +51,7 @@
         - template1
         - sysinv
         - barbican
+        - helmv2
 
     - name: Backup fm db data
       shell: >-

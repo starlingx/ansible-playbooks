@@ -388,6 +388,7 @@
         - "{{ staging_dir }}/postgres/keystone.postgreSql.data"
         - "{{ staging_dir }}/postgres/fm.postgreSql.data"
         - "{{ staging_dir }}/postgres/barbican.postgreSql.data"
+        - "{{ staging_dir }}/postgres/helmv2.postgreSql.data"
 
     - name: Restore postgres db for DC systemcontroller
       shell: "psql -f {{ item }} {{ (item|basename).split('.')[0] }}"
