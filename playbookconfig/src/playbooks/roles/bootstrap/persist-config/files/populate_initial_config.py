@@ -157,8 +157,7 @@ def populate_system_config(client):
         dc_role = None
 
     if is_subcloud():
-        capabilities.update({'shared_services': "['identity', ]",
-                             'region_config': True})
+        capabilities.update({'region_config': True})
 
     values = {
         'system_mode': CONF.get('BOOTSTRAP_CONFIG', 'SYSTEM_MODE'),
