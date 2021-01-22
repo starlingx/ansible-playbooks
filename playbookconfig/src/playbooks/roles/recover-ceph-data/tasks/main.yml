@@ -163,7 +163,7 @@
       shell: cp -ar /tmp/mon-store/store.db /var/lib/ceph/mon/ceph-{{ mon_name }}
 
     - name: Bring up ceph Monitor and OSDs
-      command: /etc/init.d/ceph start
+      command: /etc/init.d/ceph start mon osd
 
     - name: Wait for ceph monitor to be up
       shell: ceph -s

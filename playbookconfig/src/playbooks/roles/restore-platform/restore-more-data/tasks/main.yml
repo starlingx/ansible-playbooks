@@ -623,7 +623,7 @@
     when: check_online.stdout == "online"
 
   # Remove temporary staging area used by the copy module
-  - name: Remove {{ ansible_remote_tmp }} directory
+  - name: Remove temporary directory used to stage restore data
     file:
       path: "{{ ansible_remote_tmp }}"
       state: absent

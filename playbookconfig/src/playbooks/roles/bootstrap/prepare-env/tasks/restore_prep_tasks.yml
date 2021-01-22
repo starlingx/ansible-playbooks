@@ -62,7 +62,7 @@
       */{{ temp_ssl_ca_file }}*
     args:
       warn: false
-    ignore_errors: yes
+    failed_when: false
 
   - name: Check that ssl_ca certificate exists
     stat:
@@ -80,7 +80,7 @@
       --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/enabled_kube_plugins'
     args:
       warn: false
-    ignore_errors: yes
+    failed_when: false
 
   - name: Check that enabled_kube_plugins exists
     stat:
