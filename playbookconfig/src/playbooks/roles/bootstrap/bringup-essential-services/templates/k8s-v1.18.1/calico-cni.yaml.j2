@@ -747,13 +747,6 @@ spec:
               - -felix-ready
               - -bird-ready
             periodSeconds: 10
-          {% if cluster_network_ipv4 -%}
-          # Disable reverse path filter for tunl0 interface
-          lifecycle:
-            postStart:
-              exec:
-                command: ["/bin/sh", "-c", "sysctl -w net.ipv4.conf.tunl0.rp_filter=0"]
-          {% endif -%}
           volumeMounts:
             - mountPath: /lib/modules
               name: lib-modules
