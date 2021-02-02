@@ -75,6 +75,12 @@ openstack_backup_filename_prefix: "{{ inventory_hostname }}_openstack_backup"
 #
 # This variable is used for StarlingX OpenStack application restore only
 #
+
+# The dc_vault backup tarball will be named in this format:
+# <dc_vault_backup_filename_prefix>_<timestamp>.tgz
+#
+dc_vault_backup_filename_prefix: "{{ inventory_hostname }}_dc_vault_backup"
+
 restore_cinder_glance_data: false
 
 # Default directory where the system backup tarballs fetched from the

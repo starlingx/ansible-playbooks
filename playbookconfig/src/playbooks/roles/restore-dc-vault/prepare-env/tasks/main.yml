@@ -1,0 +1,67 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role verifies if dc-vault restore should proceed
+#
+- name: Perform generic user input validation for restore
+  import_role:
+    name: backup-restore/validate-input
+
+- name: Perform generic B&R environment validation
+  import_role:
+    name: backup-restore/prepare-env
+
+- name: Check if restoring dc vault is already in progress
+  stat:
+    path: "{{ restore_dc_vault_in_progress_flag }}"
+  register: restore_dc_vault_in_progress_flag_file
+
+- name: Fail if restoring dc vault is already in progress
+  fail:
+    msg: "Restoring dc-vault is already in progress!"
+  when: restore_dc_vault_in_progress_flag_file.stat.exists
+
+- name: Check if the system is a DC controller
+  command: >-
+    grep -i "distributed_cloud_role\s*=\s*systemcontroller"
+    {{ platform_conf_path }}/platform.conf
+  register: check_dc_controller
+  failed_when: false
+
+- name: Fail if controller is not DC controller
+  fail:
+    msg: "Controller must be a DC systemcontroller in order to restore the dc-vault"
+  when: check_dc_controller.rc != 0
+
+- name: Check if controller is unlocked
+  shell: source /etc/platform/openrc ; system host-show $(cat /etc/hostname) --format value --column administrative
+  register: check_unlocked
+
+- name: Fail if controller is not unlocked
+  fail:
+    msg: "Controller must be in an unlocked state before restoring dc-vault"
+  when: '"unlocked" not in (check_unlocked.stdout | lower)'
+
+# Set the restore staging directory to scratch so it's a consistent
+# behavior regardless of where the restore playbook is executed (locally vs remotely)
+- name: Set restore staging directory to /scratch
+  set_fact:
+    target_backup_dir: /scratch
+
+- name: Transfer backup tarball to target if the file is off-box
+  include_role:
+    name: backup-restore/transfer-file
+  when: on_box_data|bool == false
+
+- name: Copy the backup tarball to {{ target_backup_dir }} if the file is already on-box
+  copy:
+    src: "{{ initial_backup_dir }}/{{ backup_filename }}"
+    dest: "{{ target_backup_dir }}"
+    remote_src: yes
+  when: on_box_data|bool == true
+  become: yes
+  become_user: root
