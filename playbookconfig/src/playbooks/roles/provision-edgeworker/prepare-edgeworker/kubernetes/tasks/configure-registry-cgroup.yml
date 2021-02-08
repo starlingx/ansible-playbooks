@@ -1,0 +1,69 @@
+---
+#
+# Copyright (c) 2021 Intel Corporation
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- name: Ensure containerd config directory exists
+  file:
+    dest: "{{ containerd_cfg_dir }}"
+    state: directory
+    mode: 0755
+    owner: root
+    group: root
+
+- name: Copy containerd config file to {{ inventory_hostname }}
+  copy:
+    src: /tmp/edgeworker/containerd-config.toml
+    dest: "{{ containerd_cfg_dir }}/config.toml"
+    force: true
+    owner: root
+    group: root
+    mode: 0600
+
+- name: Ensure registry cert directory exists
+  file:
+    dest: /etc/ssl/private
+    state: directory
+    mode: 0755
+    owner: root
+    group: root
+
+- name: Copy controller docker certificates to /etc/docker on {{ inventory_hostname }}
+  copy:
+    src: /tmp/edgeworker/docker/certs.d
+    dest: /etc/docker/
+    force: true
+    owner: root
+    group: root
+
+- name: Copy controller registry cert file to /etc/ssl/private/ on {{ inventory_hostname }}
+  copy:
+    src: /tmp/edgeworker/registry-cert.crt
+    dest: /etc/ssl/private/registry-cert.crt
+    force: true
+    owner: root
+    group: root
+    mode: 0400
+  notify:
+    - Restart containerd
+
+- name: Copy controller cgroup setup script to {{ inventory_hostname }}
+  copy:
+    src: /tmp/edgeworker/kubelet-cgroup-setup.sh
+    dest: /usr/bin/kubelet-cgroup-setup.sh
+    force: true
+    owner: root
+    group: root
+    mode: 0700
+
+- name: Add k8s-infra cgroup
+  command: /usr/bin/kubelet-cgroup-setup.sh
+
+- name: Add k8s-infra cgroup creation in kubelet service
+  lineinfile:
+    path: "/etc/systemd/system/kubelet.service.d/10-kubeadm.conf"
+    state: present
+    regexp: '^ExecStartPre='
+    line: 'ExecStartPre=/usr/bin/kubelet-cgroup-setup.sh'
+  when: ansible_facts['distribution'] == "Ubuntu"

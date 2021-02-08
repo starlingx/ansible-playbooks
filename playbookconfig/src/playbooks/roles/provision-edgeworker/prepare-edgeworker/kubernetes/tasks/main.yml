@@ -1,0 +1,31 @@
+---
+#
+# Copyright (c) 2021 Intel Corporation
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- name: Get Kubernetes version on the controller
+  shell: |
+    kubectl version --client=true --short=true | awk '{print $3}'
+  register: k8s_ver_result
+  delegate_to: localhost
+
+- set_fact:
+    kubernetes_version: "{{ k8s_ver_result.stdout }}"
+
+- include_vars:
+    dir: "{{ playbook_dir }}/roles/common/load-images-information/vars/k8s-{{ kubernetes_version }}"
+    files_matching: "system-images.yml"
+
+- import_tasks: configure-swap.yml
+
+- import_tasks: configure-networking.yml
+
+- include_tasks: install-ubuntu-packages.yml
+  when: ansible_facts['distribution'] == "Ubuntu"
+
+- import_tasks: configure-registry-cgroup.yml
+
+- meta: flush_handlers
+
+- import_tasks: join-k8s-cluster.yml

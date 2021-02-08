@@ -1,0 +1,66 @@
+---
+#
+# Copyright (c) 2021 Intel Corporation
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- name: Prepare containerd config
+  command: "cp /etc/containerd/config.toml /tmp/edgeworker/containerd-config.toml"
+
+- name: Change containerd config owner
+  file:
+    path: /tmp/edgeworker/containerd-config.toml
+    owner: "{{ ansible_user }}"
+
+- name: Prepare registry cert
+  command: "cp /etc/ssl/private/registry-cert.crt /tmp/edgeworker/registry-cert.crt"
+
+- name: Change registry cert owner
+  file:
+    path: /tmp/edgeworker/registry-cert.crt
+    owner: "{{ ansible_user }}"
+
+- name: Prepare docker config and registry cert
+  command: "cp -r /etc/docker /tmp/edgeworker/docker"
+
+- name: Change docker config owner
+  file:
+    path: /tmp/edgeworker/docker
+    state: directory
+    recurse: true
+    owner: "{{ ansible_user }}"
+
+- name: Prepare cgroup setup bash
+  command: "cp /usr/bin/kubelet-cgroup-setup.sh /tmp/edgeworker/kubelet-cgroup-setup.sh"
+
+- name: Change cgroup setup bash owner
+  file:
+    path: /tmp/edgeworker/kubelet-cgroup-setup.sh
+    owner: "{{ ansible_user }}"
+
+- name: Check kubeadm master
+  shell: "awk -F '//' '/server/{print$2}' /etc/kubernetes/admin.conf"
+  register: kubeadm_master_out
+
+- name: Set kubeadm masterip
+  set_fact:
+    kubeadm_master: "{{ kubeadm_master_out.stdout }}"
+
+- name: Check kubeadm token
+  shell: "kubeadm token create"
+  register: kubeadm_token_create_out
+
+- name: Set kubeadm token
+  set_fact:
+    kubeadm_token: "{{ kubeadm_token_create_out.stdout }}"
+
+- name: Get kubeadm ca cert hash
+  shell: >-
+    openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt |
+    openssl rsa -pubin -outform der 2>/dev/null |
+    openssl dgst -sha256 -hex | sed 's/^.* /sha256:/'
+  register: ca_cert_hash_out
+
+- name: Set kubeadm_ca_cert_hash fact
+  set_fact:
+    kubeadm_ca_cert_hash: "{{ ca_cert_hash_out.stdout }}"

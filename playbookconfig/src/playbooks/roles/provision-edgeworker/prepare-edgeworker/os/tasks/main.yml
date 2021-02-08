@@ -1,0 +1,26 @@
+---
+#
+# Copyright (c) 2021 Intel Corporation
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Prepare edgeworker OS configuration
+#
+# Some limitations for edgeworker nodes:
+# - The edgeworker nodes do not support IPv6
+# - The edgeworker nodes only support Ubuntu as OS
+#
+- name: Fail if the network address type of the edgeworker node is IPv6
+  fail:
+    msg: "IPv6 network addressing is currently not supported for edgeworker nodes."
+  when: ansible_default_ipv6.keys() | length != 0
+
+- name: Fail if the edgeworker node OS is not Ubuntu
+  fail:
+    msg: "The edgeworker node OS must be Ubuntu."
+  when: ansible_distribution != "Ubuntu"
+
+- import_tasks: prepare-host.yml
+
+- include_tasks: prepare-ubuntu.yml
+  when: ansible_distribution == "Ubuntu"
