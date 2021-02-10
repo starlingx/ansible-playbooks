@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020 Wind River Systems, Inc.
+# Copyright (c) 2020-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -9,6 +9,7 @@
   hosts: all
   gather_facts: false
   become: no
+
   tasks:
     - set_fact:
         ansible_port: "{{ ansible_port | default(22) }}"
@@ -164,22 +165,11 @@
           timeout={{ wait_for_timeout }}
           state=started
 
-    - set_fact:
-        override_files_dir: "{{ lookup('env', 'HOME') }}"
-        password_change_responses:
-          yes/no: 'yes'
-          sysadmin*: 'sysadmin'
-          \(current\) UNIX password: 'sysadmin'
-          (?i)New password: "{{ ansible_ssh_pass }}"
-          (?i)Retype new password: "{{ ansible_ssh_pass }}"
-
-    - import_role:
-        name: common/prepare-env
-
-    - name: Check if the system is ready
-      command: "systemctl is-active multi-user.target"
-      register: check_active
-      retries: 30
-      delay: 40
-      until: check_active.rc == 0
-      no_log: true
+- name: Run validate host playbook post install
+  import_playbook: validate_host.yml
+  vars:
+    override_files_dir: "{{ lookup('env', 'HOME') }}"
+    check_system: true
+    check_load: false
+    check_bootstrap_address: false
+    check_patches: false

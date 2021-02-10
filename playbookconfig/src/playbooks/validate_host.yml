@@ -1,0 +1,30 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- hosts: all
+  # If gathering facts is really necessary, run setup task AFTER host connectivity
+  # check block in prepare-env role.
+  gather_facts: no
+
+  vars_files:
+    - vars/common/main.yml
+
+  pre_tasks:
+    - set_fact:
+        check_load: "{{ check_load | default(true) }}"
+        check_bootstrap_address: "{{ check_bootstrap_address | default(true) }}"
+        check_patches: "{{ check_patches | default(true) }}"
+        password_change: "{{ password_change | default(true) }}"
+        password_change_responses:
+          yes/no: 'yes'
+          sysadmin*: 'sysadmin'
+          \(current\) UNIX password: 'sysadmin'
+          (?i)New password: "{{ ansible_ssh_pass }}"
+          (?i)Retype new password: "{{ ansible_ssh_pass }}"
+
+  roles:
+    - common/prepare-env
+    - common/validate-target

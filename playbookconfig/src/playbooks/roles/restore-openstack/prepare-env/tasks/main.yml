@@ -1,21 +1,19 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
 #   This role verifies if platform restore should proceed
 #
-- name: Fail if backup_filename is not defined or set
-  fail:
-    msg: "Mandatory configuration parameter backup_filename is not defined or set."
-  when: backup_filename is not defined or backup_filename is none
+- name: Perform generic user input validation for restore
+  import_role:
+    name: backup-restore/validate-input
 
-- name: Fail if initial_backup_dir is not defined or set
-  fail:
-    msg: "Mandatory configuration parameter initial_backup_dir is not defined or set."
-  when: initial_backup_dir is not defined or initial_backup_dir is none
+- name: Perform generic B&R environment validation
+  import_role:
+    name: backup-restore/prepare-env
 
 - name: Check if restoring StarlingX Openstack is already in progress
   stat:
@@ -70,12 +68,22 @@
     msg: Application platform-integ-apps was not applied successfully during controller-0 unlock
   when: check_platform_integ.stdout not in ['applied', 'completed']
 
-- name: For remote play set target_backup_dir to {{ backup_dir }}
+# Set the restore staging directory to scratch so it's a consistent
+# behavior regardless of where the restore playbook is executed (locally vs remotely)
+- name: Set restore staging directory to /scratch
   set_fact:
-    target_backup_dir: "{{ backup_dir }}"
-  when: inventory_hostname != "localhost"
+    target_backup_dir: /scratch
 
-- name: For local play set target_backup_dir to initial_backup_dir
-  set_fact:
-    target_backup_dir: "{{ initial_backup_dir }}"
-  when: inventory_hostname == "localhost"
+- name: Transfer backup tarball to target if the file is off-box
+  include_role:
+    name: backup-restore/transfer-file
+  when: on_box_data|bool == false
+
+- name: Copy the backup tarball to {{ target_backup_dir }} if the file is already on-box
+  copy:
+    src: "{{ initial_backup_dir }}/{{ backup_filename }}"
+    dest: "{{ target_backup_dir }}"
+    remote_src: yes
+  when: on_box_data|bool == true
+  become: yes
+  become_user: root

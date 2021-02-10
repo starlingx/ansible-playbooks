@@ -15,7 +15,5 @@
   # Main play
   roles:
     - { role: common/prepare-env }
-    - { role: backup-restore/prepare-env }
     - { role: restore-openstack/prepare-env, when: not restore_openstack_continue|bool }
-    - { role: backup-restore/transfer-file, when: not restore_openstack_continue|bool }
     - { role: restore-openstack/restore, become: yes }

@@ -4,6 +4,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
 # ROLE DESCRIPTION:
 #   Create etcd server and client certs and key.
 
@@ -51,10 +53,10 @@
   with_items:
     - "etcd-client"
 
-- name: Check if CA exist
-  shell: ls /etc/kubernetes/pki/ca.crt
-  ignore_errors: true
-  register: find_exist_ca_output
+- name: Check if CA exists
+  stat:
+    path: /etc/kubernetes/pki/ca.crt
+  register: ca_file
 
 - name: Copy existed CA
   copy:
@@ -65,7 +67,7 @@
   with_items:
     - "ca.crt"
     - "ca.key"
-  when: find_exist_ca_output|succeeded
+  when: ca_file.stat.exists
 
 - name: copy user specified CA
   copy:
@@ -110,7 +112,7 @@
       provider: selfsigned
       force: true
 
-  when: find_exist_ca_output|failed and k8s_root_ca_cert == ''
+  when: not ca_file.stat.exists and k8s_root_ca_cert == ''
 
 - name: Generate certs signed with etcd CA certificate"
   openssl_certificate:

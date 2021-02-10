@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -10,6 +10,10 @@
 #       - install patches if the system was patched
 #       - reboot the controller if it is required by the patching
 #
+- name: Restore patches unless specified
+  set_fact:
+    skip_patches_restore: "{{ skip_patches_restore | default(false) }}"
+
 - block:
   - name: Set fact for patching staging dir
     set_fact:
@@ -230,5 +234,6 @@
             re-run the playbook to restore the platform after reboot is completed.
         when: required_reboot
 
+  when: skip_patches_restore|bool == false
   become: yes
   become_user: root
