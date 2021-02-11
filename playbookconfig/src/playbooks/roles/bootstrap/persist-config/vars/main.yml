@@ -10,3 +10,5 @@ region_config: no
 #   config/.../sysinv/common/constants.py
 small_root_disk_size: 240
 minimum_small_root_disk_size: 196
+source_device_image_bind_dir: /opt/platform/device_images
+target_device_image_bind_dir: /www/pages/device_images
