@@ -359,7 +359,7 @@
       vars:
         export_file_path: "{{ docker_local_registry_backup_file_path }}"
         kilo_free_size: "{{ remaining_disk_size_estimation }}"
-      when: backup_user_local_registry is defined and backup_user_local_registry
+      when: backup_user_local_registry is defined and backup_user_local_registry|bool == true
 
     # Archive module has a known bug that doesn't handle empty symbolic links
     # well. Restore to tar command. Can add -P option to keep the leading
