@@ -308,8 +308,12 @@
         system addrpool-list | awk '/cluster-host-subnet/{print$14}'
       register: etcd_endpoint
 
+    - name: Wrap etcd_endpoint in [] brackets if it's an ipv6 address
+      set_fact:
+        etcd_endpoint_parsed: "{{ etcd_endpoint.stdout | ipwrap }}"
+
     - name: Create etcd snapshot
-      command: "etcdctl --endpoints https://{{ etcd_endpoint.stdout }}:2379 --cert=/etc/etcd/etcd-client.crt
+      command: "etcdctl --endpoints https://{{ etcd_endpoint_parsed }}:2379 --cert=/etc/etcd/etcd-client.crt
                 --key=/etc/etcd/etcd-client.key --cacert=/etc/etcd/ca.crt snapshot save {{ etcd_snapshot_file }}"
       environment:
         ETCDCTL_API: 3
