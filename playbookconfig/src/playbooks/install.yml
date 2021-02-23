@@ -168,7 +168,6 @@
 - name: Run validate host playbook post install
   import_playbook: validate_host.yml
   vars:
-    override_files_dir: "{{ lookup('env', 'HOME') }}"
     check_system: true
     check_load: false
     check_bootstrap_address: false

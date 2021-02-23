@@ -14,6 +14,10 @@
     check_bootstrap_address: "{{ check_bootstrap_address | default(false) }}"
     check_patches: "{{ check_patches | default(false) }}"
 
+- name: Gather facts if check_bootstrap_address is turned on
+  setup:
+  when: check_bootstrap_address and bootstrap_address is defined
+
 - name: Retrieve software version number
   # lookup module does not work with /etc/build.info as it does not have ini
   # format. Resort to shell source.
@@ -66,22 +70,28 @@
 
 # check_bootstrap_address - e.g. prior to subcloud restore of non-Redfish subcloud
 - block:
-  - name: Set host address to IPv4 address if available
-    set_fact:
-      host_address: "{{ ansible_default_ipv4['address'] }}"
-    when: ansible_default_ipv4.keys()|length != 0
+  - set_fact:
+      ipv4_addressing: "{{ bootstrap_address | ipv4 }}"
+      ipv6_addressing: "{{ bootstrap_address | ipv6 }}"
 
-  - name: Set host address to IPv6 address if available
-    set_fact:
-      host_address: "{{ ansible_default_ipv6['address'] }}"
-    when: ansible_default_ipv6.keys()|length != 0
-
-  - name: Fail if the bootstrap address is incorrect
+  - name: Fail if the boot address does not exist in this host (IPv4)
     fail:
-      msg: >
-        The host bootstrap address is {{ host_address }}. The expected address
-        is {{ bootstrap_address }}.
-    when: host_address != bootstrap_address
+      msg: >-
+        The specified bootstrap address {{ bootstrap_address }} does
+        not exist on this host. All IPv4 addresses existing on this
+        host are {{ ansible_all_ipv4_addresses }}.
+    when: (ipv4_addressing) and
+          (bootstrap_address not in ansible_all_ipv4_addresses)
+
+  - name: Fail if the boot address does not exist in this host (IPv6)
+    fail:
+      msg: >-
+        The specified bootstrap address {{ bootstrap_address }} does
+        not exist on this host. All IPv6 addresses existing on this
+        host are {{ ansible_all_ipv6_addresses }}.
+    when: (ipv6_addressing) and
+          (bootstrap_address not in ansible_all_ipv6_addresses)
+
   when: check_bootstrap_address
 
 # check_patches validation - e.g. prior to subcloud restore of non-Redfish subcloud
