@@ -11,7 +11,6 @@
 
 - name: Set parameters for archive paths
   set_fact:
-    archive_dc_vault_permdir: "{{ dc_vault_permdir | regex_replace('^\\/', '') }}"
     archive_platform_conf_path: "{{ platform_conf_path | regex_replace('^\\/', '') }}"
     archive_ceph_backend_flag: "{{ ceph_backend_flag | regex_replace('^\\/', '') }}"
 
@@ -293,21 +292,6 @@
       -o {{ ceph_crushmap_dir }}/{{ crushmap_file }}
 
   when: ceph_backend.rc == 0
-
-- name: Look for dc-vault filesystem
-  shell: "tar -tf {{ restore_data_file }} | grep '{{ dc_vault_permdir|basename }}'"
-  args:
-    warn: false
-  failed_when: false
-  register: search_result
-
-- name: Restore dc-vault filesystem
-  command: >-
-    tar -C / --overwrite -xpf {{ restore_data_file }}
-    {{ archive_dc_vault_permdir }}
-  args:
-    warn: false
-  when: search_result.rc == 0
 
 - name: Look for deploy files
   shell: "tar -tf {{ restore_data_file }} |

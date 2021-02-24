@@ -193,7 +193,6 @@
         - "{{ patching_permdir }}"
         - "{{ patching_repo_permdir }}"
         - "{{ extension_permdir }}"
-        - "{{ dc_vault_permdir }}"
         - "{{ deploy_permdir }}"
         - "{{ postgres_dir.path }}"
         - "{{ armada_permdir }}"
@@ -210,6 +209,18 @@
       with_items: "{{ size_output_platform.results }}"
       loop_control:
         label: "{{ item.item }}"
+
+    # For SystemController the dc-vault is part of platform but restored after controller-0 unlock
+    # Create a separate archive for it
+    - block:
+        - name: Check the size (in KiB) of directories that will be backed up for dc-vault
+          shell: "du -sh -k  {{ dc_vault_permdir }} | awk '{print $1}'"
+          register: size_output_dc_vault
+
+        - name: Estimate the total required disk size for platform backup archive
+          set_fact:
+            total_platform_size_estimation: "{{ total_platform_size_estimation|int + size_output_dc_vault.stdout|int }}"
+      when: check_dc_controller.rc == 0
 
     - name: Check the free space in the archive dir
       shell: "df -k {{ backup_dir }} --output=avail | tail -1"
@@ -351,12 +362,14 @@
         platform_backup_file: "{{ platform_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
         docker_local_registry_backup_file: "{{ docker_local_registry_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
         openstack_backup_file: "{{ openstack_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
+        dc_vault_backup_file: "{{ dc_vault_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
 
     - name: Set backup files absolute path
       set_fact:
         platform_backup_file_path: "{{ backup_dir }}/{{ platform_backup_file }}"
         docker_local_registry_backup_file_path: "{{ backup_dir }}/{{ docker_local_registry_backup_file }}"
         openstack_backup_file_path: "{{ backup_dir }}/{{ openstack_backup_file }}"
+        dc_vault_backup_file_path: "{{ backup_dir }}/{{ dc_vault_backup_file }}"
 
     - name: Save user uploaded images from local registry to an archive
       import_tasks: export-user-local-registry-images.yml
@@ -382,7 +395,6 @@
            {{ patching_permdir }} \
            {{ patching_repo_permdir }} \
            {{ extension_permdir }} \
-           {{ dc_vault_permdir }} \
            {{ deploy_permdir }} \
            {{ crushmap_file | default(\"\") }} \
            {{ etcd_snapshot_file }} \
@@ -393,6 +405,13 @@
            {{ helm_charts_permdir }} 2>/dev/null)"
       args:
         warn: false
+
+    - name: Create a tgz archive for dc-vault backup
+      shell: "tar -czf {{ dc_vault_backup_file_path }} $(ls -d \
+           {{ dc_vault_permdir }} 2>/dev/null)"
+      args:
+        warn: false
+      when: check_dc_controller.rc == 0
 
     - name: Create a tgz archive for OpenStack backup
       shell: "tar -czf {{ openstack_backup_file_path }} $(ls -d \
