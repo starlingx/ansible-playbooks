@@ -139,6 +139,12 @@
   environment:
     STREAM_SERVER_ADDRESS: "{{ stream_server_address }}"
 
+- name: Remove custom container runtime CRI entries
+  command: >-
+    sed -i -e '/^# MARK_BEGIN_custom_container_runtime/,/^# MARK_END_custom_container_runtime/d' /etc/containerd/config.toml
+  args:
+    warn: false
+
 - name: Remove central cloud registry config on non-subclouds
   replace:
     path: /etc/containerd/config.toml
