@@ -54,11 +54,35 @@
     state: directory
     mode: 0700
 
+- name: Determine the stream_server_address for containerd
+  set_fact:
+    stream_server_address: "{{ '127.0.0.1' if ipv6_addressing == False else '::1' }}"
+
+- name: Get guest local registry credentials
+  vars:
+    script_content: |
+      import keyring
+      password = keyring.get_password("mtce", "services")
+      if not password:
+          raise Exception("Local registry password not found.")
+      print dict(username='mtce', password=str(password))
+  shell: "{{ script_content }}"
+  args:
+    executable: /usr/bin/python
+  register: guest_local_registry_credentials_output
+
+- set_fact:
+    guest_local_registry_credentials: "{{ guest_local_registry_credentials_output.stdout }}"
+
+- name: Determine the registry_auth for containerd
+  set_fact:
+    registry_auth: "{{ (guest_local_registry_credentials['username'] + ':'
+    + guest_local_registry_credentials['password']) | b64encode }}"
+
 - name: Create config.toml file for containerd configuration
-  copy:
-    src: "{{ containerd_template }}"
+  template:
+    src: "config.toml.j2"
     dest: /etc/containerd/config.toml
-    remote_src: yes
     mode: 0600
 
 - name: Remove puppet template for insecure registries
@@ -81,13 +105,6 @@
   when: (insecure_registries is defined and
         insecure_registries | length > 0)
 
-- name: Update config.toml with cni bin dir
-  command: "sed -i -e 's|<%= @k8s_cni_bin_dir %>|$CNI_BIN_DIR|g' /etc/containerd/config.toml"
-  args:
-    warn: false
-  environment:
-    CNI_BIN_DIR: "{{ kubelet_cni_bin_dir }}"
-
 - name: Get local registry credentials
   vars:
     script_content: |
@@ -103,69 +120,6 @@
 
 - set_fact:
     local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
-
-- name: Get guest local registry credentials
-  vars:
-    script_content: |
-      import keyring
-      password = keyring.get_password("mtce", "services")
-      if not password:
-          raise Exception("Local registry password not found.")
-      print dict(username='mtce', password=str(password))
-  shell: "{{ script_content }}"
-  args:
-    executable: /usr/bin/python
-  register: guest_local_registry_credentials_output
-
-- set_fact:
-    guest_local_registry_credentials: "{{ guest_local_registry_credentials_output.stdout }}"
-
-- name: Update config.toml with registry auth
-  command: "sed -i -e 's|<%= @registry_auth %>|$REG_AUTH|g' /etc/containerd/config.toml"
-  args:
-    warn: false
-  environment:
-    REG_AUTH: "{{ (guest_local_registry_credentials['username'] + ':'
-               + guest_local_registry_credentials['password']) | b64encode }}"
-
-- name: Determine the stream_server_address for containerd
-  set_fact:
-    stream_server_address: "{{ '127.0.0.1' if ipv6_addressing == False else '::1' }}"
-
-- name: Set the stream_server_address in config.toml
-  command: "sed -i -e 's|<%= @stream_server_address %>|'$STREAM_SERVER_ADDRESS'|g' /etc/containerd/config.toml"
-  args:
-    warn: false
-  environment:
-    STREAM_SERVER_ADDRESS: "{{ stream_server_address }}"
-
-- name: Remove custom container runtime CRI entries
-  command: >-
-    sed -i -e '/^# MARK_BEGIN_custom_container_runtime/,/^# MARK_END_custom_container_runtime/d' /etc/containerd/config.toml
-  args:
-    warn: false
-
-- name: Remove central cloud registry config on non-subclouds
-  replace:
-    path: /etc/containerd/config.toml
-    after: '# Central cloud registry config for distributed cloud subclouds'
-    regexp: '^(<%- if @distributed_cloud_role.+)\n(.+)\n(.+)\n(.+end -%>)'
-    replace: ''
-  when: distributed_cloud_role != 'subcloud'
-
-- name: Remove erb if tag start for central cloud registry config on subclouds
-  replace:
-    path: /etc/containerd/config.toml
-    regexp: "^(# Central cloud registry.+)\n(.+role == 'subcloud' -%>)"
-    replace: '# Central cloud registry config for distributed cloud subclouds'
-  when: distributed_cloud_role == 'subcloud'
-
-- name: Remove erb if tag end for central cloud registry config on subclouds
-  replace:
-    path: /etc/containerd/config.toml
-    regexp: "^(<%- end -%>)\n(.+config for distributed cloud subclouds)"
-    replace: '# End central cloud registry config for distributed cloud subclouds'
-  when: distributed_cloud_role == 'subcloud'
 
 - name: Restart containerd
   systemd:
