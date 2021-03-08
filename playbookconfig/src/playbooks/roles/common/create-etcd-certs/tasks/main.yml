@@ -32,7 +32,7 @@
       - serverAuth
       - clientAuth
     subject_alt_name:
-      - IP:{{ default_cluster_host_start_address }}
+      - IP:{{ cluster_floating_address }}
       - IP:127.0.0.1
     force: true
   with_items:

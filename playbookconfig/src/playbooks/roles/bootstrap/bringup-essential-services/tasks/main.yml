@@ -77,7 +77,7 @@
       - "user add apiserver-etcd-client:sysadmin"
       - "auth enable"
     environment:
-      ETCD_ENDPOINT: "https://{{ default_cluster_host_start_address | ipwrap }}:2379"
+      ETCD_ENDPOINT: "https://{{ cluster_floating_address | ipwrap }}:2379"
       ETCD_CERT: "/etc/etcd/etcd-client.crt"
       ETCD_KEY: "/etc/etcd/etcd-client.key"
       ETCD_CA: "/etc/etcd/ca.crt"
