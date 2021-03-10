@@ -1,0 +1,13 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Unlock host
+  shell: source /etc/platform/openrc; system host-unlock {{ target_host }}
+  retries: 10
+  delay: 30
+  register: result
+  until: result.rc == 0

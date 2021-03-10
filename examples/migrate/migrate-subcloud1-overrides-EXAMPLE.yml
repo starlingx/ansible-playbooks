@@ -1,0 +1,6 @@
+---
+{
+  "ansible_ssh_pass": "St8rlingX*",
+  "external_oam_node_0_address": "10.10.10.13",
+  "external_oam_node_1_address": "10.10.10.14",
+}

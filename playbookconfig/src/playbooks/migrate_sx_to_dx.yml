@@ -1,0 +1,85 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This playbook provides the capability to migrate a subcloud from
+# AIO-SX to AIO-DX. It will lock the subcloud, perform the necessary
+# configuration updates, then unlock the subcloud. NOTE: This is for a
+# non-ceph subcloud.
+#
+# To run the playbook, the user would define an overrides file that
+# provides the required variable settings, passing this on the ansible
+# command-line.
+# (see migrate-subcloud1-overrides-EXAMPLE.yml)
+#
+# Example command:
+# ansible-playbook /usr/share/ansible/stx-ansible/playbooks/migrate_sx_to_dx.yml \
+#     -e @migrate-subcloud1-overrides.yml -i subcloud1, -v
+#
+
+- hosts: all
+  gather_facts: no
+
+  tasks:
+    - name: Check required parameters
+      debug:
+        msg:
+        - "Validating required migration parameters:"
+        - "ansible_ssh_pass: {{ ansible_ssh_pass | regex_replace('.', '*') }}"
+        - "external_oam_node_0_address: {{ external_oam_node_0_address }}"
+        - "external_oam_node_1_address: {{ external_oam_node_1_address }}"
+      failed_when: (ansible_ssh_pass | length == 0) or
+                   (external_oam_node_0_address | ipaddr == false) or
+                   (external_oam_node_1_address | ipaddr == false)
+
+    - set_fact:
+        duplex_mode: "{{ duplex_mode | default('duplex') }}"
+
+    - name: Query system_mode
+      shell: source /etc/platform/openrc; system show | awk '$2 == "system_mode" { print $4 }'
+      register: current_system_mode
+
+    - name: Query oam_c0_ip
+      shell: source /etc/platform/openrc; system oam-show | awk '$2 == "oam_c0_ip" { print $4 }'
+      register: current_oam_c0_ip
+
+    - name: Query oam_c1_ip
+      shell: source /etc/platform/openrc; system oam-show | awk '$2 == "oam_c1_ip" { print $4 }'
+      register: current_oam_c1_ip
+
+    - block:
+      - name: Lock host
+        include_role:
+          name: common/host-lock
+        vars:
+          target_host: 'controller-0'
+
+      - name: Update system mode
+        expect:
+          echo: yes
+          command: bash -c 'source /etc/platform/openrc; system modify -m {{ duplex_mode }} '
+          responses:
+            (.*)Are you sure you want to continue(.*): "yes"
+        failed_when: false
+        when: current_system_mode.stdout == 'simplex'
+
+      - name: Update OAM configuration
+        shell: >-
+          source /etc/platform/openrc;
+          system oam-modify oam_c0_ip={{ external_oam_node_0_address }} oam_c1_ip={{ external_oam_node_1_address }}
+        args:
+          warn: false
+        when: current_oam_c0_ip.stdout != external_oam_node_0_address or
+              current_oam_c1_ip.stdout != external_oam_node_1_address
+
+      - name: Unlock host
+        include_role:
+          name: common/host-unlock
+        vars:
+          target_host: 'controller-0'
+
+      when: current_system_mode.stdout == 'simplex' or
+            current_oam_c0_ip.stdout != external_oam_node_0_address or
+            current_oam_c1_ip.stdout != external_oam_node_1_address
