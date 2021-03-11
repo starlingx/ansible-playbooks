@@ -1,0 +1,6 @@
+---
+password_change: false
+
+cluster_service_subnet: 10.96.0.0/12
+# cluster_service_start_address:
+# cluster_service_end_address:

@@ -37,6 +37,8 @@ make install DESTDIR=%{buildroot}%{local_stx_ansible_dir}
 chmod 755 %{buildroot}%{local_stx_ansible_dir}/playbooks/roles/bootstrap/persist-config/files/populate_initial_config.py
 chmod 755 %{buildroot}%{local_stx_ansible_dir}/playbooks/roles/bootstrap/prepare-env/files/check_root_disk_size.py
 chmod 755 %{buildroot}%{local_stx_ansible_dir}/playbooks/roles/backup/backup-system/files/fm_alarm.py
+chmod 755 %{buildroot}%{local_stx_ansible_dir}/playbooks/roles/rehome-subcloud/update-keystone-data/files/migrate_keystone_ids.py
+chmod 755 %{buildroot}%{local_stx_ansible_dir}/playbooks/roles/rehome-subcloud/update-keystone-data/files/validate_keystone_passwords.sh
 
 
 %post

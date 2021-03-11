@@ -1,0 +1,88 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#   This role is to check the target host environment before proceeding to
+#   the next step.
+#
+
+- name: Check if rehome is in progress
+  stat:
+    path: "{{ rehome_in_progress_flag }}"
+  register: rehome_in_progress
+
+- name: Fail if rehome is already in progress
+  fail:
+    msg: "Rehome is already in progress!"
+  when: rehome_in_progress.stat.exists
+
+- name: Set config path facts
+  set_fact:
+    keyring_permdir: "{{ platform_path + '/.keyring/' + software_version }}"
+    config_permdir: "{{ platform_path + '/config/' + software_version }}"
+    sysinv_permdir: "{{ platform_path + '/sysinv/' + software_version }}"
+    puppet_permdir: "{{ platform_path + '/puppet/' + software_version }}"
+
+- name: Set network facts
+  set_fact:
+    controller_floating_address: "{{ management_start_address }}"
+    management_subnet_prefix: "{{ management_subnet | ipaddr('prefix') }}"
+    management_broadcast: "{{ management_subnet | ipaddr('broadcast') }}"
+    external_oam_node_0_address: "{{ external_oam_node_0_address | default('derived') }}"
+    external_oam_node_1_address: "{{ external_oam_node_1_address | default('derived') }}"
+
+- name: Set derived facts for subsequent tasks/roles
+  set_fact:
+    derived_network_params:
+      'controller_0_address': "{{ controller_floating_address|ipmath(1) }}"
+      'controller_1_address': "{{ controller_floating_address|ipmath(2) }}"
+      'oam_start_address': "{{ external_oam_node_0_address if external_oam_node_0_address != 'derived'
+                           else external_oam_floating_address | ipmath(1) }}"
+
+- name: Get existing docker no_proxy
+  shell: >-
+    source /etc/platform/openrc; system service-parameter-list |
+    awk '($4 == "docker" && $8 == "no_proxy") {print $2}'
+  register: existing_docker_no_proxy_result
+
+- block:
+  - name: Set subcloud docker no_proxy facts
+    set_fact:
+      subcloud_no_proxy:
+        - localhost
+        - 127.0.0.1
+        - registry.local
+        - "{{ (cluster_service_subnet | ipaddr(1)).split('/')[0] }}"
+        - "{{ controller_floating_address }}"
+        - "{{ derived_network_params.controller_0_address }}"
+        - "{{ external_oam_floating_address }}"
+        - "{{ derived_network_params.oam_start_address }}"
+        - registry.central
+        - "{{ system_controller_oam_floating_address }}"
+      docker_no_proxy_combined: []
+
+  - name: Add user defined no-proxy address list to subcloud no proxy list
+    set_fact:
+      docker_no_proxy_combined: "{{ subcloud_no_proxy | union(docker_no_proxy) | ipwrap | unique }}"
+
+  when: existing_docker_no_proxy_result.stdout | length > 0
+
+- name: Get management interface of controller-0
+  shell: >-
+    source /etc/platform/openrc; system interface-network-list controller-0 |
+    awk '$8 == "mgmt" { print $6 }'
+  register: controller_0_management_interface_result
+
+- name: Get management interface of controller-1 if the subcloud is not simplex
+  shell: >-
+    source /etc/platform/openrc; system interface-network-list controller-1 |
+    awk '$8 == "mgmt" { print $6 }'
+  register: controller_1_management_interface_result
+  when: system_mode != 'simplex'
+
+- name: Create rehome in progress flag file
+  file:
+    path: "{{ rehome_in_progress_flag }}"
+    state: touch

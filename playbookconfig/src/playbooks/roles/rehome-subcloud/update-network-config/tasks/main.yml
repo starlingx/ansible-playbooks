@@ -1,0 +1,58 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role updates the network configuration for rehoming on subcloud
+#
+
+- name: Check existing host route in controller-0
+  # Checking if the static route to the new system controller subnet
+  # is already configured. If it is already configured, e.g. recovery
+  # from a disaster that the system controllers are reinstalled, the
+  # static routes should not be added again.
+  shell: >-
+    source /etc/platform/openrc; system host-route-list controller-0 |
+    awk '/{{ (system_controller_subnet | ipaddr(0)).split('/')[0] }}/'
+  register: existing_route_controller_0
+
+- name: Add static route from controller-0 to system controller
+  shell: >-
+    source /etc/platform/openrc; system host-route-add controller-0
+    {{ controller_0_management_interface_result.stdout_lines[0] }}
+    {{ (system_controller_subnet | ipaddr(0)).split('/')[0] }}
+    {{ system_controller_subnet | ipaddr('prefix') }}
+    {{ management_gateway_address }}
+  when: existing_route_controller_0.stdout | length == 0
+
+- block:
+  - name: Check existing host route in controller-1
+    shell: >-
+      source /etc/platform/openrc; system host-route-list controller-1 |
+      awk '/{{ (system_controller_subnet | ipaddr(0)).split('/')[0] }}/'
+    register: existing_route_controller_1
+
+  - name: Add static route from controller-1 to system controller
+    shell: >-
+      source /etc/platform/openrc; system host-route-add controller-1
+      {{ controller_1_management_interface_result.stdout_lines[0] }}
+      {{ (system_controller_subnet | ipaddr(0)).split('/')[0] }}
+      {{ system_controller_subnet | ipaddr('prefix') }}
+      {{ management_gateway_address }}
+    when: existing_route_controller_1.stdout | length == 0
+
+  when: system_mode != 'simplex'
+
+- name: Update system controller's subnets
+  import_tasks: update_system_controller_subnet.yml
+
+- name: Modify docker no_proxy if exists
+  shell: >-
+    source /etc/platform/openrc; system service-parameter-modify
+    docker proxy no_proxy={{ docker_no_proxy_combined | join(',') }}
+  when: existing_docker_no_proxy_result.stdout | length > 0
+
+- name: Copy central registy cert
+  import_tasks: copy_central_registry_cert.yml

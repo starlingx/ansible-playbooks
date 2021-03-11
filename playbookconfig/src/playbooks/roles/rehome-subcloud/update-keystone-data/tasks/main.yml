@@ -1,0 +1,29 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role updates the openstack keystone data(Ids, passwords)
+#   in database, reloads the configurations of related services and
+#   restarts these services
+#
+
+- name: Temporarily disable lockout in keystone
+  lineinfile:
+    path: "/etc/keystone/keystone.conf"
+    regexp: "^{{ item }}"
+    state: absent
+  with_items:
+    - "lockout_failure_attempts"
+    - "lockout_duration"
+
+- name: Restart keystone service
+  command: "sm-restart service keystone"
+
+- name: Migrate keystone passwords
+  import_tasks: migrate_keystone_passwords.yml
+
+- name: Migrate keystone IDs
+  import_tasks: migrate_keystone_ids.yml

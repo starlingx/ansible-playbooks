@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020 Wind River Systems, Inc.
+# Copyright (c) 2020-21 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -60,7 +60,10 @@
     when: distributed_cloud_role == 'systemcontroller'
 
   - name: Set up subcloud admin endpoints certificates if host is a subcloud
-    include_tasks: setup_sc_adminep_certs.yml
+    include_role:
+      name: common/setup-subcloud-adminep-certs
+    vars:
+      ansible_become: yes
     when: distributed_cloud_role == 'subcloud'
 
   when: mode == 'bootstrap'
