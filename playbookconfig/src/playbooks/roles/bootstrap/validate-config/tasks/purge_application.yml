@@ -20,7 +20,7 @@
 
 - block:
   - name: Remove application
-    shell: "source /etc/platform/openrc; system application-remove {{ application }}"
+    shell: "source /etc/platform/openrc; system application-remove --force {{ application }}"
 
   - name: Wait until application is in the uploaded state
     shell: "source /etc/platform/openrc; system application-show {{ application }}
@@ -34,4 +34,4 @@
 # expect applications to be in the uploaded state now
 # because of above check leaving 2 possible states and above code eliminating "applied"
 - name: Delete application
-  shell: "source /etc/platform/openrc; system application-delete {{ application }}"
+  shell: "source /etc/platform/openrc; system application-delete --force {{ application }}"
