@@ -33,9 +33,25 @@
   when: mode != 'restore'
 
 # Create a generic namespace to be shared by deployed platform resources as needed
+# and copy default-registry-key
 - name: Create 'deployment' namespace
   shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace deployment --dry-run -o yaml |
           kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
+
+- name: Get deployment namespace default registry key
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret default-registry-key --namespace=deployment
+  failed_when: false
+  register: get_deployment_default_registry_key
+
+- name: Copy default-registry-key to deployment namespace
+  shell: >-
+    kubectl get secret default-registry-key --namespace=kube-system -o yaml
+    | sed 's/namespace: kube-system/namespace: deployment/'
+    | kubectl apply --namespace=deployment -f -
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  when: get_deployment_default_registry_key.stdout == ""
 
 # Create DC CA and set up subcloud admin endpoint certificates for bootstrap mode.
 - block:
