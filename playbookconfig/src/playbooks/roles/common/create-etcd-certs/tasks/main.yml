@@ -81,7 +81,9 @@
   when: (k8s_root_ca_cert)
 
 - block:
-  - name: Generate private key for CA
+  - name: Generate private key for kubernetes-ca
+    # Reuse this kubernetes-ca for the etcd-ca,
+    # will copy to /etc/kubernetes/pki later
     openssl_privatekey:
       path: "/etc/etcd/ca.key"
       type: RSA
@@ -89,12 +91,11 @@
       state: present
       force: true
 
-  - name: Generate CSR for CA
+  - name: Generate CSR for kubernetes-ca
     openssl_csr:
       path: "/etc/etcd/ca.csr"
       privatekey_path: "/etc/etcd/ca.key"
-      common_name: ca
-      organization_name: "Etcd CA"
+      common_name: kubernetes
       basic_constraints:
         - CA:true
         - pathlen:1
@@ -114,7 +115,7 @@
 
   when: not ca_file.stat.exists and k8s_root_ca_cert == ''
 
-- name: Generate certs signed with etcd CA certificate"
+- name: Generate certs signed with kubernetes CA certificate"
   openssl_certificate:
     path: "/etc/etcd/{{ item }}.crt"
     csr_path: "/etc/etcd/{{ item }}.csr"
