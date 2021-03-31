@@ -4,9 +4,9 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# ROLE DESCRIPTION:
-#   This role is to create static configuration and apply the puppet bootstrap
-#   manifest.
+# SUB-TASK DESCRIPTION:
+# These tasks create static configuration and apply the puppet bootstrap
+# manifest.
 
 - name: Create config workdir
   file:

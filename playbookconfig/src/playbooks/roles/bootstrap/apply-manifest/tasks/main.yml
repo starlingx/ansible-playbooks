@@ -1,0 +1,16 @@
+---
+#
+# Copyright (c) 2021 Intel, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to apply the puppet manifest.
+
+- name: Apply bootstrap manifest (only in the initial play)
+  include_tasks: apply_bootstrap_manifest.yml
+  when: not replayed
+
+- name: Apply manifest to reconfigure etcd
+  include_tasks: apply_etcd_manifest.yml
+  when: replayed and network_config_update

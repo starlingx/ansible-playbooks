@@ -20,7 +20,7 @@
     - bootstrap/prepare-env
     - { role: bootstrap/validate-config, become: yes }
     - { role: bootstrap/store-passwd, when: save_password, become: yes }
-    - { role: bootstrap/apply-bootstrap-manifest, when: not replayed, become: yes }
+    - { role: bootstrap/apply-manifest, become: yes }
     - { role: bootstrap/persist-config, become: yes }
     - { role: bootstrap/bringup-essential-services, become: yes }
     - { role: bootstrap/bringup-bootstrap-applications, become: yes }
