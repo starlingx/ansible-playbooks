@@ -137,54 +137,9 @@
     - "grubby --update-kernel={{ grub_kernel_output.stdout_lines[0] }} --args='{{ default_security_feature }}'"
     - "grubby --efi --update-kernel={{ grub_kernel_output.stdout_lines[0] }} --args='{{ default_security_feature }}'"
 
-- block:
-  - name: Resize logical volumes
-    include: resize_logical_volume.yml
-    with_items:
-    - { size: "10G", lv: "/dev/cgts-vg/pgsql-lv" }
-    - { size: "10G", lv: "/dev/cgts-vg/platform-lv" }
-    - { size: "5G", lv: "/dev/cgts-vg/etcd-lv" }
-    - { size: "16G", lv: "/dev/cgts-vg/dockerdistribution-lv" }
-    - { size: "20G", lv: "/dev/cgts-vg/backup-lv" }
-    - { size: "30G", lv: "/dev/cgts-vg/docker-lv" }
-    - { size: "10G", lv: "/dev/cgts-vg/kubelet-lv" }
-    - { size: "16G", lv: "/dev/cgts-vg/scratch-lv" }
+- name: Gather drbd status
+  command: drbd-overview
+  register: drbd_result
 
-  - name: Resize filesystems (default)
-    command: "{{ item }}"
-    failed_when: false
-    with_items:
-      - resize2fs /dev/cgts-vg/backup-lv
-      - xfs_growfs /dev/cgts-vg/docker-lv
-      - resize2fs /dev/cgts-vg/kubelet-lv
-      - resize2fs /dev/cgts-vg/scratch-lv
-
-  - name: Resize drbd filesystems (default)
-    include: resize_drbd.yml
-    with_items:
-    - { resource: "drbd-pgsql/0", device: "drbd0" }
-    - { resource: "drbd-platform/0", device: "drbd2" }
-    - { resource: "drbd-etcd/0", device: "drbd7" }
-    - { resource: "drbd-dockerdistribution/0", device: "drbd8" }
-
-  when: root_disk_size|int >= minimum_small_root_disk_size
-
-- block:
-  - name: Further resize if root disk size is larger than 240G
-    include: resize_logical_volume.yml
-    with_items:
-      - { size: "20G", lv: "/dev/cgts-vg/pgsql-lv" }
-      - { size: "25G", lv: "/dev/cgts-vg/backup-lv" }
-
-  - name: Resize filesystems
-    command: "{{ item }}"
-    failed_when: false
-    with_items:
-      - resize2fs /dev/cgts-vg/backup-lv
-
-  - name: Further resize drbd filesystems
-    include: resize_drbd.yml
-    with_items:
-    - { resource: "drbd-pgsql/0", device: "drbd0" }
-
-  when: root_disk_size|int > small_root_disk_size
+- name: Record drbd status
+  debug: var=drbd_result.stdout_lines
