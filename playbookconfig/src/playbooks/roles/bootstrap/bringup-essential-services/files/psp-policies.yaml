@@ -99,20 +99,45 @@ subjects:
   name: system:serviceaccounts:kube-system
   apiGroup: rbac.authorization.k8s.io
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubelet-kube-system-privileged-psp-user
+  namespace: kube-system
+  annotations:
+    kubernetes.io/description: 'Allow nodes to create privileged pods. Should
+      be used in combination with the NodeRestriction admission plugin to limit
+      nodes to mirror pods bound to themselves.'
+  labels:
+    addonmanager.kubernetes.io/mode: Reconcile
+    kubernetes.io/cluster-service: 'true'
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: privileged-psp-user
+subjects:
+- kind: Group
+  apiGroup: rbac.authorization.k8s.io
+  name: system:nodes
+- kind: User
+  apiGroup: rbac.authorization.k8s.io
+  # Legacy node ID
+  name: kubelet
+---
 # ClusterRoleBinding of system:serviceaccounts:kubesystem to
 # restricted-psp-user Role. Applies to all namespaces.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: kube-system-SAs-restricted-psp-users
-subjects:
-- kind: Group
-  name: system:serviceaccounts:kube-system
-  apiGroup: rbac.authorization.k8s.io
 roleRef:
    apiGroup: rbac.authorization.k8s.io
    kind: ClusterRole
    name: restricted-psp-user
+subjects:
+- kind: Group
+  name: system:serviceaccounts:kube-system
+  apiGroup: rbac.authorization.k8s.io
 ---
 # ClusterRoleBinding of system:authenticated (all
 # authenticated users) to restricted-psp-user Role.
@@ -120,12 +145,13 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: authenticated-users-restricted-psp-users
-subjects:
-- kind: Group
-  name: system:authenticated
-  apiGroup: rbac.authorization.k8s.io
 roleRef:
    apiGroup: rbac.authorization.k8s.io
    kind: ClusterRole
    name: restricted-psp-user
+subjects:
+- kind: Group
+  name: system:authenticated
+  apiGroup: rbac.authorization.k8s.io
+
 
