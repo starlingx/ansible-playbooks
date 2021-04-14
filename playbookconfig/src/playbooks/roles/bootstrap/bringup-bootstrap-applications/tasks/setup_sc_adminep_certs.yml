@@ -85,31 +85,6 @@
     kubectl --kubeconfig=/etc/kubernetes/admin.conf -n "{{ sc_adminep_ca_cert_ns }}"
     wait --for=condition=ready certificate "{{ sc_adminep_cert_secret }}" --timeout=30s
 
-- name: Extract subcloud admin endpoint certificate
-  shell: >-
-    kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret "{{ sc_adminep_cert_secret }}"
-    -n "{{ sc_adminep_ca_cert_ns }}" -o=jsonpath='{.data.tls\.crt}'
-    | base64 --decode > "{{ sc_adminep_temp_dir }}/{{ sc_adminep_cert }}"
-
-- name: Extract subcloud admin endpoint key
-  shell: >-
-    kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret "{{ sc_adminep_cert_secret }}"
-    -n "{{ sc_adminep_ca_cert_ns }}" -o=jsonpath='{.data.tls\.key}'
-    | base64 --decode > "{{ sc_adminep_temp_dir }}/{{ sc_adminep_key }}"
-
-- name: Create haproxy tls certifcate
-  shell: >-
-    cat "{{ sc_adminep_temp_dir }}/{{ sc_adminep_cert }}"
-    "{{ sc_adminep_temp_dir }}/{{ sc_adminep_key }}"
-    > "{{ sc_adminep_temp_dir }}/{{ haproxy_adminep_cert }}"
-
-- name: Install haproxy tls certficate
-  copy:
-    src: "{{ sc_adminep_temp_dir }}/{{ haproxy_adminep_cert }}"
-    dest: /etc/ssl/private
-    remote_src: yes
-    mode: 0400
-
 - name: Copy admin endpoint certficates to the shared filesystem directory
   copy:
     src: "{{ item }}"
@@ -117,7 +92,6 @@
     remote_src: yes
     mode: 0400
   with_items:
-    - "/etc/ssl/private/{{ haproxy_adminep_cert }}"
     - "/etc/pki/ca-trust/source/anchors/{{ dc_adminep_root_ca_cert }}"
 
 - name: Cleanup temporary working directory
