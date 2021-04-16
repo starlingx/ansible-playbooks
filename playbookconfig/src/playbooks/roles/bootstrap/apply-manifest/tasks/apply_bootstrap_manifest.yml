@@ -80,14 +80,14 @@
 
           helmv2_db_pw = keyring.get_password("helmv2", "database")
           if helmv2_db_pw:
-              print helmv2_db_pw
+              print(helmv2_db_pw)
               exit()
 
           os.environ['XDG_DATA_HOME'] = '/tmp'
           try:
               helmv2_db_pw = utils.generate_random_password(length=16)
               keyring.set_password("helmv2", "database", helmv2_db_pw)
-              print helmv2_db_pw
+              print(helmv2_db_pw)
           except Exception as e:
               raise Exception("Failed to generate password for helmv2:%s" % e)
           finally:
