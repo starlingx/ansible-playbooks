@@ -32,7 +32,8 @@ class CgtsClient(object):
         with open(os.devnull, "w") as fnull:
             proc = subprocess.Popen(
                 ['bash', '-c', source_command],
-                stdout=subprocess.PIPE, stderr=fnull)
+                stdout=subprocess.PIPE, stderr=fnull,
+                universal_newlines=True)
 
         for line in proc.stdout:
             key, _, value = line.partition("=")

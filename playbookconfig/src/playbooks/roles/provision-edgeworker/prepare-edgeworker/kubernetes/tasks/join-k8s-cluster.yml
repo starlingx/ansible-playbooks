@@ -50,7 +50,7 @@
       password = str(keyring.get_password("CGCS", "admin"))
       if not password:
           raise Exception("Local registry password not found.")
-      print dict(username='admin', password=password)
+      print(dict(username='admin', password=password))
     ansible_connection: local
   shell: "{{ script_content }}"
   args:

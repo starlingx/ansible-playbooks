@@ -15,15 +15,11 @@ import stat
 import subprocess
 import sys
 import time
+from six.moves.configparser import ConfigParser
 
 from netaddr import IPNetwork
 from cgtsclient import client as cgts_client
 from sysinv.common import constants as sysinv_constants
-
-try:
-    from ConfigParser import ConfigParser
-except ImportError:
-    from configparser import ConfigParser
 
 
 COMBINED_LOAD = 'All-in-one'
@@ -49,7 +45,8 @@ class CgtsClient(object):
         with open(os.devnull, "w") as fnull:
             proc = subprocess.Popen(
                 ['bash', '-c', source_command],
-                stdout=subprocess.PIPE, stderr=fnull)
+                stdout=subprocess.PIPE, stderr=fnull,
+                universal_newlines=True)
 
         for line in proc.stdout:
             key, _, value = line.partition("=")
@@ -115,7 +112,7 @@ def touch(fname):
 
 
 def is_subcloud():
-    cloud_role = CONF.get('BOOTSTRAP_CONFIG', 'DISTRIBUTED_CLOUD_ROLE', None)
+    cloud_role = CONF.get('BOOTSTRAP_CONFIG', 'DISTRIBUTED_CLOUD_ROLE')
     return cloud_role == SUBCLOUD_ROLE
 
 
@@ -914,7 +911,7 @@ def device_node_to_device_path(dev_node):
     cmd = ["find", "-L", "/dev/disk/by-path/", "-samefile", dev_node]
 
     try:
-        out = subprocess.check_output(cmd)
+        out = subprocess.check_output(cmd, universal_newlines=True)
     except subprocess.CalledProcessError as e:
         print("Could not retrieve device information: %s" % e)
         return device_path
@@ -970,7 +967,8 @@ def get_orig_install_mode():
 
     search_str = 'Display mode = t'
     try:
-        subprocess.check_call(['grep', '-q', search_str, logfile])
+        subprocess.check_call(['grep', '-q', search_str, logfile],
+                              universal_newlines=True)
         return 'text'
     except subprocess.CalledProcessError:
         return 'graphical'
@@ -1029,7 +1027,7 @@ def populate_controller_config(client):
 
 
 def wait_initial_inventory_complete(client, host):
-    for _ in range(SYSTEM_CONFIG_TIMEOUT / 10):
+    for _ in range(SYSTEM_CONFIG_TIMEOUT // 10):
         try:
             host = client.sysinv.ihost.get('controller-0')
             if host and (host.inv_state ==
