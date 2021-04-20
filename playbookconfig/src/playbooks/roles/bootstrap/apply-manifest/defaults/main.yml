@@ -2,3 +2,7 @@
 hieradata_workdir: /tmp/hieradata
 manifest_apply_log: /tmp/apply_manifest.log
 loopback_ifname: lo
+# The default disk size thresholds must align with the ones in
+#   config/.../sysinv/common/constants.py
+small_root_disk_size: 240
+minimum_small_root_disk_size: 196

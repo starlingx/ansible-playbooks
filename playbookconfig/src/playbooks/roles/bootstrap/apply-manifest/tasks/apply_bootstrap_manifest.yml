@@ -50,10 +50,11 @@
     set_fact:
       temp_ssh_config_dir: /tmp/config/ssh_config
 
-  - name: Prefetch static hieradata
+  - name: Prefetch static and system hieradata
     command: >-
       tar -C {{ hieradata_workdir }} -xpf {{ restore_data_file }} --transform='s,.*/,,'
       '{{ archive_puppet_permdir }}/*static.yaml'
+      '{{ archive_puppet_permdir }}/system.yaml'
     args:
       warn: false
 
@@ -203,12 +204,74 @@
     - "platform::etcd::params::bind_address: {{ cluster_floating_address }}"
     - "platform::etcd::params::bind_address_version: {{ etcd_listen_address_version }}"
 
+- name: Create runtime hieradata
+  file:
+    path: "{{ hieradata_workdir }}/runtime.yaml"
+    state: touch
+    owner: root
+    group: root
+    mode: 0600
+
+- block:
+  - name: Specify filesystem sizes
+    set_fact:
+      pgsql_size: 10
+      platform_size: 10
+      etcd_size: 5
+      dockerdistribution_size: 16
+      backup_size: 20
+      docker_size: 30
+      kubelet_size: 10
+      scratch_size: 16
+    when: root_disk_size|int >= minimum_small_root_disk_size
+
+  - name: Expand filesystem sizes
+    set_fact:
+      pgsql_size: 20
+      backup_size: 25
+    when: root_disk_size|int > small_root_disk_size
+
+  - name: Write filesystem settings to runtime hieradata
+    lineinfile:
+      path: "{{ hieradata_workdir }}/runtime.yaml"
+      line: "{{ item }}"
+    with_items:
+      - "platform::filesystem::backup::params::lv_size: {{ backup_size }}"
+      - "platform::filesystem::docker::params::bootstrap::lv_size: {{ docker_size }}"
+      - "platform::filesystem::kubelet::params::lv_size: {{ kubelet_size }}"
+      - "platform::filesystem::scratch::params::lv_size: {{ scratch_size }}"
+      - "platform::drbd::dockerdistribution::params::lv_size: {{ dockerdistribution_size }}"
+      - "platform::drbd::etcd::params::lv_size: {{ etcd_size }}"
+      - "platform::drbd::pgsql::params::lv_size: {{ pgsql_size }}"
+      - "platform::drbd::platform::params::lv_size: {{ platform_size }}"
+    when: root_disk_size|int >= minimum_small_root_disk_size
+  when: mode == 'bootstrap'
+
+- block:
+  - name: Read drbd settings from system hieradata
+    command: "grep 'platform::drbd::.*::params::lv_size.*' {{ hieradata_workdir }}/system.yaml"
+    register: system_file
+
+  - name: Write filesystem settings to runtime hieradata
+    lineinfile:
+      path: "{{ hieradata_workdir }}/runtime.yaml"
+      line: "{{ item }}"
+    with_items: "{{system_file.stdout_lines}}"
+
+  - name: Remove system hieradata
+    file:
+      path: "{{ hieradata_workdir }}/system.yaml"
+      state: absent
+
+  when: mode == 'restore'
+
 - name: Applying puppet bootstrap manifest
   command: >
     /usr/local/bin/puppet-manifest-apply.sh
     {{ hieradata_workdir }}
     {{ derived_network_params.controller_0_address }}
-    controller ansible_bootstrap > {{ manifest_apply_log }}
+    controller ansible_bootstrap
+    {{ hieradata_workdir }}/runtime.yaml > {{ manifest_apply_log }}
   register: bootstrap_manifest
   environment:
     INITIAL_CONFIG_PRIMARY: "true"
@@ -222,6 +285,11 @@
          before attempting to bootstrap it again. See /var/log/puppet/latest/puppet.log
          for details.
   when: bootstrap_manifest.rc != 0
+
+- name: Remove runtime hieradata
+  file:
+    path: "{{ hieradata_workdir }}/runtime.yaml"
+    state: absent
 
 - name: Ensure Puppet directory exists
   file:
