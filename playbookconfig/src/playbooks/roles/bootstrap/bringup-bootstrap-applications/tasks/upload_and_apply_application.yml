@@ -14,7 +14,7 @@
 # extract the name of the tar file
 - name: Set application tar name
   set_fact:
-    current_application_tar_name: "{{ application.keys()[0].split('/')[-1] }}"
+    current_application_tar_name: "{{ (application.keys()|list|first).split('/')[-1] }}"
 
 # we assume the application tarball comes from a build and have the following format
 # application-name-version.tgz where version is x.y-z
@@ -31,7 +31,7 @@
 - block:
   - name: Upload application
     shell: "source /etc/platform/openrc;
-            system application-upload {{ application.keys()[0] }}"
+            system application-upload {{ application.keys()|list|first }}"
     when: check_exist.stdout == ""
 
   - name: Wait until application is in the uploaded state
@@ -45,10 +45,10 @@
   - name: Apply overrides for application
     shell: "source /etc/platform/openrc; system helm-override-update {{ current_application_name }}
             {{ override_item['chart'] }} {{ override_item['namespace'] }} --values {{ override_item['values-path'] }}"
-    loop: "{{ application[application.keys()[0]]['overrides'] }}"
+    loop: "{{ application[application.keys()|list|first]['overrides'] }}"
     loop_control:
       loop_var: override_item
-    when: application[application.keys()[0]] and "overrides" in application[application.keys()[0]]
+    when: application[application.keys()|list|first] and "overrides" in application[application.keys()|list|first]
 
   - name: Apply application
     shell: "source /etc/platform/openrc; system application-apply {{ current_application_name }}"

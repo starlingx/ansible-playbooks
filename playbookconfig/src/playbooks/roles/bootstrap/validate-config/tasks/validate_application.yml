@@ -24,7 +24,7 @@
 # extract the name of the tar file
 - name: Set application tar name
   set_fact:
-    current_application_tar_name: "{{ application.keys()[0].split('/')[-1] }}"
+    current_application_tar_name: "{{ (application.keys()|list|first).split('/')[-1] }}"
 
 - name: Fail if the application tarfile is not a valid type
   fail:
@@ -33,17 +33,17 @@
 
 - name: Check appication tarfile status
   stat:
-    path: "{{ application.keys()[0] }}"
+    path: "{{ application.keys()|list|first }}"
   register: tarball_stat
 
 - name: Fail if the application tarfile doesn't exist
   fail:
-    msg: "{{ application.keys()[0] }} doesn't exist"
+    msg: "{{ application.keys()|list|first }} doesn't exist"
   when: not tarball_stat.stat.exists
 
 - name: Fail if the provided application tarfile is a directory
   fail:
-    msg: "{{ application.keys()[0] }} is a directory"
+    msg: "{{ application.keys()|list|first }} is a directory"
   when: tarball_stat.stat.exists and tarball_stat.stat.isdir
 
 - name: Fail if overrides config is incomplete
@@ -52,19 +52,19 @@
   failed_when: '"chart" not in override_item or
                 "namespace" not in override_item or
                 "values-path" not in override_item'
-  loop: "{{ application[application.keys()[0]]['overrides'] }}"
+  loop: "{{ application[application.keys()|list|first]['overrides'] }}"
   loop_control:
     loop_var: override_item
-  when: (application[application.keys()[0]]) and
-        ("overrides" in application[application.keys()[0]])
+  when: (application[application.keys()|list|first]) and
+        ("overrides" in application[application.keys()|list|first])
 
 - name: Fail if overrides file does not exist
   stat:
     path: "{{ override_item['values-path'] }}"
   register: override_stat
   failed_when: not override_stat.stat.exists
-  loop: "{{ application[application.keys()[0]]['overrides'] }}"
+  loop: "{{ application[application.keys()|list|first]['overrides'] }}"
   loop_control:
     loop_var: override_item
-  when: (application[application.keys()[0]]) and
-        ("overrides" in application[application.keys()[0]])
+  when: (application[application.keys()|list|first]) and
+        ("overrides" in application[application.keys()|list|first])
