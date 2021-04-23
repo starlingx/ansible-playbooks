@@ -17,14 +17,12 @@
 
 - name: Resize drbd resource {{ item.resource }}
   command: "drbdadm -- --assume-peer-has-space resize {{ item.resource }}"
-  failed_when: false
-  register: resize_result
 
-- name: Pause 3 seconds for drbd resize
+# Pause for 10 seconds to mimic this workaround. When moving to drbd9 this can be removed
+# https://github.com/LINBIT/drbd-utils/commit/b12e02eb8ac83aeb0a2165810d91dc3f5d20c83f
+- name: Pause 10 seconds for drbd resize
   pause:
-    seconds: 3
+    seconds: 10
 
 - name: Resize filesystem {{ item.device }}
   command: "resize2fs /dev/{{ item.device }}"
-  failed_when: false
-  when: resize_result.rc !=0
