@@ -34,6 +34,26 @@
                    (external_oam_node_0_address | ipaddr == false) or
                    (external_oam_node_1_address | ipaddr == false)
 
+    - name: Query management interface configuration
+      shell: |
+        source /etc/platform/openrc
+        system interface-network-list controller-0 --nowrap | awk '$8 == "mgmt" { print $6 }'
+      register: mgmt_if
+
+    - name: Query cluster-host interface configuration
+      shell: |
+        source /etc/platform/openrc
+        system interface-network-list controller-0 --nowrap | awk '$8 == "cluster-host" { print $6 }'
+      register: cluster_host_if
+
+    - name: Validate network interface configuration
+      fail:
+        msg: |
+          The cluster-host and management networks cannot be on the
+          loopback interface for simplex to duplex migration
+      when: mgmt_if.stdout == 'lo' or
+            cluster_host_if.stdout == 'lo'
+
     - set_fact:
         duplex_mode: "{{ duplex_mode | default('duplex') }}"
 
