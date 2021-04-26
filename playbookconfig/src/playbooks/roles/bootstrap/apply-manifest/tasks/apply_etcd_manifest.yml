@@ -17,7 +17,7 @@
 - name: Reconfigure cluster float address in static.yaml
   lineinfile:
     path: "{{ hieradata_workdir }}/static.yaml"
-    regexp: "^platform::etcd::params::bind_address"
+    regexp: "^platform::etcd::params::bind_address:"
     line: "platform::etcd::params::bind_address: {{ cluster_floating_address }}"
 
 - name: Create list of etcd classes to pass to puppet
@@ -27,11 +27,21 @@
       classes:
         - platform::etcd::init
 
+- name: Set facts derived from previous network configurations
+  set_fact:
+    prev_controller_floating_address:
+      "{{ (prev_management_subnet | ipaddr(1)).split('/')[0]
+      if prev_management_start_address == 'derived' else prev_management_start_address }}"
+
+- name: Get previous controller_0 address
+  set_fact:
+    prev_controller_0_address: "{{ prev_controller_floating_address|ipmath(1) }}"
+
 - name: Applying puppet for enabling etcd security
   command: >
     /usr/local/bin/puppet-manifest-apply.sh
     {{ hieradata_workdir }}
-    {{ derived_network_params.controller_0_address }}
+    {{ prev_controller_0_address }}
     controller runtime /tmp/etcd.yml
   register: etcd_manifest
   environment:
