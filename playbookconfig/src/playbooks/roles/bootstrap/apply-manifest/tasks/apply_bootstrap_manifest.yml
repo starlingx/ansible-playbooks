@@ -55,6 +55,7 @@
       tar -C {{ hieradata_workdir }} -xpf {{ restore_data_file }} --transform='s,.*/,,'
       '{{ archive_puppet_permdir }}/*static.yaml'
       '{{ archive_puppet_permdir }}/system.yaml'
+      '{{ archive_puppet_permdir }}/{{ derived_network_params.controller_0_address }}.yaml'
     args:
       warn: false
 
@@ -252,11 +253,25 @@
     command: "grep 'platform::drbd::.*::params::lv_size.*' {{ hieradata_workdir }}/system.yaml"
     register: system_file
 
+  - name: Read host filesystems settings from controller-0 hieradata
+    command: "grep 'platform::filesystem::.*::params::lv_size.*'
+             {{ hieradata_workdir }}/{{ derived_network_params.controller_0_address }}.yaml"
+    register: host_file
+
+  # Replace platform::filesystem::docker::params::lv_size with
+  # platform::filesystem::docker::params::bootstrap::lv_size
+  # to have similar behaviour with the bootstrap steps
+  - name: Set host_file_list
+    set_fact:
+      host_file_list: "{{ host_file.stdout_lines |
+                       map('regex_replace', '^platform::filesystem::docker::params::lv_size',
+                       'platform::filesystem::docker::params::bootstrap::lv_size') | list }}"
+
   - name: Write filesystem settings to runtime hieradata
     lineinfile:
       path: "{{ hieradata_workdir }}/runtime.yaml"
       line: "{{ item }}"
-    with_items: "{{system_file.stdout_lines}}"
+    with_items: "{{ system_file.stdout_lines + host_file_list }}"
 
   - name: Remove system hieradata
     file:
