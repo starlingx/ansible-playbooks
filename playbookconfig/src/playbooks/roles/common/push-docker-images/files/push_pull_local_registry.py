@@ -58,7 +58,11 @@ def push_from_filesystem(image):
             # as opae container runs via docker.
             # TODO: run opae with containerd.
             if not ('n3000-opae' in image):
-                client.remove_image(image)
+                if client.images(image):
+                    client.remove_image(image)
+                else:
+                    print("WARNING: Image %s was not deleted because it "
+                          "was not present into the local docker filesystem" % image)
             return image, True
         except docker.errors.APIError as e:
             print(err_msg + str(e))
