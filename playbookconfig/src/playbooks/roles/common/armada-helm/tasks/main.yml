@@ -44,6 +44,7 @@
     helm_charts_url: "http://{{ controller_floating_address | ipwrap }}:{{ helm_repo_port }}/helm_charts"
     helm_sql_connection_address: "postgresql://admin-helmv2:{{ helm_sql_database_password.stdout }}@{{
                                   controller_floating_address | ipwrap }}:5432/helmv2?sslmode=disable"
+    helm_sql_endpoint_ip: "{{ controller_floating_address | ipwrap }}"
 
 - name: Configure and launch containerized Armada
   block:
