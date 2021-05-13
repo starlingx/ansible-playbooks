@@ -98,6 +98,10 @@
     registry: "{{ item['url'] }}"
     username: "{{ item['username'] }}"
     password: "{{ item['password'] }}"
+  register: login_result
+  retries: 10
+  delay: 5
+  until: login_result is succeeded
   with_items:
     - "{{ k8s_registry }}"
     - "{{ gcr_registry }}"
@@ -128,6 +132,9 @@
 - name: Download images and push to local registry
   script: download_images.py {{ download_images }}
   register: download_images_output
+  retries: 10
+  delay: 5
+  until: download_images_output.rc == 0
   environment:
     REGISTRIES: "{{ registries | to_json }}"
 
