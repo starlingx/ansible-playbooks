@@ -187,7 +187,8 @@
     # This speeds up "Get wait tasks results" on multi-node systems
     command: >-
       kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --namespace=kube-system
-      --for=condition=Ready pods --selector {{ item }} --field-selector spec.nodeName=controller-0 --timeout=30s
+      --for=condition=Ready pods --selector {{ item }} --field-selector spec.nodeName=controller-0
+      --timeout={{ async_timeout }}s
     async: "{{ async_timeout }}"
     poll: 0
     with_items: "{{ kube_component_list }}"
@@ -197,7 +198,7 @@
     # Check the deployment status rather than the pod status in case some pods are down on other nodes
     command: >-
       kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --namespace={{ item.namespace }}
-      --for=condition=Available deployment {{ item.deployment }} --timeout=30s
+      --for=condition=Available deployment {{ item.deployment }} --timeout={{ async_timeout }}s
     async: "{{ async_timeout }}"
     poll: 0
     with_items:
