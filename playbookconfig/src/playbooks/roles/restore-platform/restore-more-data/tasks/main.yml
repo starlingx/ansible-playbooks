@@ -81,28 +81,10 @@
 
   when: migrate_platform_data is not defined or not migrate_platform_data
 
-# For subcloud, the DC root CA certificate and admin endpoint certificate need to be
-# restored from backup into /opt/platform/config directory so that
-# /etc/init.d/controller_configure will install them when controllers unlock.
+# For subcloud, the DC root CA certificate needs to be restored from backup
+# into /opt/platform/config directory and it will be installed to controllers
+# at the time when controllers are unlocked.
 - block:
-  # Restore admin endpoint certificate for DC if it exists in backup
-  - name: Check if admin endpoint certficate exists in backup config permdir (opt/platform/config)
-    command: >-
-      tar -tf {{ restore_data_file }} '{{ archive_config_permdir }}/admin-ep-cert.pem'
-    register: check_admin_cert
-    failed_when: false
-    args:
-      warn: false
-
-  - name: Restore admin endpoint certificate into config permdir (/opt/platform/config/...)
-    command: >-
-      tar -C {{ config_permdir }} -xpf {{ restore_data_file}}
-      --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/admin-ep-cert.pem'
-    args:
-      warn: false
-    when: check_admin_cert.rc is defined and
-          check_admin_cert.rc == 0
-
   # Restore admin endpoint root CA certificate for DC if it exists in backup
   - name: Check if admin endpoint root CA certficate exists in backup config permdir (opt/platform/config)
     command: >-
