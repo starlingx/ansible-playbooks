@@ -9,11 +9,6 @@
 #   finishing the rehome playbook
 #
 
-- name: Remove rehome in progress flag file
-  file:
-    path: "{{ rehome_in_progress_flag }}"
-    state: absent
-
 - name: Wait for 90 secs before check if services come up
   wait_for: timeout=90
 

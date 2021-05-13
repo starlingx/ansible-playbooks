@@ -7,4 +7,3 @@
 
 platform_path: /opt/platform
 puppet_path: /opt/platform/puppet
-rehome_in_progress_flag: /etc/platform/.rehome_in_progress

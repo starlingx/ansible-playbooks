@@ -8,30 +8,15 @@
 #   the next step.
 #
 
-- name: Check if rehome is in progress
-  stat:
-    path: "{{ rehome_in_progress_flag }}"
-  register: rehome_in_progress
-
-- name: Fail if rehome is already in progress
-  fail:
-    msg: "Rehome is already in progress!"
-  when: rehome_in_progress.stat.exists
-
 - name: Set config path facts
   set_fact:
-    keyring_permdir: "{{ platform_path + '/.keyring/' + software_version }}"
     config_permdir: "{{ platform_path + '/config/' + software_version }}"
-    sysinv_permdir: "{{ platform_path + '/sysinv/' + software_version }}"
     puppet_permdir: "{{ platform_path + '/puppet/' + software_version }}"
 
 - name: Set network facts
   set_fact:
     controller_floating_address: "{{ management_start_address }}"
-    management_subnet_prefix: "{{ management_subnet | ipaddr('prefix') }}"
-    management_broadcast: "{{ management_subnet | ipaddr('broadcast') }}"
     external_oam_node_0_address: "{{ external_oam_node_0_address | default('derived') }}"
-    external_oam_node_1_address: "{{ external_oam_node_1_address | default('derived') }}"
 
 - name: Set derived facts for subsequent tasks/roles
   set_fact:
@@ -81,8 +66,3 @@
     awk '$8 == "mgmt" { print $6 }'
   register: controller_1_management_interface_result
   when: system_mode != 'simplex'
-
-- name: Create rehome in progress flag file
-  file:
-    path: "{{ rehome_in_progress_flag }}"
-    state: touch
