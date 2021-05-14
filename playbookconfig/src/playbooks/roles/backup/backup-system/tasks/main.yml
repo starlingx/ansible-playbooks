@@ -520,7 +520,7 @@
       file:
         path: "{{ tempdir.path }}"
         state: absent
-      when: tempdir is defined
+      when: tempdir is defined and tempdir.path is defined
 
     - name: Remove the backup in progress flag file
       file:
