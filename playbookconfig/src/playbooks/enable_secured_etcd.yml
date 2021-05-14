@@ -71,6 +71,7 @@
         {{ ipaddress }}
         controller runtime /tmp/etcd.yml
       register: etcd_apply_result
+      failed_when: false
       environment:
         LC_ALL: "en_US.UTF-8"
 
