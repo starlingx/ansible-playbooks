@@ -15,6 +15,7 @@
     - { name: 'sysinv', id: "{{ system_controller_keystone_sysinv_user_id }}" }
     - { name: 'dcmanager', id: "{{ system_controller_keystone_dcmanager_user_id }}" }
   become_user: postgres
+  no_log: true
 
 - name: Migrate keystone project IDs
   script: migrate_keystone_ids.py {{ item.name }} {{ item.id }} 'project'
@@ -22,6 +23,7 @@
     - { name: 'admin', id: "{{ system_controller_keystone_admin_project_id }}" }
     - { name: 'services', id: "{{ system_controller_keystone_services_project_id }}" }
   become_user: postgres
+  no_log: true
 
   # The values updated will be applied as puppet manifest after unlock
 - name: Write required system controller keystone user and project Ids to static hieradata
@@ -43,6 +45,7 @@
     - { From: "^platform::dcmanager::bootstrap::dc_dcmanager_user_id",
         To: "platform::dcmanager::bootstrap::dc_dcmanager_user_id:
         {{ system_controller_keystone_dcmanager_user_id }}" }
+  no_log: true
 
 - name: Reload related services
   systemd:
