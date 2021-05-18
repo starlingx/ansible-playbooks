@@ -4,6 +4,10 @@ localAPIEndpoint:
   advertiseAddress: <%= @apiserver_advertise_address %>
 nodeRegistration:
   criSocket: "/var/run/containerd/containerd.sock"
+  # configure kubeadm to not apply the default
+  # taint "node-role.kubernetes.io/master:NoSchedule"
+  # to control plane nodes
+  taints: []
 ---
 apiVersion: kubeadm.k8s.io/v1beta2
 kind: ClusterConfiguration

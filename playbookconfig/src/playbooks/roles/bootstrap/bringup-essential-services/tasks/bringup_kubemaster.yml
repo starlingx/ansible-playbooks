@@ -20,7 +20,6 @@
 #   - Prepare and apply coredns config
 #   - Restrict coredns to master node and set anti-affnity (duplex system)
 #   - Restrict coredns to 1 pod (simplex system)
-#   - Remove taint from master node
 #   - Add kubelet service override
 #   - Register kubelet with pmond
 #   - Reload systemd
@@ -332,9 +331,6 @@
     when: system_mode == 'simplex'
 
   when: mode == 'bootstrap'
-
-- name: Remove taint from master node
-  shell: "kubectl --kubeconfig=/etc/kubernetes/admin.conf taint node controller-0 node-role.kubernetes.io/master- || true"
 
 - block:
   - name: Applying kubernetes plugins
