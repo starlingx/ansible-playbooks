@@ -731,8 +731,9 @@ def populate_docker_config(client):
     # previous run.
     parameters = client.sysinv.service_parameter.list()
     for parameter in parameters:
-        if (parameter.name ==
-                sysinv_constants.SERVICE_PARAM_NAME_KUBERNETES_API_SAN_LIST):
+        if (parameter.name in [
+                sysinv_constants.SERVICE_PARAM_NAME_KUBERNETES_API_SAN_LIST,
+                sysinv_constants.SERVICE_PARAM_NAME_KUBERNETES_POD_MAX_PIDS]):
             client.sysinv.service_parameter.delete(parameter.uuid)
 
     apiserver_san_list = CONF.get('BOOTSTRAP_CONFIG', 'APISERVER_SANS')
@@ -752,9 +753,27 @@ def populate_docker_config(client):
             'parameters': parameters
         }
 
-        print("Populating/Updating kubernetes config...")
+        print("Populating/Updating kubernetes san list...")
         client.sysinv.service_parameter.create(**values)
-        print("Kubernetes config completed.")
+
+    parameters = {
+        sysinv_constants.SERVICE_PARAM_NAME_KUBERNETES_POD_MAX_PIDS:
+            str(sysinv_constants.SERVICE_PARAM_KUBERNETES_POD_MAX_PIDS_DEFAULT)
+    }
+
+    values = {
+        'service': sysinv_constants.SERVICE_TYPE_KUBERNETES,
+        'section':
+            sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_CONFIG,
+        'personality': None,
+        'resource': None,
+        'parameters': parameters
+    }
+
+    print("Populating/Updating kubernetes config...")
+    client.sysinv.service_parameter.create(**values)
+
+    print("Kubernetes config completed.")
 
     parameters = client.sysinv.service_parameter.list()
 
