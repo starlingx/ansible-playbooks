@@ -8,3 +8,4 @@ ssl_ca_complete_flag: /etc/platform/.ssl_ca_complete
 region_config: no
 source_device_image_bind_dir: /opt/platform/device_images
 target_device_image_bind_dir: /www/pages/device_images
+etcd_certs_dir: "{{ config_permdir + '/etcd' }}"

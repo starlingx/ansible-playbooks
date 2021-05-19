@@ -68,6 +68,29 @@
 - include: one_time_config_tasks.yml
   when: not initial_db_populated
 
+- name: Find etcd certs files
+  find:
+    paths: "/etc/etcd"
+    patterns:
+      - '*.crt'
+      - '*.key'
+  register: etcd_certs_find_output
+
+- name: Copy etcd certificates to etcd certs directory
+  copy:
+    src: "/etc/etcd/{{ item }}"
+    dest: "{{ etcd_certs_dir }}/{{ item }}"
+    remote_src: yes
+    force: yes
+  with_items:
+    - "etcd-server.crt"
+    - "etcd-server.key"
+    - "ca.crt"
+    - "ca.key"
+    - "etcd-client.crt"
+    - "etcd-client.key"
+  when: etcd_certs_find_output.matched != 0
+
 # Banner customization is not part of one_time_config_task.yml as the user may
 # choose to change their banner look and feel and replay.
 - name: Check if custom banner exists

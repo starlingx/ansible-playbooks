@@ -98,21 +98,28 @@
     msg: Timeout waiting for system controller database configuration to complete
   when: distributed_cloud_role == 'systemcontroller'
 
-- block:
-  - name: Update sysinv with new region name
-    replace:
-      path: /etc/sysinv/sysinv.conf
-      regexp: "region_name=.*$"
-      replace: "region_name={{ region_name }}"
 
-  - name: Restart sysinv-agent and sysinv-api to pick up sysinv.conf update
-    command: "{{ item }}"
-    with_items:
-      - /etc/init.d/sysinv-agent restart
-      - /usr/lib/ocf/resource.d/platform/sysinv-api reload
-    environment:
-      OCF_ROOT: "/usr/lib/ocf"
+- name: Update sysinv with new region name
+  replace:
+    path: /etc/sysinv/sysinv.conf
+    regexp: "region_name=.*$"
+    replace: "region_name={{ region_name }}"
   when: distributed_cloud_role == 'subcloud'
+
+- name: Restart sysinv-agent and sysinv-api to pick up sysinv.conf update
+  command: "{{ item }}"
+  with_items:
+    - /etc/init.d/sysinv-agent restart
+    - /usr/lib/ocf/resource.d/platform/sysinv-api reload
+  environment:
+    OCF_ROOT: "/usr/lib/ocf"
+
+- name: Wait for sysinv inventory
+  wait_for:
+    path: /var/run/sysinv/.sysinv_reported
+    state: present
+    timeout: 600
+    msg: Timeout waiting for system inventory to complete
 
 - name: Set flag to mark the initial db population completed milestone
   file:
