@@ -54,16 +54,16 @@
       warn: false
 
   - block:
-    - name: Restart etcd
+    - name: Stop etcd
       systemd:
         name: etcd
-        state: restarted
+        state: stopped
 
     rescue:
-      - name: Etcd failed to restart, try one more time
+      - name: Etcd failed to stop, try one more time
         systemd:
           name: etcd
-          state: restarted
+          state: stopped
 
 
 - block:  # Revert configuration to loopback interface
