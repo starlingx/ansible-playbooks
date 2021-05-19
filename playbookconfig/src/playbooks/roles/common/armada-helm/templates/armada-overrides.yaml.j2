@@ -1,9 +1,9 @@
 # Overrides yaml file for armada chart
 images:
   tags:
-    api: 'registry.local:9001/quay.io/airshipit/armada:8a1638098f88d92bf799ef4934abe569789b885e-ubuntu_bionic'
+    api: 'registry.local:9001/quay.io/airshipit/armada:7ef4b8643b5ec5216a8f6726841e156c0aa54a1a-ubuntu_bionic'
     dep_check: 'registry.local:9001/quay.io/stackanetes/kubernetes-entrypoint:v0.3.1'
-    tiller: 'registry.local:9001/gcr.io/kubernetes-helm/tiller:v2.16.1'
+    tiller: 'registry.local:9001/gcr.io/kubernetes-helm/tiller:v2.16.9'
 labels:
   # Configure sane node labels values that work with armada node selector.
   # Helm v3 validation prevents null overrides.
