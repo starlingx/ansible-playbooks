@@ -110,9 +110,6 @@ def update_keystone_project_id(project_name, project_id):
             current_project_id = get_keystone_project_id(project_name, cur)
             if current_project_id != project_id:
                 try:
-                    cur.execute("SELECT id FROM public.project WHERE \
-                                 name='%s'" % project_name)
-                    old_id = cur.fetchone()
                     cur.execute("UPDATE public.assignment SET target_id='%s' FROM public.project \
                                  WHERE public.assignment.target_id=public.project.id AND \
                                  public.project.name='%s'" % (project_id, project_name))
@@ -121,9 +118,9 @@ def update_keystone_project_id(project_name, project_id):
                 except Exception as ex:
                     print("Failed to update keystone id for project: %s" % project_name)
                     raise ex
-            if old_id:
+
                 try:
-                    update_barbican_project_external_id(old_id['id'], project_id)
+                    update_barbican_project_external_id(current_project_id, project_id)
                 except Exception as ex:
                     print("Failed to update external_id in barbican db for project: %s" % project_name)
                     raise ex
