@@ -56,6 +56,7 @@
 
     - set_fact:
         duplex_mode: "{{ duplex_mode | default('duplex') }}"
+        kubernetes_duplex_migration_flag: '/var/run/.kubernetes_duplex_migration_complete'
 
     - name: Query system_mode
       shell: source /etc/platform/openrc; system show | awk '$2 == "system_mode" { print $4 }'
@@ -84,6 +85,16 @@
             (.*)Are you sure you want to continue(.*): "yes"
         failed_when: false
         when: current_system_mode.stdout == 'simplex'
+
+      # Wait up to 20 minutes for the runtime manifest triggered by the previous
+      # "system modify -m duplex" command, as there may be other runtime manifests
+      # being applied
+      - name: Wait for kubernetes duplex migration manifest completion, up to 20 minutes
+        wait_for:
+          path: "{{ kubernetes_duplex_migration_flag }}"
+          state: present
+          timeout: 1200
+          msg: Timeout waiting for kubernetes duplex migration manifest completion
 
       - name: Update OAM configuration
         shell: >-
