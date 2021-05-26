@@ -3,10 +3,12 @@
       jobs:
         - openstack-tox-linters
         - openstack-tox-pep8
+        - ansible-playbooks-tox-bandit
     gate:
       jobs:
         - openstack-tox-linters
         - openstack-tox-pep8
+        - ansible-playbooks-tox-bandit
     post:
       jobs:
         - stx-ansible-playbooks-upload-git-mirror
@@ -23,6 +25,18 @@
       - name: git_mirror_credentials
         secret: stx-ansible-playbooks-github-secret
         pass-to-parent: true
+
+- job:
+    name: ansible-playbooks-tox-bandit
+    parent: tox
+    description: |
+      Run bandit test for ansible-playbooks
+    nodeset: ubuntu-bionic
+    files:
+      - ./*
+    vars:
+      tox_envlist: bandit
+      tox_extra_args: -c ./tox.ini
 
 - secret:
     name: stx-ansible-playbooks-github-secret
