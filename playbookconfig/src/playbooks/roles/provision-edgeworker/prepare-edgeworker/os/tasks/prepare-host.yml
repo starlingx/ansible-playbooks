@@ -1,0 +1,37 @@
+---
+#
+# Copyright (c) 2021 Intel Corporation
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- name: Set http_proxy value if configured
+  set_fact:
+    http_proxy: "{{ hostvars['localhost']['http_proxy'] }}"
+  when: hostvars['localhost']['http_proxy'] is defined
+
+- name: Set https_proxy value if configured
+  set_fact:
+    https_proxy: "{{ hostvars['localhost']['https_proxy'] }}"
+  when: hostvars['localhost']['https_proxy'] is defined
+
+- name: Set no_proxy value if configured
+  set_fact:
+    no_proxy: "{{ hostvars['localhost']['no_proxy'] }}"
+  when: hostvars['localhost']['no_proxy'] is defined
+
+- name: Set docker_registry value if configured
+  set_fact:
+    docker_registry: "{{ hostvars['localhost']['docker_registry'] }}"
+  when: hostvars['localhost']['docker_registry'] is defined
+
+- name: Ensure ssh directory exists
+  file:
+    dest: "/home/{{ ansible_user }}/.ssh"
+    state: directory
+    mode: 0700
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+
+- name: Set hostname
+  hostname:
+    name: "{{ ansible_host }}"

@@ -1,0 +1,56 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role validates user input common to all B&R playbooks
+#
+- name: Set default target where backup tarball inspection takes place
+  set_fact:
+    inspection_target: "{{ inventory_hostname }}"
+
+# Set inspection target to Ansible control machine if the backup tarball
+# is off-box.
+- name: Update target if backup data are off-box
+  set_fact:
+    inspection_target: localhost
+  when: on_box_data|bool == false
+
+- block:
+  - name: Fail if backup_filename is not defined or set
+    fail:
+      msg: "Mandatory configuration parameter backup_filename is not defined or set."
+    when: backup_filename is not defined or backup_filename is none
+
+  - name: Fail if the backup file is off-box and initial_backup_dir is not specified
+    fail:
+      msg: "Parameter initial_backup_dir must be specified if the backup tar file is off box."
+    when: (initial_backup_dir is not defined or initial_backup_dir is none) and
+          (on_box_data|bool == false)
+
+  - name: Set the initial_backup_dir to /opt/platform-backup if not specified and backup file is on the host
+    set_fact:
+      initial_backup_dir: /opt/platform-backup
+    when: (initial_backup_dir is not defined or initial_backup_dir is none) and
+          (on_box_data|bool == true)
+
+  - name: Check if backup file exists
+    stat:
+      path: "{{ initial_backup_dir }}/{{ backup_filename }}"
+    register: backup_stat_result
+
+  - block:
+      - name: Fail if backup file does not exist on the target
+        fail:
+          msg: "Backup file {{ initial_backup_dir }}/{{ backup_filename }} does not exist on the target."
+        when: (on_box_data|bool == true)
+
+      - name: Fail if the backup file does not exist locally
+        fail:
+          msg: "Backup file {{ initial_backup_dir }}/{{ backup_filename }} does not exist on this machine."
+        when: (on_box_data|bool == false)
+    when: not backup_stat_result.stat.exists
+
+  delegate_to: "{{ inspection_target }}"

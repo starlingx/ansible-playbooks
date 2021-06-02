@@ -1,0 +1,8 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+additional_system_images_conf_path: /usr/share/additional-config
+additional_system_images_conf_file: additional-system-images.yml

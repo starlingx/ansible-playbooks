@@ -1,0 +1,98 @@
+---
+#
+# Copyright (c) 2020 Intel Corporation
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   Enable secured etcd.
+# This file can be removed in the release after STX5.0
+
+- hosts: all
+  become: yes
+  become_user: root
+  tasks:
+    - name: Create cert for etcd server and client
+      import_role:
+        name: common/create-etcd-certs
+
+    - name: Create etcd cert permdir
+      file:
+        path: "{{ config_permdir + '/etcd' }}"
+        state: directory
+        mode: 0700
+
+    - name: Copy etcd certificates to config_permdir
+      copy:
+        src: "/etc/etcd/{{ item }}"
+        dest: "{{ config_permdir + '/etcd' }}/{{ item }}"
+        remote_src: yes
+        force: yes
+      with_items:
+        - "etcd-server.crt"
+        - "etcd-server.key"
+        - "etcd-client.crt"
+        - "etcd-client.key"
+        - "apiserver-etcd-client.crt"
+        - "apiserver-etcd-client.key"
+        - "ca.crt"
+        - "ca.key"
+
+    - name: Copy apiserver-etcd-client cert
+      copy:
+        src: "/etc/etcd/{{ item }}"
+        dest: "/etc/kubernetes/pki/{{ item }}"
+        remote_src: yes
+        force: yes
+      with_items:
+        - "apiserver-etcd-client.crt"
+        - "apiserver-etcd-client.key"
+
+    - name: Write security settings to hieradata
+      lineinfile:
+        path: "{{ puppet_permdir }}/hieradata/static.yaml"
+        line: "{{ item }}"
+      with_items:
+        - "platform::etcd::params::security_enabled: true"
+        - "platform::etcd::params::bind_address: {{ cluster_floating_address }}"
+        - "platform::etcd::params::bind_address_version: {{ etcd_listen_address_version }}"
+
+    - name: Create list of etcd classes to pass to puppet
+      copy:
+        dest: "/tmp/etcd.yml"
+        content: |
+          classes:
+          - platform::etcd::upgrade::runtime
+
+    - name: Applying puppet for enabling etcd security
+      command: >
+        /usr/local/bin/puppet-manifest-apply.sh
+        {{ puppet_permdir }}/hieradata/
+        {{ ipaddress }}
+        controller runtime /tmp/etcd.yml
+      register: etcd_apply_result
+      failed_when: false
+      environment:
+        LC_ALL: "en_US.UTF-8"
+
+    - block:
+      - name: Remove bind address and address version
+        lineinfile:
+          dest: "{{ puppet_permdir }}/hieradata/static.yaml"
+          regexp: "{{ item }}"
+          state: absent
+        with_items:
+          - "^platform::etcd::params::bind_address"
+          - "^platform::etcd::params::bind_address_version"
+
+      - name: Revert security_enable flag
+        lineinfile:
+          dest: "{{ puppet_permdir }}/hieradata/static.yaml"
+          regexp: "^platform::etcd::params::security_enabled"
+          line: "platform::etcd::params::security_enabled: false"
+
+      - name: Fail if puppet manifest apply script returns an error
+        fail:
+          msg: >-
+               Failed to apply etcd manifest!
+      when: etcd_apply_result.rc != 0

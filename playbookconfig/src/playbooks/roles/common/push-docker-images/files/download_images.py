@@ -87,8 +87,17 @@ def download_an_image(img):
             # as opae container runs via docker.
             # TODO: run opae with containerd.
             if not ('n3000-opae' in target_img):
-                client.remove_image(target_img)
-                client.remove_image(local_img)
+                delete_warn = "WARNING: Image %s was not deleted because it was not " \
+                              "present into the local docker filesystem"
+                if client.images(target_img):
+                    client.remove_image(target_img)
+                else:
+                    print(delete_warn % target_img)
+                if client.images(local_img):
+                    client.remove_image(local_img)
+                else:
+                    print(delete_warn % local_img)
+
             return target_img, True
         except docker.errors.NotFound as e:
             print(err_msg + str(e))

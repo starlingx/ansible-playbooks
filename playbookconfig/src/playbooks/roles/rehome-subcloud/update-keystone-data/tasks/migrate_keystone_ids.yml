@@ -1,0 +1,68 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   These tasks are to migrate the keystone IDs in keystone DB and hieradata.
+#
+
+- name: Migrate keystone user IDs
+  script: migrate_keystone_ids.py {{ item.name }} {{ item.id }} 'user'
+  with_items:
+    - { name: 'admin', id: "{{ system_controller_keystone_admin_user_id }}" }
+    - { name: 'sysinv', id: "{{ system_controller_keystone_sysinv_user_id }}" }
+    - { name: 'dcmanager', id: "{{ system_controller_keystone_dcmanager_user_id }}" }
+  become_user: postgres
+  no_log: true
+
+- name: Migrate keystone project IDs
+  script: migrate_keystone_ids.py {{ item.name }} {{ item.id }} 'project'
+  with_items:
+    - { name: 'admin', id: "{{ system_controller_keystone_admin_project_id }}" }
+    - { name: 'services', id: "{{ system_controller_keystone_services_project_id }}" }
+  become_user: postgres
+  no_log: true
+
+  # The values updated will be applied as puppet manifest after unlock
+- name: Write required system controller keystone user and project Ids to static hieradata
+  lineinfile:
+    path: "{{ puppet_path }}/{{ software_version }}/hieradata/static.yaml"
+    regexp: "{{ item.From }}"
+    line: "{{ item.To }}"
+  with_items:
+    - { From: "^keystone::dc_admin_user_id",
+        To: "keystone::dc_admin_user_id: {{ system_controller_keystone_admin_user_id }}" }
+    - { From: "^keystone::dc_admin_project_id",
+        To: "keystone::dc_admin_project_id: {{ system_controller_keystone_admin_project_id }}" }
+    - { From: "^openstack::keystone::bootstrap::dc_services_project_id",
+        To: "openstack::keystone::bootstrap::dc_services_project_id:
+        {{ system_controller_keystone_services_project_id }}" }
+    - { From: "^platform::sysinv::bootstrap::dc_sysinv_user_id",
+        To: "platform::sysinv::bootstrap::dc_sysinv_user_id:
+        {{ system_controller_keystone_sysinv_user_id }}" }
+    - { From: "^platform::dcmanager::bootstrap::dc_dcmanager_user_id",
+        To: "platform::dcmanager::bootstrap::dc_dcmanager_user_id:
+        {{ system_controller_keystone_dcmanager_user_id }}" }
+  no_log: true
+
+- name: Reload related services
+  systemd:
+    name: "{{ item }}"
+    state: restarted
+  with_items:
+    - sm-api
+    - fminit
+    - fm-api
+    - sysinv-agent
+    - sw-patch-controller
+
+- name: Restart sm managed services
+  command: "sm-restart service {{ item }}"
+  with_items:
+    - lighttpd
+    - keystone
+    - sysinv-conductor
+    - fm-mgr
+    - barbican-api

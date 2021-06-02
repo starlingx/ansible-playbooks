@@ -11,7 +11,6 @@
 
 - name: Set parameters for archive paths
   set_fact:
-    archive_dc_vault_permdir: "{{ dc_vault_permdir | regex_replace('^\\/', '') }}"
     archive_platform_conf_path: "{{ platform_conf_path | regex_replace('^\\/', '') }}"
     archive_ceph_backend_flag: "{{ ceph_backend_flag | regex_replace('^\\/', '') }}"
 
@@ -82,28 +81,10 @@
 
   when: migrate_platform_data is not defined or not migrate_platform_data
 
-# For subcloud, the DC root CA certificate and admin endpoint certificate need to be
-# restored from backup into /opt/platform/config directory so that
-# /etc/init.d/controller_configure will install them when controllers unlock.
+# For subcloud, the DC root CA certificate needs to be restored from backup
+# into /opt/platform/config directory and it will be installed to controllers
+# at the time when controllers are unlocked.
 - block:
-  # Restore admin endpoint certificate for DC if it exists in backup
-  - name: Check if admin endpoint certficate exists in backup config permdir (opt/platform/config)
-    command: >-
-      tar -tf {{ restore_data_file }} '{{ archive_config_permdir }}/admin-ep-cert.pem'
-    register: check_admin_cert
-    failed_when: false
-    args:
-      warn: false
-
-  - name: Restore admin endpoint certificate into config permdir (/opt/platform/config/...)
-    command: >-
-      tar -C {{ config_permdir }} -xpf {{ restore_data_file}}
-      --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/admin-ep-cert.pem'
-    args:
-      warn: false
-    when: check_admin_cert.rc is defined and
-          check_admin_cert.rc == 0
-
   # Restore admin endpoint root CA certificate for DC if it exists in backup
   - name: Check if admin endpoint root CA certficate exists in backup config permdir (opt/platform/config)
     command: >-
@@ -294,21 +275,6 @@
 
   when: ceph_backend.rc == 0
 
-- name: Look for dc-vault filesystem
-  shell: "tar -tf {{ restore_data_file }} | grep '{{ dc_vault_permdir|basename }}'"
-  args:
-    warn: false
-  failed_when: false
-  register: search_result
-
-- name: Restore dc-vault filesystem
-  command: >-
-    tar -C / --overwrite -xpf {{ restore_data_file }}
-    {{ archive_dc_vault_permdir }}
-  args:
-    warn: false
-  when: search_result.rc == 0
-
 - name: Look for deploy files
   shell: "tar -tf {{ restore_data_file }} |
          grep {{ archive_deploy_permdir }}"
@@ -388,6 +354,7 @@
         - "{{ staging_dir }}/postgres/keystone.postgreSql.data"
         - "{{ staging_dir }}/postgres/fm.postgreSql.data"
         - "{{ staging_dir }}/postgres/barbican.postgreSql.data"
+        - "{{ staging_dir }}/postgres/helmv2.postgreSql.data"
 
     - name: Restore postgres db for DC systemcontroller
       shell: "psql -f {{ item }} {{ (item|basename).split('.')[0] }}"
@@ -493,74 +460,6 @@
         guide for next step.
     when: check_online.stdout != "online"
 
-  # Resize drbd-backed partitions
-  - block:
-    - name: Get DRBD-synced partitions
-      shell: source /etc/platform/openrc; system controllerfs-list --format yaml
-      register: controllerfs_partitions_output
-
-    # First extend the logical volumes
-    - name: Resize logical volumes (except database, dc-vault)
-      command: "lvextend -L{{ item.size }}G /dev/cgts-vg/{{ item.logical_volume }}"
-      failed_when: false
-      with_items: "{{ controllerfs_partitions_output.stdout | from_yaml }}"
-      when: item.name != "database" and item.name != "{{ dc_vault_permdir|basename }}"
-      register: lvextend_output
-
-    # In cases where we try to resize an LV to the size it already is, lvextend
-    # will throw an error, but it's not an issue so we just ignore that error.
-    - name: Fail if resize of logical volumes fail
-      fail:
-        msg: "{{ item.item }}  failed for the following reason: {{ item.stderr }}"
-      when: item.rc is defined and item.rc != 0 and
-            item.stderr is not search('matches existing size')
-      with_items: "{{ lvextend_output.results }}"
-
-    # The database LV is twice the size that is stored in sysinv (in order to support
-    # upgrades), so we resize it seperately.
-    - name: Resize database logical volume
-      command: "lvextend -L{{ (item.size*2) }}G /dev/cgts-vg/{{ item.logical_volume }}"
-      failed_when: false
-      with_items: "{{ controllerfs_partitions_output.stdout | from_yaml }}"
-      when: item.name == "database"
-      register: lvextend_database_output
-
-    - name: Fail if resize of database logical volume fails
-      fail:
-        msg: "{{ item.item }}  failed for the following reason: {{ item.stderr }}"
-      when: item.rc is defined and item.rc != 0 and
-            item.stderr is not search('matches existing size')
-      with_items: "{{ lvextend_database_output.results }}"
-
-    - name: Resize DRBD resources
-      command: "drbdadm -- --assume-peer-has-space resize all"
-
-    # Resize the filesystem on top of DRBD resources.
-    # The information about which /dev/drbd<id> corresponds to each LV is hard-coded
-    # in puppet and is not available in sysinv, so we provide a static list of devices
-    # here as well.
-    # Keep this list in sync with the device names specified in the stx-puppet repo at:
-    # puppet-manifests/src/modules/platform/manifests/drbd.pp
-    # NOTE: Only devices present in the "system controllerfs-list" command output
-    #       need to be kept in sync. Filesystem that we don't allow resizing for
-    #       (for example rabbitmq) or those that don't use the controllerfs
-    #       command (for example cephmon) don't need to be kept in sync.
-    - name: Resize DRBD filesystems
-      command: "resize2fs {{ item }}"
-      register: resize2fs_output
-      failed_when: false
-      with_items:
-        - /dev/drbd0  # postgres
-        - /dev/drbd2  # platform
-        - /dev/drbd5  # extension
-        - /dev/drbd7  # etcd
-        - /dev/drbd8  # docker-distribution
-
-    - name: Fail if resize of DRBD filesystems fail
-      fail:
-        msg: "{{ item.item }}  failed for the following reason: {{ item.stderr }}"
-      when: item.rc != 0 and item.stderr is not search('Nothing to do!')
-      with_items: "{{ resize2fs_output.results }}"
   # Restore ceph-mon data if ceph backend is configured
   - block:
     - block:
@@ -622,7 +521,7 @@
     when: check_online.stdout == "online"
 
   # Remove temporary staging area used by the copy module
-  - name: Remove {{ ansible_remote_tmp }} directory
+  - name: Remove temporary directory used to stage restore data
     file:
       path: "{{ ansible_remote_tmp }}"
       state: absent

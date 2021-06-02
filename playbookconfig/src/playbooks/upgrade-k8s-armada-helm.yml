@@ -1,0 +1,40 @@
+---
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- hosts: all
+
+  vars:
+    mode: "upgrade_k8s_armada_helm"
+    overrides_file: "/tmp/upgrade-armada-overrides.yaml"
+    playbooks_root: "/usr/share/ansible/stx-ansible/playbooks"
+
+  tasks:
+    - name: Create the upgrade overrides file
+      command: >
+        /usr/bin/sysinv-utils --debug --config-file /etc/sysinv/sysinv.conf create-host-overrides "{{ overrides_file }}"
+      become: yes
+      become_user: sysinv
+      environment:
+        HOME: /home/sysadmin
+
+    - name: Read the overrides variables
+      include_vars:
+        file: "{{ overrides_file }}"
+
+    - name: Set controller floating address
+      set_fact:
+        controller_floating_address: "{{ management_floating_address }}"
+
+    - name: Set helm repo facts
+      set_fact:
+        helm_repo_name_apps: "starlingx"
+        helm_repo_name_platform: "stx-platform"
+        helm_repo_port: 8080
+
+    - name: Upgrade to containerized Armada using Helm v3
+      import_role:
+        name: common/armada-helm

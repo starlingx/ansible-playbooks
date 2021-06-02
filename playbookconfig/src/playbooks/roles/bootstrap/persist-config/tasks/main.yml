@@ -68,6 +68,29 @@
 - include: one_time_config_tasks.yml
   when: not initial_db_populated
 
+- name: Find etcd certs files
+  find:
+    paths: "/etc/etcd"
+    patterns:
+      - '*.crt'
+      - '*.key'
+  register: etcd_certs_find_output
+
+- name: Copy etcd certificates to etcd certs directory
+  copy:
+    src: "/etc/etcd/{{ item }}"
+    dest: "{{ etcd_certs_dir }}/{{ item }}"
+    remote_src: yes
+    force: yes
+  with_items:
+    - "etcd-server.crt"
+    - "etcd-server.key"
+    - "ca.crt"
+    - "ca.key"
+    - "etcd-client.crt"
+    - "etcd-client.key"
+  when: etcd_certs_find_output.matched != 0
+
 # Banner customization is not part of one_time_config_task.yml as the user may
 # choose to change their banner look and feel and replay.
 - name: Check if custom banner exists
@@ -395,3 +418,20 @@
     when: search_result.rc == 0
 
   when: mode == 'restore'
+
+- name: Create source and target device_images bind directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: www
+    group: root
+    mode: 0755
+  with_items:
+    - "{{ source_device_image_bind_dir }}"
+    - "{{ target_device_image_bind_dir }}"
+
+- name: Bind mount on {{ target_device_image_bind_dir }}
+  # Due to deficiency of mount module, resort to command for now
+  command: mount -o bind -t ext4 {{ source_device_image_bind_dir }} {{ target_device_image_bind_dir }}
+  args:
+    warn: false

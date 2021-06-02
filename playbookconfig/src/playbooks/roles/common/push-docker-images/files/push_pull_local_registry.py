@@ -54,7 +54,15 @@ def push_from_filesystem(image):
             subprocess.check_call(["crictl", "pull", "--creds",
                                    auth_str, image])
             print("Image %s download succeeded by containerd" % image)
-            client.remove_image(image)
+            # Clean up docker images except for n3000-opae
+            # as opae container runs via docker.
+            # TODO: run opae with containerd.
+            if not ('n3000-opae' in image):
+                if client.images(image):
+                    client.remove_image(image)
+                else:
+                    print("WARNING: Image %s was not deleted because it "
+                          "was not present into the local docker filesystem" % image)
             return image, True
         except docker.errors.APIError as e:
             print(err_msg + str(e))

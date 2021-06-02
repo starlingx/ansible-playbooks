@@ -1,0 +1,137 @@
+---
+#
+# Copyright (c) 2021 Intel Corporation
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- name: Set management ip address
+  set_fact:
+    mgmt_ip_addr: "{{ hostvars['localhost']['hostname_ip_list'][ansible_host] }}"
+
+# Find the management interface name by ip
+# Search for specific ip in ipv4.address and ipv4_secondaries list
+# Sample output: mgmt_if_name: eno1
+- name: Get management network interface name
+  set_fact:
+    mgmt_if_name: "{{ item }}"
+  when: >
+    (hostvars[ansible_host]['ansible_%s' % item]|default({}))
+    .get('ipv4', {}).get('address') == mgmt_ip_addr
+    or
+    mgmt_ip_addr in ((hostvars[ansible_host]['ansible_%s' % item]|default({}))
+    .get('ipv4_secondaries'))|map(attribute='address')|list
+  with_items:
+    - "{{ ansible_interfaces }}"
+
+- name: Set systemd-networkd interface config
+  template:
+    src: 1-interface.network.j2
+    dest: /etc/systemd/network/1-interface.network
+    mode: '0644'
+
+# It's a workaround for stx-openstack neutron that
+# it mandatorily requires docker0 bridge on the host
+- name: Set systemd-networkd bridge config
+  template:
+    src: 5-bridge.netdev.j2
+    dest: /etc/systemd/network/5-bridge.netdev
+    mode: '0644'
+
+- name: Set systemd-networkd bridge address
+  template:
+    src: 5-bridge.network.j2
+    dest: /etc/systemd/network/5-bridge.network
+    mode: '0644'
+
+- name: Start systemd-networkd service
+  systemd:
+    name: systemd-networkd
+    daemon_reload: yes
+    enabled: yes
+    state: restarted
+
+- name: Read in service facts
+  service_facts:
+
+- block:
+  - name: Disable NetworkManager
+    systemd:
+      name: NetworkManager
+      enabled: no
+      state: stopped
+
+  - name: Disable NetworkManager-wait-online
+    systemd:
+      name: NetworkManager-wait-online
+      enabled: no
+      state: stopped
+
+  - name: Disable NetworkManager-dispatcher
+    systemd:
+      name: NetworkManager-dispatcher
+      enabled: no
+      state: stopped
+
+  - name: Disable network-manager
+    systemd:
+      name: network-manager
+      enabled: no
+      state: stopped
+
+  - name: Reboot edgeworker
+    reboot:
+  when: >-
+    ("NetworkManager.service" in ansible_facts.services and
+    ansible_facts.services["NetworkManager.service"].state != "stopped")
+
+- name: Set dns server for systemd-resolved
+  lineinfile:
+    dest: /etc/systemd/resolved.conf
+    state: present
+    insertbefore: EOF
+    regexp: "DNS={{ hostvars['localhost']['management_floating_address'] }}"
+    line: "DNS={{ hostvars['localhost']['management_floating_address'] }}"
+
+- name: Restart systemd-resolved service
+  systemd:
+    name: systemd-resolved
+    daemon_reload: yes
+    enabled: yes
+    state: restarted
+
+- name: Add registry.local to hosts
+  lineinfile:
+    dest: /etc/hosts
+    state: present
+    regexp: "registry.local"
+    line: "{{ hostvars['localhost']['management_floating_address'] }}        registry.local"
+
+- name: Add proxy to apt.conf.d if http_proxy is defined
+  lineinfile:
+    path: "/etc/apt/apt.conf.d/10proxy"
+    regexp: '^Acquire::http::Proxy'
+    line: 'Acquire::http::Proxy "{{ http_proxy }}";'
+    create: true
+    state: present
+  when:
+    - http_proxy is defined
+
+- name: Install ntp packages
+  apt:
+    pkg:
+    - ntp
+    update_cache: yes
+
+- name: Config ntp server
+  lineinfile:
+    dest: /etc/ntp.conf
+    state: present
+    regexp: "^server {{ hostvars['localhost']['management_floating_address'] }}"
+    line: "server {{ hostvars['localhost']['management_floating_address'] }}"
+
+- name: Start ntp service
+  systemd:
+    name: ntp
+    enabled: yes
+    daemon_reload: yes
+    state: restarted

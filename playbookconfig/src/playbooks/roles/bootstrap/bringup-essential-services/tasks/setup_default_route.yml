@@ -1,6 +1,6 @@
 ---
 #
-# copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -14,7 +14,7 @@
 
 - name: Check if the default route exists
   shell: "{{ ip_command }} route show | grep 'default via {{ external_oam_gateway_address }}'"
-  ignore_errors: yes
+  failed_when: false
   register: route_check
 
 - block:

@@ -11,6 +11,35 @@
 #
 - name: Do StarlingX backup
   block:
+    - name: Send application lifecycle notifications for pre-backup semantic check
+      script: /usr/bin/sysinv-utils notify backup-semantic-check
+      register: backup_semantic_check_notification_result
+      failed_when: false
+
+    - name: Fail if some application won't allow backup to proceed because semantic check failed.
+      fail:
+        msg: >
+          Semantic check failed for backup action from application
+          {{ backup_semantic_check_notification_result.stderr }}.
+      when: backup_semantic_check_notification_result.rc == 1
+
+    - name: Fail if there is some other/internal error when sending lifecycle hook.
+      fail:
+        msg: "Failed to run backup-semantic-check action."
+      when: backup_semantic_check_notification_result.rc == 2
+
+    - name: Send application lifecycle notifications for pre-backup action
+      script: /usr/bin/sysinv-utils notify pre-backup-action
+      register: pre_backup_notification_result
+      failed_when: false
+
+    - name: Fail if some application cannot handle the pre-backup action
+      fail:
+        msg: >
+          Pre-backup action for application
+          {{ pre_backup_notification_result.stderr }}.
+      when: pre_backup_notification_result.rc != 0
+
     - name: Generate backup_in_progress alarm
       script: fm_alarm.py "--set" "--backup"
       register: alarm_result
@@ -40,7 +69,7 @@
       args:
         warn: false
 
-    - name: Backup postgres, template1, sysinv, barbican db data
+    - name: Backup postgres, template1, sysinv, barbican, helmv2 db data
       shell: >-
         sudo -u postgres pg_dump --format=plain --inserts --disable-triggers --data-only
         {{ item }} > {{ postgres_dir.path }}/{{ item }}.postgreSql.data
@@ -51,6 +80,7 @@
         - template1
         - sysinv
         - barbican
+        - helmv2
 
     - name: Backup fm db data
       shell: >-
@@ -192,7 +222,6 @@
         - "{{ patching_permdir }}"
         - "{{ patching_repo_permdir }}"
         - "{{ extension_permdir }}"
-        - "{{ dc_vault_permdir }}"
         - "{{ deploy_permdir }}"
         - "{{ postgres_dir.path }}"
         - "{{ armada_permdir }}"
@@ -209,6 +238,18 @@
       with_items: "{{ size_output_platform.results }}"
       loop_control:
         label: "{{ item.item }}"
+
+    # For SystemController the dc-vault is part of platform but restored after controller-0 unlock
+    # Create a separate archive for it
+    - block:
+        - name: Check the size (in KiB) of directories that will be backed up for dc-vault
+          shell: "du -sh -k  {{ dc_vault_permdir }} | awk '{print $1}'"
+          register: size_output_dc_vault
+
+        - name: Estimate the total required disk size for platform backup archive
+          set_fact:
+            total_platform_size_estimation: "{{ total_platform_size_estimation|int + size_output_dc_vault.stdout|int }}"
+      when: check_dc_controller.rc == 0
 
     - name: Check the free space in the archive dir
       shell: "df -k {{ backup_dir }} --output=avail | tail -1"
@@ -291,6 +332,18 @@
 
       when: ceph_backend.stat.exists
 
+    - name: Send application lifecycle notifications for pre-etcd-backup action
+      script: /usr/bin/sysinv-utils notify pre-etcd-backup-action
+      register: pre_etcd_backup_notification_result
+      failed_when: false
+
+    - name: Fail if some application cannot handle the pre-etcd-backup action
+      fail:
+        msg: >
+          Pre-etcd-backup action failed for application
+          {{ pre_etcd_backup_notification_result.stderr }}.
+      when: pre_etcd_backup_notification_result.rc != 0
+
     - name: Create etcd snapshot temp dir
       file:
         path: "{{ tempdir.path }}/etcd-snapshot"
@@ -301,10 +354,31 @@
       set_fact:
         etcd_snapshot_file: "{{ etcd_snapshot_dir.path }}/etcd-snapshot.db"
 
+    - name: Get etcd endpoints
+      shell: |
+        source /etc/platform/openrc
+        system addrpool-list | awk '/cluster-host-subnet/{print$14}'
+      register: etcd_endpoint
+
+    - name: Wrap etcd_endpoint in [] brackets if it's an ipv6 address
+      set_fact:
+        etcd_endpoint_parsed: "{{ etcd_endpoint.stdout | ipwrap }}"
+
     - name: Create etcd snapshot
-      command: "etcdctl snapshot save {{ etcd_snapshot_file }}"
+      command: "etcdctl --endpoints https://{{ etcd_endpoint_parsed }}:2379 --cert=/etc/etcd/etcd-client.crt
+                --key=/etc/etcd/etcd-client.key --cacert=/etc/etcd/ca.crt snapshot save {{ etcd_snapshot_file }}"
       environment:
         ETCDCTL_API: 3
+
+    - name: Notify applications that etcd-backup succeeded
+      script: /usr/bin/sysinv-utils notify post-etcd-backup-action success
+      register: post_etcd_backup_notification_result
+      failed_when: false
+
+    - name: Fail if there is some other/internal error when sending lifecycle hook.
+      fail:
+        msg: "Failed to run post-etcd-backup action [{{ post_etcd_backup_notification_result.rc }}]"
+      when: post_etcd_backup_notification_result.rc != 0
 
     - name: Create temp dir for override backup file
       file:
@@ -339,19 +413,32 @@
         platform_backup_file: "{{ platform_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
         docker_local_registry_backup_file: "{{ docker_local_registry_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
         openstack_backup_file: "{{ openstack_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
+        dc_vault_backup_file: "{{ dc_vault_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
 
     - name: Set backup files absolute path
       set_fact:
         platform_backup_file_path: "{{ backup_dir }}/{{ platform_backup_file }}"
         docker_local_registry_backup_file_path: "{{ backup_dir }}/{{ docker_local_registry_backup_file }}"
         openstack_backup_file_path: "{{ backup_dir }}/{{ openstack_backup_file }}"
+        dc_vault_backup_file_path: "{{ backup_dir }}/{{ dc_vault_backup_file }}"
 
     - name: Save user uploaded images from local registry to an archive
       import_tasks: export-user-local-registry-images.yml
       vars:
         export_file_path: "{{ docker_local_registry_backup_file_path }}"
         kilo_free_size: "{{ remaining_disk_size_estimation }}"
-      when: backup_user_local_registry is defined and backup_user_local_registry
+      when: backup_user_local_registry is defined and backup_user_local_registry|bool == true
+
+    - name: Notify applications that backup succeeded
+      script: /usr/bin/sysinv-utils notify post-backup-action success
+      register: post_backup_notification_result
+      failed_when: false
+
+    - name: Fail if there is some other/internal error when sending lifecycle hook.
+      fail:
+        msg: "Failed to run post-backup action [{{ post_backup_notification_result.rc }}]"
+      when: post_backup_notification_result.rc != 0
+
 
     # Archive module has a known bug that doesn't handle empty symbolic links
     # well. Restore to tar command. Can add -P option to keep the leading
@@ -370,7 +457,6 @@
            {{ patching_permdir }} \
            {{ patching_repo_permdir }} \
            {{ extension_permdir }} \
-           {{ dc_vault_permdir }} \
            {{ deploy_permdir }} \
            {{ crushmap_file | default(\"\") }} \
            {{ etcd_snapshot_file }} \
@@ -381,6 +467,13 @@
            {{ helm_charts_permdir }} 2>/dev/null)"
       args:
         warn: false
+
+    - name: Create a tgz archive for dc-vault backup
+      shell: "tar -czf {{ dc_vault_backup_file_path }} $(ls -d \
+           {{ dc_vault_permdir }} 2>/dev/null)"
+      args:
+        warn: false
+      when: check_dc_controller.rc == 0
 
     - name: Create a tgz archive for OpenStack backup
       shell: "tar -czf {{ openstack_backup_file_path }} $(ls -d \
@@ -427,7 +520,7 @@
       file:
         path: "{{ tempdir.path }}"
         state: absent
-      when: tempdir is defined
+      when: tempdir is defined and tempdir.path is defined
 
     - name: Remove the backup in progress flag file
       file:
@@ -443,3 +536,7 @@
       fail:
         msg: "Failed to clear backup-in-progress alarm."
       when: alarm_result.rc != 0
+
+  rescue:
+    - name: Notify applications that backup failed.
+      script: /usr/bin/sysinv-utils notify post-backup-action failure

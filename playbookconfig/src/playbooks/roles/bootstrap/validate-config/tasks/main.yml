@@ -8,6 +8,12 @@
 #   This role is to validate and save host (non secure) config.
 #
 
+- name: Fail if any of the configured registry keys is unknown
+  fail:
+    msg: "Unknown registry key: '{{ item }}'. Acceptable keys are {{ known_registry_keys|join(', ') }} "
+  when: not item in known_registry_keys
+  with_items: "{{ user_defined_registry_keys }}"
+
 # error check the password section of docker registries
 # check password parameters before trying to hide the password
 # we need to do that here as opposed to with the other docker registry

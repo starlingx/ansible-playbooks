@@ -58,6 +58,31 @@
     import_role:
       name: common/push-docker-images
 
+  - name: Bring up etcd
+    systemd:
+      name: etcd
+      state: started
+
+  - name: Check if etcd-client crt was created.
+    find:
+      paths: "/etc/etcd"
+      patterns: "etcd-client.*"
+    register: etcd_client_find_output
+
+  - name: Create etcd client account for root, apiserver and enable etcd auth
+    command: "etcdctl --cert-file=$ETCD_CERT --key-file=$ETCD_KEY --ca-file=$ETCD_CA
+              --endpoint=$ETCD_ENDPOINT {{ item }}"
+    with_items:
+      - "user add root:sysadmin"
+      - "user add apiserver-etcd-client:sysadmin"
+      - "auth enable"
+    environment:
+      ETCD_ENDPOINT: "https://{{ cluster_floating_address | ipwrap }}:2379"
+      ETCD_CERT: "/etc/etcd/etcd-client.crt"
+      ETCD_KEY: "/etc/etcd/etcd-client.key"
+      ETCD_CA: "/etc/etcd/ca.crt"
+    when: etcd_client_find_output.matched != 0
+
   - name: Bring up Kubernetes master
     import_tasks: bringup_kubemaster.yml
 
@@ -147,36 +172,23 @@
         kubectl --kubeconfig=/etc/kubernetes/admin.conf scale deployment
         -n kube-system coredns --replicas={{ coredns_get_replicas.stdout }}
 
-    - name: Get the number of Kubernetes nodes to calculate async_retries value
-      # Use tail to skip the header of kubectl command, then count the line output
-      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes | tail -n +2 | wc -l
-      register: k8s_node_count
-
     - name: Override async parameters
-      # async_retries needs to scale with the number of nodes because the async
-      # kubectl wait tasks can use their full 30 second timeout for each pod they
-      # are checking. When checking a daemonset like app=multus, this means that
-      # the wait command could take up to 30s * number of nodes
-      # When this value is too short, the async task does not complete and the
-      # play fails on the "Fail if any of the Kubernetes component, Networking
-      # or Tiller pods are not ready by this time" task.
-      # The async_retries value results in a total wait time of
-      # async_retries * delay (from "Get wait task results" task below).
       set_fact:
         async_timeout: 120
-        async_retries: "{{ (k8s_node_count.stdout|int * 6)|int }}"
-      when: k8s_node_count.stdout|int > 1
 
-    - name: Wait for {{ pods_wait_time }} seconds to ensure deployments have time to scale back up
+    - name: Wait for 30 seconds to ensure deployments have time to scale back up
       wait_for:
-        timeout: "{{ pods_wait_time }}"
+        timeout: 30
 
     when: mode == 'restore'
 
   - name: Start parallel tasks to wait for Kubernetes component and Networking pods to reach ready state
+    # Only check for pods on the current host to avoid waiting for pods on downed nodes
+    # This speeds up "Get wait tasks results" on multi-node systems
     command: >-
       kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --namespace=kube-system
-      --for=condition=Ready pods --selector {{ item }} --timeout=30s
+      --for=condition=Ready pods --selector {{ item }} --field-selector spec.nodeName=controller-0
+      --timeout={{ async_timeout }}s
     async: "{{ async_timeout }}"
     poll: 0
     with_items: "{{ kube_component_list }}"
@@ -186,7 +198,7 @@
     # Check the deployment status rather than the pod status in case some pods are down on other nodes
     command: >-
       kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --namespace={{ item.namespace }}
-      --for=condition=Available deployment {{ item.deployment }} --timeout=30s
+      --for=condition=Available deployment {{ item.deployment }} --timeout={{ async_timeout }}s
     async: "{{ async_timeout }}"
     poll: 0
     with_items:
@@ -204,13 +216,6 @@
     # complete (success or failure) within 30 seconds
     retries: "{{ async_retries }}"
     delay: 6
-    # At B&R, after the restore phase, this will fail on duplex or standard systems because
-    # some of the resources that we are waiting for are replicasets and daemonsets
-    # and some pods will be launched on a different host than controller-0.
-    # Since only the controller-0 is online at this step, the rest of the pods that
-    # are on a different host will fail to start, so we only need to check that
-    # at least 1 pod from every deployment is up and running. If there are none active
-    # from a particular deployment it will be caught in the next task.
     failed_when: false
     with_items:
       - "{{ wait_for_kube_system_pods.results }}"

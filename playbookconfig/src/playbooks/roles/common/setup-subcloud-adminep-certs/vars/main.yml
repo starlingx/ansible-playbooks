@@ -1,0 +1,12 @@
+---
+# subcloud admin endpoint certificates
+sc_adminep_temp_dir: /tmp/adminep
+dc_adminep_root_ca_cert: dc-adminep-root-ca.crt
+sc_adminep_cert: sc-adminep.crt
+sc_adminep_key: sc-adminep.key
+sc_adminep_ca_cert_secret: sc-adminep-ca-certificate
+sc_adminep_cert_secret: sc-adminep-certificate
+sc_adminep_ca_cert_ns: sc-cert
+sc_adminep_cert_duration: 4320h
+sc_adminep_cert_renew_before: 720h
+setup_sc_adminep_certs_yaml: setup-sc-adminep-certs.yaml

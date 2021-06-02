@@ -67,3 +67,11 @@
 
     - name: Update SRIOV device plugin
       command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_sriovdp-daemonset.yaml"
+
+    - name: Create Coredns config file
+      template:
+        src: "roles/bootstrap/bringup-essential-services/templates/coredns.yaml.j2"
+        dest: /etc/kubernetes/update_coredns.yaml
+
+    - name: Update Coredns config map
+      command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_coredns.yaml"

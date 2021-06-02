@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020 Wind River Systems, Inc.
+# Copyright (c) 2020-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -24,11 +24,70 @@
   - set_fact:
       kubernetes_images: "{{ kubernetes_images_output.stdout_lines }}"
 
-  - include_vars:
+  - name: Read in system images list
+    include_vars:
       dir: "vars/k8s-{{ kubernetes_version }}"
       files_matching: "system-images.yml"
 
-  - name: Get the list of platform images
+  # Optional system images can be addded in {{ additional_system_images_conf_file }}
+  # under {{ additional_system_images_conf_path }}.
+  # Additional static images can be introduced in this file, e.g.
+  # additional_static_images_list:
+  #   image1_name: <registry-url>/image1:v1.0
+  #   image2_name: <registry-url>/image2:v2.0
+  # Additional static images required or a DC controller only can also be introduced
+  # in this file, e.g.
+  # additional_system_controller_static_images_list:
+  #   image3_name: <registry-url>/image3:v3.0
+  #   image4_name: <registry-url>/image4:v4.0
+  - name: Check if additional image config file exists
+    stat:
+      path: "{{ additional_system_images_conf_path + '/' + additional_system_images_conf_file }}"
+    register: additional_config_file
+
+  - name: Read in additional system images list(s) in localhost
+    include_vars:
+      file: "{{ additional_config_file.stat.path }}"
+    when: additional_config_file.stat.exists and
+          inventory_hostname == "localhost"
+
+  # When invoking the playbook remotely, the additional config file locates in the remote
+  # host may not also exist in the control host, fetch it to the control host to prevent
+  # include_vars failure.
+  - block:
+    - name: Create a temporary file on remote
+      tempfile:
+        state: file
+        prefix: "additional_images_"
+      register: additional_system_images_temp_file
+
+    - name: Fetch the additional images config in case the playbook is executed remotely
+      fetch:
+        src: "{{ additional_config_file.stat.path }}"
+        dest: "{{ additional_system_images_temp_file.path }}"
+        flat: yes
+
+    - name: Read in additional system images list(s) fetched from remote
+      include_vars:
+        file: "{{ additional_system_images_temp_file.path }}"
+
+    - name: Remove the temporary file on remote
+      file:
+        path: "{{ additional_system_images_temp_file.path }}"
+        state: absent
+      delegate_to: "{{ inventory_hostname }}"
+
+    - name: Remove override temp file on Ansible control host
+      file:
+        path: "{{ additional_system_images_temp_file.path }}"
+        state: absent
+      delegate_to: localhost
+      become: no
+
+    when: additional_config_file.stat.exists and
+          inventory_hostname != "localhost"
+
+  - name: Categorize system images
     set_fact:
       networking_images:
         - "{{ calico_cni_img }}"
@@ -45,4 +104,27 @@
         - "{{ kubernetes_entrypoint_img }}"
       storage_images:
         - "{{ snapshot_controller_img }}"
+
+  - name: Append additional static images if provisioned
+    set_fact:
+      static_images: "{{ static_images }} + [ '{{item.value}}' ]"
+    with_items: "{{ additional_static_images_list | default({})| dict2items }}"
+    when: additional_static_images_list is defined
+
+  - block:
+    - name: Append RVMC image for a DC system controller
+      set_fact:
+        static_images: "{{ static_images }} + [ '{{ rvmc_img }}' ]"
+
+    - name: Append additional static images for a DC system controller if provisioned
+      set_fact:
+        static_images: "{{ static_images }} + [ '{{item.value}}' ]"
+      with_items: "{{ additional_system_controller_static_images_list | default({})| dict2items }}"
+      when: additional_system_controller_static_images_list is defined
+
+    when: (distributed_cloud_role is defined and
+           distributed_cloud_role == 'systemcontroller') or
+          (check_dc_controller is defined and
+           check_dc_controller.rc == 0)
+
   when: kubernetes_version is defined

@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020 Wind River Systems, Inc.
+# Copyright (c) 2020-21 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -32,6 +32,27 @@
   import_tasks: test_cert_manager_creation.yml
   when: mode != 'restore'
 
+# Create a generic namespace to be shared by deployed platform resources as needed
+# and copy default-registry-key
+- name: Create 'deployment' namespace
+  shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace deployment --dry-run -o yaml |
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
+
+- name: Get deployment namespace default registry key
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret default-registry-key --namespace=deployment
+  failed_when: false
+  register: get_deployment_default_registry_key
+
+- name: Copy default-registry-key to deployment namespace
+  shell: >-
+    kubectl get secret default-registry-key --namespace=kube-system -o yaml
+    | sed 's/namespace: kube-system/namespace: deployment/'
+    | kubectl apply --namespace=deployment -f -
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  when: get_deployment_default_registry_key.stdout == ""
+
 # Create DC CA and set up subcloud admin endpoint certificates for bootstrap mode.
 - block:
   - name: Create distributed cloud CA
@@ -39,7 +60,10 @@
     when: distributed_cloud_role == 'systemcontroller'
 
   - name: Set up subcloud admin endpoints certificates if host is a subcloud
-    include_tasks: setup_sc_adminep_certs.yml
+    include_role:
+      name: common/setup-subcloud-adminep-certs
+    vars:
+      ansible_become: yes
     when: distributed_cloud_role == 'subcloud'
 
   when: mode == 'bootstrap'

@@ -1,12 +1,23 @@
 ---
 #
-# Copyright (c) 2020 Wind River Systems, Inc.
+# Copyright (c) 2020-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
-#   This role performs checks to ensure the target is combatiable for these playbooks
+#   This role performs checks to ensure the target is compatible with the playbook
+#   and is ready for the next step.
 #
+- set_fact:
+    check_system: "{{ check_system | default(false) }}"
+    check_load: "{{ check_load | default(false) }}"
+    check_bootstrap_address: "{{ check_bootstrap_address | default(false) }}"
+    check_patches: "{{ check_patches | default(false) }}"
+
+- name: Gather facts if check_bootstrap_address is turned on
+  setup:
+  when: check_bootstrap_address and bootstrap_address is defined
+
 - name: Retrieve software version number
   # lookup module does not work with /etc/build.info as it does not have ini
   # format. Resort to shell source.
@@ -27,12 +38,83 @@
     msg: "system_type is missing in /etc/platform/platform.conf"
   when: system_type_result.stdout_lines|length == 0
 
-- name: Set software version, system type config path facts
+- name: Set host software version, system type
   set_fact:
-    software_version: "{{ sw_version_result.stdout_lines[0] }}"
-    system_type: "{{ system_type_result.stdout_lines[0] }}"
+    host_software_version: "{{ sw_version_result.stdout }}"
+    host_system_type: "{{ system_type_result.stdout }}"
 
 - name: Fail if host software version is not supported by this playbook
   fail:
-    msg: "This playbook is not compatible with StarlingX software version {{ software_version }}."
-  when: software_version not in supported_release_versions
+    msg: "This playbook is not compatible with StarlingX software version {{ host_software_version }}."
+  when: host_software_version not in supported_release_versions
+
+# check_system validation, e.g. right after remote fresh install
+- name: Check if the system is ready
+  command: "systemctl is-active multi-user.target"
+  register: check_active
+  retries: 30
+  delay: 40
+  until: check_active.rc == 0
+  no_log: true
+  when: check_system
+
+# check_load validation, e.g. prior to subcloud upgrade/restore of non-Redfish subcloud
+- block:
+  - name: Fail if the host was not installed with the right software version
+    fail:
+      msg: >
+        This host is running {{ host_software_version }}. The expected software
+        version is {{ software_version }}.
+    when: host_software_version != software_version
+  when: check_load and software_version is defined
+
+# check_bootstrap_address - e.g. prior to subcloud restore of non-Redfish subcloud
+- block:
+  - set_fact:
+      ipv4_addressing: "{{ bootstrap_address | ipv4 }}"
+      ipv6_addressing: "{{ bootstrap_address | ipv6 }}"
+
+  - name: Fail if the boot address does not exist in this host (IPv4)
+    fail:
+      msg: >-
+        The specified bootstrap address {{ bootstrap_address }} does
+        not exist on this host. All IPv4 addresses existing on this
+        host are {{ ansible_all_ipv4_addresses }}.
+    when: (ipv4_addressing) and
+          (bootstrap_address not in ansible_all_ipv4_addresses)
+
+  - name: Fail if the boot address does not exist in this host (IPv6)
+    fail:
+      msg: >-
+        The specified bootstrap address {{ bootstrap_address }} does
+        not exist on this host. All IPv6 addresses existing on this
+        host are {{ ansible_all_ipv6_addresses }}.
+    when: (ipv6_addressing) and
+          (bootstrap_address not in ansible_all_ipv6_addresses)
+
+  when: check_bootstrap_address
+
+# check_patches validation - e.g. prior to subcloud restore of non-Redfish subcloud
+- block:
+  - name: Query list of applied patches on master
+    shell: sw-patch query|awk '($4 == "Applied" || $4 == "Partial-Applied") {print $1}'
+    register: master_patch_list
+    delegate_to: localhost
+
+  - name: Query list of applied patches on the target
+    shell: sw-patch query|awk '($4 == "Applied" || $4 == "Partial-Applied") {print $1}'
+    register: target_patch_list
+
+  - name: Fail if the applied patch list on target differs from that on the master
+    fail:
+      msg: >-
+        The applied patches ({{ target_patch_list.stdout_lines }}) are not the same on the
+        master ({{ master_patch_list.stdout_lines }})
+    when: target_patch_list.stdout_lines != master_patch_list.stdout_lines
+  when: check_patches
+
+# Now that the host has been validated, set the official software version, system type facts
+- name: Set software version, system type config path facts
+  set_fact:
+    software_version: "{{ host_software_version }}"
+    system_type: "{{ host_system_type }}"

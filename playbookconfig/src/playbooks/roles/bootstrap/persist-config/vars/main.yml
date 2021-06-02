@@ -6,7 +6,6 @@ default_security_feature: "nopti nospectre_v2 nospectre_v1"
 temp_ssl_ca: "/tmp/ca-cert.pem"
 ssl_ca_complete_flag: /etc/platform/.ssl_ca_complete
 region_config: no
-# The default disk size thresholds must align with the ones in
-#   config/.../sysinv/common/constants.py
-small_root_disk_size: 240
-minimum_small_root_disk_size: 181
+source_device_image_bind_dir: /opt/platform/device_images
+target_device_image_bind_dir: /www/pages/device_images
+etcd_certs_dir: "{{ config_permdir + '/etcd' }}"

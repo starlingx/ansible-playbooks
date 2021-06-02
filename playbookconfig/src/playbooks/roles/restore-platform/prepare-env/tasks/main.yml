@@ -1,26 +1,34 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
-#   This role performs following tasks:
-#     1. Retrieve the override file from the backup tarball
-#        required for the controller bootstrap.
-#     2. Verify if platform restore should proceed
+#   This role performs the following tasks:
+#     1. Validate user input.
+#     2. Verify that the target is in the right state for platform restore.
+#     3. Transfer the backup tarball to the target if it is off-box, otherwise
+#        copy it to the designated staging directory (/scratch).
+#     4. Extract the host override file from the tarball and load bootstrap
+#        parameters in memory.
+#     5. Create restore_in_progress flag.
 #
+# Note that due to Ansible mishandling of boolean values via extra-vars we are
+# adding supplementary validation here
+# See: https://github.com/ansible/ansible/issues/17193
+- name: Check for Ceph data wipe flag
+  fail:
+    msg: "wipe_ceph_osds is misconfigured. Valid value is either 'true' or 'false'"
+  when: (not wipe_ceph_osds | type_debug == 'bool') and
+        (wipe_ceph_osds != 'true') and
+        (wipe_ceph_osds != 'false')
+
+- name: Perform generic user input validation for restore
+  import_role:
+    name: backup-restore/validate-input
+
 - block:
-  - name: Fail if backup_filename is not defined or set
-    fail:
-      msg: "Mandatory configuration parameter backup_filename is not defined or set."
-    when: backup_filename is not defined or backup_filename is none
-
-  - name: Fail if initial_backup_dir is not defined or set
-    fail:
-      msg: "Mandatory configuration parameter initial_backup_dir is not defined or set."
-    when: initial_backup_dir is not defined or initial_backup_dir is none
-
   - name: Look for override backup file in the backup tarball
     shell: "tar -tf {{ initial_backup_dir }}/{{ backup_filename }} | grep '_override_backup.yml'"
     args:
@@ -28,57 +36,13 @@
     failed_when: false
     register: search_result
 
-  # Note that due to Ansible mishandling of boolean values via extra-vars we are
-  # adding supplementary validation here.
-  # See: https://github.com/ansible/ansible/issues/17193
-  - name: Check for Ceph data wipe flag
-    fail:
-      msg: "wipe_ceph_osds is misconfigured. Valid value is either 'true' or 'false'"
-    when: (not wipe_ceph_osds | type_debug == 'bool') and
-          (wipe_ceph_osds != 'true') and
-          (wipe_ceph_osds != 'false')
-
-  - block:
-    - name: Extract override file from backup tarball
-      shell: >-
-        tar -C {{ override_files_dir }} -xf {{ initial_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
-        {{ search_result.stdout_lines[0] }}
-      args:
-        warn: false
-
-    - name: Prepare to rename override file
-      set_fact:
-        override_filename: restore_platform_overrides.yml
-
-    - name: Rename override file for bootstrap
-      command: >-
-        mv -f {{ override_files_dir }}/{{ (search_result.stdout_lines[0] | basename) }}
-        {{ override_files_dir }}/{{ override_filename }}
-
-    - name: Include override data
-      include_vars: "{{ override_files_dir }}/{{ override_filename }}"
-
-    when: search_result.rc == 0
-
   - name: Fail if override file is missing
     fail:
-      msg: >-
+      msg: >
         Cannot find {{ initial_backup_dir }}/{{ backup_filename }}
         or the override file is missing in the backup tarball!
     when: search_result.rc != 0
-
-  delegate_to: localhost
-
-- name: Set archive parameters for bootstrap
-  set_fact:
-    archive_puppet_permdir: "opt/platform/puppet/{{ software_version }}/hieradata"
-    archive_ssh_config_permdir: "opt/platform/config/{{ software_version }}/ssh_config"
-    archive_config_permdir: "opt/platform/config/{{ software_version }}"
-    archive_keyring_permdir: "opt/platform/.keyring/{{ software_version }}/python_keyring"
-    archive_branding_permdir: "opt/platform/config/{{ software_version }}/branding"
-    archive_banner_permdir: "opt/platform/config/{{ software_version }}/banner/etc"
-    archive_deploy_permdir: "opt/platform/deploy/{{ software_version }}"
-    archive_helm_permdir: "opt/platform/helm/{{ software_version }}"
+  delegate_to: "{{ inspection_target }}"
 
 - block:
   # Bail if the host has been unlocked
@@ -102,24 +66,104 @@
       msg: " Restore is already in progress!"
     when: restore_in_progress.stat.exists
 
-  - name: Create {{ restore_in_progress_flag }} flag file
-    file:
-      path: "{{ restore_in_progress_flag }}"
-      state: touch
-
-  - name: For remote play set target_backup_dir to /scratch
+  # Set the restore staging directory to scratch so it's a consistent
+  # behavior regardless of where the restore playbook is executed (locally vs remotely)
+  - name: Set restore staging directory to /scratch
     set_fact:
       target_backup_dir: /scratch
-    when: inventory_hostname != "localhost"
-
-  - name: For local play set target_backup_dir to initial_backup_dir
-    set_fact:
-      target_backup_dir: "{{ initial_backup_dir }}"
-    when: inventory_hostname == "localhost"
 
   - name: Set restore file parameter
     set_fact:
       restore_data_file: "{{ target_backup_dir }}/{{ backup_filename }}"
 
+  - name: Transfer backup tarball to target if the file is off-box
+    include_role:
+      name: backup-restore/transfer-file
+    when: on_box_data|bool == false
+
+  - name: Copy the backup tarball to {{ target_backup_dir }} if the file is already on-box
+    copy:
+      src: "{{ initial_backup_dir }}/{{ backup_filename }}"
+      dest: "{{ target_backup_dir }}"
+      remote_src: yes
+    when: on_box_data|bool == true
+
+  - name: Extract override file from backup tarball
+    command: >
+      tar -C {{ target_backup_dir }} -xf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+      {{ search_result.stdout_lines[0] }}
+    register: extract_result
+    failed_when: false
+    args:
+      warn: false
+
+  - name: Fail if host override file cannot be extracted from the backup tar file
+    fail:
+      msg: >
+        Failed to extract the host override file {{ search_result.stdout_lines[0] }}.
+        If the backup tar file is not on the host that is being restored, please either
+        transfer the tar file to the target or set on_box_data parameter to false and
+        try again.
+    when: extract_result.rc != 0
+
+  - name: Prepare to rename override file
+    set_fact:
+      override_filename: restore_platform_overrides.yml
+
+  - name: Rename override file for bootstrap
+    command: >
+      mv -f {{ target_backup_dir }}/{{ (search_result.stdout_lines[0] | basename) }}
+      {{ target_backup_dir }}/{{ override_filename }}
+
+  - name: Load override data (local execution)
+    include_vars: "{{ target_backup_dir }}/{{ override_filename }}"
+    when: inventory_hostname == "localhost"
+
+  - block:
+    - name: Create a temporary file
+      tempfile:
+        state: file
+      register: host_override_tmp_file
+
+    - name: Fetch override file to temp file to Ansible control host
+      fetch:
+        src: "{{ target_backup_dir }}/{{ override_filename }}"
+        dest: "{{ host_override_tmp_file.path }}"
+        flat: yes
+
+    - name: Load override data (remote execution)
+      include_vars: "{{ host_override_tmp_file.path }}"
+
+    - name: Remove override temp file on target
+      file:
+        path: "{{ host_override_tmp_file.path }}"
+        state: absent
+      delegate_to: "{{ inventory_hostname }}"
+
+    - name: Remove override temp file on Ansible control host
+      file:
+        path: "{{ host_override_tmp_file.path }}"
+        state: absent
+      delegate_to: localhost
+      # In case the ansible user does not have sudo privilege on Ansible control machine
+      become: no
+    when: inventory_hostname != "localhost"
+
+  - name: Create {{ restore_in_progress_flag }} flag file
+    file:
+      path: "{{ restore_in_progress_flag }}"
+      state: touch
+
   become: yes
   become_user: root
+
+- name: Set archive parameters for bootstrap
+  set_fact:
+    archive_puppet_permdir: "opt/platform/puppet/{{ software_version }}/hieradata"
+    archive_ssh_config_permdir: "opt/platform/config/{{ software_version }}/ssh_config"
+    archive_config_permdir: "opt/platform/config/{{ software_version }}"
+    archive_keyring_permdir: "opt/platform/.keyring/{{ software_version }}/python_keyring"
+    archive_branding_permdir: "opt/platform/config/{{ software_version }}/branding"
+    archive_banner_permdir: "opt/platform/config/{{ software_version }}/banner/etc"
+    archive_deploy_permdir: "opt/platform/deploy/{{ software_version }}"
+    archive_helm_permdir: "opt/platform/helm/{{ software_version }}"

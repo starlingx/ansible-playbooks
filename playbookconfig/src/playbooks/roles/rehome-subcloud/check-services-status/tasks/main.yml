@@ -1,0 +1,23 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role checks related services are all enabled-active before
+#   finishing the rehome playbook
+#
+
+- name: Wait for 90 secs before check if services come up
+  wait_for: timeout=90
+
+- name: Check all services are enabled-active
+  shell: >-
+    source /etc/platform/openrc; system service-list
+    | awk 'FNR >= 4 { print $8 }'
+    | grep -v "enabled-active" | wc -l
+  register: service_status_result
+  until: service_status_result.stdout == "1"
+  retries: 5
+  delay: 30

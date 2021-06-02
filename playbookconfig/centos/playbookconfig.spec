@@ -33,6 +33,7 @@ This package contains playbooks used for configuring StarlingX.
 
 %install
 make install DESTDIR=%{buildroot}%{local_stx_ansible_dir}
+chmod 755 %{buildroot}%{local_stx_ansible_dir}/playbooks/roles/rehome-subcloud/update-keystone-data/files/validate_keystone_passwords.sh
 
 %post
 cp %{local_stx_ansible_dir}/playbooks/ansible.cfg %{local_etc_ansible}

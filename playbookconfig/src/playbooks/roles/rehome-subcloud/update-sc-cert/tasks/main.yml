@@ -1,0 +1,45 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role updates the certificates for https enabled admin endpoints on a subcloud
+#
+
+- name: Get sc_adminep_ca_cert namespaces
+  shell: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf get namespaces |
+    awk '/{{ sc_adminep_ca_cert_ns }}/{print$1}'
+  register: get_sc_adminep_ca_cert_ns
+
+- name: Remove sc-cert namespace if exists
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf delete ns
+    "{{ sc_adminep_ca_cert_ns }}"
+  when: get_sc_adminep_ca_cert_ns
+
+- name: Set up subcloud admin endpoints certificates
+  import_role:
+    name: common/setup-subcloud-adminep-certs
+  vars:
+    ansible_become: yes
+
+- name: Create dc_root_ca runtime class to pass to puppet
+  copy:
+    dest: "/tmp/dc_root_ca.yml"
+    content: |
+      classes:
+      - platform::config::dc_root_ca::runtime
+      - platform::haproxy::restart::runtime
+
+- name: Applying puppet runtime manifest
+  command: >
+    /usr/local/bin/puppet-manifest-apply.sh
+    {{ puppet_permdir }}/hieradata
+    {{ derived_network_params.controller_0_address }}
+    controller runtime /tmp/dc_root_ca.yml
+  register: dc_root_ca_apply_result
+  environment:
+    LC_ALL: "en_US.UTF-8"
