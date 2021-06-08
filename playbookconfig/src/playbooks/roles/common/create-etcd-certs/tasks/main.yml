@@ -97,7 +97,7 @@
       privatekey_path: "/etc/etcd/ca.key"
       common_name: kubernetes
       basic_constraints:
-        - CA:true
+        - CA:TRUE
         - pathlen:1
       basic_constraints_critical: True
       key_usage:
