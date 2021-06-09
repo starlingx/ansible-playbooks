@@ -1,14 +1,14 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
-#   This role is to restore the CEPH Monitor data
+#   This role is to restore the Ceph cluster data
 
 
-- name: Restore CEPH Monitor data
+- name: Restore Ceph cluster data
   block:
 
     # Check if Ceph osd partitions are present
@@ -185,6 +185,12 @@
       wait_for:
         timeout: "{{ ceph_wait_time }}"
       when: restore_system_mode != 'simplex'
+
+    - name: Check and recover CephFs filesystem
+      script: recover_cephfs.sh
+      register: cephfs_recovery_out
+
+    - debug: var=cephfs_recovery_out.stdout_lines
 
     - name: Restart ceph one more time to pick latest changes
       command: /etc/init.d/ceph restart
