@@ -29,6 +29,11 @@
     set_fact:
       ansible_port: "{{ ansible_port | default(22) }}"
 
+  - name: Format the ansible host if it is an IP address
+    set_fact:
+      ansible_host: "{{ ansible_host | ipaddr }}"
+    when: ansible_host | ipaddr
+
   - name: Update SSH known hosts
     lineinfile:
       path: ~/.ssh/known_hosts
