@@ -47,22 +47,11 @@
         {{ system_controller_keystone_dcmanager_user_id }}" }
   no_log: true
 
-- name: Reload related services
-  systemd:
-    name: "{{ item }}"
-    state: restarted
-  with_items:
-    - sm-api
-    - fminit
-    - fm-api
-    - sysinv-agent
-    - sw-patch-controller
-
-- name: Restart sm managed services
-  command: "sm-restart service {{ item }}"
-  with_items:
-    - lighttpd
-    - keystone
-    - sysinv-conductor
-    - fm-mgr
-    - barbican-api
+- name: Apply puppet subcloud rehome manifest
+  command: >
+    /usr/local/bin/puppet-manifest-apply.sh
+    {{ puppet_permdir }}/hieradata
+    {{ derived_network_params.controller_0_address }}
+    controller subcloud_rehome
+  environment:
+    LC_ALL: "en_US.UTF-8"

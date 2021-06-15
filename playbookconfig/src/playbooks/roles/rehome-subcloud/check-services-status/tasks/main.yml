@@ -9,9 +9,6 @@
 #   finishing the rehome playbook
 #
 
-- name: Wait for 90 secs before check if services come up
-  wait_for: timeout=90
-
 - name: Check all services are enabled-active
   shell: >-
     source /etc/platform/openrc; system service-list
