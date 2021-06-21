@@ -110,7 +110,6 @@
   command: "{{ item }}"
   with_items:
     - "grubby --update-kernel={{ grub_kernel_output.stdout_lines[0] }} --args='{{ default_security_feature }}'"
-    - "grubby --efi --update-kernel={{ grub_kernel_output.stdout_lines[0] }} --args='{{ default_security_feature }}'"
 
 - name: Gather drbd status
   command: drbd-overview
