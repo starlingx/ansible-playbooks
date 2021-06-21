@@ -66,52 +66,6 @@
       warn: false
     when: migrate_platform_data is defined and migrate_platform_data
 
-  # The helmv2 database is new in the release stx5.0. The AIO-SX
-  # upgrade from stx4.0 to stx5.0 requires a password to be generated
-  # and written into hieradata to access the DB. This can be removed
-  # in the release that follows stx5.0
-  - block:
-    - name: Generate helmv2 database password and store in keyring
-      vars:
-        script_content: |
-          import keyring
-          import os
-          from sysinv.common import utils
-
-          helmv2_db_pw = keyring.get_password("helmv2", "database")
-          if helmv2_db_pw:
-              print helmv2_db_pw
-              exit()
-
-          os.environ['XDG_DATA_HOME'] = '/tmp'
-          try:
-              helmv2_db_pw = utils.generate_random_password(length=16)
-              keyring.set_password("helmv2", "database", helmv2_db_pw)
-              print helmv2_db_pw
-          except Exception as e:
-              raise Exception("Failed to generate password for helmv2:%s" % e)
-          finally:
-              del os.environ['XDG_DATA_HOME']
-      shell: "{{ script_content }}"
-      args:
-        executable: /usr/bin/python
-      register: helmv2_db_pw_output
-      no_log: true
-
-    - name: Write helmv2 database username to hieradata
-      lineinfile:
-        path: "{{ hieradata_workdir }}/static.yaml"
-        line: "platform::helm::v2::db::postgresql::user: admin-helmv2"
-
-    - name: Write helmv2 database password to hieradata
-      lineinfile:
-        path: "{{ hieradata_workdir }}/secure_static.yaml"
-        line: "platform::helm::v2::db::postgresql::password: {{ helmv2_db_pw_output.stdout }}"
-
-    when: (migrate_platform_data is defined and
-           migrate_platform_data and
-           upgrade_metadata.from_release == "20.06")
-
   - name: Restore etcd certificates.
     shell: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
     args:
@@ -127,31 +81,6 @@
         - '*.crt'
         - '*.key'
     register: etcd_certs_find_output
-
-    # This is for simplex upgrade from STX 4.0 to 5.0
-  - block:
-    - name: set kubeadm_pki_dir
-      set_fact:
-        kubeadm_pki_dir: /etc/kubernetes/pki
-
-    - name: Create pki directory for kubernetes certificates
-      file:
-        path: "{{ kubeadm_pki_dir }}"
-        state: directory
-        mode: 0700
-
-    - name: Restore CA
-      shell: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
-      args:
-        warn: false
-      with_items:
-        - "{{ kubeadm_pki_dir | regex_replace('^\\/', '') }}"
-      become_user: root
-
-    - name: Create certs for etcd server and client for simplex upgrade
-      import_role:
-        name: common/create-etcd-certs
-    when: etcd_certs_find_output.matched == 0
 
   - name: Check if apiserver-keys are present in the backup tarball
     shell: "tar -tf {{ restore_data_file }} | grep 'etc/kubernetes/pki/apiserver-etcd-client.*'"
