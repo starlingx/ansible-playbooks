@@ -71,13 +71,12 @@
 
 - name: copy user specified CA
   copy:
-    src: "{{ item }}"
-    dest: "/etc/etcd/{{ item }}"
-    remote_src: yes
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
     force: yes
   with_items:
-    - "{{k8s_root_ca_cert}}"
-    - "{{k8s_root_ca_key}}"
+    - { src: "{{ k8s_root_ca_cert }}", dest: "/etc/etcd/ca.crt" }
+    - { src: "{{ k8s_root_ca_key }}", dest: "/etc/etcd/ca.key" }
   when: (k8s_root_ca_cert)
 
 - block:
