@@ -14,8 +14,10 @@ import json
 import keyring
 import subprocess
 
-MAX_DOWNLOAD_ATTEMPTS = 3
 MAX_DOWNLOAD_THREAD = 5
+MAX_FAILED_DOWNLOADS = 5
+
+num_failed_downloads = 0
 
 DEFAULT_REGISTRIES = {
     'docker.io': 'docker.io',
@@ -73,49 +75,42 @@ def download_an_image(img):
     except docker.errors.APIError as e:
         print(str(e))
         print("Image {} not found on local registry, attempt to download...".format(target_img))
-        for i in range(MAX_DOWNLOAD_ATTEMPTS):
-            try:
-                client.pull(target_img)
-                print("Image download succeeded: %s" % target_img)
-                client.tag(target_img, local_img)
-                client.push(local_img, auth_config=auth)
-                print("Image push succeeded: %s" % local_img)
+        # pull if not already too many failed downloads
+        if num_failed_downloads > MAX_FAILED_DOWNLOADS:
+            print("Too many failed downloads {}, skipping {}".format(
+                  num_failed_downloads, target_img))
+            return target_img, False
+        try:
+            client.pull(target_img)
+            print("Image download succeeded: %s" % target_img)
+            client.tag(target_img, local_img)
+            client.push(local_img, auth_config=auth)
+            print("Image push succeeded: %s" % local_img)
 
-                auth_str = '{0}:{1}'.format(auth['username'], auth['password'])
-                subprocess.check_call(["crictl", "pull", "--creds", auth_str,
-                                       local_img])
-                print("Image %s download succeeded by containerd" % target_img)
-                # Clean up docker images except for n3000-opae
-                # as opae container runs via docker.
-                # TODO: run opae with containerd.
-                if not ('n3000-opae' in target_img):
-                    delete_warn = "WARNING: Image %s was not deleted because" \
-                                  " it was not present into the local docker" \
-                                  " filesystem"
-                    if client.images(target_img):
-                        client.remove_image(target_img)
-                    else:
-                        print(delete_warn % target_img)
-                    if client.images(local_img):
-                        client.remove_image(local_img)
-                    else:
-                        print(delete_warn % local_img)
+            auth_str = '{0}:{1}'.format(auth['username'], auth['password'])
+            subprocess.check_call(["crictl", "pull", "--creds", auth_str,
+                                   local_img])
+            print("Image %s download succeeded by containerd" % target_img)
+            # Clean up docker images except for n3000-opae
+            # as opae container runs via docker.
+            # TODO: run opae with containerd.
+            if not ('n3000-opae' in target_img):
+                delete_warn = "WARNING: Image %s was not deleted because" \
+                              " it was not present into the local docker" \
+                              " filesystem"
+                if client.images(target_img):
+                    client.remove_image(target_img)
+                else:
+                    print(delete_warn % target_img)
+                if client.images(local_img):
+                    client.remove_image(local_img)
+                else:
+                    print(delete_warn % local_img)
 
-                return target_img, True
-            except docker.errors.NotFound as e:
-                print(err_msg + str(e))
-                return target_img, False
-            except docker.errors.APIError as e:
-                print(err_msg + str(e))
-                if "no basic auth credentials" in str(e):
-                    return target_img, False
-            except Exception as e:
-                print(err_msg + str(e))
-
-            print("Sleep 20s before retry downloading image %s ..." % target_img)
-            time.sleep(20)
-
-    return target_img, False
+            return target_img, True
+        except Exception as e:
+            print(err_msg + str(e))
+            return target_img, False
 
 
 def get_img_tag_with_registry(pub_img):
@@ -132,6 +127,7 @@ def get_img_tag_with_registry(pub_img):
 
 
 def download_images(images):
+    global num_failed_downloads
     failed_images = []
     threads = min(MAX_DOWNLOAD_THREAD, len(images))
 
@@ -139,6 +135,7 @@ def download_images(images):
     for img, success in pool.imap(download_an_image, images):
         if not success:
             failed_images.append(img)
+            num_failed_downloads += 1
     return failed_images
 
 
