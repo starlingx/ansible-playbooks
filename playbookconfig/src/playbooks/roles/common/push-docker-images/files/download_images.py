@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -63,54 +63,57 @@ def download_an_image(img):
     local_img = 'registry.local:9001/' + new_img
     err_msg = " Image download failed: %s" % target_img
 
-    for i in range(MAX_DOWNLOAD_ATTEMPTS):
-        try:
-            client = docker.APIClient()
-            client.pull(target_img)
-            print("Image download succeeded: %s" % target_img)
-            client.tag(target_img, local_img)
-            # admin password may be changed by openstack client in parallel.
-            # So we cannot cache auth info, need refresh it each time.
-            auth = get_local_registry_auth()
-            client.push(local_img, auth_config=auth)
-            print("Image push succeeded: %s" % local_img)
-            # due to crictl doesn't support push function, docker client is used
-            # to pull and push image to local registry, then crictl download image
-            # from local registry.
-            # admin password may be changed by openstack client in parallel.
-            # So we cannot cache auth info, need refresh it each time.
-            auth = get_local_registry_auth()
-            auth_str = '{0}:{1}'.format(auth['username'], auth['password'])
-            subprocess.check_call(["crictl", "pull", "--creds", auth_str, local_img])
-            print("Image %s download succeeded by containerd" % target_img)
-            # Clean up docker images except for n3000-opae
-            # as opae container runs via docker.
-            # TODO: run opae with containerd.
-            if not ('n3000-opae' in target_img):
-                delete_warn = "WARNING: Image %s was not deleted because it was not " \
-                              "present into the local docker filesystem"
-                if client.images(target_img):
-                    client.remove_image(target_img)
-                else:
-                    print(delete_warn % target_img)
-                if client.images(local_img):
-                    client.remove_image(local_img)
-                else:
-                    print(delete_warn % local_img)
+    client = docker.APIClient()
+    auth = get_local_registry_auth()
+    try:
+        client.inspect_distribution(local_img, auth_config=auth)
+        print("Image {} found on local registry".format(target_img))
 
-            return target_img, True
-        except docker.errors.NotFound as e:
-            print(err_msg + str(e))
-            return target_img, False
-        except docker.errors.APIError as e:
-            print(err_msg + str(e))
-            if "no basic auth credentials" in str(e):
+        return target_img, True
+    except docker.errors.APIError as e:
+        print(str(e))
+        print("Image {} not found on local registry, attempt to download...".format(target_img))
+        for i in range(MAX_DOWNLOAD_ATTEMPTS):
+            try:
+                client.pull(target_img)
+                print("Image download succeeded: %s" % target_img)
+                client.tag(target_img, local_img)
+                client.push(local_img, auth_config=auth)
+                print("Image push succeeded: %s" % local_img)
+
+                auth_str = '{0}:{1}'.format(auth['username'], auth['password'])
+                subprocess.check_call(["crictl", "pull", "--creds", auth_str,
+                                       local_img])
+                print("Image %s download succeeded by containerd" % target_img)
+                # Clean up docker images except for n3000-opae
+                # as opae container runs via docker.
+                # TODO: run opae with containerd.
+                if not ('n3000-opae' in target_img):
+                    delete_warn = "WARNING: Image %s was not deleted because" \
+                                  " it was not present into the local docker" \
+                                  " filesystem"
+                    if client.images(target_img):
+                        client.remove_image(target_img)
+                    else:
+                        print(delete_warn % target_img)
+                    if client.images(local_img):
+                        client.remove_image(local_img)
+                    else:
+                        print(delete_warn % local_img)
+
+                return target_img, True
+            except docker.errors.NotFound as e:
+                print(err_msg + str(e))
                 return target_img, False
-        except Exception as e:
-            print(err_msg + str(e))
+            except docker.errors.APIError as e:
+                print(err_msg + str(e))
+                if "no basic auth credentials" in str(e):
+                    return target_img, False
+            except Exception as e:
+                print(err_msg + str(e))
 
-        print("Sleep 20s before retry downloading image %s ..." % target_img)
-        time.sleep(20)
+            print("Sleep 20s before retry downloading image %s ..." % target_img)
+            time.sleep(20)
 
     return target_img, False
 
