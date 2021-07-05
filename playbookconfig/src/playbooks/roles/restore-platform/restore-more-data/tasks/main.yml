@@ -13,6 +13,7 @@
   set_fact:
     archive_platform_conf_path: "{{ platform_conf_path | regex_replace('^\\/', '') }}"
     archive_ceph_backend_flag: "{{ ceph_backend_flag | regex_replace('^\\/', '') }}"
+    archive_fernet_keys_permdir: "{{ fernet_keys_permdir | regex_replace('^\\/', '') }}"
 
 # User postgres needs access files in this folder during restore
 # Permissions will be set back to 0750 when host is unlocked
@@ -372,6 +373,21 @@
     when: migrate_platform_data is not defined or not migrate_platform_data
 
   - block:
+    - name: Check if fernet keys directory exists in the backup tarball
+      command: tar -tf {{ restore_data_file }} {{ archive_fernet_keys_permdir }}
+      register: check_fernet_keys_dir
+      failed_when: false
+      args:
+        warn: false
+
+    - name: Migrate fernet keys
+      command: >-
+        tar -C {{ fernet_keys_permdir }} -xpf {{ restore_data_file }} --overwrite
+        --transform='s,.*/,,' {{ archive_fernet_keys_permdir }}/*
+      args:
+        warn: false
+      when: check_fernet_keys_dir.rc == 0
+
     - name: Migrate databases and platform data
       command: "upgrade_controller_simplex {{ restore_data_file }}"
       register: migration_output

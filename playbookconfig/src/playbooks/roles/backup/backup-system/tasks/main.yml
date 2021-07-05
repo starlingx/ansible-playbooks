@@ -228,6 +228,7 @@
         - "{{ helm_charts_permdir }}"
         - "{{ helm_overrides_permdir }}"
         - "{{ helm_overrides_dir.path }}"
+        - "{{ fernet_keys_permdir }}"
       register: size_output_platform
 
     # Estimate the backup size. We add 128M overhead for things like ceph crushmap,
@@ -464,7 +465,8 @@
            {{ postgres_dir.path }} \
            {{ armada_permdir }} \
            {{ helm_overrides_permdir }} \
-           {{ helm_charts_permdir }} 2>/dev/null)"
+           {{ helm_charts_permdir }} \
+           {{ fernet_keys_permdir }} 2>/dev/null)"
       args:
         warn: false
 

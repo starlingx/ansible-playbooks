@@ -76,6 +76,7 @@
     extension_permdir: "/opt/extension"
     dc_vault_permdir: "/opt/dc-vault"
     extra_permdir: "{{ platform_path }}/extra"
+    fernet_keys_permdir: "{{ platform_path }}/keystone/fernet-keys"
 
 - name: Check if ceph is configured
   stat:

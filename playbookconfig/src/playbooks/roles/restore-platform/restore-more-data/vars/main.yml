@@ -5,6 +5,7 @@ helm_charts_permdir: /opt/platform/helm_charts
 extension_permdir: /opt/extension
 dc_vault_permdir: /opt/dc-vault
 ldap_permdir: /var/lib/openldap-data
+fernet_keys_permdir: /opt/platform/keystone/fernet-keys
 crushmap_file: crushmap.bin.backup
 skip_ceph_osds_wipe_flag: /etc/platform/.skip_ceph_osds_wipe
 
