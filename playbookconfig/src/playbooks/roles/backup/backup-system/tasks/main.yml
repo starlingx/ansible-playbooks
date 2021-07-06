@@ -12,7 +12,7 @@
 - name: Do StarlingX backup
   block:
     - name: Send application lifecycle notifications for pre-backup semantic check
-      script: /usr/bin/sysinv-utils notify backup-semantic-check
+      command: /usr/bin/sysinv-utils notify backup-semantic-check
       register: backup_semantic_check_notification_result
       failed_when: false
 
@@ -29,7 +29,7 @@
       when: backup_semantic_check_notification_result.rc == 2
 
     - name: Send application lifecycle notifications for pre-backup action
-      script: /usr/bin/sysinv-utils notify pre-backup-action
+      command: /usr/bin/sysinv-utils notify pre-backup-action
       register: pre_backup_notification_result
       failed_when: false
 
@@ -333,7 +333,7 @@
       when: ceph_backend.stat.exists
 
     - name: Send application lifecycle notifications for pre-etcd-backup action
-      script: /usr/bin/sysinv-utils notify pre-etcd-backup-action
+      command: /usr/bin/sysinv-utils notify pre-etcd-backup-action
       register: pre_etcd_backup_notification_result
       failed_when: false
 
@@ -371,7 +371,7 @@
         ETCDCTL_API: 3
 
     - name: Notify applications that etcd-backup succeeded
-      script: /usr/bin/sysinv-utils notify post-etcd-backup-action success
+      command: /usr/bin/sysinv-utils notify post-etcd-backup-action success
       register: post_etcd_backup_notification_result
       failed_when: false
 
@@ -430,7 +430,7 @@
       when: backup_user_local_registry is defined and backup_user_local_registry|bool == true
 
     - name: Notify applications that backup succeeded
-      script: /usr/bin/sysinv-utils notify post-backup-action success
+      command: /usr/bin/sysinv-utils notify post-backup-action success
       register: post_backup_notification_result
       failed_when: false
 
@@ -539,4 +539,4 @@
 
   rescue:
     - name: Notify applications that backup failed.
-      script: /usr/bin/sysinv-utils notify post-backup-action failure
+      command: /usr/bin/sysinv-utils notify post-backup-action failure
