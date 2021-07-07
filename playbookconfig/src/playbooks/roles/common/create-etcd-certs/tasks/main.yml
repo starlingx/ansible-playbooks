@@ -28,6 +28,7 @@
     common_name: "{{ item }}"
     key_usage:
       - digitalSignature
+      - keyEncipherment
     extended_key_usage:
       - serverAuth
       - clientAuth
