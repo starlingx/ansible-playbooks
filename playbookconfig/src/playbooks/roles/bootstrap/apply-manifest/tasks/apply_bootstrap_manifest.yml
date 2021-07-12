@@ -146,7 +146,6 @@
     path: "{{ hieradata_workdir }}/static.yaml"
     line: "{{ item }}"
   with_items:
-    - "platform::etcd::params::security_enabled: true"
     - "platform::etcd::params::bind_address: {{ cluster_floating_address }}"
     - "platform::etcd::params::bind_address_version: {{ etcd_listen_address_version }}"
 

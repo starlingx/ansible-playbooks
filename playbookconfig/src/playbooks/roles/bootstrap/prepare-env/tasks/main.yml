@@ -197,11 +197,13 @@
     docker_https_proxy: "{{ docker_https_proxy | default('undef') }}"
     docker_no_proxy: "{{ docker_no_proxy | default([]) }}"
 
-- name: Set default values for kubernetes certificate parameters if not defined
+- name: Define k8s/etcd certificate parameters if not defined
   set_fact:
     k8s_root_ca_cert: "{{ k8s_root_ca_cert | default('') }}"
     k8s_root_ca_key: "{{ k8s_root_ca_key | default('') }}"
     apiserver_cert_sans: "{{ apiserver_cert_sans | default([]) }}"
+    etcd_root_ca_cert: "{{ etcd_root_ca_cert | default('') }}"
+    etcd_root_ca_key: "{{ etcd_root_ca_key | default('') }}"
 
 # Give the bootstrap config output file on the host a generic name so the
 # same file is referenced if the host is bootstrapped locally and remotely
@@ -333,7 +335,9 @@
                 prev_docker_no_proxy != docker_no_proxy | sort)) or
               (prev_apiserver_cert_sans != apiserver_cert_sans) or
               (prev_k8s_root_ca_cert != k8s_root_ca_cert) or
-              (prev_k8s_root_ca_key != k8s_root_ca_key)
+              (prev_k8s_root_ca_key != k8s_root_ca_key) or
+              (prev_etcd_root_ca_cert != etcd_root_ca_cert) or
+              (prev_etcd_root_ca_key != etcd_root_ca_key)
 
       - name: Turn on service endpoints reconfiguration flag if management and/or oam network config is changed
         set_fact:

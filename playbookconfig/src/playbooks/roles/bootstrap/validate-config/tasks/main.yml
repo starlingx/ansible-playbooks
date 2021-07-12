@@ -730,6 +730,22 @@
   include: validate_address.yml input_address={{ item }}
   with_items: "{{ apiserver_cert_sans }}"
 
+- name: Verify that either both etcd root ca cert and key are defined or not at all
+  fail:
+    msg: "etcd_root_ca_cert and etcd_root_ca_key must be provided as a pair"
+  when: (etcd_root_ca_cert and not etcd_root_ca_key) or
+        (not etcd_root_ca_cert and etcd_root_ca_key)
+
+- name: Check for etcd_root_ca_cert file
+  fail:
+    msg: "etcd_root_ca_cert file not found. ({{ etcd_root_ca_cert }})"
+  when: etcd_root_ca_cert and (not etcd_root_ca_cert is file)
+
+- name: Check for etcd_root_ca_key file
+  fail:
+    msg: "etcd_root_ca_key file not found. ({{ etcd_root_ca_key }})"
+  when: etcd_root_ca_key and (not etcd_root_ca_key is file)
+
 - name: Verify that either both Kubernetes root ca cert and key are defined or not at all
   fail:
     msg: "k8s_root_ca_cert and k8s_root_ca_key must be provided as a pair"
