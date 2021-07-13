@@ -175,12 +175,18 @@
     - name: Override async parameters
       set_fact:
         async_timeout: 120
+        async_retries: 40
 
     - name: Wait for 30 seconds to ensure deployments have time to scale back up
       wait_for:
         timeout: 30
 
     when: mode == 'restore'
+
+  - name: Upgrade k8s networking
+    import_role:
+      name: common/upgrade-k8s-networking
+    when: migrate_platform_data is defined and migrate_platform_data
 
   - name: Start parallel tasks to wait for Kubernetes component and Networking pods to reach ready state
     # Only check for pods on the current host to avoid waiting for pods on downed nodes
@@ -212,8 +218,8 @@
       jid: "{{ item.ansible_job_id }}"
     register: wait_job_result
     until: wait_job_result.finished
-    # Set the retry to 10 times (60 seconds) but the async jobs above will
-    # complete (success or failure) within 30 seconds
+    # The retry length should be x2 the length of the async_timeout
+    # eg async_retries = async_timeout * 2 / delay
     retries: "{{ async_retries }}"
     delay: 6
     failed_when: false
