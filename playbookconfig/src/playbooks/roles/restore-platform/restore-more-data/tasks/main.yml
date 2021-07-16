@@ -140,6 +140,21 @@
   when: check_platform_license.rc is defined and
         check_platform_license.rc == 0
 
+- name: Check if ssh config directory exists in backup tarball
+  command: tar -tf {{ restore_data_file }} 'etc/ssh/*'
+  register: check_ssh_dir
+  failed_when: false
+  args:
+    warn: false
+
+- name: Restore ssh config directory
+  command: >-
+    tar -C /etc/ssh -xpf {{ restore_data_file }} --overwrite
+    --transform='s,.*/,,' etc/ssh/*
+  args:
+    warn: false
+  when: check_ssh_dir.rc is defined and check_ssh_dir.rc == 0
+
 # Restore resolv.conf and dnsmaq
 - name: Extract resolv.conf from backup tarball
   command: >-
