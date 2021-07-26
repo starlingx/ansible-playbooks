@@ -352,7 +352,6 @@
     path: /etc/platform/platform.conf
     line: "{{ item }}"
   with_items:
-    - region_config={{ region_config }}
     - sw_version={{ software_version }}
     - vswitch_type=none
 
