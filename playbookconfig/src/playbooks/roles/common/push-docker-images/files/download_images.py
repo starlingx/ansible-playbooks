@@ -22,7 +22,8 @@ DEFAULT_REGISTRIES = {
     'gcr.io': 'gcr.io',
     'k8s.gcr.io': 'k8s.gcr.io',
     'quay.io': 'quay.io',
-    'docker.elastic.co': 'docker.elastic.co'
+    'docker.elastic.co': 'docker.elastic.co',
+    'ghcr.io': 'ghcr.io'
 }
 
 registries = json.loads(os.environ['REGISTRIES'])

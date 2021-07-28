@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -107,6 +107,8 @@
         url: docker.io
       docker.elastic.co:
         url: docker.elastic.co
+      ghcr.io:
+        url: ghcr.io
 
 - name: Save the list of user defined registry keys
   set_fact:
@@ -178,6 +180,8 @@
       url: docker.io
     default_elastic_registry:
       url: docker.elastic.co
+    default_ghcr_registry:
+      url: ghcr.io
 
 - name: Set default values for additional images list
   set_fact:

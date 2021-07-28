@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2020 Wind River Systems, Inc.
+# Copyright (c) 2019-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -22,6 +22,7 @@
     - { name: 'quay_registry', value: { url: 'quay.io' } }
     - { name: 'docker_registry', value: { url: 'docker.io' } }
     - { name: 'elastic_registry', value: { url: 'docker.elastic.co' } }
+    - { name: 'ghcr_registry', value: { url: 'ghcr.io' } }
   when: mode is regex("^upgrade_") or
         mode == 'trident_install'
 
@@ -35,6 +36,7 @@
     - { name: "quay_registry", value: "{{ quay_registry }}" }
     - { name: "docker_registry", value: "{{ docker_registry }}" }
     - { name: "elastic_registry", value: "{{ elastic_registry }}" }
+    - { name: "ghcr_registry", value: "{{ ghcr_registry }}" }
   when: registry.value.type is defined and
         registry.value.type == 'aws-ecr'
   no_log: true
@@ -91,9 +93,10 @@
     - { default_url: 'quay.io', replaced_url: "{{ quay_registry.url }}" }
     - { default_url: 'docker.io', replaced_url: "{{ docker_registry.url }}" }
     - { default_url: 'docker.elastic.co', replaced_url: "{{ elastic_registry.url }}" }
+    - { default_url: 'ghcr.io', replaced_url: "{{ ghcr_registry.url }}" }
 
 # Disable the log to not expose registry password
-- name: Log in k8s, gcr, quay, docker registries if credentials exist
+- name: Log in k8s, gcr, quay, ghcr, docker registries if credentials exist
   docker_login:
     registry: "{{ item['url'] }}"
     username: "{{ item['username'] }}"
@@ -103,6 +106,7 @@
     - "{{ gcr_registry }}"
     - "{{ quay_registry }}"
     - "{{ docker_registry }}"
+    - "{{ ghcr_registry }}"
   when: item.username is defined
   no_log: true
 
@@ -135,7 +139,7 @@
     msg: "{{ download_images_output.stdout_lines }}"
 
 # Disable the log to not expose registry password
-- name: Log out of k8s, gcr, quay, docker registries if credentials exist
+- name: Log out of k8s, gcr, quay, ghcr docker registries if credentials exist
   docker_login:
     registry: "{{ item['url'] }}"
     state: absent
@@ -144,5 +148,6 @@
     - "{{ gcr_registry }}"
     - "{{ quay_registry }}"
     - "{{ docker_registry }}"
+    - "{{ ghcr_registry }}"
   when: item.username is defined
   no_log: true
