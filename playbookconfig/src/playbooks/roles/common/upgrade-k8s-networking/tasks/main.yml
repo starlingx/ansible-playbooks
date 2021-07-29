@@ -11,6 +11,11 @@
 
   when: mode is defined
 
+- name: Set kubernetes long version
+  set_fact:
+    kubernetes_long_version: "{{ kubernetes_version if kubernetes_version.startswith('v')
+                              else 'v' + kubernetes_version }}"
+
 - name: Initialize variables
   set_fact:
     overrides_file: "/tmp/upgrade_overrides.yaml"
@@ -42,7 +47,7 @@
 
 - name: Create Calico config file
   template:
-    src: "roles/bootstrap/bringup-essential-services/templates/k8s-{{ kubernetes_version }}/calico-cni.yaml.j2"
+    src: "roles/bootstrap/bringup-essential-services/templates/k8s-{{ kubernetes_long_version }}/calico-cni.yaml.j2"
     dest: /etc/kubernetes/update_calico.yaml
 
 - name: Update Calico Networking
@@ -50,7 +55,7 @@
 
 - name: Create Multus config file
   template:
-    src: "roles/bootstrap/bringup-essential-services/templates/k8s-{{ kubernetes_version }}/multus-cni.yaml.j2"
+    src: "roles/bootstrap/bringup-essential-services/templates/k8s-{{ kubernetes_long_version }}/multus-cni.yaml.j2"
     dest: /etc/kubernetes/update_multus.yaml
 
 - name: Update Multus Networking
@@ -58,7 +63,7 @@
 
 - name: Create SRIOV Networking config file
   template:
-    src: "roles/bootstrap/bringup-essential-services/templates/k8s-{{ kubernetes_version }}/sriov-cni.yaml.j2"
+    src: "roles/bootstrap/bringup-essential-services/templates/k8s-{{ kubernetes_long_version }}/sriov-cni.yaml.j2"
     dest: /etc/kubernetes/update_sriov-cni.yaml
 
 - name: Update SRIOV Networking
@@ -66,7 +71,7 @@
 
 - name: Create SRIOV device plugin config file
   template:
-    src: "roles/bootstrap/bringup-essential-services/templates/k8s-{{ kubernetes_version }}/sriov-plugin.yaml.j2"
+    src: "roles/bootstrap/bringup-essential-services/templates/k8s-{{ kubernetes_long_version }}/sriov-plugin.yaml.j2"
     dest: /etc/kubernetes/update_sriovdp-daemonset.yaml
 
 - name: Update SRIOV device plugin

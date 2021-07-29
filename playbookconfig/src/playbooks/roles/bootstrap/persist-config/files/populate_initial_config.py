@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -251,6 +251,28 @@ def create_network(client, network_data, network_name):
             for network in networks:
                 if network.name == network_name:
                     return
+        raise e
+
+
+def populate_kube_cmd_version(client):
+    try:
+        kube_cmd_version = CONF.get('BOOTSTRAP_CONFIG', 'KUBERNETES_VERSION')
+        if kube_cmd_version != 'none':
+            values = {
+                'kubeadm_version': kube_cmd_version,
+                'kubelet_version': kube_cmd_version
+            }
+            patch = dict_to_patch(values)
+            client.sysinv.kube_cmd_version.update(patch)
+    except Exception as e:
+        if INCOMPLETE_BOOTSTRAP:
+            if kube_cmd_version != 'none':
+                kube_cmd_version_incomplete = client.sysinv.kube_cmd_version.get()
+                if kube_cmd_version_incomplete.kubeadm_version == kube_cmd_version \
+                        and kube_cmd_version_incomplete.kubelet_version == kube_cmd_version:
+                    return
+            else:
+                return
         raise e
 
 
@@ -616,7 +638,7 @@ def populate_dns_config(client):
     print("DNS config completed.")
 
 
-def populate_docker_config(client):
+def populate_docker_kube_config(client):
     http_proxy = CONF.get('BOOTSTRAP_CONFIG', 'DOCKER_HTTP_PROXY')
     https_proxy = CONF.get('BOOTSTRAP_CONFIG', 'DOCKER_HTTPS_PROXY')
     no_proxy = CONF.get('BOOTSTRAP_CONFIG', 'DOCKER_NO_PROXY')
@@ -772,7 +794,7 @@ def populate_docker_config(client):
 
     print("Populating/Updating kubernetes config...")
     client.sysinv.service_parameter.create(**values)
-
+    populate_kube_cmd_version(client)
     print("Kubernetes config completed.")
 
     parameters = client.sysinv.service_parameter.list()
@@ -844,7 +866,7 @@ def populate_service_parameter_config(client):
     if not INITIAL_POPULATION and not RECONFIGURE_SERVICE:
         return
     populate_platform_config(client)
-    populate_docker_config(client)
+    populate_docker_kube_config(client)
 
 
 def get_management_mac_address():

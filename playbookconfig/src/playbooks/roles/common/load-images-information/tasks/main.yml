@@ -8,17 +8,15 @@
 #   This role loads variables containing images.
 #
 
-- set_fact:
-    kubernetes_version: "{{ lookup('file', 'roles/common/files/kubeadm.yaml.erb') |
-      regex_search('^kubernetesVersion: (.*)$', multiline=True) | regex_replace('^(.*): (.*)$', '\\2')}}"
-  when: mode == 'bootstrap' or
-        mode == 'restore' or
-        mode == 'trident_install' or
-        mode == 'backup'
+- name: Set kubernetes long version
+  set_fact:
+    kubernetes_long_version: "{{ kubernetes_version if kubernetes_version.startswith('v')
+                              else 'v' + kubernetes_version }}"
 
 - block:
   - name: Get the list of kubernetes images
-    shell: "kubeadm --kubeconfig=/etc/kubernetes/admin.conf config images list --kubernetes-version {{ kubernetes_version }}"
+    shell: "kubeadm --kubeconfig=/etc/kubernetes/admin.conf config images list
+           --kubernetes-version {{ kubernetes_long_version }}"
     register: kubernetes_images_output
 
   - set_fact:
@@ -26,7 +24,7 @@
 
   - name: Read in system images list
     include_vars:
-      dir: "vars/k8s-{{ kubernetes_version }}"
+      dir: "vars/k8s-{{ kubernetes_long_version }}"
       files_matching: "system-images.yml"
 
   # Optional system images can be addded in {{ additional_system_images_conf_file }}

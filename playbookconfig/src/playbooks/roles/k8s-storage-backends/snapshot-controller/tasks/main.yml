@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020 Wind River Systems, Inc.
+# Copyright (c) 2020-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -25,14 +25,14 @@
     dest: >-
       {{ snapshot_controller_setup_dir }}/volume-snapshot-controller/{{ item | basename | regex_replace('\.j2$', '') }}
   with_fileglob:
-  - ../templates/k8s-{{ kubernetes_version }}/volume-snapshot-controller/*.j2
+  - "{{ role_path }}/templates/k8s-{{ kubernetes_long_version }}/volume-snapshot-controller/*.j2"
 
 - name: Copy snapshots CRD files
   copy:
     src: "{{ item }}"
     dest: "{{ snapshot_controller_setup_dir }}/crd/{{ item | basename }}"
   with_fileglob:
-  - k8s-{{ kubernetes_version }}/crd/*.yaml
+  - k8s-{{ kubernetes_long_version }}/crd/*.yaml
 
 - name: Add Snapshot CRDs
   command: "kubectl apply -f {{ snapshot_controller_setup_dir }}/crd"

@@ -48,7 +48,7 @@ etcd:
     certFile: /etc/kubernetes/pki/apiserver-etcd-client.crt
     keyFile: /etc/kubernetes/pki/apiserver-etcd-client.key
 imageRepository: "registry.local:9001/k8s.gcr.io"
-kubernetesVersion: v1.18.1
+kubernetesVersion: <%= @kubernetes_version %>
 networking:
   dnsDomain: <%= @service_domain %>
   podSubnet: <%= @pod_network_cidr %>
