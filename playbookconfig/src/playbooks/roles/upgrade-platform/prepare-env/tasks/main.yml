@@ -174,22 +174,17 @@
 
 # Copy the override data to the master if necessary
 - block:
-  - name: Gather override data
-    command: "cat {{ temp_upgrade_platform_dir }}/{{ override_filename }}"
-    register: override_contents
-
   - name: Create temporary data directory
     local_action:
       module: file
       path: "{{ temp_upgrade_platform_dir }}"
       state: directory
 
-  - name: Write out override data
-    local_action:
-      module: copy
-      force: yes
-      content: "{{ override_contents.stdout }}"
+  - name: Fetch local copy of overrides
+    fetch:
+      src: "{{ temp_upgrade_platform_dir }}/{{ override_filename }}"
       dest: "{{ temp_upgrade_platform_dir }}/{{ override_filename }}"
+      flat: yes
 
   when: inventory_hostname != 'localhost'
 
