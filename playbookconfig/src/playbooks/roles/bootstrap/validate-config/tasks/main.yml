@@ -606,7 +606,7 @@
 
 - name: Append applications to application list
   set_fact:
-    all_applications: "{{ all_applications }} + [ '{{ item.keys()[0] }}' ]"
+    all_applications: "{{ all_applications }} + [ '{{ item.keys()|list|first }}' ]"
   with_items: "{{ applications }}"
 
 - name: Get the name of the nginx tarball
