@@ -33,7 +33,7 @@
       password = keyring.get_password("helmv2", "database")
       if not password:
           raise Exception("Helm database password not found.")
-      print password
+      print(password)
   shell: "{{ script_content }}"
   args:
     executable: /usr/bin/python
@@ -84,7 +84,7 @@
           password = keyring.get_password("sysinv", "services")
           if not password:
               raise Exception("Local registry password not found.")
-          print dict(username='sysinv', password=str(password))
+          print(dict(username='sysinv', password=str(password)))
       shell: "{{ script_content }}"
       args:
         executable: /usr/bin/python

@@ -119,7 +119,7 @@
         password = keyring.get_password("CGCS", "admin")
         if not password:
             raise Exception("Local registry password not found.")
-        print dict(username='admin', password=str(password))
+        print(dict(username='admin', password=str(password)))
     shell: "{{ script_content }}"
     args:
       executable: /usr/bin/python
