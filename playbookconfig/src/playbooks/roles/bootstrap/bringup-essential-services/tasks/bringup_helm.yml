@@ -32,16 +32,16 @@
     shell: /sbin/nologin
     state: present
 
-- name: Ensure /www/tmp exists
+- name: Ensure /var/www/tmp exists
   file:
-    path: /www/tmp
+    path: /var/www/tmp
     state: directory
     recurse: yes
     owner: www
     group: root
     # mode: 1700
 
-- name: Ensure /www/var exists
+- name: Ensure /var/www/var exists
   file:
     path: "{{ item }}"
     state: directory
@@ -49,8 +49,8 @@
     owner: www
     group: root
   with_items:
-    - /www/var
-    - /www/var/log
+    - /var/www/var
+    - /var/www/var/log
 
 - name: Set up lighttpd.conf
   copy:

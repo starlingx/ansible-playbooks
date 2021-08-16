@@ -63,7 +63,7 @@
     helm_overrides_permdir: "{{ platform_path }}/helm/{{ software_version }}"
     helm_charts_permdir: "{{ platform_path }}/helm_charts"
     patching_permdir: "/opt/patching"
-    patching_repo_permdir: "/www/pages/updates"
+    patching_repo_permdir: "/var/www/pages/updates"
     extension_permdir: "/opt/extension"
     dc_vault_permdir: "/opt/dc-vault"
     extra_permdir: "{{ platform_path }}/extra"

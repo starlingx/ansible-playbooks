@@ -119,7 +119,7 @@
 
       - name: Restore patching repo
         command: >-
-          tar -C /www/pages -xpf {{ restore_data_file }} --strip-components=2
+          tar -C /var/www/pages -xpf {{ restore_data_file }} --strip-components=3
           {{ short_patching_repo_permdir }}
         args:
           warn: false
