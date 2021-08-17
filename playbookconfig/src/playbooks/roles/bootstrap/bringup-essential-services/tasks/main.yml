@@ -37,6 +37,9 @@
     when: last_config_file_exists and reconfigure_endpoints and
           (mgmt_floating_virtual != prev_mgmt_floating_virtual)
 
+  - name: Mount current kubernetes version
+    import_tasks: k8s_bind_mount.yml
+
   - name: Refresh local DNS (i.e. /etc/hosts)
     import_tasks: refresh_local_dns.yml
 

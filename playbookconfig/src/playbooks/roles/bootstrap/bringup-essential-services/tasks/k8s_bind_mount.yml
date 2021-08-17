@@ -1,0 +1,43 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   These tasks do the preparation for kubernetes staged versions.
+#
+
+- block:
+  - name: Set Kubernetes local directory
+    set_fact:
+      kube_local_dir: "/usr/local/kubernetes"
+
+  - name: Create Kubernetes bind mounts directories
+    file:
+      path: "{{ item }}"
+      state: directory
+      recurse: yes
+      owner: root
+      group: root
+      mode: 0755
+    with_items:
+      - "{{ kube_local_dir }}/current/stage1"
+      - "{{ kube_local_dir }}/current/stage2"
+      - "{{ kube_local_dir }}/{{ kubernetes_version }}/stage1"
+      - "{{ kube_local_dir }}/{{ kubernetes_version }}/stage2"
+
+  # When updating kubernetes, kubeadm and kubelet/kubectl need to be updated separately
+  # and we will have "stage1" and "stage2" subdirectories to separate these different stages.
+  - name: Bind Kubernetes stage1 and stage2 directories
+    mount:
+      path: "{{ kube_local_dir }}/current/{{ item }}"
+      src: "{{ kube_local_dir }}/{{ kubernetes_version }}/{{ item }}"
+      opts: bind
+      state: mounted
+      fstype: none
+    with_items:
+      - "stage1"
+      - "stage2"
+
+  when: kubernetes_version is defined
