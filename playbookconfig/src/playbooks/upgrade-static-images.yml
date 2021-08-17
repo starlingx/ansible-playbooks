@@ -22,6 +22,27 @@
     - name: Read the overrides variables
       include_vars:
         file: "{{ overrides_file }}"
+      when: inventory_hostname == 'localhost'
+
+    - block:
+      - name: Fetch local copy of overrides
+        fetch:
+          src: "{{ overrides_file }}"
+          dest: /tmp/
+        register: fetched
+
+      - name: Read the overrides variables
+        include_vars:
+          file: "{{ fetched.dest }}"
+
+      - name: Remove local overrides copy
+        local_action:
+          module: file
+          path: "{{ fetched.dest }}"
+          state: absent
+        become: no
+
+      when: inventory_hostname != 'localhost'
 
     - name: Upgrade static images
       import_role:
