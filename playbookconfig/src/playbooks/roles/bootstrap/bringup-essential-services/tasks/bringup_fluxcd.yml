@@ -1,0 +1,77 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# DESCRIPTION:
+#   These tasks configure and launch FluxCD helm and source controllers.
+#
+
+# Create a temporary directory and copy FluxCD resource files for kubectl.
+- name: Set up FluxCD resource files
+  block:
+  - name: Create FluxCD resource directory
+    file:
+      path: "{{ fluxcd_resource_dir }}"
+      state: directory
+
+  - name: Create FluxCD resource files from templates
+    template:
+      src: "{{ item }}"
+      dest: "{{ fluxcd_resource_dir }}/{{ item | basename | regex_replace('\\.j2$', '') }}"
+    with_fileglob:
+    - "{{ role_path }}/templates/fluxcd-*.j2"
+
+- name: Configure and launch FluxCD helm and source controllers
+  block:
+    # Create the FluxCD namespace. This is used for the local registry secret.
+    - name: Create namespace for FluxCD
+      command: kubectl create namespace {{ fluxcd_namespace }}
+      register: create_fluxcd_ns
+      failed_when: false
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Fail if creating namespace fails
+      fail:
+        msg: "Failed to create {{ fluxcd_namespace }} namespace. Error: {{ create_fluxcd_ns.stderr }}"
+      when: create_fluxcd_ns.rc !=0 and create_fluxcd_ns.stderr is not search('AlreadyExists')
+
+    - name: Check if flux helm and source controllers exist
+      command: kubectl -n {{ fluxcd_namespace }} get pods
+      register: fluxcd_get_pods
+      failed_when: false
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - block:
+        - name: Check if secret exists
+          command: kubectl -n {{ fluxcd_namespace }} get secret {{ fluxcd_secret_name }}
+          register: fluxcd_get_secret
+          failed_when: false
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+        - name: Create secret if it doesn't exist
+          command: >-
+            kubectl -n {{ fluxcd_namespace }} create secret docker-registry {{ fluxcd_secret_name }}
+            --docker-server={{ local_registry }}
+            --docker-username={{ local_registry_credentials['username'] }}
+            --docker-password={{ local_registry_credentials['password'] }}
+          when: fluxcd_get_secret.rc !=0
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+        - name: Install flux helm and source controllers
+          command: kubectl create -f {{ fluxcd_resource_dir }}
+          register: create_fluxcd_pods
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+      when: fluxcd_get_pods.stderr is search('No resources found')
+
+  always:
+  - name: Clean FluxCD resource directory
+    file:
+      path: "{{ fluxcd_resource_dir }}"
+      state: absent

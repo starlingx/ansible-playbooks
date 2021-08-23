@@ -16,3 +16,5 @@ sriov_network_device_img: docker.io/starlingx/k8s-plugins-sriov-network-device:s
 # in the kubernetes github repo
 snapshot_controller_img: quay.io/k8scsi/snapshot-controller:v2.0.0-rc2
 rvmc_img: docker.io/starlingx/rvmc:stx.5.0-v1.0.0
+flux_helm_controller_img: docker.io/fluxcd/helm-controller:v0.10.1
+flux_source_controller_img: docker.io/fluxcd/source-controller:v0.13.2

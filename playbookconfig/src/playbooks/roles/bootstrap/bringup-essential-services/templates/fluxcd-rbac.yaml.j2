@@ -1,0 +1,72 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: crd-controller
+  namespace: flux-helm
+rules:
+- apiGroups:
+  - source.toolkit.fluxcd.io
+  resources:
+  - '*'
+  verbs:
+  - '*'
+- apiGroups:
+  - kustomize.toolkit.fluxcd.io
+  resources:
+  - '*'
+  verbs:
+  - '*'
+- apiGroups:
+  - helm.toolkit.fluxcd.io
+  resources:
+  - '*'
+  verbs:
+  - '*'
+- apiGroups:
+  - notification.toolkit.fluxcd.io
+  resources:
+  - '*'
+  verbs:
+  - '*'
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - configmaps/status
+  verbs:
+  - '*'
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: crd-controller
+  namespace: flux-helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: crd-controller
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: flux-helm
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-reconciler
+  namespace: flux-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: flux-helm
