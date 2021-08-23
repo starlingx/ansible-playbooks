@@ -120,10 +120,10 @@
     vars:
       script_content: |
         import keyring
-        password = keyring.get_password("CGCS", "admin")
+        password = keyring.get_password("sysinv", "services")
         if not password:
             raise Exception("Local registry password not found.")
-        print(dict(username='admin', password=str(password)))
+        print(dict(username='sysinv', password=str(password)))
     shell: "{{ script_content }}"
     args:
       executable: /usr/bin/python

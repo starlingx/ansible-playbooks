@@ -29,7 +29,7 @@ trident_metrics_port: 8001
 trident_deploy_only_on_controllers: false
 
 trident_force_reinstall: false
-trident_secret_name: "trident-local-registry-secret"
+trident_secret_name: "default-registry-key"
 
 # Extra parameters to be given to the tridentctl install command
 # If you want to configure Ipv6 add "--use-ipv6" to this list

@@ -56,6 +56,11 @@
   when: create_ns_output.rc is defined and create_ns_output.rc !=0 and
         create_ns_output.stderr is not search('AlreadyExists')
 
+- name: Fail if the docker registry secret name to be used differs from default name
+  fail:
+    msg: "Trident secret name for docker registry credentials differs from default value 'default-registry-key'"
+  when: trident_secret_name != "default-registry-key"
+
 - name: Check if secret exists
   command: kubectl -n {{ trident_namespace }} get secret {{ trident_secret_name }}
   environment:
