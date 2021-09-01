@@ -1,16 +1,16 @@
 ---
 # System images that are pre-pulled and pushed to local registry
-n3000_opae_img: docker.io/starlingx/n3000-opae:stx.4.0-v1.0.0
+n3000_opae_img: docker.io/starlingx/n3000-opae:stx.6.0-v1.0.1
 tiller_img: ghcr.io/helm/tiller:v2.16.9
 armada_img: quay.io/airshipit/armada:7ef4b8643b5ec5216a8f6726841e156c0aa54a1a-ubuntu_bionic
 kubernetes_entrypoint_img: quay.io/stackanetes/kubernetes-entrypoint:v0.3.1
-calico_cni_img: quay.io/calico/cni:v3.12.0
-calico_node_img: quay.io/calico/node:v3.12.0
-calico_kube_controllers_img: quay.io/calico/kube-controllers:v3.12.0
-calico_flexvol_img: quay.io/calico/pod2daemon-flexvol:v3.12.0
-multus_img: docker.io/nfvpe/multus:v3.4
-sriov_cni_img: docker.io/starlingx/k8s-cni-sriov:stx.5.0-v2.6-7-gb18123d8
-sriov_network_device_img: docker.io/starlingx/k8s-plugins-sriov-network-device:stx.4.0-v3.2-16-g4e0302ae
+calico_cni_img: quay.io/calico/cni:v3.19.1
+calico_node_img: quay.io/calico/node:v3.19.1
+calico_kube_controllers_img: quay.io/calico/kube-controllers:v3.19.1
+calico_flexvol_img: quay.io/calico/pod2daemon-flexvol:v3.19.1
+multus_img: ghcr.io/k8snetworkplumbingwg/multus-cni:v3.7.1
+sriov_cni_img: ghcr.io/k8snetworkplumbingwg/sriov-cni:v2.6.1
+sriov_network_device_img: ghcr.io/k8snetworkplumbingwg/sriov-network-device-plugin:v3.3.2
 # Keep the snapshot-controller image in sync with the one provided at:
 # cluster/addons/volumesnapshots/volume-snapshot-controller/volume-snapshot-controller-deployment.yaml
 # in the kubernetes github repo
