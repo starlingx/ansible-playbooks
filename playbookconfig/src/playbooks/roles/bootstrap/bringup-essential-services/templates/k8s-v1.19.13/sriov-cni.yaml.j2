@@ -13,6 +13,8 @@
 #   updates of pods with "kubectl apply".
 # - The image is set to a stable starlingX version
 # - The 'imagePullPolicy: Never' is omitted
+# - For k8s 1.19, the matchLabels are the same as the k8s 1.18 labels to
+#   allow a rolling update to succeed.
 #
 # Copyright (c) 2021 Wind River Systems, Inc.
 #
@@ -30,7 +32,8 @@ metadata:
 spec:
   selector:
     matchLabels:
-      name: sriov-cni
+      tier: node
+      app: sriov-cni
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
