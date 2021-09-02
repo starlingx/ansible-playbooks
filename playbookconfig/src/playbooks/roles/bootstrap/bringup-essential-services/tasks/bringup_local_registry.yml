@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2020 Wind River Systems, Inc.
+# Copyright (c) 2019-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -23,6 +23,7 @@
     - "{{ k8s_registry }}"
     - "{{ quay_registry }}"
     - "{{ elastic_registry }}"
+    - "{{ ghcr_registry }}"
   when: (item.secure is defined and not item.secure)
   no_log: true
 

@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -17,6 +17,7 @@
       - { name: 'quay_registry', value: { } }
       - { name: 'docker_registry', value: { } }
       - { name: 'elastic_registry', value: { } }
+      - { name: 'ghcr_registry', value: { } }
 
   - name: Put docker registries into a single variable
     set_fact:
@@ -27,3 +28,4 @@
       - { name: 'quay.io', value: "{{ quay_registry }}" }
       - { name: 'docker.io', value: "{{ docker_registry }}" }
       - { name: 'docker.elastic.co', value: "{{ elastic_registry }}" }
+      - { name: 'ghcr.io', value: "{{ ghcr_registry }}" }
