@@ -32,7 +32,7 @@ This package contains playbooks used for configuring StarlingX.
 %build
 
 %install
-make install DESTDIR=%{buildroot}%{local_stx_ansible_dir}
+make install DESTDIR=%{buildroot} PREFIX=%{local_stx_ansible_dir}
 
 %post
 cp %{local_stx_ansible_dir}/playbooks/ansible.cfg %{local_etc_ansible}
