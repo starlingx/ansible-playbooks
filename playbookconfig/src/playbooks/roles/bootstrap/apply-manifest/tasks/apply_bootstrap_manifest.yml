@@ -54,7 +54,7 @@
     command: >-
       tar -C {{ hieradata_workdir }} -xpf {{ restore_data_file }} --transform='s,.*/,,'
       '{{ archive_puppet_permdir }}/*static.yaml'
-      '{{ archive_puppet_permdir }}/system.yaml'
+      '{{ archive_puppet_permdir }}/*system.yaml'
     args:
       warn: false
 
@@ -198,16 +198,24 @@
     command: "grep 'platform::drbd::.*::params::lv_size.*' {{ hieradata_workdir }}/system.yaml"
     register: system_file
 
-  - name: Write filesystem settings to runtime hieradata
+  - name: Read admin_password from system hieradata
+    command: "egrep '::keystone_admin_password|::admin_password|admin::password' {{ hieradata_workdir }}/secure_system.yaml"
+    register: secure_system_file
+
+  - name: Write system settings to runtime hieradata
     lineinfile:
       path: "{{ hieradata_workdir }}/runtime.yaml"
       line: "{{ item }}"
-    with_items: "{{system_file.stdout_lines}}"
+    no_log: True
+    with_items: "{{ system_file.stdout_lines + secure_system_file.stdout_lines }}"
 
   - name: Remove system hieradata
     file:
-      path: "{{ hieradata_workdir }}/system.yaml"
+      path: "{{ item }}"
       state: absent
+    with_items:
+      - "{{ hieradata_workdir }}/system.yaml"
+      - "{{ hieradata_workdir }}/secure_system.yaml"
 
   when: mode == 'restore'
 
