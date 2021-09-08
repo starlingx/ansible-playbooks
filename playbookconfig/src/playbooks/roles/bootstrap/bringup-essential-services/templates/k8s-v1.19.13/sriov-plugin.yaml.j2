@@ -16,6 +16,8 @@
 # - The image is set to a stable starlingX version
 # - The default configMap is not used.  Rather, a hostPath to the config.json file
 #   is used, as resources are populated and based on datanetwork names.
+# - For k8s 1.19, the matchLabels are the same as the k8s 1.18 labels to
+#   allow a rolling update to succeed.
 #
 # Copyright (c) 2021 Wind River Systems, Inc.
 #
@@ -40,7 +42,8 @@ metadata:
 spec:
   selector:
     matchLabels:
-      name: sriov-device-plugin
+      tier: node
+      app: sriovdp
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
