@@ -100,6 +100,8 @@
         - "{{ armada_img }}"
         - "{{ n3000_opae_img }}"
         - "{{ kubernetes_entrypoint_img }}"
+        - "{{ flux_helm_controller_img }}"
+        - "{{ flux_source_controller_img }}"
       storage_images:
         - "{{ snapshot_controller_img }}"
 

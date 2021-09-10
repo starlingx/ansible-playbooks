@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -91,6 +91,9 @@
 
   - name: Bring up Helm
     import_tasks: bringup_helm.yml
+
+  - name: Bring up FluxCD helm and source controllers
+    import_tasks: bringup_fluxcd.yml
 
   - name: Bring up essential flock services
     import_tasks: bringup_flock_services.yml
@@ -203,7 +206,7 @@
     with_items: "{{ kube_component_list }}"
     register: wait_for_kube_system_pods
 
-  - name: Start wait for armada, calico-kube-controllers & coredns deployments to reach Available state
+  - name: Start wait for armada, fluxcd, calico-kube-controllers & coredns deployments to reach Available state
     # Check the deployment status rather than the pod status in case some pods are down on other nodes
     command: >-
       kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --namespace={{ item.namespace }}
@@ -212,6 +215,8 @@
     poll: 0
     with_items:
       - { namespace: kube-system, deployment: calico-kube-controllers }
+      - { namespace: flux-helm, deployment: helm-controller }
+      - { namespace: flux-helm, deployment: source-controller }
       - { namespace: armada, deployment: armada-api }
       - { namespace: kube-system, deployment: coredns }
     register: wait_for_deployments
