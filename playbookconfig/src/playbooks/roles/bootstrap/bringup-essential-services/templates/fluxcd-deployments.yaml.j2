@@ -59,6 +59,8 @@ spec:
         volumeMounts:
         - mountPath: /tmp
           name: temp
+      imagePullSecrets:
+        - name: default-registry-key
       nodeSelector:
         node-role.kubernetes.io/master: ""
       terminationGracePeriodSeconds: 600
@@ -134,6 +136,8 @@ spec:
           name: data
         - mountPath: /tmp
           name: tmp
+      imagePullSecrets:
+        - name: default-registry-key
       nodeSelector:
         node-role.kubernetes.io/master: ""
       securityContext:
