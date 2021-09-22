@@ -102,6 +102,7 @@
         - "{{ kubernetes_entrypoint_img }}"
         - "{{ flux_helm_controller_img }}"
         - "{{ flux_source_controller_img }}"
+        - "{{ pause_img }}"
       storage_images:
         - "{{ snapshot_controller_img }}"
 
