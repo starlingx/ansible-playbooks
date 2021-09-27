@@ -1,0 +1,17 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- block:
+  - name: Get kubernetes_version from the DB
+    shell: echo "select kubeadm_version from kube_cmd_versions" | psql -qAt -d sysinv
+    register: kube_ver_select_result
+    become_user: postgres
+
+  - name: Set kubernetes_version to the value from DB
+    set_fact:
+      kubernetes_version: "{{ kube_ver_select_result.stdout_lines[0] }}"
+
+  when: kubernetes_version is not defined
