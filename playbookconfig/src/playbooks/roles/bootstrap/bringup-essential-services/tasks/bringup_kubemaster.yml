@@ -157,6 +157,11 @@
   set_fact:
     apiserver_cert_list: "{{ [ cluster_floating_address, loopback_ip ] + apiserver_cert_sans + OAM_addresses}}"
 
+- name: Set taint configuration for non-AIO systems
+  set_fact:
+    kubelet_taints: "[{key: 'node-role.kubernetes.io/master', effect: 'NoSchedule'}]"
+  when: system_type != 'All-in-one'
+
 - name: Create Kube admin yaml
   template:
     src: roles/common/files/kubeadm.yaml.j2
