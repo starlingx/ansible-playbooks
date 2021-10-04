@@ -68,7 +68,7 @@
 - name: Create a symlink to PXE config files
   file:
     src: "{{ pxe_config_dir }}"
-    dest: /pxeboot/pxelinux.cfg
+    dest: /var/pxeboot/pxelinux.cfg
     state: link
 
 - name: Check if copying of branding files for mate is required

@@ -346,8 +346,8 @@
 
 - name: Set pxeboot files symlinks
   file:
-    src: "/pxeboot/{{ item.src }}"
-    dest: "/pxeboot/{{ item.dest }}"
+    src: "/var/pxeboot/{{ item.src }}"
+    dest: "/var/pxeboot/{{ item.dest }}"
     state: link
     force: yes
   with_items:
