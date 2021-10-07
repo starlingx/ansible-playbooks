@@ -769,6 +769,20 @@
         apiserver_oidc.username_claim is defined and
         apiserver_oidc.groups_claim is defined))
 
+# Set the kubernetes_version if the user hasn't overridden it
+- block:
+    - name: Set kubernetes_version for fresh installs.
+      set_fact:
+        kubernetes_version: "{{ fresh_install_k8s_version }}"
+      when: migrate_platform_data is undefined or not migrate_platform_data
+
+    - name: Set kubernetes_version for upgrades.
+      set_fact:
+        kubernetes_version: "{{ upgrade_k8s_version }}"
+      when: migrate_platform_data is defined and migrate_platform_data
+
+  when: kubernetes_version is not defined
+
 # Wipe ceph osds
 # Note that due to Ansible mishandling of boolean values via extra-vars we are
 # adding supplementary validation here.
@@ -886,6 +900,7 @@
       - "OIDC_CLIENT_ID={{ apiserver_oidc.client_id | default('undef') }}"
       - "OIDC_USERNAME_CLAIM={{ apiserver_oidc.username_claim | default('undef') }}"
       - "OIDC_GROUPS_CLAIM={{ apiserver_oidc.groups_claim | default('undef') }}"
+      - "KUBERNETES_VERSION={{ kubernetes_version }}"
 
   - name: Write simplex flag
     file:

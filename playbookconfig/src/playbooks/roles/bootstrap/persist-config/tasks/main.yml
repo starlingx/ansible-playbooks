@@ -216,25 +216,8 @@
     - "ELASTIC_REGISTRY_SECRET={{ elastic_registry_secret | default('none') }}"
     - "GHCR_REGISTRY_SECRET={{ ghcr_registry_secret | default('none') }}"
 
-- name: Append config ini file with Kubernetes version
-  lineinfile:
-    path: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
-    line: "KUBERNETES_VERSION={{ kubernetes_version | default('none') }}"
-
 - include: update_sysinv_database.yml
   when: save_config_to_db
-
-- block:
-  - name: Get default kubernetes_version from the DB
-    shell: echo "select kubeadm_version from kube_cmd_versions" | psql -qAt -d sysinv
-    register: kube_ver_select_result
-    become_user: postgres
-
-  - name: Set kubernetes_version to the default value from DB
-    set_fact:
-      kubernetes_version: "{{ kube_ver_select_result.stdout_lines[0] }}"
-
-  when: kubernetes_version is not defined
 
 # Update docker and containerd config files and restart docker and containerd
 # if docker proxy is configured
