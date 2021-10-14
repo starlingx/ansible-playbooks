@@ -38,14 +38,15 @@
           if start not in subnet or end not in subnet:
             raise Exception("Failed validation, {{ network }} start or end address must be within its subnet range.")
 
+          # min_subnet_size = number of hosts + 1 network address + 1 broadcast address
           min_subnet_sizes = {
               'cluster_pod': 65536,
               'cluster_service': 65536,
-              'pxeboot': 16,
-              'multicast': 16,
-              'management': 16,
-              'cluster_host': 8,
-              'oam': 8
+              'pxeboot': 5,
+              'multicast': 6,
+              'management': 6,
+              'cluster_host': 5,
+              'oam': 5
           }
           max_subnet_sizes = {
               'cluster_service': 1048576
