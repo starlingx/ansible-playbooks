@@ -63,6 +63,10 @@ spec:
         - name: default-registry-key
       nodeSelector:
         node-role.kubernetes.io/master: ""
+      tolerations:
+        - key: "node-role.kubernetes.io/master"
+          operator: "Exists"
+          effect: "NoSchedule"
       terminationGracePeriodSeconds: 600
       volumes:
       - emptyDir: {}
@@ -140,6 +144,10 @@ spec:
         - name: default-registry-key
       nodeSelector:
         node-role.kubernetes.io/master: ""
+      tolerations:
+        - key: "node-role.kubernetes.io/master"
+          operator: "Exists"
+          effect: "NoSchedule"
       securityContext:
         fsGroup: 1337
       terminationGracePeriodSeconds: 10
