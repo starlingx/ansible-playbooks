@@ -120,6 +120,8 @@
     - "prev_k8s_root_ca_cert: {{ k8s_root_ca_cert }}"
     - "prev_k8s_root_ca_key: {{ k8s_root_ca_key }}"
     - "prev_apiserver_oidc: {{ apiserver_oidc | to_yaml }}"
+    - "prev_etcd_root_ca_cert: {{ etcd_root_ca_cert }}"
+    - "prev_etcd_root_ca_key: {{ etcd_root_ca_key }}"
     # Nested dictionaries are picky about having things on the same line
     - "prev_docker_registries: "
     - "{{ docker_registries | to_yaml }}"

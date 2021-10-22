@@ -54,36 +54,27 @@
   with_items:
     - "etcd-client"
 
-- name: Check if CA exists
-  stat:
-    path: /etc/kubernetes/pki/ca.crt
-  register: ca_file
+- name: Define values for etcd certificate and key
+  set_fact:
+    etcd_root_ca_cert: "{{ etcd_root_ca_cert | default('') }}"
+    etcd_root_ca_key: "{{ etcd_root_ca_key | default('') }}"
 
-- name: Copy existed CA
-  copy:
-    src: "/etc/kubernetes/pki/{{ item }}"
-    dest: "/etc/etcd/{{ item }}"
-    remote_src: yes
-    force: yes
-  with_items:
-    - "ca.crt"
-    - "ca.key"
-  when: ca_file.stat.exists
+- name: Setup dictionary of etcd certificates to install
+  set_fact:
+    etcd_ca_files: { ca.crt: "{{etcd_root_ca_cert}}", ca.key: "{{etcd_root_ca_key}}" }
+  when:
+    - (etcd_root_ca_cert)
+    - (etcd_root_ca_key)
 
-- name: copy user specified CA
+- name: Copy etcd root ca certificates
   copy:
-    src: "{{ item.src }}"
-    dest: "{{ item.dest }}"
-    force: yes
-  with_items:
-    - { src: "{{ k8s_root_ca_cert }}", dest: "/etc/etcd/ca.crt" }
-    - { src: "{{ k8s_root_ca_key }}", dest: "/etc/etcd/ca.key" }
-  when: (k8s_root_ca_cert)
+    src: "{{ item.value }}"
+    dest: "/etc/etcd/{{item.key}}"
+  with_dict: "{{ etcd_ca_files }}"
+  when: etcd_ca_files is defined
 
 - block:
-  - name: Generate private key for kubernetes-ca
-    # Reuse this kubernetes-ca for the etcd-ca,
-    # will copy to /etc/kubernetes/pki later
+  - name: Generate private key for etcd-ca
     openssl_privatekey:
       path: "/etc/etcd/ca.key"
       type: RSA
@@ -91,11 +82,11 @@
       state: present
       force: true
 
-  - name: Generate CSR for kubernetes-ca
+  - name: Generate CSR for etcd-ca
     openssl_csr:
       path: "/etc/etcd/ca.csr"
       privatekey_path: "/etc/etcd/ca.key"
-      common_name: kubernetes
+      common_name: etcd
       basic_constraints:
         - CA:TRUE
         - pathlen:1
@@ -103,19 +94,19 @@
       key_usage:
         - keyCertSign
         - digitalSignature
+        - keyEncipherment
       force: true
 
-  - name: Generate self-signed CA certificate
+  - name: Generate self-signed CA certificate for etcd-ca
     openssl_certificate:
       path: "/etc/etcd/ca.crt"
       privatekey_path: "/etc/etcd/ca.key"
       csr_path: "/etc/etcd/ca.csr"
       provider: selfsigned
       force: true
+  when: etcd_root_ca_cert == ''
 
-  when: not ca_file.stat.exists and k8s_root_ca_cert == ''
-
-- name: Generate certs signed with kubernetes CA certificate"
+- name: Generate certs signed with etcd CA certificate
   openssl_certificate:
     path: "/etc/etcd/{{ item }}.crt"
     csr_path: "/etc/etcd/{{ item }}.csr"

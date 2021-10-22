@@ -222,6 +222,8 @@ docker_registries:
 #   - ssl_ca_cert
 #   - k8s_root_ca_cert
 #   - k8s_root_ca_key
+#   - etcd_root_ca_cert
+#   - etcd_root_ca_key
 #
 # ssl_ca_cert: /path/to/ssl_ca_cert_file
 
