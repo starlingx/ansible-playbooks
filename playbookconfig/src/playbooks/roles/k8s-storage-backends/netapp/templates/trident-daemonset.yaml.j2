@@ -5,6 +5,7 @@ metadata:
   name: trident-csi
   labels:
     app: node.csi.trident.netapp.io
+    kubectl.kubernetes.io/default-container: trident-main
 spec:
   selector:
     matchLabels:
@@ -17,6 +18,7 @@ spec:
       serviceAccount: trident-csi
       hostNetwork: true
       hostIPC: true
+      hostPID: true
       dnsPolicy: ClusterFirstWithHostNet
       containers:
       - name: trident-main
@@ -26,9 +28,9 @@ spec:
             add: ["SYS_ADMIN"]
           allowPrivilegeEscalation: true
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/docker.io/netapp/trident:20.04.0
+        image: {{ local_registry }}/docker.io/netapp/trident:21.04.1
         command:
-        - /usr/local/bin/trident_orchestrator
+        - /trident_orchestrator
         args:
         - "--no_persistence"
         - "--rest=false"
@@ -36,7 +38,34 @@ spec:
         - "--csi_endpoint=$(CSI_ENDPOINT)"
         - "--csi_role=node"
         - "--log_format=text"
+        - "--node_prep=false"
+        - "--https_rest"
+        - "--https_port=17546"
         #- -debug
+        startupProbe:
+          httpGet:
+            path: /liveness
+            scheme: HTTPS
+            port: 17546
+          failureThreshold: 5
+          timeoutSeconds: 1
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /liveness
+            scheme: HTTPS
+            port: 17546
+          failureThreshold: 3
+          timeoutSeconds: 1
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readiness
+            scheme: HTTPS
+            port: 17546
+          failureThreshold: 5
+          initialDelaySeconds: 10
+          periodSeconds: 10
         env:
         - name: KUBE_NODE_NAME
           valueFrom:
@@ -46,7 +75,7 @@ spec:
         - name: CSI_ENDPOINT
           value: unix://plugin/csi.sock
         - name: PATH
-          value: /netapp:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          value: /netapp:/bin
         volumeMounts:
         - name: plugin-dir
           mountPath: /plugin
@@ -69,7 +98,7 @@ spec:
           readOnly: true
       - name: driver-registrar
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/quay.io/k8scsi/csi-node-driver-registrar:v1.3.0
+        image: {{ local_registry }}/quay.io/k8scsi/csi-node-driver-registrar:v2.1.0
         args:
         - "--v=2"
         - "--csi-address=$(ADDRESS)"

@@ -45,12 +45,13 @@ trident_clean_folder: true
 
 # Images that need to be pulled to the local registry
 trident_images:
-  - docker.io/netapp/trident:20.04.0
-  - quay.io/k8scsi/csi-provisioner:v1.6.0
-  - quay.io/k8scsi/csi-attacher:v2.2.0
-  - quay.io/k8scsi/csi-resizer:v0.5.0
-  - quay.io/k8scsi/csi-node-driver-registrar:v1.3.0
-  - quay.io/k8scsi/csi-snapshotter:v2.1.0
+  - docker.io/netapp/trident:21.04.1
+  - docker.io/netapp/trident-autosupport:21.01
+  - quay.io/k8scsi/csi-provisioner:v2.1.1
+  - quay.io/k8scsi/csi-attacher:v3.1.0
+  - quay.io/k8scsi/csi-resizer:v1.1.0
+  - quay.io/k8scsi/csi-node-driver-registrar:v2.1.0
+  - quay.io/k8scsi/csi-snapshotter:v3.0.3
 
 # OVERRIDE FILES DIRECTORY
 # ========================
