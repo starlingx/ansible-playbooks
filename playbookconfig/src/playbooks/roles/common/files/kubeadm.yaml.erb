@@ -8,6 +8,8 @@ nodeRegistration:
   # taint "node-role.kubernetes.io/master:NoSchedule"
   # to control plane nodes
   taints: []
+  kubeletExtraArgs:
+    v: "2"
 ---
 apiVersion: kubeadm.k8s.io/v1beta2
 kind: ClusterConfiguration
