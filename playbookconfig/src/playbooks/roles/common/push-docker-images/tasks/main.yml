@@ -133,7 +133,21 @@
       local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
   when: local_registry_credentials is not defined
 
-- name: Download images and push to local registry
+- set_fact:
+    download_images_task_name: "Download images and push to local registry"
+
+- block:
+  - name: Push imported images to local registry
+    script: push_imported_images_to_local_registry.py
+    register: push_imported_images_output
+
+  - set_fact:
+      download_images_task_name: "Download any missing images and push to local registry"
+
+  - debug: var=push_imported_images_output.stdout_lines
+  when: images_archive_exists | default(false)
+
+- name: "{{ download_images_task_name }}"
   script: download_images.py {{ download_images }}
   register: download_images_output
   retries: 10

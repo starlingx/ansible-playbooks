@@ -588,30 +588,65 @@
 # Docker images archive source validation
 - block:
   - set_fact:
-      images_archive_exists: false
+      images_archive_md5_file: "{{ images_archive_dir }}/container-image.tar.gz.md5"
+
+  - name: Check if images archive(s) exists
+    find:
+      paths: "{{ images_archive_dir }}"
+      patterns: "*.tar,*.tar.gz"
+      recurse: no
+    register: images_archive_find_output
+
+  - debug: var=images_archive_find_output.files
+  - set_fact:
+      num_of_archive_files_on_disk: "{{ images_archive_find_output.files|length }}"
 
   - block:
-    - name: Check if images archive location exists
+    - name: Check if images archive md5 exists
       stat:
-        path: "{{ docker_images_archive_source }}"
-      register: archive_source
+        path: "{{ images_archive_md5_file }}"
+      register: images_archive_md5
 
     - block:
-      - name: Get list of archived files
-        find:
-          paths: "{{ docker_images_archive_source }}"
-          patterns: "*.tar"
-        register: archive_find_output
+      - name: Get number of archive files in md5 file
+        shell: cat {{ images_archive_md5_file }} | wc -l
+        register: file_count
 
-      - name: Turn on images archive flag
-        set_fact:
-          images_archive_exists: true
-        when: archive_find_output.matched > 0
+      - name: Print warning if md5 file content is invalid
+        debug:
+          msg: >-
+               WARNING: Number of archive files listed in {{ images_archive_md5_file }}
+               does not match with the number of image archive files on disk. Fall
+               back to downloading images...
+        when: file_count.stdout != num_of_archive_files_on_disk
 
-      when: archive_source.stat.exists
-    delegate_to: localhost
-    when: (docker_images_archive_source is defined) and
-          (docker_images_archive_source is not none)
+      - block:
+        - name: Verify container images archive file checksum
+          command: md5sum -c {{ images_archive_md5_file }}
+          args:
+            chdir: "{{ images_archive_dir }}"
+          register: checksum_result
+          failed_when: false
+
+        - debug: var=checksum_result
+
+        - name: Print warning if images archive checksum failed
+          debug:
+            msg: >-
+                 WARNING: Images archive checksum failed. Fall back to downloading
+                 images...
+          when: checksum_result.rc != 0
+
+        - name: Turn on images archive flag if file checksum is successfully validated
+          set_fact:
+            images_archive_exists: true
+            images_archive_files: "{{ images_archive_find_output.files }}"
+          when: checksum_result.rc == 0
+        when: file_count.stdout == num_of_archive_files_on_disk
+
+      when: images_archive_md5.stat.exists
+
+    when: num_of_archive_files_on_disk > 0
 
 # System applications validation
 - name: Validate applications

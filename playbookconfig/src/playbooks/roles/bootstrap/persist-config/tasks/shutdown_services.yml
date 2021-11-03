@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -25,9 +25,15 @@
 
 
 - block:  # Revert changes done by kubeadm init, clear data cache
+  - name: Check if Kubernetes master has been initialized
+    stat:
+      path: /etc/kubernetes/admin.conf
+    register: k8s_admin_conf
+
   - name: Shut down and remove Kubernetes components
     command: kubeadm --kubeconfig=/etc/kubernetes/admin.conf reset -f --cri-socket /var/run/containerd/containerd.sock
     register: reset_info
+    when: k8s_admin_conf.stat.exists
 
   - debug: var=reset_info.stdout_lines
 

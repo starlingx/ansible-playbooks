@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -205,7 +205,7 @@
     lineinfile:
       path: "{{ hieradata_workdir }}/runtime.yaml"
       line: "{{ item }}"
-    no_log: True
+    no_log: true
     with_items: "{{ system_file.stdout_lines + secure_system_file.stdout_lines }}"
 
   - name: Remove system hieradata

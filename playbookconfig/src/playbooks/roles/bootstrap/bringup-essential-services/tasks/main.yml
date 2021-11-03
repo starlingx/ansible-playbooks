@@ -51,7 +51,8 @@
     when: distributed_cloud_role == 'subcloud'
 
   - name: Load images from archives if configured
-    include_tasks: load_images_from_archive.yml
+    include: load_images_from_archive.yml input_archive={{ item.path }}
+    with_items: "{{ images_archive_files }}"
     when: images_archive_exists
 
   - name: Bring up local docker registry

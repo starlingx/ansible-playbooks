@@ -71,6 +71,13 @@ def download_an_image(img):
     try:
         client.inspect_distribution(local_img, auth_config=auth)
         print("Image {} found on local registry".format(target_img))
+        try:
+            auth_str = '{0}:{1}'.format(auth['username'], auth['password'])
+            subprocess.check_call(["crictl", "pull", "--creds", auth_str,
+                                   local_img])
+        except Exception as e:
+            print(err_msg + str(e))
+            return target_img, False
 
         return target_img, True
     except docker.errors.APIError as e:

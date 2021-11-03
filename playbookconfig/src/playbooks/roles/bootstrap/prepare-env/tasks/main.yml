@@ -214,6 +214,11 @@
   set_fact:
     additional_local_registry_images: "{{ additional_local_registry_images | default([]) }}"
 
+- name: Set default values for images archive
+  set_fact:
+    images_archive_dir: "/opt/platform-backup/{{ software_version }}"
+    images_archive_exists: false
+
 - name: Set default values for OpenID connect
   set_fact:
     apiserver_oidc: "{{ apiserver_oidc | default({}) }}"
