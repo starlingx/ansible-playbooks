@@ -287,7 +287,8 @@
       crushtool -i {{ ceph_crushmap_dir }}/{{ crushmap_file }} --tree |
       awk /osd/'{print $NF}' |
       xargs -i crushtool -i {{ ceph_crushmap_dir }}/{{ crushmap_file }} --remove-item {}
-      -o {{ ceph_crushmap_dir }}/{{ crushmap_file }}
+      -o {{ ceph_crushmap_dir }}/{{ crushmap_file_tmp }} &&
+      mv {{ ceph_crushmap_dir }}/{{ crushmap_file_tmp }} {{ ceph_crushmap_dir }}/{{ crushmap_file }}
 
   when: ceph_backend.rc == 0
 
