@@ -45,6 +45,40 @@
   delegate_to: "{{ inspection_target }}"
 
 - block:
+  - name: Extract kubeadm version from the backup tarball
+    # Match kube_cmd_versions VALUES from sysinv database table.
+    command: "zgrep -a 'INSERT INTO kube_cmd_versions VALUES' {{ initial_backup_dir }}/{{ backup_filename }}"
+    args:
+      warn: false
+    failed_when: false
+    register: kube_cmd_search
+
+  - name: Fail if kube_cmd_versions table is missing
+    fail:
+      msg: >
+        Cannot find {{ initial_backup_dir }}/{{ backup_filename }}
+        or the kube_cmd_versions table is missing in the backup tarball!
+    when: kube_cmd_search.rc != 0
+
+  - name: Set restore kubernetes version for bootstrap
+    set_fact:
+      # Note: regex_search() returns a list containing capture groups.
+      # The first filter obtains the first grouped element and converts
+      # unicode string to string.
+      restore_k8s_version: "{{ kube_cmd_search.stdout_lines[0] \
+                           | regex_search(version_re, '\\1') \
+                           | first }}"
+    failed_when: restore_k8s_version|length == 0
+    vars:
+      # kubeadm_version is second last entry within VALUES tuple containing
+      # 6 CSV elements. Exclude the single quotes surrounding the version.
+      version_re: 'VALUES\s+\([^,]+,[^,]+,[^,]+,[^,]+,\s+''([^\s]+)'',[^,]+\);'
+
+  - debug:
+      msg: "kubeadm version from kube_cmd_versions {{ restore_k8s_version }}"
+  delegate_to: "{{ inspection_target }}"
+
+- block:
   # Bail if the host has been unlocked
   - name: Check initial config flag
     stat:
