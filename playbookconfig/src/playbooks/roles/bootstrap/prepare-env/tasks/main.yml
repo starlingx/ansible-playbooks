@@ -114,6 +114,32 @@
   set_fact:
     user_defined_registry_keys: "{{ docker_registries.keys() | list }}"
 
+# NOTE: This custom handling of ghcr can be removed in StarlingX 7
+# since it will be guaranteed to exist by then.
+- name: Check for ghcr data in docker_registries
+  set_fact:
+    ghcr_not_found: "{{ 'ghcr.io' not in docker_registries }}"
+
+- block:
+  - name: Copy gcr.io registry data during upgrades
+    set_fact:
+      docker_registries: "{{ docker_registries|combine({'ghcr.io': docker_registries['gcr.io']}) }}"
+
+  - name: Update ghcr.io url
+    set_fact:
+      docker_registries: "{{ docker_registries \
+                         | combine({'ghcr.io': {'url': docker_registries['gcr.io']['url'] \
+                         | replace('gcr.io','ghcr.io')}}, recursive=True) }}"
+    when: "'gcr.io' in docker_registries and 'url' in docker_registries['gcr.io']"
+
+  - name: Update ghcr.io additional overrides
+    set_fact:
+      docker_registries: "{{ docker_registries \
+                         | combine({'ghcr.io': {'additional-overrides': docker_registries['gcr.io']['additional-overrides'] \
+                         | replace('gcr.io','ghcr.io')}}, recursive=True) }}"
+    when: "'gcr.io' in docker_registries and 'additional-overrides' in docker_registries['gcr.io']"
+  when: ghcr_not_found and migrate_platform_data is defined and migrate_platform_data
+
 - name: Merge user and default registries dictionaries
   set_fact:
     docker_registries: "{{ default_docker_registries | combine(docker_registries) }}"
