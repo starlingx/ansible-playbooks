@@ -156,6 +156,7 @@
     restart_services: false
     reconfigure_endpoints: false
     dc_role_changed: false
+    etcd_root_ca_changed: false
 
     # Replay related flags
     last_config_file_exists: false
@@ -385,6 +386,12 @@
         when: distributed_cloud_role == 'systemcontroller' and
               prev_distributed_cloud_role != distributed_cloud_role
 
+      - name: Turn on etcd reconfiguration if ETCD root CA filenames changed.
+        set_fact:
+          etcd_root_ca_changed: true
+        when: (prev_etcd_root_ca_cert != etcd_root_ca_cert) or
+              (prev_etcd_root_ca_key != etcd_root_ca_key)
+
       - name: Turn on network reconfiguration flag if any of the network related config is changed
         set_fact:
           network_config_update: true
@@ -543,3 +550,4 @@
       incomplete_bootstrap flag: {{ incomplete_bootstrap }},
       initial_db_populated_flag: {{ initial_db_populated }},
       dc_role_changed_flag: {{ dc_role_changed }}
+      etcd_root_ca_changed flag: {{ etcd_root_ca_changed }}

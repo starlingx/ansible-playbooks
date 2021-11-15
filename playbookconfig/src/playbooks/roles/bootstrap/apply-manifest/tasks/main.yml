@@ -13,4 +13,4 @@
 
 - name: Apply manifest to reconfigure etcd
   include_tasks: apply_etcd_manifest.yml
-  when: replayed and network_config_update
+  when: replayed and (network_config_update or etcd_root_ca_changed)
