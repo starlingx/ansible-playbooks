@@ -71,6 +71,67 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
+  name: tridentbackendconfigs.trident.netapp.io
+spec:
+  group: trident.netapp.io
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+          openAPIV3Schema:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+      - name: Backend Name
+        type: string
+        description: The backend name
+        priority: 0
+        jsonPath: .status.backendInfo.backendName
+      - name: Backend UUID
+        type: string
+        description: The backend UUID
+        priority: 0
+        jsonPath: .status.backendInfo.backendUUID
+      - name: Phase
+        type: string
+        description: The backend config phase
+        priority: 0
+        jsonPath: .status.phase
+      - name: Status
+        type: string
+        description: The result of the last operation
+        priority: 0
+        jsonPath: .status.lastOperationStatus
+      - name: Storage Driver
+        type: string
+        description: The storage driver type
+        priority: 1
+        jsonPath: .spec.storageDriverName
+      - name: Deletion Policy
+        type: string
+        description: The deletion policy
+        priority: 1
+        jsonPath: .status.deletionPolicy
+  scope: Namespaced
+  names:
+    plural: tridentbackendconfigs
+    singular: tridentbackendconfig
+    kind: TridentBackendConfig
+    shortNames:
+    - tbc
+    - tbconfig
+    - tbackendconfig
+    categories:
+    - trident
+    - trident-internal
+    - trident-external
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
   name: tridentstorageclasses.trident.netapp.io
 spec:
   group: trident.netapp.io

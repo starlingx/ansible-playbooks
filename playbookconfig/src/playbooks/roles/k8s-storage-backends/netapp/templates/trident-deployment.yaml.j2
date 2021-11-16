@@ -5,6 +5,7 @@ metadata:
   name: trident-csi
   labels:
     app: controller.csi.trident.netapp.io
+    kubectl.kubernetes.io/default-container: trident-main
 spec:
   replicas: 1
   strategy:
@@ -21,13 +22,13 @@ spec:
       containers:
       - name: trident-main
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/docker.io/netapp/trident:20.04.0
+        image: {{ local_registry }}/docker.io/netapp/trident:21.04.1
         ports:
         # STX_change: change ports
         - containerPort: {{ trident_https_rest_api_port }}
         - containerPort: {{ trident_metrics_port }}
         command:
-        - /usr/local/bin/trident_orchestrator
+        - /trident_orchestrator
         args:
         - "--crd_persistence"
         - "--k8s_pod"
@@ -73,13 +74,34 @@ spec:
         - name: certs
           mountPath: /certs
           readOnly: true
+      - name: trident-autosupport
+        # STX_change: pull image from local registry
+        image: {{ local_registry }}/docker.io/netapp/trident-autosupport:21.01
+        imagePullPolicy: Always
+        command:
+        - /usr/local/bin/trident-autosupport
+        args:
+        - "--k8s-pod"
+        - "--log-format=text"
+        - "--trident-silence-collector=false"
+
+        #- -debug
+        resources:
+          limits:
+            memory: 1Gi
+        volumeMounts:
+        - name: asup-dir
+          mountPath: /asup
       - name: csi-provisioner
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/quay.io/k8scsi/csi-provisioner:v1.6.0
+        image: {{ local_registry }}/quay.io/k8scsi/csi-provisioner:v2.1.1
         args:
         - "--v=2"
         - "--timeout=600s"
         - "--csi-address=$(ADDRESS)"
+        - "--retry-interval-start=8s"
+        - "--retry-interval-max=30s"
+
         env:
         - name: ADDRESS
           value: /var/lib/csi/sockets/pluginproxy/csi.sock
@@ -88,7 +110,7 @@ spec:
           mountPath: /var/lib/csi/sockets/pluginproxy/
       - name: csi-attacher
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/quay.io/k8scsi/csi-attacher:v2.2.0
+        image: {{ local_registry }}/quay.io/k8scsi/csi-attacher:v3.1.0
         args:
         - "--v=2"
         - "--timeout=60s"
@@ -102,10 +124,10 @@ spec:
           mountPath: /var/lib/csi/sockets/pluginproxy/
       - name: csi-resizer
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/quay.io/k8scsi/csi-resizer:v0.5.0
+        image: {{ local_registry }}/quay.io/k8scsi/csi-resizer:v1.1.0
         args:
         - "--v=2"
-        - "--csiTimeout=300s"
+        - "--timeout=300s"
         - "--csi-address=$(ADDRESS)"
         env:
         - name: ADDRESS
@@ -115,7 +137,7 @@ spec:
           mountPath: /var/lib/csi/sockets/pluginproxy/
       - name: csi-snapshotter
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/quay.io/k8scsi/csi-snapshotter:v2.1.0
+        image: {{ local_registry }}/quay.io/k8scsi/csi-snapshotter:v3.0.3
         args:
         - "--v=2"
         - "--timeout=300s"
@@ -137,3 +159,7 @@ spec:
       - name: certs
         secret:
           secretName: trident-csi
+      - name: asup-dir
+        emptyDir:
+          medium: ""
+          sizeLimit: 1Gi
