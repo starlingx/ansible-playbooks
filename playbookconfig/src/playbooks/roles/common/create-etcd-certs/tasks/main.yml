@@ -106,12 +106,17 @@
       force: true
   when: etcd_root_ca_cert == ''
 
+- name: Get date 1 year from now in ASN.1 TIME format (YYYYMMDDHHMMSSZ)
+  command: "date -u -d 'next year' +'%Y%m%d%H%M%SZ'"
+  register: next_year_date
+
 - name: Generate certs signed with etcd CA certificate
   openssl_certificate:
     path: "/etc/etcd/{{ item }}.crt"
     csr_path: "/etc/etcd/{{ item }}.csr"
     ownca_path: "/etc/etcd/ca.crt"
     ownca_privatekey_path: "/etc/etcd/ca.key"
+    ownca_not_after: "{{ next_year_date.stdout }}"
     provider: ownca
     force: true
   with_items:
