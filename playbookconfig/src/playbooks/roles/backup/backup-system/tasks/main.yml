@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -11,6 +11,17 @@
 #
 - name: Do StarlingX backup
   block:
+    - name: Get kube-system default-registry-key
+      command: >-
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret default-registry-key --namespace=kube-system
+      failed_when: false
+      register: kube_system_default_registry_key
+
+    - name: Fail if there is no default-registry-key for kube-system
+      fail:
+        msg: "default-registry-key not found. Platform backup cannot proceed without it."
+      when: kube_system_default_registry_key.rc != 0
+
     - name: Send application lifecycle notifications for pre-backup semantic check
       command: /usr/bin/sysinv-utils notify backup-semantic-check
       register: backup_semantic_check_notification_result

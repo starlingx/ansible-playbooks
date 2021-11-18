@@ -38,6 +38,27 @@
   shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace deployment --dry-run -o yaml |
           kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
 
+#Check if there is a default-registry-key for kube-system and create it when
+#there is not during platform-restore process
+- block:
+  - name: Get kube-system default registry key
+    command: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret default-registry-key --namespace=kube-system
+    failed_when: false
+    register: kube_system_default_registry_key
+
+  - name: Create kube-system default registry key
+    command: >-
+      kubectl -n kube-system create secret docker-registry default-registry-key
+        --docker-server={{ local_registry }}
+        --docker-username={{ local_registry_credentials['username'] }}
+        --docker-password={{ local_registry_credentials['password'] }}
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+    when: kube_system_default_registry_key.rc != 0
+
+  when: mode == 'restore'
+
 - name: Get deployment namespace default registry key
   command: >-
     kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret default-registry-key --namespace=deployment
