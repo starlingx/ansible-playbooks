@@ -123,6 +123,38 @@
         - /etc/init.d/ceph stop mon
       when: ceph_mons.stdout != ""
 
+    # Four sed patterns for the monitor public_addr: First two remove the MSGR
+    # V1 port if it already exists, the second two add it when it doesn't exist.
+    # Prevents us from continually adding the port in case this role becomes
+    # reentrant
+    #
+    # Handling two patterns of restored ceph.conf:
+    # 1) For AIO-SX/STD
+    #
+    # [mon.controller-0]
+    # public_addr = 192.168.204.2
+    # host = controller-0
+    #
+    # 2) For AIO-DX
+    #
+    # [mon.controller]
+    # host = controller-0
+    # public_addr = 192.168.204.2
+    #
+
+    - name: Explicitly enable Msgr V1 port on Ceph monitor public address
+      command: "{{ item }}"
+      args:
+        warn: false
+      with_items:
+        - "sed -ri -e '/mon.'$MON_NAME'/!b;n;s/(public_addr.*):'$MON_PORT'$/\\1/' /etc/ceph/ceph.conf"
+        - "sed -ri -e '/mon.'$MON_NAME'/!b;n;!b;n;s/(public_addr.*):'$MON_PORT'$/\\1/' /etc/ceph/ceph.conf"
+        - "sed -ri -e '/mon.'$MON_NAME'/!b;n;s/(public_addr.*)$/\\1:'$MON_PORT'/' /etc/ceph/ceph.conf"
+        - "sed -ri -e '/mon.'$MON_NAME'/!b;n;!b;n;s/(public_addr.*)$/\\1:'$MON_PORT'/' /etc/ceph/ceph.conf"
+      environment:
+        MON_PORT: 6789
+        MON_NAME: "{{ mon_name }}"
+
     # On a partial restore ceph-osds are not wiped.
     # 'ceph-disk list' command returns the list of ceph osds
     # This task:
@@ -170,6 +202,19 @@
       until: true
       retries: 5
       delay: 2
+
+    - name: Enable Ceph Msgr v2 protocol
+      shell: ceph mon enable-msgr2
+      until: true
+      retries: 5
+      delay: 2
+
+    - name: Wait for V2 protocol to be enabled
+      shell: ceph -s
+      register: result
+      until: "'1 monitors have not enabled msgr2' not in result"
+      retries: 30
+      delay: 10
 
     - name: Start Ceph manager
       command: /usr/bin/ceph-mgr --cluster ceph --id controller-0 - start ceph-mgr
