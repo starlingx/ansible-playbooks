@@ -1,0 +1,76 @@
+#
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This playbook is intended to be run on system controller or
+# standalone systems.
+#
+# It provides the capability to migrate platform certificates
+# (registry.local, https/rest-api, oidc-client) to cert-manager.
+#
+# To run the playbook, the user would define an overrides file that
+# provides the required variable settings, passing this on the ansible
+# command-line as a parameter.
+# (see migrate-platform-certificates-to-certmanager-inventory-EXAMPLE.yml)
+#
+# Example command:
+# ansible-playbook migrate-platform-certificates-to-certmanager.yml \
+#     -i @migrate-platform-certificates-to-certmanager-inventory.yml \
+#     --extra-vars "target_list=subcloud1 mode=update"
+#
+# Use target_list to target individual subclouds, or a comma-separated
+# list of subclouds such as 'subcloud1,subcloud2'. To target all online
+# subclouds at once use target_list=all_online_subclouds
+#
+# To target the system controller or standalone systems use target_list=localhost
+#
+- hosts: localhost
+  gather_facts: no
+  tasks:
+
+    - name: Fail if target_list is not defined
+      fail:
+        msg: >-
+          Please provide the target list in extra-vars.
+          Example --extra-vars "target_list=subcloud1,subcloud2"
+          or "target_list=all_online_subclouds" to target all online subclouds
+          in 'dcmanager subcloud list'
+      when: target_list is undefined
+
+    - name: Get all online subclouds in the system
+      block:
+        - name: Get online subclouds from dcmanager
+          shell: |
+            source /etc/platform/openrc
+            dcmanager subcloud list -c name -c availability | awk ' $4 == "online" { print $2 }'
+          register: subclouds
+
+        - name: Add host to target_group
+          add_host:
+            name: "{{ item }}"
+            groups: target_group
+          with_items: "{{ subclouds.stdout_lines }}"
+
+      when:
+        - target_list == 'all_online_subclouds'
+
+    - name: Get subcloud from extra-vars
+      add_host:
+        name: "{{ item }}"
+        groups: target_group
+      with_items: "{{ target_list.split(',') }}"
+      when:
+        - target_list != 'all_online_subclouds'
+
+    - name: Install ICA as a system Trusted CA certificate
+      import_role:
+        name: migrate-platform-certificates-to-certmanager/install-trusted-ca
+      when: mode == 'update'
+
+- hosts: target_group
+  gather_facts: no
+  # for mode=check the output is too messy with free strategy
+  strategy: "{{ 'linear' if mode == 'check' else 'free' }}"
+  roles:
+    - migrate-platform-certificates-to-certmanager/migrate-certificates

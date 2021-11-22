@@ -1,0 +1,28 @@
+#
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This task checks if certificates are installed after
+# migration to cert-manager ( mode = 'update' )
+#
+- name: Checking certificate in secret {{item.secret}}
+  shell: >-
+    CERT=$(kubectl get secret {{item.secret}} -n {{item.namespace}}
+    {% raw %}
+    --template='{{ index .data "tls.crt" }}' | base64 -d);
+    {% endraw %}
+    echo "$CERT" | openssl x509 -startdate -enddate -issuer -subject -noout
+    && echo "$CERT" | openssl x509 -text -noout | grep DNS: | xargs
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: certificate_info_out
+  failed_when: false
+  when:
+    - item.should_run | bool
+
+- debug:
+    var: certificate_info_out.stdout_lines
+  when:
+    - certificate_info_out is defined
+    - certificate_info_out.stdout_lines is defined

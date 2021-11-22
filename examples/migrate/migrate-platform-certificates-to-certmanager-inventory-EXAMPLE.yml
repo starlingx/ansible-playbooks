@@ -1,0 +1,61 @@
+#
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Parameter ica_cert will be the certificate that will be used as the
+# issuer for platform certificates (registry.local, https / rest-api, oidc)
+#
+# Please make sure that you use a ICA certificate with a long duration
+# The playbook will fail if an ICA certificate that expires in less than
+# 3 years is provided.
+#
+# If you wish to use a different value for ICA duration you can override
+# it by setting a different value to validation ica_duration:
+# Example:
+# ica_duration: 2
+#
+# Please also make sure that duration and renewBefore are sensible values
+# considering the ICA remaining duration.
+#
+all:
+  vars:
+    ica_cert: <base64_cert>
+    ica_key: <base64_key>
+  children:
+    # This will be applied to all online subclouds
+    # Use the below example in hosts to override particulars for a subcloud such as passwords
+    target_group:
+      vars:
+        dns_domain: xyz.com
+        duration: 2160h # 90d
+        renewBefore: 360h  # 15d
+        subject_C: canada
+        subject_ST: ontario
+        subject_L: ottawa
+        subject_O: myorganization
+        subject_OU: engineering
+        subject_CN: myorganization.com
+        subject_prefix: starlingx
+        # SSH password to connect to all subclouds
+        ansible_ssh_user: sysadmin
+        ansible_ssh_pass: <sysadmin-pwd>
+        # Sudo password
+        ansible_become_pass: <sysadmin-pwd>
+#      Add a child group, as exemplified below, if you need individual
+#      overrides for specific subcloud hosts
+#      Use the hosts section to add the list of hosts
+#      Use the vars section to override target_group variables
+#      such as the ssh password, for instance
+#      Note that you can also override multiple hosts at once or
+#      have multiple children groups if necessary
+#      Example:
+#      children:
+#        different_password_group:
+#          vars:
+#            ansible_ssh_user: sysadmin
+#            ansible_ssh_pass: <sysadmin-pwd>
+#            ansible_become_pass: <sysadmin-pwd>
+#          hosts:
+#            subcloud1:
+#            subcloud2:

@@ -1,0 +1,190 @@
+#
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# These tasks perform a clean installation of platform certificates with
+# cert-manager ( rest-api/https, registry.local and oidc-auth-app )
+#
+# Before installing new certificates, a backup of old ones is saved to
+# /home/sysadmin/certificates_backup/ in case they are needed
+#
+# The ICA used as issuer of the certificates created, is also installed
+# to the platform as a Trusted CA
+#
+# For oidc-auth-app certificate an application-apply is also performed
+# in order to restart the application with the new certificate
+#
+- name: Install / Update cert-manager certificate
+  block:
+    - name: Check for management affecting alarms
+      include_tasks: check-for-management-alarms.yml
+      when: ignore_alarms is undefined or ignore_alarms | bool == False
+
+    - name: Get address pool information for system
+      shell: |
+        source /etc/platform/openrc; system addrpool-list --nowrap
+      register: address_table
+
+    - name: Get floating management ip
+      shell: |
+        echo "{{ address_table.stdout }}" | awk  '$4 == "management" { print $14 }'
+      register: management_ip
+
+    - name: Get floating oam ip
+      shell: |
+        echo "{{ address_table.stdout }}" | awk  '$4 == "oam" { print $14 }'
+      register: oam_ip
+
+    - name: Get region name
+      shell: |
+        source /etc/platform/openrc
+        system show | grep region_name | awk '{ print $4 }'
+      register: region_name
+
+    - name: Get distributed_cloud role
+      shell: |
+        source /etc/platform/openrc
+        system show | grep distributed_cloud_role | awk '{ print $4 }'
+      register: distributed_cloud_role
+
+    - name: Check certificates to be installed
+      include_tasks: check-certificates-to-be-installed.yml
+
+    - name: Make sure /home/sysadmin/certificates_backup/ directory exists
+      file:
+        path: /home/sysadmin/certificates_backup/
+        state: directory
+        recurse: yes
+
+    - name: Backup current registry.local and rest-api-https certificates
+      copy:
+        remote_src: true
+        src: /etc/ssl/private/{{item}}
+        dest: /home/sysadmin/certificates_backup/{{item}}
+      with_items:
+        - registry-cert.crt
+        - server-cert.pem
+      become: true
+      failed_when: false
+
+    - name: Backup current local-dex.tls secret
+      shell: >-
+        kubectl --ignore-not-found=true
+        get secret local-dex.tls -n kube-system -o yaml
+        > /home/sysadmin/certificates_backup/local-dex.tls.yaml
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: bkp_secret_ep
+      until: bkp_secret_ep is not failed
+      retries: 3
+      delay: 30
+
+    - name: Generate kubernetes yaml for cert-manager resources
+      template:
+        src: platform_certificates.yml.j2
+        dest: /tmp/platform_certificates.yaml
+
+    - name: Apply kubernetes yaml to create cert-manager clusterissuer and certificates
+      command: kubectl apply -f /tmp/platform_certificates.yaml
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: create_k8_apply_ep
+      until: create_k8_apply_ep is not failed
+      retries: 10
+      delay: 30
+
+    - name: Force certificate renewals
+      include_tasks: delete-kubernetes-objects.yml
+      with_items:
+        - { secret: system-registry-local-certificate, namespace: deployment, type: secret }
+        - { secret: system-restapi-gui-certificate, namespace: deployment, type: secret }
+        - { secret: oidc-auth-apps-certificate, namespace: kube-system, type: secret }
+
+    - name: Install ICA as a system Trusted CA certificate
+      import_role:
+        name: migrate-platform-certificates-to-certmanager/install-trusted-ca
+
+    - name: Update oidc-auth-apps in order to use new certificate
+      include_tasks: reapply-oidc-auth-app.yml
+      when: oidc_applied.stdout | bool
+
+  rescue:
+    - debug:
+        msg: >-
+          Failed to migrate platform certificates to cert-manager.
+          Please find backups of the previous certificates in /home/sysadmin/certificates_backup.
+
+    - name: Show backups of certificates
+      command: ls -lR /home/sysadmin/certificates_backup
+      register: certs_output
+
+    - debug:
+        msg: "{{ certs_output.stdout_lines }}"
+
+  when: mode == 'update'
+
+# This mode is here to aid in testing,
+# so that it's easy to delete all cert-manager objects
+# and switch back to the self-signed certificates
+#
+# This should be used for testing purposes only
+#
+- name: Delete cert-manager resources
+  block:
+    - name: Delete clusterissuer
+      command: >-
+        kubectl --ignore-not-found=true
+        delete clusterissuer system-local-ca
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: clusterissuer_output
+      until: clusterissuer_output is not failed
+      retries: 3
+      delay: 3
+
+    - name: Delete certificates
+      include_tasks: delete-kubernetes-objects.yml
+      with_items:
+        - { secret: system-registry-local-certificate, namespace: deployment, type: certificate }
+        - { secret: system-restapi-gui-certificate, namespace: deployment, type: certificate }
+
+    - name: Delete secrets
+      include_tasks: delete-kubernetes-objects.yml
+      with_items:
+        - { secret: system-registry-local-certificate, namespace: deployment, type: secret }
+        - { secret: system-restapi-gui-certificate, namespace: deployment, type: secret }
+
+    - debug:
+        msg: >-
+          Delete mode for oidc-auth-apps certificate is not well supported.
+          Delete it manually if you need it.
+
+  when: mode == 'delete'
+
+# To be run after certificate migration to visually check execution
+- name: Gets a summary of certificates on system
+  block:
+    - name: Check certificates to be installed
+      include_tasks: check-certificates-to-be-installed.yml
+
+    - name: Get summary of certificates installed
+      include_tasks: get-certificates-summary.yml
+      with_items:
+        - {
+          secret: system-registry-local-certificate,
+          namespace: deployment,
+          should_run: 'true'
+        }
+        - {
+          secret: system-restapi-gui-certificate,
+          namespace: deployment,
+          should_run: "{{https_enabled.stdout}}"
+        }
+        - {
+          secret: oidc-auth-apps-certificate,
+          namespace: kube-system,
+          should_run: "{{oidc_applied.stdout}}"
+        }
+
+  when: mode == 'check'

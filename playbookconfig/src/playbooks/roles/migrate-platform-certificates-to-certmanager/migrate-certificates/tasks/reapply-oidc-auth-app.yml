@@ -1,0 +1,111 @@
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# These tasks perform helm-update of oidc-auth-apps to pick up the new
+# certificate and reapply the app to apply the new configuration.
+#
+
+# Secret system-local-ca-oidc-secret is a copy of system-local-ca
+# we need it because this secret needs to be in the same namespace as oidc-auth-apps
+- name: Delete system-local-ca-oidc-secret before recreating it
+  include_tasks: delete-kubernetes-objects.yml
+  with_items:
+    - { secret: system-local-ca-oidc-secret, namespace: kube-system, type: secret }
+
+- name: Create new dex-client secret based of system-local-ca
+  shell: >-
+    {% raw %}
+    kubectl -n cert-manager get secret system-local-ca
+    --template='{{ index .data "tls.crt" | base64decode }}' > /tmp/dex-ca.pem ;
+    kubectl -n kube-system create secret generic
+    system-local-ca-oidc-secret --from-file=/tmp/dex-ca.pem
+    {% endraw %}
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Create override file for dex-client-secret
+  copy:
+    dest: "/tmp/dex-client-secret.yaml"
+    content: |
+      tlsName: oidc-auth-apps-certificate
+      config:
+        issuer_root_ca: /home/dex-ca.pem
+        issuer_root_ca_secret: system-local-ca-oidc-secret
+
+- name: Create override file for oidc-auth-apps-certificate
+  copy:
+    dest: "/tmp/oidc-auth-apps-certificate-override.yaml"
+    content: |
+      certs:
+        web:
+          secret:
+            tlsName: oidc-auth-apps-certificate
+            caName: oidc-auth-apps-certificate
+        grpc:
+          secret:
+            serverTlsName: oidc-auth-apps-certificate
+            clientTlsName: oidc-auth-apps-certificate
+            caName: oidc-auth-apps-certificate
+
+- name: Create override file for secret-observer helm chart
+  copy:
+    dest: "/tmp/secret-observer.yaml"
+    content: |
+      observedSecrets:
+        - secretName: "system-local-ca-oidc-secret"
+          filename: "ca.crt"
+          deploymentToRestart: "stx-oidc-client"
+        - secretName: "oidc-auth-apps-certificate"
+          filename: "tls.crt"
+          deploymentToRestart: "stx-oidc-client"
+        - secretName: "oidc-auth-apps-certificate"
+          filename: "tls.crt"
+          deploymentToRestart: "oidc-dex"
+
+- name: Perform helm-override-updates to use new certificates
+  shell: |
+    source /etc/platform/openrc
+    system helm-override-update oidc-auth-apps {{item.chart}} kube-system \
+    --values {{item.overrides_file}} --reuse-values
+  register: helm_updates
+  until: helm_updates is not failed
+  retries: 10
+  delay: 30
+  with_items:
+    - { chart: oidc-client, overrides_file: /tmp/dex-client-secret.yaml }
+    - { chart: dex, overrides_file: /tmp/oidc-auth-apps-certificate-override.yaml }
+    - { chart: secret-observer, overrides_file: /tmp/secret-observer.yaml }
+
+- name: Apply oidc-auth-apps so that it picks up new certificates
+  shell: |
+    source /etc/platform/openrc
+    system application-apply oidc-auth-apps
+  register: appl_oidc
+  until: appl_oidc is not failed
+  retries: 3
+  delay: 120
+
+# System application-apply does not restart pods if helm-overrides are unchanged.
+# This steps ensures pods always restart, in order to support playbook re-run
+# for future updates. For a rerun the helm overrides may not be changed.
+- name: Rollout oidc-auth-apps pods so that they start using new certificates
+  command: >-
+    kubectl rollout restart deploy oidc-dex stx-oidc-client -n kube-system
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: oidc_deploy_ep
+  until: oidc_deploy_ep is not failed
+  retries: 3
+  delay: 60
+
+- name: Wait for oidc-auth-apps pods to become active
+  command: >-
+    kubectl wait -n kube-system --for=condition=Ready pods --selector app=dex --timeout=90s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: wait_oidc_ep
+  until: wait_oidc_ep is not failed
+  retries: 3
+  delay: 90

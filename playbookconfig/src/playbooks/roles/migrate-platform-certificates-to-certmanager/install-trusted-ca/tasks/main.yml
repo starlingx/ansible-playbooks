@@ -1,0 +1,50 @@
+#
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# These tasks provide the functionality to validate ICA duration and
+# install it as a platform Trusted CA
+#
+- name: Save the specified ICA to a file
+  shell: echo "{{ ica_cert }}" | base64 -d > /tmp/ica.pem
+
+- name: Get CA information from certificate
+  shell: |
+    cat /tmp/ica.pem | openssl x509 -text -noout | grep "CA:"
+  register: is_ca
+
+- name: Fail when ICA certificate is not an actual CA certificate
+  fail:
+    msg: The certificate provided as ICA is not a CA certificate (CA:FALSE)
+  when: "'CA:TRUE' not in is_ca.stdout"
+
+- name: Get years for ICA duration validation
+  set_fact:
+    ica_duration: "{{ ica_duration if ica_duration is defined else 3 }}"
+
+- name: Check that ICA certificate remaining duration is longer than {{ ica_duration }} years
+  shell: |
+      expiration_date=$(cat /tmp/ica.pem | openssl x509 -noout -enddate | cut -d'=' -f2)
+      expiration_date_timestamp=$(date -d "${expiration_date}" +%s)
+      date_5years_from_now_timestamp=$(date -d "+{{ ica_duration }} years" +%s)
+      time_left_ica=$(expr $expiration_date_timestamp - $date_5years_from_now_timestamp)
+      echo $time_left_ica
+  register: ica_time_left
+
+- name: Fail when ICA certificate remaining duration is shorter than {{ ica_duration }} years
+  fail:
+    msg: >-
+      The remaining duration for the ICA certificate specified
+      is less than {{ ica_duration }} years.
+      Please use a certificate with a longer validity.
+  when: ica_time_left.stdout | int < 0
+
+- name: Install ICA
+  shell: >-
+    source /etc/platform/openrc &&
+    system certificate-install -m ssl_ca /tmp/ica.pem
+  register: install_cert_output
+  until: install_cert_output is not failed
+  retries: 10
+  delay: 30

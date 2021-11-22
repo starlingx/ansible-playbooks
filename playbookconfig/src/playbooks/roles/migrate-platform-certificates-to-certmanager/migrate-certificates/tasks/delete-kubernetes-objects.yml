@@ -1,0 +1,19 @@
+#
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This task provides functionality to delete kubernetes objects
+#
+- name: Delete kubernetes objects
+  command: >-
+    kubectl delete {{ item.type }}
+    --ignore-not-found=true
+    {{ item.secret }}
+    -n {{ item.namespace }}
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: command_output
+  until: command_output is not failed
+  retries: 10
+  delay: 30
