@@ -49,16 +49,17 @@
 - name: Set download images list
   set_fact:
     download_images_list:
-      "{{ (kubernetes_images + networking_images + static_images + storage_images + additional_local_registry_images)
+      "{{ (kubernetes_images + networking_images + static_images + storage_images + security_images +
+           additional_local_registry_images)
       if (additional_local_registry_images is defined and additional_local_registry_images|length > 0)
-      else (kubernetes_images + networking_images + static_images + storage_images) }}"
+      else (kubernetes_images + networking_images + static_images + storage_images + security_images) }}"
   when: mode == 'bootstrap' or
         mode == 'restore'
 
-# Only download static images if static images upgrade
-- name: Set download images list to static images if upgrading static images
+# Download general and security specific static images if static images upgrade
+- name: Set download images list to static images (both general and security specific) if upgrading platform
   set_fact:
-    download_images_list: "{{ download_images_list|default([]) + static_images }}"
+    download_images_list: "{{ download_images_list|default([]) + static_images + security_images }}"
   when: mode == 'upgrade_static_images'
 
 # Only download k8s networking images if k8s networking upgrade

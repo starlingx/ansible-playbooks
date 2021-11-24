@@ -11,11 +11,15 @@ calico_flexvol_img: quay.io/calico/pod2daemon-flexvol:v3.12.0
 multus_img: docker.io/nfvpe/multus:v3.4
 sriov_cni_img: docker.io/starlingx/k8s-cni-sriov:stx.5.0-v2.6-7-gb18123d8
 sriov_network_device_img: docker.io/starlingx/k8s-plugins-sriov-network-device:stx.4.0-v3.2-16-g4e0302ae
+nginx_ingress_controller_img: k8s.gcr.io/ingress-nginx/controller:v0.41.2
+default_backend_img: k8s.gcr.io/defaultbackend:1.4
+cert_manager_acmesolver_img: quay.io/jetstack/cert-manager-acmesolver:v0.15.0
+cert_manager_cainjector_img: quay.io/jetstack/cert-manager-cainjector:v0.15.0
+cert_manager_controller_img: quay.io/jetstack/cert-manager-controller:v0.15.0
+cert_manager_webhook_img: quay.io/jetstack/cert-manager-webhook:v0.15.0
 # Keep the snapshot-controller image in sync with the one provided at:
 # cluster/addons/volumesnapshots/volume-snapshot-controller/volume-snapshot-controller-deployment.yaml
 # in the kubernetes github repo
 snapshot_controller_img: quay.io/k8scsi/snapshot-controller:v2.0.0-rc2
 rvmc_img: docker.io/starlingx/rvmc:stx.5.0-v1.0.0
-flux_helm_controller_img: docker.io/fluxcd/helm-controller:v0.11.2
-flux_source_controller_img: docker.io/fluxcd/source-controller:v0.15.4
 pause_img: k8s.gcr.io/pause:3.4.1

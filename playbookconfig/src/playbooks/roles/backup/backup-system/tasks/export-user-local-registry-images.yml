@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020 Wind River Systems, Inc.
+# Copyright (c) 2020-2021 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -17,7 +17,7 @@
   - name: Set platform images list
     set_fact:
       platform_images_list:
-        "{{ (kubernetes_images + networking_images + static_images + storage_images) }}"
+        "{{ (kubernetes_images + networking_images + static_images + storage_images + security_images) }}"
 
   # The sysinv-utils utility may print logs to stdout, so pipe information
   # through a file to communicate only relevant data.
