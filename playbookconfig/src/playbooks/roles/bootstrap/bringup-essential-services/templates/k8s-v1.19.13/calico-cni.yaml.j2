@@ -11,6 +11,8 @@
 # - Added node-role.kubernetes.io/master nodeSelector to calico-kube-controller
 # - Expand calico-node failsafe rules to include kube-apiserver port
 # - Set the log level for calico-node and felix to warning
+# - Set the calico-node iptables backend to 'NFT' for compatibility with
+#   iptables >= 1.8
 #
 # Copyright (c) 2021 Wind River Systems, Inc.
 #
@@ -3795,6 +3797,9 @@ spec:
             # Set Felix logging to "warning"
             - name: FELIX_LOGSEVERITYSCREEN
               value: "warning"
+            # Set Felix iptables backend to use nf_tables (iptables-nft)
+            - name: FELIX_IPTABLESBACKEND
+              value: "NFT"
           securityContext:
             privileged: true
           resources:
