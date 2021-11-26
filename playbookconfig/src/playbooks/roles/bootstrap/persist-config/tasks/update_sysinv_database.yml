@@ -82,7 +82,7 @@
   wait_for:
     path: /etc/platform/.service_endpoint_reconfigured
     state: present
-    timeout: 720
+    timeout: 960
     msg: Timeout waiting for service endpoints reconfiguration to complete
 
 - name: Restart barbican
