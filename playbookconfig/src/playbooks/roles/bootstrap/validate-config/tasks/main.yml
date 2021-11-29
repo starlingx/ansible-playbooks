@@ -646,7 +646,7 @@
 
       when: images_archive_md5.stat.exists
 
-    when: num_of_archive_files_on_disk > 0
+    when: num_of_archive_files_on_disk|int > 0
 
 # System applications validation
 - name: Validate applications
