@@ -46,7 +46,6 @@ trident_clean_folder: true
 # Images that need to be pulled to the local registry
 trident_images:
   - docker.io/netapp/trident:21.04.1
-  - docker.io/netapp/trident-autosupport:21.01
   - quay.io/k8scsi/csi-provisioner:v2.1.1
   - quay.io/k8scsi/csi-attacher:v3.1.0
   - quay.io/k8scsi/csi-resizer:v1.1.0
