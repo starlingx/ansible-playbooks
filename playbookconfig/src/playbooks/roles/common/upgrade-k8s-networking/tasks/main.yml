@@ -73,6 +73,10 @@
 
 - name: Update Calico Networking
   command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_calico.yaml"
+  retries: 5
+  delay: 3
+  register: result
+  until: result.rc == 0
 
 - name: Create Multus config file
   template:
@@ -105,6 +109,18 @@
 
 - name: Update Coredns config map
   command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_coredns.yaml"
+
+- block:
+  - name: Check if calico ipv4 pool exists
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf get ippool.crd.projectcalico.org/default-ipv4-ippool"
+    failed_when: false
+    register: check_ipv4_pools
+
+  - name: Remove unused ipv4 pool
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf delete ippool.crd.projectcalico.org/default-ipv4-ippool"
+    when: check_ipv4_pools.rc == 0
+
+  when: cluster_network_ipv6 == cluster_pod_subnet
 
 - block:
   - name: Restore mode variable
