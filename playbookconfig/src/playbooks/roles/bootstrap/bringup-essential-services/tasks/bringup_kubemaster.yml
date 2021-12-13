@@ -339,6 +339,10 @@
 
   - name: Activate Calico Networking
     command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/calico.yaml"
+    retries: 5
+    delay: 3
+    register: result
+    until: result.rc == 0
 
   - name: Activate Multus Networking
     command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/multus.yaml"
