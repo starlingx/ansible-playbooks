@@ -1,6 +1,6 @@
 ---
 source_helm_bind_dir: /opt/platform/helm_charts
-target_helm_bind_dir: /www/pages/helm_charts
+target_helm_bind_dir: /var/www/pages/helm_charts
 helm_repo_name_apps: starlingx
 helm_repo_name_platform: stx-platform
 helm_repo_port: 8080
