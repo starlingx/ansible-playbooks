@@ -342,6 +342,27 @@
       - name: Create ceph crushmap backup
         command: "ceph osd getcrushmap -o {{ crushmap_file }}"
 
+      - name: Register the content of etc/hostname from
+        shell: cat /etc/hostname
+        register: local_host
+
+      - name: Set local_hostname
+        set_fact:
+          local_hostname: "{{ local_host.stdout_lines[0] | trim | default('') }}"
+
+      # backup ceph.conf from ctrl-0 if we take backup from ctrl-1 on DX system
+      - block:
+        - name: Rename ceph.conf backup from controller-0
+          set_fact:
+            ceph_conf_ctrl_0: "{{ ceph_dir.path }}/ceph_controller-0.conf"
+
+        - name: Copy ceph.conf from controller-0
+          command: 'sshpass -p "{{ ansible_become_pass }}" scp -o StrictHostKeyChecking=no
+                    sysadmin@controller-0:/etc/ceph/ceph.conf {{ ceph_conf_ctrl_0 }}'
+          no_log: True
+
+        when: (system_mode == 'duplex') and (local_hostname == "controller-1")
+
       when: ceph_backend.stat.exists
 
     - name: Send application lifecycle notifications for pre-etcd-backup action
@@ -483,6 +504,7 @@
            {{ extension_permdir }} \
            {{ deploy_permdir }} \
            {{ crushmap_file | default(\"\") }} \
+           {{ ceph_conf_ctrl_0 | default(\"\") }} \
            {{ etcd_snapshot_file }} \
            {{ ldap_db_backup }} \
            {{ postgres_dir.path }} \

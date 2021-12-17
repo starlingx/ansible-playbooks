@@ -30,26 +30,53 @@
         msg: "No Ceph osd partition found, aborting restore operation"
       when: not ceph_osd_parts
 
-    - name: Restore ceph.conf file
-      command: >-
-        tar -C / -xpf {{ restore_data_file }}
-        '{{ ceph_conf[1:] }}'
-      args:
-        warn: false
+    - block:
+      - name: Restore ceph.conf file
+        command: >-
+          tar -C / -xpf {{ restore_data_file }}
+          '{{ ceph_conf[1:] }}'
+        args:
+          warn: false
 
-    - name: Get list of OSDs defined in {{ ceph_conf }}
-      shell: grep "\[osd\.[0-9]*\]" {{ ceph_conf }} | grep -oh "osd\.[0-9]*"
-      register: ceph_conf_osd_list
-      failed_when: false
+      - name: Get list of OSDs defined in {{ ceph_conf }}
+        shell: grep "\[osd\.[0-9]*\]" {{ ceph_conf }} | grep -oh "osd\.[0-9]*"
+        register: ceph_conf_osd_list
+        failed_when: false
 
-    # Allow starting ceph with a ceph.conf from a backup done on controller-1
-    # w/o this it will try to initialize OSDs that are not configured on controller-0.
-    - name: Remove "[osd.*]" sections from {{ ceph_conf }}
-      ini_file:
-        path: "{{ ceph_conf }}"
-        section: "{{ item }}"
-        state: absent
-      with_items: "{{ ceph_conf_osd_list.stdout_lines }}"
+      # Allow starting ceph with a ceph.conf from a backup done on controller-1
+      # w/o this it will try to initialize OSDs that are not configured on controller-0.
+      - name: Remove "[osd.*]" sections from {{ ceph_conf }}
+        ini_file:
+          path: "{{ ceph_conf }}"
+          section: "{{ item }}"
+          state: absent
+        with_items: "{{ ceph_conf_osd_list.stdout_lines }}"
+
+      when: backup_taken_from != 'controller-1'
+
+      # Restore ceph.conf from controller-0 if backup was taken on controller-1
+    - block:
+
+      - name: Restore ceph_controller-0.conf from controller-0
+        command: >-
+          tar -C {{ ceph_conf | dirname }} -xpf {{ restore_data_file }}
+          --transform='s,.*/,,' '*/{{ ceph_conf_controller_0 | basename }}'
+        args:
+          warn: false
+
+      - name: Replace ceph.conf with ceph_controller-0.conf
+        copy:
+          src: "{{ ceph_conf_controller_0 }}"
+          dest: "{{ ceph_conf }}"
+          remote_src: yes
+          force: yes
+
+      - name: Delete ceph_controller-0.conf
+        file:
+          path: "{{ ceph_conf_controller_0 }}"
+          state: absent
+
+      when: (system_mode == 'duplex') and (backup_taken_from == 'controller-1')
 
     - name: Set initial ceph-mon name
       set_fact:

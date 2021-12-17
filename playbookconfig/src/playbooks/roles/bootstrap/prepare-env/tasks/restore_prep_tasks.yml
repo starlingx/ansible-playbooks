@@ -93,6 +93,13 @@
       name: k8s_plugins
     when: plugins_from_bk.stat.exists == True
 
+  - name: Register the content of etc/hostname from backup archive
+    shell: tar -O -xf {{ restore_data_file }} etc/hostname
+    register: bck_taken_from
+
+  - name: Set the host from where the backup was taken
+    set_fact:
+      backup_taken_from: "{{ bck_taken_from.stdout_lines[0] | trim | default('') }}"
 
   become: yes
   become_user: root
