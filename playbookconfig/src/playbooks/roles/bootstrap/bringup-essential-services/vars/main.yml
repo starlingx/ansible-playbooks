@@ -6,7 +6,7 @@ helm_repo_name_platform: stx-platform
 helm_repo_port: 8080
 kubelet_override_template: /usr/share/puppet/modules/platform/templates/kube-stx-override.conf.erb
 kubelet_pmond_template: /usr/share/puppet/modules/platform/templates/kubelet-pmond-conf.erb
-kubelet_cni_bin_dir: /usr/libexec/cni
+kubelet_cni_bin_dir: /opt/cni/bin
 lighttpd_conf_template: /usr/share/puppet/modules/openstack/templates/lighttpd.conf.erb
 lighttpd_inc_conf_template: /usr/share/puppet/modules/openstack/templates/lighttpd-inc.conf.erb
 registry_config_template: /usr/share/puppet/modules/platform/templates/dockerdistribution.conf.erb

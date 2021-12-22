@@ -39,7 +39,7 @@
   lineinfile:
     path: "{{ kubelet_extra_config_file }}"
     regexp: "^(KUBELET_EXTRA_ARGS=.*)$"
-    line: '\1 --cni-bin-dir /usr/libexec/cni'
+    line: '\1 --cni-bin-dir /opt/cni/bin'
     backrefs: yes
   when: ansible_facts['distribution'] == "Ubuntu"
 
