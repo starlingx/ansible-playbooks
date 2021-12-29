@@ -369,7 +369,7 @@
     - name: Get etcd endpoints
       shell: |
         source /etc/platform/openrc
-        system addrpool-list | awk '/cluster-host-subnet/{print$14}'
+        system addrpool-list --nowrap | awk '/cluster-host-subnet/{print$14}'
       register: etcd_endpoint
 
     - name: Wrap etcd_endpoint in [] brackets if it's an ipv6 address
