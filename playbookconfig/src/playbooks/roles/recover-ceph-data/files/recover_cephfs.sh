@@ -31,15 +31,12 @@ set -x
 # Check if the filesystem for the system RWX provisioner is present
 ceph fs ls | grep ${FS_NAME}
 if [ $? -ne 0 ]; then
-    # Attempt to create the pool if not present, this should be present
-    ceph fs new ${FS_NAME} ${METADATA_POOL_NAME} ${DATA_POOL_NAME}
-    if [ $? -eq 22 ]; then
-        # We need to rebuild the fs since we have hit:
-        #   Error EINVAL: pool 'kube-cephfs-metadata' already contains some
-        #   objects. Use an empty pool instead.
-        ceph fs new ${FS_NAME} ${METADATA_POOL_NAME} ${DATA_POOL_NAME} --force
-        ceph fs reset ${FS_NAME} --yes-i-really-mean-it
-    fi
+    # If we have existing metadata/data pools, use them
+    ceph fs new ${FS_NAME} ${METADATA_POOL_NAME} ${DATA_POOL_NAME} --force
+    # Reset the filesystem and journal
+    ceph fs reset ${FS_NAME} --yes-i-really-mean-it
+    cephfs-journal-tool --rank=${FS_NAME}:0 event recover_dentries summary
+    cephfs-journal-tool --rank=${FS_NAME}:0 journal reset
 fi
 
 # Start the Ceph MDS
