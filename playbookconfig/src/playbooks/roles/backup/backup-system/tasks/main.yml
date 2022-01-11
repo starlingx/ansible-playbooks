@@ -565,3 +565,7 @@
   rescue:
     - name: Notify applications that backup failed.
       command: /usr/bin/sysinv-utils notify post-backup-action failure
+
+    - name: Force fail if this playbook or nested playbook failed
+      fail:
+        msg: "Unable to backup the system. Please check ansible logs for the last failed task."
