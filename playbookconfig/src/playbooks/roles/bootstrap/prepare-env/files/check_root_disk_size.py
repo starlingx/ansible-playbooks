@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -30,6 +30,11 @@ def get_rootfs_node():
                         device = os.path.basename(os.readlink(symlink))
                     else:
                         device = os.path.basename(params[1])
+                elif params[0] == "ostree_root":
+                    if "LABEL=" in params[1]:
+                        key, label = params[1].split("=")
+                        symlink = "/dev/disk/by-label/%s" % label
+                        device = os.path.basename(os.readlink(symlink))
 
     if device is not None:
         if DEVICE_NAME_NVME in device:
