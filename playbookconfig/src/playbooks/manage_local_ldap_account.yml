@@ -1,0 +1,91 @@
+---
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Create a new LDAP user with keystone account and sudo access. The playbook
+# uses the openrc-template.j2 file as a template for the keystone account
+# openrc file.
+#
+# Users will be prompted for the following parameters:
+# - user_id                 : id for the new account
+# - user_password           : password for the new account.
+# The parameters below use a default value if they are not defined:
+# - password_change_period  : number of days before needing to change password
+#                             (default: 90)
+# - password_warning_period : number of days to warn about changing the password
+#                             (default: 2)
+#
+# The inventory file contains the password of system controller
+# Do not add any subclouds to the inventory file. The list of subclouds
+# will be dynamically added to the inventory by the playbook itself. To access,
+# the subclouds, the system controller for that subcloud will be used as a jump
+# host and the subcloud's ansible_ssh_common_args variable is set to allow
+# this. This ansible_ssh_common_args variable requires access to the
+# variables (for connecting to the system controller), which requires these
+# parameters to be explicitly supplied through the inventory or passed down
+# through the --extra-vars parameter. Specifying --ask-pass and --user will
+# NOT work in these instances.
+#
+# A special caveat of using the system controller as a jump host is that the
+# /etc/ssh/sshd_config file must have AllowTcpForwarding set to yes. This
+# playbook enables this option while the user account creation is progressing
+# and disables it when complete.
+#
+# Example command:
+#   ansible-playbook --inventory inventory --extra-vars='user_id=na-admin' \
+#     /usr/share/ansible/stx-ansible/playbooks/manage_local_ldap_account.yml
+#
+
+- hosts: systemcontroller
+  gather_facts: no
+
+  vars_prompt:
+  - name: user_id
+    prompt: "What is the name of the user account?"
+    private: no
+
+  - name: user_password
+    prompt: "What is the password for the user account?"
+    private: yes
+    unsafe: yes
+
+  pre_tasks:
+  - set_fact:
+      password_change_period: 90
+      password_warning_period: 2
+  - name: Validate user_id
+    fail:
+      msg: "The user account cannot be empty. Please provide a valid user account."
+    when: user_id == ''
+
+  - name: Validate user_password
+    fail:
+      msg: "The password cannot be empty. Please provide a valid password for the user account."
+    when: user_password == ''
+
+  # The user id and password variables need to be explicitly set here.
+  # Otherwise, there would be undefined variable errors in subsequent
+  # plays.
+  - name: Set the user id and password facts for subsequent plays
+    set_fact:
+      in_user_id: "{{ user_id }}"
+      in_user_password: "{{ user_password }}"
+
+- hosts: systemcontroller
+  gather_facts: no
+
+  vars:
+    ssh_internal_args: -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no
+
+  roles:
+    - manage-local-ldap-account/create-account
+
+- hosts: all
+  gather_facts: no
+
+  vars:
+    ssh_internal_args: -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no
+
+  roles:
+    - manage-local-ldap-account/create-keystone-account
