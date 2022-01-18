@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2021 Wind River Systems, Inc.
+# Copyright (c) 2019-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -66,26 +66,6 @@
     systemd:
       name: etcd
       state: started
-
-  - name: Check if etcd-client crt was created.
-    find:
-      paths: "/etc/etcd"
-      patterns: "etcd-client.*"
-    register: etcd_client_find_output
-
-  - name: Create etcd client account for root, apiserver and enable etcd auth
-    command: "etcdctl --cert-file=$ETCD_CERT --key-file=$ETCD_KEY --ca-file=$ETCD_CA
-              --endpoint=$ETCD_ENDPOINT {{ item }}"
-    with_items:
-      - "user add root:sysadmin"
-      - "user add apiserver-etcd-client:sysadmin"
-      - "auth enable"
-    environment:
-      ETCD_ENDPOINT: "https://{{ cluster_floating_address | ipwrap }}:2379"
-      ETCD_CERT: "/etc/etcd/etcd-client.crt"
-      ETCD_KEY: "/etc/etcd/etcd-client.key"
-      ETCD_CA: "/etc/etcd/ca.crt"
-    when: etcd_client_find_output.matched != 0
 
   - name: Bring up Kubernetes master
     import_tasks: bringup_kubemaster.yml
