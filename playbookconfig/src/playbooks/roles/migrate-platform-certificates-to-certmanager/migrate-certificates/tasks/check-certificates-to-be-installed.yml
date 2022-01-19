@@ -1,0 +1,20 @@
+#
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Check if https_enabled is enabled and if oidc-auth-apps is applied
+# in order to determine which certificates need to be installed
+#
+- name: Check if system is https_enabled
+  shell: |
+    source /etc/platform/openrc
+    system show | grep https_enabled | awk '{ print $4 }'
+  register: https_enabled
+
+- name: Check if oidc-auth-apps is applied
+  shell: |
+    source /etc/platform/openrc
+    system application-show oidc-auth-apps --column status --format value | \
+    awk  '{ if ($0 == "applied") print "true"; else print "false"; }'
+  register: oidc_applied

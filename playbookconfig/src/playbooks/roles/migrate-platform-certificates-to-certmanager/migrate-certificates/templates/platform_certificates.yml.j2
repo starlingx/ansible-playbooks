@@ -1,0 +1,119 @@
+## strips out any bad character from region name. Only [^A-Za-z0-9-]" is supported
+{% set clean_region_name = region_name.stdout | replace("_", "-") | regex_replace("[^A-Za-z0-9-]","") | lower %}
+---
+apiVersion: v1
+data:
+  tls.crt: "{{ ica_cert }}"
+  tls.key: "{{ ica_key }}"
+kind: Secret
+metadata:
+  name: system-local-ca
+  namespace: cert-manager
+type: kubernetes.io/tls
+---
+apiVersion: cert-manager.io/v1alpha2
+kind: ClusterIssuer
+metadata:
+  name: system-local-ca
+spec:
+  ca:
+    secretName: system-local-ca
+---
+{% if https_enabled.stdout | bool %}
+apiVersion: cert-manager.io/v1alpha3
+kind: Certificate
+metadata:
+  name: system-restapi-gui-certificate
+  namespace: deployment
+spec:
+  secretName: system-restapi-gui-certificate
+  duration: "{{ duration }}"
+  renewBefore: "{{ renewBefore }}"
+  issuerRef:
+    name: system-local-ca
+    kind: ClusterIssuer
+  commonName: "{{ oam_ip.stdout }}"
+  ipAddresses:
+    - "{{ oam_ip.stdout }}"
+  dnsNames:
+    - "{{ clean_region_name }}.{{ dns_domain }}"
+  subject:
+    countries:
+      - "{{ subject_C }}"
+    provinces:
+      - "{{ subject_ST }}"
+    localities:
+      - "{{ subject_L }}"
+      - "{{ subject_prefix + ':' if subject_prefix is defined else '' }}{{ clean_region_name }}:system-restapi-gui"
+    organizations:
+      - "{{ subject_O }}"
+    organizationalUnits:
+      - "{{ subject_OU }}"
+---
+{% endif %}
+apiVersion: cert-manager.io/v1alpha3
+kind: Certificate
+metadata:
+  name: system-registry-local-certificate
+  namespace: deployment
+spec:
+  secretName: system-registry-local-certificate
+  duration: "{{ duration }}"
+  renewBefore: "{{ renewBefore }}"
+  issuerRef:
+    name: system-local-ca
+    kind: ClusterIssuer
+  commonName: "{{ oam_ip.stdout }}"
+  ipAddresses:
+    - "{{ oam_ip.stdout }}"
+    - "{{ management_ip.stdout }}"
+  dnsNames:
+    - "{{ clean_region_name }}.{{ dns_domain }}"
+    - registry.local
+{% if distributed_cloud_role.stdout == 'systemcontroller' %}
+    - registry.central
+{% endif %}
+  subject:
+    countries:
+      - "{{ subject_C }}"
+    provinces:
+      - "{{ subject_ST }}"
+    localities:
+      - "{{ subject_L }}"
+      - "{{ subject_prefix + ':' if subject_prefix is defined else '' }}{{ clean_region_name }}:system-registry-local"
+    organizations:
+      - "{{ subject_O }}"
+    organizationalUnits:
+      - "{{ subject_OU }}"
+---
+{% if oidc_applied.stdout | bool %}
+apiVersion: cert-manager.io/v1alpha3
+kind: Certificate
+metadata:
+  name: oidc-auth-apps-certificate
+  namespace: kube-system
+spec:
+  secretName: oidc-auth-apps-certificate
+  duration: "{{ duration }}"
+  renewBefore: "{{ renewBefore }}"
+  issuerRef:
+    name: system-local-ca
+    kind: ClusterIssuer
+  commonName: "{{ oam_ip.stdout }}"
+  ipAddresses:
+    - "{{ oam_ip.stdout }}"
+  dnsNames:
+    - "{{ clean_region_name }}.{{ dns_domain }}"
+  subject:
+    countries:
+      - "{{ subject_C }}"
+    provinces:
+      - "{{ subject_ST }}"
+    localities:
+      - "{{ subject_L }}"
+      - "{{ subject_prefix + ':' if subject_prefix is defined else '' }}{{ clean_region_name }}:system-oidc-dex"
+    organizations:
+      - "{{ subject_O }}"
+    organizationalUnits:
+      - "{{ subject_OU }}"
+{% endif %}
