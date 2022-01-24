@@ -3,25 +3,37 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Parameter ica_cert will be the certificate that will be used as the
+# Parameter system_local_ca_cert will be the certificate that will be used as the
 # issuer for platform certificates (registry.local, https / rest-api, oidc)
 #
-# Please make sure that you use a ICA certificate with a long duration
-# The playbook will fail if an ICA certificate that expires in less than
-# 3 years is provided.
+# Please make sure that you use a root_ca_cert and system_local_ca_cert certificate
+# with a long duration. The playbook will fail if any of these CA certificates expire in
+# less than 3 years.
 #
-# If you wish to use a different value for ICA duration you can override
-# it by setting a different value to validation ica_duration:
+# If you wish to use a different value for CA duration you can override
+# it by setting a different value to validation parameter ca_duration:
 # Example:
-# ica_duration: 2
+# ca_duration: 2
+# Notice that ca_duration is applied to both root_ca_cert and system_local_ca_cert
 #
 # Please also make sure that duration and renewBefore are sensible values
-# considering the ICA remaining duration.
+# considering the system_local_ca_cert remaining duration.
 #
 all:
   vars:
-    ica_cert: <base64_cert>
-    ica_key: <base64_key>
+    root_ca_cert: <base64_cert>
+    # It's strongly recommended using an Intermediate CA for system-local-ca_cert
+    # as that has the advantages of anchoring your certificates to your external Root CA.
+    # However, it is possible to simply specify a Root CA for system-local-ca_cert.
+    # For that, specify system_local_ca_cert and system_local_ca_key with values from your Root CA.
+    # Note that system_local_ca_cert and root_ca_cert must be the same for that configuration.
+    system_local_ca_cert: <base64_cert>
+    system_local_ca_key: <base64_key>
+    # the ca_duration parameter is optional. If not specified, it defaults to 3.
+    # It represents the number of years for the CA certificates validity check.
+    # It is not recommended to use short values for this parameter.
+    # It applies to both system_local_ca_cert and the system_local_ca_cert certificates.
+    ca_duration: 3
   children:
     # This will be applied to all online subclouds
     # Use the below example in hosts to override particulars for a subcloud such as passwords

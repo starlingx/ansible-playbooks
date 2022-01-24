@@ -3,8 +3,8 @@
 ---
 apiVersion: v1
 data:
-  tls.crt: "{{ ica_cert }}"
-  tls.key: "{{ ica_key }}"
+  tls.crt: "{{ system_local_ca_cert }}"
+  tls.key: "{{ system_local_ca_key }}"
 kind: Secret
 metadata:
   name: system-local-ca

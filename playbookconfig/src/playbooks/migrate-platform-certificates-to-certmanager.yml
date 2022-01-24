@@ -75,7 +75,13 @@
 - hosts: localhost
   gather_facts: no
   tasks:
-    - name: Install ICA as a system Trusted CA certificate
-      import_role:
+    - name: Install certificates as system Trusted CA certificates
+      include_role:
         name: migrate-platform-certificates-to-certmanager/install-trusted-ca
+      with_items:
+        - { name: system_local_ca_cert, content: "{{ system_local_ca_cert }}" }
+        - { name: root_ca_cert, content: "{{ root_ca_cert }}" }
+      loop_control:
+        label: "{{ item.name }}"
+
       when: mode == 'update'

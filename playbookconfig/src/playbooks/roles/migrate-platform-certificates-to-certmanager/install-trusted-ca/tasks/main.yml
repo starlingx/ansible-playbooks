@@ -6,45 +6,63 @@
 # These tasks provide the functionality to validate ICA duration and
 # install it as a platform Trusted CA
 #
-- name: Save the specified ICA to a file
-  shell: echo "{{ ica_cert }}" | base64 -d > /tmp/ica.pem
+- name: Save {{ item.name }} certificate to a file
+  shell: echo "{{ item.content }}" | base64 -d > /tmp/ca.pem
+
+- name: Check if system_local_ca_cert is signed by root_ca_cert or self-signed
+  shell: |
+    echo "{{ root_ca_cert }}" | base64 -d > /tmp/root.pem
+    openssl verify -verbose -CAfile /tmp/root.pem /tmp/ca.pem
+  register: ca_verification
+  when: item.name == 'system_local_ca_cert'
+  # failed_when as false in order to print a better error msg in the task below
+  failed_when: false
+
+- name: Fail when system_local_ca_cert is not signed by root_ca_cert or self-signed
+  fail:
+    msg: |
+      The system_local_ca_cert provided is not signed by root_ca_cert provided or self-signed.
+      Please review your inventory parameters.
+  when:
+    - item.name == 'system_local_ca_cert'
+    - "'OK' not in ca_verification.stdout"
 
 - name: Get CA information from certificate
   shell: |
-    cat /tmp/ica.pem | openssl x509 -text -noout | grep "CA:"
+    cat /tmp/ca.pem | openssl x509 -text -noout | grep "CA:"
   register: is_ca
 
-- name: Fail when ICA certificate is not an actual CA certificate
+- name: Fail when certificate specified is not an actual CA certificate
   fail:
-    msg: The certificate provided as ICA is not a CA certificate (CA:FALSE)
+    msg: The {{ item.name }} certificate provided is not a CA certificate (CA:FALSE)
   when: "'CA:TRUE' not in is_ca.stdout"
 
-- name: Get years for ICA duration validation
+- name: Get years for CA duration validation
   set_fact:
-    ica_duration: "{{ ica_duration if ica_duration is defined else 3 }}"
+    ca_duration: "{{ ca_duration if ca_duration is defined else 3 }}"
 
-- name: Check that ICA certificate remaining duration is longer than {{ ica_duration }} years
+- name: Check that CA certificate remaining duration is longer than {{ ca_duration }} years
   shell: |
-      expiration_date=$(cat /tmp/ica.pem | openssl x509 -noout -enddate | cut -d'=' -f2)
+      expiration_date=$(cat /tmp/ca.pem | openssl x509 -noout -enddate | cut -d'=' -f2)
       expiration_date_timestamp=$(date -d "${expiration_date}" +%s)
-      date_5years_from_now_timestamp=$(date -d "+{{ ica_duration }} years" +%s)
+      date_5years_from_now_timestamp=$(date -d "+{{ ca_duration }} years" +%s)
       time_left_ica=$(expr $expiration_date_timestamp - $date_5years_from_now_timestamp)
       echo $time_left_ica
   register: ica_time_left
 
-- name: Fail when ICA certificate remaining duration is shorter than {{ ica_duration }} years
+- name: Fail when CA certificate remaining duration is shorter than {{ ca_duration }} years
   fail:
     msg: >-
-      The remaining duration for the ICA certificate specified
-      is less than {{ ica_duration }} years.
+      The remaining duration for the {{ item.name }} certificate specified
+      is less than {{ ca_duration }} years.
       Please use a certificate with a longer validity.
   when: ica_time_left.stdout | int < 0
 
-- name: Install ICA
+- name: Install {{ item.name }} certificate as a Trusted CA certificate
   shell: >-
     source /etc/platform/openrc &&
-    system certificate-install -m ssl_ca /tmp/ica.pem
+    system certificate-install -m ssl_ca /tmp/ca.pem
   register: install_cert_output
   until: install_cert_output is not failed
-  retries: 10
-  delay: 30
+  retries: 3
+  delay: 60
