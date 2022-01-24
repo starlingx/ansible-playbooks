@@ -6,3 +6,4 @@ standard_root_disk_size: 500
 temp_ssl_ca_dir: "/tmp"
 temp_ssl_ca_file: "ca-cert.pem"
 temp_k8s_plugins_dir: "/tmp"
+os_release: "centos"
