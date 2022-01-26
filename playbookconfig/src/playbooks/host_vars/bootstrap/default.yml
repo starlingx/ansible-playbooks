@@ -253,6 +253,41 @@ docker_registries:
 #   issuer_url:
 #   username_claim:
 
+# The following parameters (in dictionary format) are used to configure
+# Kubernetes control plane components, the kubelet as well as networking respsectively:
+#
+# apiserver_extra_args: {}
+# controllermanager_extra_args: {}
+#
+# kubelet_extra_args: {}
+# kubelet_configurations: {}
+#
+# networking_configurations: {}
+#
+# By default the system is bootstrapped with a set of default values e.g.
+#
+# apiserver_extra_args:
+#   default-not-ready-toleration-seconds: "30"
+#   default-unreachable-toleration-seconds: "30"
+#   feature-gates: "SCTPSupport=true,TTLAfterFinished=true,HugePageStorageMediumSize=true,RemoveSelfLink=false"
+#   event-ttl: "24h"
+#
+# controllermanager_extra_args:
+#   node-monitor-period: "2s"
+#   node-monitor-grace-period: "20s"
+#   pod-eviction-timeout: '30s'
+#   feature-gates: "TTLAfterFinished=true"
+#
+# kubelet_configurations: {}
+#   nodeStatusUpdateFrequency: "4s"
+#   featureGates:
+#     HugePageStorageMediumSize: true
+#
+# networking_configurations:
+#   dnsDomain: 'cluster.local'
+#
+# Please refer to the official documentation for more details on these overwritable parameters.
+
 # ADMIN CREDENTIALS
 # =================
 #

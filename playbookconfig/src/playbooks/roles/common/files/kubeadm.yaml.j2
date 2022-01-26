@@ -1,0 +1,64 @@
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: {{ apiserver_advertise_address }}
+nodeRegistration:
+  criSocket: "/var/run/containerd/containerd.sock"
+  # configure kubeadm to not apply the default
+  # taint "node-role.kubernetes.io/master:NoSchedule" to control plane nodes
+  taints: {{ kubelet_taints }}
+  kubeletExtraArgs:
+    {{kubelet_extra_args | to_nice_yaml(width=512) | indent(4, indentfirst=False)}}
+---
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: ClusterConfiguration
+apiServer:
+  certSANs:
+  {{ apiserver_cert_list | to_nice_yaml(width=512) | indent(2, indentfirst=False) }}
+  extraArgs:
+    {{apiserver_extra_args | to_nice_yaml(width=512) | indent(4, indentfirst=False)}}
+{% if 'client_id' in apiserver_oidc %}
+{% if 'oidc-client-id' not in apiserver_extra_args%}
+    oidc-client-id: {{ apiserver_oidc.client_id }}
+{% endif %}
+{% endif %}
+{% if 'issuer_url' in apiserver_oidc %}
+{% if 'oidc-issuer-url' not in apiserver_extra_args%}
+    oidc-issuer-url: {{ apiserver_oidc.issuer_url }}
+{% endif %}
+{% endif %}
+{% if 'username_claim' in apiserver_oidc %}
+{% if 'oidc-username-claim' not in apiserver_extra_args%}
+    oidc-username-claim: {{ apiserver_oidc.username_claim }}
+{% endif %}
+{% endif %}
+{% if 'groups_claim' in apiserver_oidc %}
+{% if 'oidc-groups-claim' not in apiserver_extra_args%}
+    oidc-groups-claim: {{ apiserver_oidc.groups_claim }}
+{% endif %}
+{% endif %}
+  extraVolumes:
+    - name: "encryption-config"
+      hostPath:  {{ encryption_provider_config }}
+      mountPath: {{ encryption_provider_config }}
+      readOnly: true
+      pathType: File
+controllerManager:
+  extraArgs:
+    {{controllermanager_extra_args | to_nice_yaml(width=512) | indent(4, indentfirst=False)}}
+controlPlaneEndpoint: {{ controlplane_endpoint }}
+etcd:
+  external:
+    endpoints:
+    - {{ etcd_endpoint }}
+    caFile: /etc/etcd/ca.crt
+    certFile: /etc/kubernetes/pki/apiserver-etcd-client.crt
+    keyFile: /etc/kubernetes/pki/apiserver-etcd-client.key
+imageRepository: "registry.local:9001/k8s.gcr.io"
+kubernetesVersion: {{ kubernetes_long_version }}
+networking:
+  {{networking_configurations | to_nice_yaml(width=512) | indent(2, indentfirst=False)}}
+---
+kind: KubeletConfiguration
+apiVersion: kubelet.config.k8s.io/v1beta1
+{{kubelet_configurations | to_nice_yaml(width=512) | indent(0, indentfirst=False)}}
