@@ -1,8 +1,24 @@
+#
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# These tasks perform an alarm check for management affecting alarms.
+# It stops execution in case there are any.
+# Users can bypass this check by using extra-var ignore_alarms=yes
+#
+
+# it checks for column 6 below because that's the column for mgmt_affecting
 - name: Check for management affecting alarms
   shell: |
     source /etc/platform/openrc
-    fm alarm-list --nowrap --mgmt_affecting | grep True | wc -l
+    fm alarm-list --nowrap --mgmt_affecting | cut -d'|' -f6 | grep True | wc -l
   register: management_alarm_count
+  until: management_alarm_count.stdout | int == 0
+  retries: 10
+  delay: 15
+  # set as false to allow for a better error message in the fail task below
+  failed_when: false
 
 - name: Fail when there are management alarms
   fail:
@@ -10,5 +26,5 @@
       There are management affecting alarms present on the target system.
       Execution will not continue. No certificates were migrated.
       After a careful analysis of the alarms,
-      retry this target with extra-var ignore-alarms=yes
+      retry this target with extra-var ignore_alarms=yes
   when: management_alarm_count.stdout | int > 0

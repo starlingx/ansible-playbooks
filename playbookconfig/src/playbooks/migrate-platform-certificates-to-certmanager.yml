@@ -63,14 +63,19 @@
       when:
         - target_list != 'all_online_subclouds'
 
-    - name: Install ICA as a system Trusted CA certificate
-      import_role:
-        name: migrate-platform-certificates-to-certmanager/install-trusted-ca
-      when: mode == 'update'
-
 - hosts: target_group
   gather_facts: no
   # for mode=check the output is too messy with free strategy
   strategy: "{{ 'linear' if mode == 'check' else 'free' }}"
   roles:
     - migrate-platform-certificates-to-certmanager/migrate-certificates
+
+# Ensures ICA is also installed in system controller
+# even when target_list contains only subclouds
+- hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Install ICA as a system Trusted CA certificate
+      import_role:
+        name: migrate-platform-certificates-to-certmanager/install-trusted-ca
+      when: mode == 'update'

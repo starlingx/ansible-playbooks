@@ -51,9 +51,13 @@
     - name: Check certificates to be installed
       include_tasks: check-certificates-to-be-installed.yml
 
-    - name: Make sure /home/sysadmin/certificates_backup/ directory exists
+    - name: Get new backup directory
+      shell: mktemp -d -p /home/sysadmin -t certificates_backup_XXXXXX --dry-run
+      register: backup_directory
+
+    - name: Make sure backup directory exists
       file:
-        path: /home/sysadmin/certificates_backup/
+        path: "{{backup_directory.stdout}}"
         state: directory
         recurse: yes
 
@@ -61,7 +65,7 @@
       copy:
         remote_src: true
         src: /etc/ssl/private/{{item}}
-        dest: /home/sysadmin/certificates_backup/{{item}}
+        dest: "{{backup_directory.stdout}}/{{item}}"
       with_items:
         - registry-cert.crt
         - server-cert.pem
@@ -72,7 +76,7 @@
       shell: >-
         kubectl --ignore-not-found=true
         get secret local-dex.tls -n kube-system -o yaml
-        > /home/sysadmin/certificates_backup/local-dex.tls.yaml
+        > {{backup_directory.stdout}}/local-dex.tls.yaml
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: bkp_secret_ep
@@ -110,17 +114,19 @@
       when: oidc_applied.stdout | bool
 
   rescue:
-    - debug:
-        msg: >-
-          Failed to migrate platform certificates to cert-manager.
-          Please find backups of the previous certificates in /home/sysadmin/certificates_backup.
+    - block:
+      - debug:
+          msg: >-
+            Failed to migrate platform certificates to cert-manager.
+            Please find backups of the previous certificates in {{backup_directory.stdout}}.
 
-    - name: Show backups of certificates
-      command: ls -lR /home/sysadmin/certificates_backup
-      register: certs_output
+      - name: Show backups of certificates
+        command: ls -lR {{backup_directory.stdout}}
+        register: certs_output
 
-    - debug:
-        msg: "{{ certs_output.stdout_lines }}"
+      - debug:
+          msg: "{{ certs_output.stdout_lines }}"
+      when: backup_directory is defined
 
   when: mode == 'update'
 
