@@ -1,0 +1,32 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This playbook downloads container images, generates image archive files
+# and stores them in /opt/platform-backup/<release-number> in preparation
+# for subcloud upgrade or reinstall.
+#
+# Usage:
+#   ansible-playbook prestage_images.yml -i <inventory-file> \
+#      -e "software_version=<release-number> image_list_file=<images-file>"
+#
+# Images file is mandatory if the specified software version is greater
+# than the current software version of the subcloud. Passwords for
+# ssh (ansible_ssh_pass) and privilege escalation (ansible_become_pass)
+# must also be provided via --extra-vars or be included in the inventory file.
+
+- hosts: all
+  # If gathering facts is really necessary, run setup task AFTER host connectivity
+  # check block in prepare-env role.
+  gather_facts: no
+
+  vars:
+    prestage_type: "images"
+    platform_backup_dir: /opt/platform-backup
+    image_list: []
+
+  roles:
+    - prestage/prepare-env
+    - { role: prestage/prestage-images, become: yes }

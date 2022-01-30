@@ -1,0 +1,50 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# TASKS DESCRIPTION:
+#   These tasks clean up the specified directory in preparation for
+#   prestage activities.
+#
+
+- name: Set prestage directory and sub directory facts
+  set_fact:
+    images_cleanup_dir: "{{ platform_backup_dir}}/{{ input_dir }}"
+    packages_cleanup_dir: "{{ platform_backup_dir}}/{{ input_dir }}/Packages"
+    repodata_cleanup_dir: "{{ platform_backup_dir}}/{{ input_dir }}/repodata"
+
+- block:
+  - name: Delete Packages directory
+    file:
+      path: "{{ packages_cleanup_dir }}"
+      state: absent
+
+  - name: Delete repodata directory
+    file:
+      path: "{{ repodata_cleanup_dir }}"
+      state: absent
+  when: prestage_type == "packages"
+
+- block:
+  - name: Check if {{ images_cleanup_dir }} exists
+    stat:
+      path: "{{ images_cleanup_dir }}"
+    register: check_images_cleanup_dir
+
+  - block:
+    - name: Find images archive and md5 files
+      find:
+        paths: "{{ images_cleanup_dir }}"
+        patterns: "*.tar.gz,*.tar.gz.md5"
+      register: find_result
+
+    - name: Clean up {{ input_dir }} images archive and md5 files
+      file:
+        path: "{{ item['path'] }}"
+        state: absent
+      with_items: "{{ find_result['files'] }}"
+      become: yes
+    when: check_images_cleanup_dir.stat.exists
+  when: prestage_type == "images"

@@ -359,7 +359,7 @@
         - name: Copy ceph.conf from controller-0
           command: 'sshpass -p "{{ ansible_become_pass }}" scp -o StrictHostKeyChecking=no
                     sysadmin@controller-0:/etc/ceph/ceph.conf {{ ceph_conf_ctrl_0 }}'
-          no_log: True
+          no_log: true
 
         when: (system_mode == 'duplex') and (local_hostname == "controller-1")
 

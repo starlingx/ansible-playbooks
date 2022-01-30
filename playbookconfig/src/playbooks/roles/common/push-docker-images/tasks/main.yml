@@ -153,7 +153,8 @@
   register: download_images_output
   retries: 10
   delay: 5
-  until: download_images_output.rc == 0
+  until: (download_images_output.rc == 0 or "HARD FAIL" in download_images_output.stdout)
+  failed_when: download_images_output.rc != 0
   environment:
     REGISTRIES: "{{ registries | to_json }}"
 

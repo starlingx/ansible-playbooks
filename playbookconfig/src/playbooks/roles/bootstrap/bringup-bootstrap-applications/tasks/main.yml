@@ -38,8 +38,8 @@
   shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace deployment --dry-run -o yaml |
           kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
 
-#Check if there is a default-registry-key for kube-system and create it when
-#there is not during platform-restore process
+# Check if there is a default-registry-key for kube-system and create it when
+# there is not during platform-restore process
 - block:
   - name: Get kube-system default registry key
     command: >-

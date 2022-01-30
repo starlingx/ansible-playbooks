@@ -29,3 +29,4 @@
       - { name: 'docker.io', value: "{{ docker_registry }}" }
       - { name: 'docker.elastic.co', value: "{{ elastic_registry }}" }
       - { name: 'ghcr.io', value: "{{ ghcr_registry }}" }
+    no_log: true

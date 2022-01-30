@@ -13,7 +13,7 @@
 - name: Gather Host OS release
   raw: "grep '^NAME=' /etc/os-release | sed s'/NAME=//'"
   register: distro
-  changed_when: False
+  changed_when: false
 
 - name: Set OS Release to Debian
   set_fact:

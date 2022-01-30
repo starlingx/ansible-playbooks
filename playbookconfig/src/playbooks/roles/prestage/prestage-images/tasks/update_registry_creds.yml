@@ -1,0 +1,59 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# TASKS DESCRIPTION:
+#   These tasks retrieve aws login credentials from the stored
+#   registry username and password if the registry type is aws-ecr.
+#   The output registries dictionary contains the auth info
+#   required for images download.
+
+# registry.key and registry.value are passed in from the caller
+- set_fact:
+    creds_converted_required: false
+    registry_val: "{{ registry.value }}"
+
+- name: Set to default (docker.io) value if value is missing for a registry
+  set_fact:
+    registry_val: "{{ default_registry_val }}"
+  when: not registry_val
+
+- name: Turn on credentials update flag if registry type is aws-ecr
+  set_fact:
+    creds_converted_required: true
+  when: registry_val['type'] is defined and registry_val['type'] == 'aws-ecr'
+
+- block:
+  - name: Get aws-ecr login credentials
+    script: >
+      {{ playbook_dir }}/roles/common/push-docker-images/files/get_registry_auth.py
+      {{ registry_val['url'] }} {{ registry_val['username'] }} {{ registry_val['password'] }}
+    register: registry_auth_output
+    environment:
+      AWS_HTTP_PROXY: "{{ docker_http_proxy|default('') }}"
+      AWS_HTTPS_PROXY: "{{ docker_https_proxy|default('') }}"
+    no_log: true
+
+  - name: Trim aws-ecr auth output
+    set_fact:
+      registry_auth: "{{ registry_auth_output.stdout | trim }}"
+
+  - name: Set registry value with correct aws-ecr login credentials
+    set_fact:
+      converted_registry_val:
+        url: "{{ registry_val['url'] }}"
+        type: "{{ registry_val['type'] }}"
+        username: "{{ registry_auth['username'] }}"
+        password: "{{ registry_auth['password'] }}"
+
+  - name: Add a new entry to the output registries dictionary with updated credentials
+    set_fact:
+      output_registries: "{{ output_registries|default({}) | combine({registry.key: converted_registry_val}) }}"
+  when: creds_converted_required
+
+- name: Add a new entry to the output registries dictionary with the stored credentials
+  set_fact:
+    output_registries: "{{ output_registries|default({}) | combine({registry.key: registry_val}) }}"
+  when: not creds_converted_required

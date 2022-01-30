@@ -1,0 +1,64 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# TASKS DESCRIPTION:
+#   These tasks retrieve docker registries and credentials from sysinv and
+#   barbican, add missing registry/registry value and invoke sub tasks to
+#   update registry login credentials where applicable.
+#
+
+- name: Retrieve configured docker registries if images list is provided
+  include_role:
+    name: common/push-docker-images
+    tasks_from: get_docker_registries
+
+- name: Set input registries for conversion
+  set_fact:
+    input_registries: "{{ registries['docker_registries'] }}"
+
+- name: Set default registry value to docker.io registry value
+  set_fact:
+    default_registry_val: "{{ input_registries['docker.io'] }}"
+    default_url_prefix: "{{ input_registries['docker.io']['url']|replace('docker.io', '') }}"
+
+- block:
+  - set_fact:
+      ghcr_registry_val: "{{ default_registry_val }}"
+
+  - name: Set registry url for ghcr registry
+    set_fact:
+      ghcr_registry_val: "{{ ghcr_registry_val|combine({'url': default_url_prefix + 'ghcr.io'}) }}"
+
+  - name: Add ghcr.io registry if it does not exist in the input registries
+    set_fact:
+      input_registries: "{{ input_registries|combine({'ghcr.io': ghcr_registry_val}) }}"
+  when: input_registries['ghcr.io'] is not defined
+
+- name: Retrieve proxy info
+  shell: >
+    source /etc/platform/openrc;
+    system service-parameter-list --section proxy --column name --column value --format yaml
+  register: proxy_info
+
+- name: Generate a docker proxy lookup table
+  set_fact:
+    proxy_lookup: "{{ proxy_lookup|default({}) | combine({item.name: item.value}) }}"
+  loop: "{{ proxy_info.stdout|from_yaml }}"
+
+- name: Set http proxy facts if defined
+  set_fact:
+    http_proxy: "{{ proxy_lookup['http_proxy'] if proxy_lookup['http_proxy'] is defined else '' }}"
+    https_proxy: "{{ proxy_lookup['https_proxy'] if proxy_lookup['https_pproxy'] is defined else '' }}"
+
+- name: Update docker registries credentials for type aws-ecr
+  include: update_registry_creds.yml
+  loop: "{{ input_registries|dict2items }}"
+  loop_control:
+    loop_var: registry
+
+- name: Set docker_registries to the output registries from the above conversion
+  set_fact:
+    docker_registries: "{{ output_registries }}"
