@@ -15,7 +15,7 @@
 # (see migrate-platform-certificates-to-certmanager-inventory-EXAMPLE.yml)
 #
 # Example command:
-# ansible-playbook migrate-platform-certificates-to-certmanager.yml \
+# ansible-playbook migrate_platform_certificates_to_certmanager.yml \
 #     -i @migrate-platform-certificates-to-certmanager-inventory.yml \
 #     --extra-vars "target_list=subcloud1 mode=update"
 #
@@ -52,16 +52,14 @@
             groups: target_group
           with_items: "{{ subclouds.stdout_lines }}"
 
-      when:
-        - target_list == 'all_online_subclouds'
+      when: "'all_online_subclouds' in target_list"
 
     - name: Get subcloud from extra-vars
       add_host:
         name: "{{ item }}"
         groups: target_group
       with_items: "{{ target_list.split(',') }}"
-      when:
-        - target_list != 'all_online_subclouds'
+      when: "item != 'all_online_subclouds'"
 
 - hosts: target_group
   gather_facts: no
@@ -72,6 +70,9 @@
 
 # Ensures ICA is also installed in system controller
 # even when target_list contains only subclouds
+# Moved this tasks to be the very last because 'system certificate-install'
+# creates a temporary management affecting alarm. In order to avoid waiting
+# for it to clear, running it as a last step. No side effects of doing this.
 - hosts: localhost
   gather_facts: no
   tasks:

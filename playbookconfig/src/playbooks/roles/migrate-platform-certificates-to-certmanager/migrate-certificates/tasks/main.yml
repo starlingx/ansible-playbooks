@@ -52,20 +52,17 @@
       include_tasks: check-certificates-to-be-installed.yml
 
     - name: Get new backup directory
-      shell: mktemp -d -p /home/sysadmin -t certificates_backup_XXXXXX --dry-run
-      register: backup_directory
-
-    - name: Make sure backup directory exists
-      file:
-        path: "{{backup_directory.stdout}}"
+      tempfile:
         state: directory
-        recurse: yes
+        path: /home/sysadmin/
+        prefix: certificates_backup_
+      register: backup_directory
 
     - name: Backup current registry.local and rest-api-https certificates
       copy:
         remote_src: true
         src: /etc/ssl/private/{{item}}
-        dest: "{{backup_directory.stdout}}/{{item}}"
+        dest: "{{ backup_directory.path }}/{{item}}"
       with_items:
         - registry-cert.crt
         - server-cert.pem
@@ -76,7 +73,7 @@
       shell: >-
         kubectl --ignore-not-found=true
         get secret local-dex.tls -n kube-system -o yaml
-        > {{backup_directory.stdout}}/local-dex.tls.yaml
+        > {{ backup_directory.path }}/local-dex.tls.yaml
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: bkp_secret_ep
@@ -123,10 +120,10 @@
       - debug:
           msg: >-
             Failed to migrate platform certificates to cert-manager.
-            Please find backups of the previous certificates in {{backup_directory.stdout}}.
+            Please find backups of the previous certificates in {{ backup_directory.path }}.
 
       - name: Show backups of certificates
-        command: ls -lR {{backup_directory.stdout}}
+        command: ls -lR {{ backup_directory.path }}
         register: certs_output
 
       - debug:
