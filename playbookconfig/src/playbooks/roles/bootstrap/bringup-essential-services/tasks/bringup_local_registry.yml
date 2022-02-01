@@ -267,7 +267,7 @@
 
 - name: Start docker registry
   systemd:
-    name: docker-distribution
+    name: "{{ 'docker-registry' if os_release == 'debian' else 'docker-distribution' }}"
     state: restarted
 
 - name: Update /etc/hosts with local registry host
