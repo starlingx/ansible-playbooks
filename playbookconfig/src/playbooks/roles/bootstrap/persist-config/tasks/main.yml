@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2021 Wind River Systems, Inc.
+# Copyright (c) 2019-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -183,7 +183,7 @@
 - block:
   - name: Create Barbican secret for elastic registry if credentials exist
     shell: "source /etc/platform/openrc; openstack secret store -n elastic-registry-secret
-           -p 'username:{{ docker_registry['username'] }} password:{{ docker_registry['password'] }}'
+           -p 'username:{{ elastic_registry['username'] }} password:{{ elastic_registry['password'] }}'
            -c 'Secret href' -f value"
     register: elastic_registry_secret_output
 
@@ -195,7 +195,7 @@
 - block:
   - name: Create Barbican secret for ghcr registry if credentials exist
     shell: "source /etc/platform/openrc; openstack secret store -n ghcr-registry-secret
-           -p 'username:{{ docker_registry['username'] }} password:{{ docker_registry['password'] }}'
+           -p 'username:{{ ghcr_registry['username'] }} password:{{ ghcr_registry['password'] }}'
            -c 'Secret href' -f value"
     register: ghcr_registry_secret_output
 
