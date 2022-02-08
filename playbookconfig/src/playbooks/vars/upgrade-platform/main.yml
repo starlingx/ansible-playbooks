@@ -4,3 +4,10 @@ restore_in_progress_flag: /etc/platform/.restore_in_progress
 wipe_ceph_osds: false
 migrate_platform_data: true
 skip_version_check: true
+# From 21.12 to 22.02 upgrade, the N release still have repo in /www.
+# This is different from a restore from a 22.02 backup.
+# The overwrite below is needed only for 22.02 release in which
+# /www is relocated to /var/www.
+# TODO: from 22.02 + 1 release, remove this line below to use
+# the same patching repo path as restore scenario.
+patching_repo_permdir: /www/pages/updates
