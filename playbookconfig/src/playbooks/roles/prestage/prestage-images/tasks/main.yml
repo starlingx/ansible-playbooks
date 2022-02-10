@@ -91,6 +91,10 @@
   - debug: var=gen_image_bundles_output.stdout_lines
 
   always:
+    - name: Clear docker cache
+      command: docker image prune -af
+      failed_when: false
+
     - name: Remove tempfile
       file:
         path: "{{ image_list_tempfile.path }}"

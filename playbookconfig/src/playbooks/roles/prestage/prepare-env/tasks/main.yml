@@ -11,7 +11,7 @@
 
 - name: Fail if software version for images prestaging is not specified
   fail:
-    msg: "Please specify software version for images prestaging."
+    msg: "Please specify software version for prestaging."
   when: software_version is not defined
 
 - name: Set prestage software version and cleanup directores fact
@@ -25,6 +25,7 @@
     prestage_dir: "{{ platform_backup_dir }}/{{ prestage_software_version }}"
     packages_prestage_dir: "{{ platform_backup_dir }}/{{ prestage_software_version }}/Packages"
     repodata_prestage_dir: "{{ platform_backup_dir }}/{{ prestage_software_version }}/repodata"
+    packages_prestage_completed_flag: ".packages_prestage_completed"
 
 - name: Retrieve current software version of the host
   shell: source /etc/platform/openrc;
@@ -40,7 +41,7 @@
     msg: >-
       Invalid software version for prestaging. The host is running a newer
       software version ({{ host_software_version}}) than the specified software version.
-  when: host_software_version is version(prestage_software_version, 'gt')
+  when: host_software_version is version(prestage_software_version, '>')
 
 - name: Update prestage reason
   set_fact:
@@ -50,92 +51,193 @@
 - block:
   - name: Look for packages_prestage_completed flag
     stat:
-      path: "{{ prestage_dir }}/.packages_prestage_completed"
-    register: packages_prestage_completed_flag
+      path: "{{ prestage_dir }}/{{ packages_prestage_completed_flag }}"
+    register: flag_file_check
 
   - block:
-    - debug:
-        msg: "Skipping packages prestaging as it was already completed."
+    - name: Skip packages prestaging if it was completed already
+      debug:
+        msg: "Packages prestaging for {{ prestage_software_version }} is already completed."
     - meta: end_play
-    when: packages_prestage_completed_flag.stat.exists
+    when: flag_file_check.stat.exists
+
+  - name: Issue a warning if prestage is for reinstall and shared_download_source is specified
+    debug:
+      msg: >-
+        WARNING: This prestage request is for host reinstall, source files in
+        {{ shared_download_source }} will be ignored.
+    when: prestage_reason == 'reinstall' and shared_download_source is defined
+
+  - block:
+    - name: Set download source directory
+      set_fact:
+        shared_download_source: "{{ shared_download_source|
+          default('/opt/platform/deploy/{{ prestage_software_version }}/prestage/shared') }}"
+
+    - name: Find the comps file under download source directory
+      find:
+        paths: "{{ shared_download_source }}"
+        patterns: '*-comps.xml'
+      register: find_comps
+      delegate_to: localhost
+
+    - name: Fail if there is no comps file or there are more than one comps file
+      fail:
+        msg: "There must be one comps file in {{ shared_download_source }}."
+      when: find_comps.failed or find_comps.files|length != 1
+
+    - name: Get the stats of other download sources
+      stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ shared_download_source }}"
+        - "{{ shared_download_source }}/Packages"
+        - "{{ shared_download_source }}/common_packages.txt"
+      register: download_source_stats
+      delegate_to: localhost
+
+    - name: Fail if any of the other download source(s) does not exist
+      fail:
+        msg: "File {{ download_source.item }} does not exist on Ansible control node."
+      when: not download_source.stat.exists
+      loop: "{{ download_source_stats.results }}"
+      loop_control:
+        loop_var: download_source
+
+    - name: Set download source facts
+      set_fact:
+        packages_download_source: "{{ shared_download_source }}/Packages"
+        common_packages_list_file: "{{ shared_download_source }}/common_packages.txt"
+        comps_file: "{{ find_comps.files[0].path }}"
+
+    when: prestage_reason == 'upgrade'
+
+  - name: Set the release feed directory to /www/pages/feed (for release 21.12 or older)
+    set_fact:
+      release_feed: "/www/pages/feed/rel-{{ host_software_version }}"
+    when: host_software_version is version("21.12", '<=')
+
+  - name: Set the feed directory to /var/www/pages/feed (for release higher than 21.12)
+    set_fact:
+      release_feed: "/var/www/pages/feed/rel-{{ host_software_version }}"
+    when: host_software_version is version("21.12", '>')
+
+  - name: Set local sources of software packages and repodata
+    set_fact:
+      packages_release_feed: "{{ release_feed }}/Packages"
+      repodata_release_feed: "{{ release_feed }}/repodata"
+
+  - name: Get the stats of local packages and repodata sources
+    stat:
+      path: "{{ item }}"
+    loop:
+      - "{{ packages_release_feed }}"
+      - "{{ repodata_release_feed }}"
+    register: release_feed_stats
+
+  - name: Fail if local packages or repodata source(s) does not exist
+    fail:
+      msg: "Directory {{ local_source.item }} does not exist on {{ inventory_hostname }}."
+    when: not local_source.stat.exists
+    loop: "{{ release_feed_stats.results }}"
+    loop_control:
+      loop_var: local_source
+
   when: prestage_type == "packages"
 
 - block:
-  - name: Verify that the images list file exists if provided
-    stat:
-      path: "{{ image_list_file }}"
-    register: check_result
-    connection: local
+  - block:
+    - name: Skip images prestaging for upgrade if images list is not specified
+      debug:
+        msg: "Prestaging for upgrade is skipped as image list is not specified."
+    - meta: end_play
+    when: prestage_reason == 'upgrade' and image_list_file is undefined
 
-  - name: Fail if the specified image list doesn't exist
-    fail:
-      msg: "Images list file {{ image_list_file }} does not exist!"
-    when: not check_result.stat.exists
+  - block:
+    - name: Verify that the images list file exists if provided
+      stat:
+        path: "{{ image_list_file }}"
+      register: check_result
+      connection: local
 
-  - name: Create a temp file
-    tempfile:
-      state: file
-      suffix: prestage
-    register: image_list_tempfile
+    - name: Fail if the specified image list doesn't exist
+      fail:
+        msg: "Images list file {{ image_list_file }} does not exist!"
+      when: not check_result.stat.exists
 
-  - name: Copy the content of images list to the temp file on target
-    copy:
-      src: "{{ image_list_file }}"
-      dest: "{{ image_list_tempfile.path }}"
+    - name: Create a temp file
+      tempfile:
+        state: file
+        suffix: prestage
+      register: image_list_tempfile
 
-  - name: Remove blank lines, comments, markers from images temp file
-    command: sed -i -e '/^$/d; /#/d; /\[/d' {{ image_list_tempfile.path }}
-    args:
-      warn: false
+    - name: Copy the content of images list to the temp file on target
+      copy:
+        src: "{{ image_list_file }}"
+        dest: "{{ image_list_tempfile.path }}"
 
-  - name: Remove extra fields from images temp file
-    command: sed -i 's/,.*//' {{ image_list_tempfile.path }}
-    args:
-      warn: false
+    - name: Remove blank lines, comments, markers from images temp file
+      command: sed -i -e '/^$/d; /#/d; /\[/d' {{ image_list_tempfile.path }}
+      args:
+        warn: false
 
-  - name: Read in the images temp file content
-    slurp:
-      src: "{{ image_list_tempfile.path }}"
-    register: slurped_file
+    - name: Remove extra fields from images temp file
+      command: sed -i 's/,.*//' {{ image_list_tempfile.path }}
+      args:
+        warn: false
 
-  - name: Set image_list to the prepared file on the target
-    set_fact:
-      image_list: "{{ (slurped_file.content|b64decode|trim).split('\n') }}"
+    - name: Read in the images temp file content
+      slurp:
+        src: "{{ image_list_tempfile.path }}"
+      register: slurped_file
 
-  - name: Remove the images list temp file
-    file:
-      path: "{{ image_list_tempfile.path }}"
-      state: absent
+    - name: Set image_list to the prepared file on the target
+      set_fact:
+        image_list: "{{ (slurped_file.content|b64decode|trim).split('\n') }}"
 
-  - name: Fail if the images list is empty
-    fail:
-      msg: "File {{ image_list_file }} contains no image references."
-    when: image_list|length == 0 or image_list == ['']
+    - name: Remove the images list temp file
+      file:
+        path: "{{ image_list_tempfile.path }}"
+        state: absent
 
-  when: image_list_file is defined
+    - name: Fail if the images list is empty
+      fail:
+        msg: "File {{ image_list_file }} contains no image references."
+      when: image_list|length == 0 or image_list == ['']
 
-- block:
-  - debug:
-      msg: "Skipping images prestaging for upgrade as images list is not specified."
-  when: prestage_reason == 'upgrade' and image_list_file is undefined
+    when: image_list_file is defined
+
+  - name: Prepare docker cache for prestaging
+    command: docker image prune -af
+    become: yes
+
+  when: prestage_type == "images"
 
 - name: Update cleanup directories list if the prestage is for upgrade
   set_fact:
     cleanup_dirs: "{{ cleanup_dirs + [host_software_version] }}"
   when: prestage_reason == 'upgrade'
 
-- name: Prepare platform-backup directory for prestaging
+- name: Prepare platform-backup directory for {{ prestage_type }} prestaging
   include: cleanup_prestage_dir.yml
   loop: "{{ cleanup_dirs | flatten(1) }}"
   loop_control:
     loop_var: input_dir
 
-- name: Prepare docker cache for prestaging
-  command: docker image prune -af
-  become: yes
+- debug:
+    msg: |
+      Prestaging type: {{ prestage_type }}
+      Prestaging reason: {{ prestage_reason }}
+      Release feed directory (on target): {{ release_feed|default('N/A') }}
+      Packages download source: {{ packages_download_source|default('N/A') }}
+      Comps file: {{ comps_file|default('N/A') }}
+      Common packages list file: {{ common_packages_list_file|default('N/A') }}
+  when: prestage_type == 'packages'
 
 - debug:
     msg: |
-      Specified images list file: {{ image_list_file|default('not provided') }}
-      Prestage reason: {{ prestage_reason }}
-      Images list: {{ image_list }}
+      Prestaging type: {{ prestage_type }}
+      Prestaging reason: {{ prestage_reason }}
+      Images list file: {{ image_list_file|default('not provided') }}
+      Image list: {{ image_list }}
+  when: prestage_type == 'images'

@@ -323,7 +323,7 @@ if __name__ == '__main__':
             images_with_auth = get_image_list_with_auth_info(image_list)
             image_list = [img_tuple[0] for img_tuple in images_with_auth]
 
-            success_msg = "All images downloaded successfully."
+            success_msg = "All images downloaded successfully"
             failed_downloads = map_function(images_with_auth, download_an_image)
 
         print("Local download flag: %s" % local_download)

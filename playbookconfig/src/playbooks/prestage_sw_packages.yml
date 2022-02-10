@@ -1,0 +1,31 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This playbook populates the Packages directory and generates repodata
+# under /opt/platform-backup/<release-number> in preparation for subcloud
+# upgrade or reinstall. The playbook is meant to be integrated with the
+# dcmanager to provide subcloud prestaging functionality.
+#
+# Usage:
+#   ansible-playbook prestage_sw_packages.yml -i <inventory-file> \
+#      -e "software_version=<release-number> \
+#          shared_download_source=<download-source-dir>"
+#
+# Shared download source containing Packages directory, common_packages.txt
+# and packages comps.xml files are optional. If not specified, the playbook
+# will look for the required content in
+# /opt/platform/deploy/<software_version>/prestage/shared directory.
+
+- hosts: all
+  gather_facts: no
+
+  vars:
+    prestage_type: "packages"
+    platform_backup_dir: /opt/platform-backup
+
+  roles:
+    - prestage/prepare-env
+    - { role: prestage/prestage-sw-packages, become: yes }

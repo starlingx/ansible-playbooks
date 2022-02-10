@@ -16,15 +16,25 @@
     repodata_cleanup_dir: "{{ platform_backup_dir}}/{{ input_dir }}/repodata"
 
 - block:
-  - name: Delete Packages directory
+  - name: Delete Packages and repodata directories ({{ input_dir }})
     file:
-      path: "{{ packages_cleanup_dir }}"
+      path: "{{ item }}"
       state: absent
+    loop:
+      - "{{ packages_cleanup_dir }}"
+      - "{{ repodata_cleanup_dir }}"
+      - "{{ platform_backup_dir}}/{{ input_dir }}/{{ packages_prestage_completed_flag }}"
+    become: yes
 
-  - name: Delete repodata directory
+  - name: Delete common packages and comps files
     file:
-      path: "{{ repodata_cleanup_dir }}"
+      path: "{{ item }}"
       state: absent
+    loop:
+      - "{{ common_packages_list_file }}"
+      - "{{ comps_file }}"
+    when: prestage_reason == 'upgrade'
+    become: yes
   when: prestage_type == "packages"
 
 - block:

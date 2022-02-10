@@ -48,10 +48,17 @@
     proxy_lookup: "{{ proxy_lookup|default({}) | combine({item.name: item.value}) }}"
   loop: "{{ proxy_info.stdout|from_yaml }}"
 
-- name: Set http proxy facts if defined
+- name: Set http proxy facts if docker proxy is configured
   set_fact:
     http_proxy: "{{ proxy_lookup['http_proxy'] if proxy_lookup['http_proxy'] is defined else '' }}"
     https_proxy: "{{ proxy_lookup['https_proxy'] if proxy_lookup['https_pproxy'] is defined else '' }}"
+  when: proxy_lookup is defined
+
+- name: Set default http proxy facts if docker proxy is not configured
+  set_fact:
+    http_proxy: ''
+    https_proxy: ''
+  when: proxy_lookup is undefined
 
 - name: Update docker registries credentials for type aws-ecr
   include: update_registry_creds.yml

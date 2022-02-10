@@ -1,0 +1,93 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is used to perform the following:
+#   a) download new software packages, package definition file (comps file) and
+#      common packages list file from the download source to the prestage
+#      directory on the target (i.e. /opt/platform-backup/<sw-version>)
+#   b) locally copy software packages specified in the common packages list file
+#      from the release feed (/www/pages/feed/rel-<current-version>/Packages)
+#      on the target to the prestage directory.
+#   c) generate repodata from comps file and the software packages in
+#      prestage directory.
+#
+#   If the prestage is for reinstall, the Packages and repodata directories
+#   are copied locally on the target from the release feed to prestage directory.
+#   Steps a) and b) aboved are skipped.
+
+- name: Ensure Packages and repodata prestage directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    mode: 0755
+  with_items:
+    - "{{ prestage_dir }}"
+    - "{{ packages_prestage_dir }}"
+
+- block:
+  # Using shell command rsync is way faster than Ansible copy module for local copy
+  # of large number of files.
+  - name: Copy software packages from local release feed to prestage directory
+    shell: rsync -a {{ release_feed }}/Packages/* {{ packages_prestage_dir }}
+
+  - name: Copy repodata from local release feed to prestage directory
+    shell: rsync -a {{ release_feed }}/repodata/* {{ repodata_prestage_dir }}
+
+  when: prestage_reason == 'reinstall'
+
+- block:
+  - name: Copy common packages list and comps.xml files to {{ inventory_hostname }}
+    copy:
+      src: "{{ item }}"
+      dest: "{{ prestage_dir }}"
+    loop:
+      - "{{ common_packages_list_file }}"
+      - "{{ comps_file }}"
+
+  - name: Copy unchanged packages from local release feed to the prestage directory
+    shell: >
+      rsync -a {{ release_feed }}/Packages
+      --files-from={{ prestage_dir }}/common_packages.txt
+      {{ packages_prestage_dir }}
+
+  # TODO(tngo): Check if the rsync method below is faster than ansible fileglob
+  # copy for batch subcloud prestage in large DC. Also consider limiting rsync
+  # bandwidth with --bwlimit option.
+  # - name: Download new packages to prestage directory on {{ inventory_hostname }}
+  #   shell: >
+  #     sshpass -p {{ ansible_ssh_pass }}
+  #     rsync -a -e 'ssh -o StrictHostKeyChecking=no'
+  #     sysadmin@registry.central:{{ packages_download_source }}/* {{ packages_prestage_dir }}
+  #   register: rpm_transfer
+  #   retries: 3
+  #   delay: 2
+  #   until: rpm_transfer.rc == 0
+  #   no_log: true
+
+  - name: Download new packages to prestage directory on {{ inventory_hostname }}
+    copy:
+      src: "{{ item }}"
+      dest: "{{ packages_prestage_dir }}"
+      owner: root
+      mode: 0644
+    with_fileglob:
+      - "{{ packages_download_source }}/*.rpm"
+
+  - name: Generate prestage repodata
+    command: createrepo -g {{ comps_file | basename }} .
+    args:
+      chdir: "{{ prestage_dir }}"
+
+  when: prestage_reason == 'upgrade'
+
+- name: Mark software prestaging as completed
+  file:
+    path: "{{ prestage_dir }}/{{ packages_prestage_completed_flag }}"
+    state: touch
+    owner: root
+    mode: 0644

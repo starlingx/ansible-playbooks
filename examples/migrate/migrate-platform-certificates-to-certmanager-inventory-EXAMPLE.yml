@@ -1,3 +1,4 @@
+---
 #
 # Copyright (c) 2021-2022 Wind River Systems, Inc.
 #
@@ -40,7 +41,7 @@ all:
     target_group:
       vars:
         dns_domain: xyz.com
-        duration: 2160h # 90d
+        duration: 2160h    # 90d
         renewBefore: 360h  # 15d
         subject_C: canada
         subject_ST: ontario
