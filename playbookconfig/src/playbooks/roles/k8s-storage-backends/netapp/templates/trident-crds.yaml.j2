@@ -132,6 +132,156 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
+  name: tridentmirrorrelationships.trident.netapp.io
+spec:
+  group: trident.netapp.io
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                state:
+                  type: string
+                  enum:
+                  - ""
+                  - promoted
+                  - established
+                  - reestablished
+                volumeMappings:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      latestSnapshotHandle:
+                        type: string
+                      localPVCName:
+                        type: string
+                      remoteVolumeHandle:
+                        type: string
+                    required:
+                    - localPVCName
+                  minItems: 1
+                  maxItems: 1
+                  type: array
+              required:
+              - volumeMappings
+            status:
+              type: object
+              properties:
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      lastTransitionTime:
+                        type: string
+                      localPVCName:
+                        type: string
+                      localVolumeHandle:
+                        type: string
+                      remoteVolumeHandle:
+                        type: string
+                      message:
+                        type: string
+                      observedGeneration:
+                        type: integer
+                      state:
+                        type: string
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+      - description: The desired mirror state
+        jsonPath: .spec.state
+        name: Desired State
+        type: string
+      - description: Local PVCs for the mirror
+        jsonPath: .spec.volumeMappings[*].localPVCName
+        name: Local PVC
+        type: string
+      - description: Status
+        jsonPath: .status.conditions[*].state
+        name: Actual state
+        type: string
+      - description: Status message
+        jsonPath: .status.conditions[*].message
+        name: Message
+        type: string
+  scope: Namespaced
+  names:
+    plural: tridentmirrorrelationships
+    singular: tridentmirrorrelationship
+    kind: TridentMirrorRelationship
+    shortNames:
+    - tmr
+    - tmrelationship
+    - tmirrorrelationship
+    categories:
+    - trident
+    - trident-internal
+    - trident-external
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tridentsnapshotinfos.trident.netapp.io
+spec:
+  group: trident.netapp.io
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                snapshotName:
+                  type: string
+              required:
+              - snapshotName
+            status:
+              type: object
+              properties:
+                lastTransitionTime:
+                  type: string
+                observedGeneration:
+                  type: integer
+                snapshotHandle:
+                  type: string
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Snapshot Handle
+          type: string
+          description: VolumeSnapshotContent Handle
+          priority: 0
+          jsonPath: .status.snapshotHandle
+  scope: Namespaced
+  names:
+    plural: tridentsnapshotinfos
+    singular: tridentsnapshotinfo
+    kind: TridentSnapshotInfo
+    shortNames:
+    - tsi
+    - tsinfo
+    - tsnapshotinfo
+    categories:
+    - trident
+    - trident-internal
+    - trident-external
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
   name: tridentstorageclasses.trident.netapp.io
 spec:
   group: trident.netapp.io
@@ -212,6 +362,61 @@ spec:
     shortNames:
     - tvol
     - tvolume
+    categories:
+    - trident
+    - trident-internal
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tridentvolumepublications.trident.netapp.io
+spec:
+  group: trident.netapp.io
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            volumeID:
+              type: string
+            nodeID:
+              type: string
+            readOnly:
+              type: boolean
+            accessMode:
+              type: integer
+              format: int32
+          required:
+              - volumeID
+              - nodeID
+              - readOnly
+      additionalPrinterColumns:
+        - name: Volume
+          type: string
+          description: Volume ID
+          priority: 0
+          jsonPath: .volumeID
+        - name: Node
+          type: string
+          description: Node ID
+          priority: 0
+          jsonPath: .nodeID
+  scope: Namespaced
+  names:
+    plural: tridentvolumepublications
+    singular: tridentvolumepublication
+    kind: TridentVolumePublication
+    shortNames:
+    - tvp
+    - tvpub
+    - tvpublication
+    - tvolpub
+    - tvolumepub
+    - tvolpublication
+    - tvolumepublication
     categories:
     - trident
     - trident-internal
