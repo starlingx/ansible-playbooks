@@ -492,6 +492,15 @@
         guide for next step.
     when: check_online.stdout != "online"
 
+  - name: Check if there are unprovisioned hosts
+    shell: source /etc/platform/openrc; system host-list --format value --column personality --column id
+    register: ids_and_personalities
+
+  - name: Delete unprovisioned hosts
+    shell: source /etc/platform/openrc; system host-delete {{ item.split(' ')[0] }}
+    loop: "{{ ids_and_personalities.stdout_lines }}"
+    when: (item.split(' ')[1] | lower) == 'none'
+
   # Restore ceph-mon data if ceph backend is configured
   - block:
     - block:
