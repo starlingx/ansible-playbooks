@@ -13,6 +13,7 @@ os_release: "centos"
 kubelet_vol_plugin_dir: /usr/libexec/kubernetes/kubelet-plugins/volume/exec/
 # Kubernetes api server encryption provider configuration file
 encryption_provider_config: /etc/kubernetes/encryption-provider.yaml
+kubelet_cgroup_root: "/k8s-infra"
 
 # Networking
 networking_configurations_defaults:
@@ -44,4 +45,4 @@ kubelet_configurations_defaults:
   featureGates:
     HugePageStorageMediumSize: true
   cgroupDriver: "cgroupfs"
-  cgroupRoot: "/k8s-infra"
+  cgroupRoot: "{{ kubelet_cgroup_root }}"
