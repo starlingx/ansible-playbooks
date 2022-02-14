@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2021 Wind River Systems, Inc.
+# Copyright (c) 2019-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -251,6 +251,19 @@
     apiserver_cert_sans: "{{ apiserver_cert_sans | default([]) }}"
     etcd_root_ca_cert: "{{ etcd_root_ca_cert | default('') }}"
     etcd_root_ca_key: "{{ etcd_root_ca_key | default('') }}"
+
+- name: Combine k8s user overrides and default config parameters
+  set_fact:
+    apiserver_extra_args: "{{ apiserver_extra_args_defaults \
+                          | combine(apiserver_extra_args|default({})) }}"
+    controllermanager_extra_args: "{{ controllermanager_extra_args_defaults \
+                                  | combine(controllermanager_extra_args|default({})) }}"
+    kubelet_extra_args: "{{ kubelet_extra_args_defaults \
+                        | combine(kubelet_extra_args|default({})) }}"
+    kubelet_configurations: "{{ kubelet_configurations_defaults \
+                            | combine(kubelet_configurations|default({})) }}"
+    networking_configurations: "{{ networking_configurations_defaults \
+                               | combine(networking_configurations|default({})) }}"
 
 # Give the bootstrap config output file on the host a generic name so the
 # same file is referenced if the host is bootstrapped locally and remotely

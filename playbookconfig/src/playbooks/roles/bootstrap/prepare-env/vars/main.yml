@@ -7,3 +7,41 @@ temp_ssl_ca_dir: "/tmp"
 temp_ssl_ca_file: "ca-cert.pem"
 temp_k8s_plugins_dir: "/tmp"
 os_release: "centos"
+
+# KUBERNETES PARAMETERS
+# =====================
+kubelet_vol_plugin_dir: /usr/libexec/kubernetes/kubelet-plugins/volume/exec/
+# Kubernetes api server encryption provider configuration file
+encryption_provider_config: /etc/kubernetes/encryption-provider.yaml
+
+# Networking
+networking_configurations_defaults:
+  dnsDomain: 'cluster.local'
+  podSubnet: "{{ cluster_pod_subnet }}"
+  serviceSubnet: "{{ cluster_service_subnet }}"
+
+# ClusterConfiguration
+apiserver_extra_args_defaults:
+  encryption-provider-config: "{{ encryption_provider_config }}"
+  default-not-ready-toleration-seconds: "30"
+  default-unreachable-toleration-seconds: "30"
+  feature-gates: "SCTPSupport=true,TTLAfterFinished=true,HugePageStorageMediumSize=true,RemoveSelfLink=false"
+  event-ttl: "24h"
+
+controllermanager_extra_args_defaults:
+  node-monitor-period: "2s"
+  node-monitor-grace-period: "20s"
+  pod-eviction-timeout: '30s'
+  feature-gates: "TTLAfterFinished=true"
+  flex-volume-plugin-dir: "{{ kubelet_vol_plugin_dir }}"
+
+# KubeletConfiguration
+kubelet_extra_args_defaults:
+  v: '2'
+kubelet_configurations_defaults:
+  nodeStatusUpdateFrequency: "4s"
+  failSwapOn: false
+  featureGates:
+    HugePageStorageMediumSize: true
+  cgroupDriver: "cgroupfs"
+  cgroupRoot: "/k8s-infra"
