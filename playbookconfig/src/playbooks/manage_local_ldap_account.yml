@@ -72,6 +72,10 @@
       in_user_id: "{{ user_id }}"
       in_user_password: "{{ user_password }}"
 
+  - name: Set sudo_permission flag fact upfront
+    set_fact:
+      in_sudo_permission: "{{ true if sudo_permission is defined and sudo_permission | bool else false }}"
+
 - hosts: systemcontroller
   gather_facts: no
 

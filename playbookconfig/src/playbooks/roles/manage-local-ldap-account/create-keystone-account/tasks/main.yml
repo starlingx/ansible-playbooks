@@ -82,19 +82,26 @@
   - name: Add LDAP user to 'root' group
     command: usermod -a -G root {{ in_user_id }}
     become: yes
+    when: in_sudo_permission
 
   - name: Retrieve LDAP user groups
     command: groups {{ in_user_id }}
     register: user_groups
 
+  - name: Set array of user groups to check
+    set_fact:
+      user_group_array: ['users', 'sys_protected']
+
+  - name: Update array of user groups to include root group if sudo permission is granted
+    set_fact:
+      user_group_array: "{{ user_group_array }} + ['root']"
+    when: in_sudo_permission
+
   - name: Verify LDAP user groups
     fail:
       msg: "{{ in_user_id }} is not part of group {{ item }}"
     when: item not in user_groups.stdout
-    loop:
-      - 'users'
-      - 'root'
-      - 'sys_protected'
+    loop: "{{ user_group_array }}"
 
   always:
   - name: Disable AllowTcpForwarding setting in ssh config
