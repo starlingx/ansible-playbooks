@@ -90,7 +90,7 @@
 - name: Restart barbican
   systemd:
     state: restarted
-    name: openstack-barbican-api
+    name: "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
 
 - name: Wait for system controller database configuration to complete
   wait_for:
