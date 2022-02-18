@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019,2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -38,7 +38,7 @@
   - block:
     - name: Set central registry for subcloud
       set_fact:
-        # For virtual subcloud (StarlingX running in Openstack Nova VM - QEMU/KVM),
+        # For virtual subcloud (StarlingX running in OpenStack Nova VM - QEMU/KVM),
         # central-cloud's local registry has to be exposed on the MGMT interface
         # instead of the OAM interface as there is no physical OAM interface on
         # subcloud to access central registry via OAM interface, so set

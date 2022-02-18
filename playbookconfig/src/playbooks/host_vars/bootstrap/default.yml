@@ -14,7 +14,7 @@ dns_servers:
   - 8.8.4.4
 
 # The parameter virtual_system provides the ability to configure system running
-# in an Openstack Nova VM(QEMU/KVM environment) with a limited system resources
+# in an OpenStack Nova VM(QEMU/KVM environment) with a limited system resources
 # (ie.disk,cpu ...) and it's only intended for testing in lab environments.
 # Note: Only All-in-one type of system that is not a system controller
 #       (i.e. distributed_cloud_role is either 'none' or 'subcloud') can be

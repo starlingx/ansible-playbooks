@@ -1,13 +1,13 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019,2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
-#   This role is to restore StarlingX Openstack application.
+#   This role is to restore OpenStack application.
 #
-# To bring up remaining StarlingX Openstack services after storage data is restored
+# To bring up remaining OpenStack services after storage data is restored
 - block:
   - name: Check if restore OpenStack continue flag file exists
     stat:
@@ -24,22 +24,22 @@
   - name: Unset show_multiple_locations override
     shell: >-
       source /etc/platform/openrc; system helm-override-update
-      --set conf.glance.DEFAULT.show_multiple_locations=False stx-openstack glance openstack
+      --set conf.glance.DEFAULT.show_multiple_locations=False {{ openstack_app_name }} glance openstack
 
-  - name: Continue to bring up the remaining StarlingX Openstack services
-    shell: source /etc/platform/openrc; system application-apply --mode normal stx-openstack
+  - name: Continue to bring up the remaining OpenStack services
+    shell: source /etc/platform/openrc; system application-apply --mode normal {{ openstack_app_name }}
 
-  - name: Checking stx-openstack apply progress for the remaining Openstack services... (max 50 mins)
+  - name: Checking OpenStack application apply progress for the remaining OpenStack services... (max 50 mins)
     shell: >-
-      source /etc/platform/openrc; system application-show stx-openstack --column status --format value
+      source /etc/platform/openrc; system application-show {{ openstack_app_name }} --column status --format value
     register: check_app_state
     until: check_app_state.stdout in ['applied', 'apply-failed']
     retries: 50
     delay: 60
 
-  - name: Fail if the remaining Openstack services cannot be restored successfully
+  - name: Fail if the remaining OpenStack services cannot be restored successfully
     fail:
-      msg: stx-openstack application is not applied successfully.
+      msg: OpenStack application is not applied successfully.
     when: check_app_state.stdout != "applied"
 
   - name: Remove restore_openstack_in_progress flag file
@@ -53,12 +53,12 @@
       state: absent
 
   - debug:
-      msg: Restore stx-openstack application is successful!
+      msg: Restore OpenStack application is successful!
 
   - meta: end_play
   when: restore_openstack_continue
 
-- name: Create restore StarlingX Openstack in progress flag file in /opt/platform
+- name: Create restore OpenStack application in progress flag file in /opt/platform
   file:
     path: "{{ restore_openstack_in_progress_flag }}"
     state: touch
@@ -105,15 +105,15 @@
   - name: Set show_multiple_locations override
     shell: >-
       source /etc/platform/openrc; system helm-override-update
-      --set conf.glance.DEFAULT.show_multiple_locations=True stx-openstack glance openstack
+      --set conf.glance.DEFAULT.show_multiple_locations=True {{ openstack_app_name }} glance openstack
 
   - name: Bring up MariaDB and its prerequisite services
     shell: >-
-      source /etc/platform/openrc; system application-apply --mode restore_db stx-openstack
+      source /etc/platform/openrc; system application-apply --mode restore_db {{ openstack_app_name }}
 
   - name: Checking MariaDB apply progress ... (max 30 mins)
     shell: >-
-      source /etc/platform/openrc; system application-show stx-openstack --column status --format value
+      source /etc/platform/openrc; system application-show {{ openstack_app_name }} --column status --format value
     register: check_app_state
     until: check_app_state.stdout in ['applied', 'apply-failed']
     retries: 30
@@ -130,7 +130,7 @@
     fail:
       msg: >-
         MariaDB service cannot be restored successfully.
-        Restore StarlingX Openstack application failed.
+        Restore OpenStack application failed.
     when: check_app_state.stdout != "applied" or
           check_mariadb_pod.rc != 0
 
@@ -144,7 +144,7 @@
 
     - name: Fail if openstack-garbd pod is not running
       fail:
-        msg: Openstack-garbd pod is not running. Restore stx-openstack application failed.
+        msg: openstack-garbd pod is not running. Restore OpenStack application failed.
       when: check_garbd_pod.rc != 0
 
     when: system_type == "Standard"
@@ -193,11 +193,11 @@
 
   - name: Bring up Cinder and Glance services and the prerequisites
     shell: >-
-      source /etc/platform/openrc; system application-apply --mode restore_storage stx-openstack
+      source /etc/platform/openrc; system application-apply --mode restore_storage {{ openstack_app_name }}
 
   - name: Checking Cinder and Glance apply progress... (max 30 mins)
     shell: >-
-      source /etc/platform/openrc; system application-show stx-openstack --column status --format value
+      source /etc/platform/openrc; system application-show {{ openstack_app_name }} --column status --format value
     register: check_app_state
     until: check_app_state.stdout in ['applied', 'apply-failed']
     retries: 30
@@ -207,7 +207,7 @@
     fail:
       msg: >-
         Cinder and Glance services cannot be restored successfully.
-        Restore stx-openstack application failed.
+        Restore OpenStack application failed.
     when: check_app_state.stdout != "applied"
 
   - block:
@@ -217,7 +217,7 @@
           Please refer to the system administration guide to restore Glance images
           and Cinder volumes.
 
-    - name: Create restore StarlingX Openstack continue flag file
+    - name: Create restore OpenStack application continue flag file
       file:
         path: "{{ restore_openstack_continue_flag }}"
         state: touch
@@ -225,24 +225,24 @@
     - meta: end_play
     when: restore_cinder_glance_data
 
-  - name: Continue to bring up the remaining StarlingX Openstack services
-    shell: source /etc/platform/openrc; system application-apply --mode normal stx-openstack
+  - name: Continue to bring up the remaining OpenStack services
+    shell: source /etc/platform/openrc; system application-apply --mode normal {{ openstack_app_name }}
 
-  - name: Checking stx-openstack apply progress for the remaining Openstack services... (max 50 mins)
+  - name: Checking OpenStack application apply progress for the remaining OpenStack services... (max 50 mins)
     shell: >-
-      source /etc/platform/openrc; system application-show stx-openstack --column status --format value
+      source /etc/platform/openrc; system application-show {{ openstack_app_name }} --column status --format value
     register: check_app_state
     until: check_app_state.stdout in ['applied', 'apply-failed']
     retries: 50
     delay: 60
 
-  - name: Fail if the remaining Openstack services cannot be restored successfully
+  - name: Fail if the remaining OpenStack services cannot be restored successfully
     fail:
-      msg: stx-openstack application is not applied successfully.
+      msg: OpenStack application is not applied successfully.
     when: check_app_state.stdout != "applied"
 
   - debug:
-      msg: Restore stx-openstack application is successful!
+      msg: Restore OpenStack application is successful!
 
   always:
     - name: Remove restore_openstack_in_progress flag file

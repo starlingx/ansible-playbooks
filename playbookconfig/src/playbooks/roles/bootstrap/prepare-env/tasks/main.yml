@@ -486,7 +486,7 @@
   failed_when: false
   become: yes
 
-# If StarlingX in Openstack Nova VM(QEMU/KVM environment),
+# If StarlingX in OpenStack Nova VM(QEMU/KVM environment),
 # skip the platform backup partition check as backup&restore
 # is not supported
 - block:
