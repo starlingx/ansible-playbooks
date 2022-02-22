@@ -35,7 +35,8 @@
   - name: Add ghcr.io registry if it does not exist in the input registries
     set_fact:
       input_registries: "{{ input_registries|combine({'ghcr.io': ghcr_registry_val}) }}"
-  when: input_registries['ghcr.io'] is not defined
+  when: (input_registries['ghcr.io'] is not defined or
+         input_registries['ghcr.io'].keys()|length == 0)
 
 - name: Retrieve proxy info
   shell: >
