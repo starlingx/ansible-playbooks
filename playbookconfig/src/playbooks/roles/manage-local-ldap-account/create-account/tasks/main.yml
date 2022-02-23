@@ -15,10 +15,13 @@
 
 - name: Create LDAP user only if it does not already exist
   block:
+  - name: Set sudo_param if external variable sudo_permission is true
+    set_fact:
+      sudo_param: "{{ '--sudo' if in_sudo_permission else '' }}"
 
   - name: Create LDAP user {{ in_user_id }}
     shell: >-
-      ldapusersetup -u {{ in_user_id }} --sudo --secondgroup sys_protected --passmax
+      ldapusersetup -u {{ in_user_id }} {{ sudo_param }} --secondgroup sys_protected --passmax
       {{ password_change_period }} --passwarning {{ password_warning_period }}
     become: yes
 
@@ -70,6 +73,7 @@
       ssh_internal_args: "{{ ssh_internal_args }}"
       ansible_ssh_common_args:
         '-o ProxyCommand="sshpass -p {{ ansible_password }} ssh -W [%h]:%p -q {{ ansible_user }}@{{ ansible_host }}"'
+      in_sudo_permission: "{{ in_sudo_permission }}"
     loop: "{{ subcloud_list }}"
 
   when: is_dc | bool

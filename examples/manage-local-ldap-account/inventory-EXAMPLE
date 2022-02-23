@@ -26,6 +26,13 @@
 # password_warning_period=1' \
 # /usr/share/ansible/stx-ansible/playbooks/manage_local_ldap_account.yml
 #
+# If you wish to create users with root permission, set sudo_permission
+# variable to yes:
+#
+# ansible-playbook --inventory inventory-secure --ask-vault-pass \
+# --extra-vars='user_id=JohnDoo sudo_permission=yes' \
+# /usr/share/ansible/stx-ansible/playbooks/manage_local_ldap_account.yml
+
 
 
 [all:vars]
