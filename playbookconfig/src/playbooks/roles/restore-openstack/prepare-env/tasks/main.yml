@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2021 Wind River Systems, Inc.
+# Copyright (c) 2019-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -15,14 +15,14 @@
   import_role:
     name: backup-restore/prepare-env
 
-- name: Check if restoring StarlingX Openstack is already in progress
+- name: Check if restoring OpenStack application is already in progress
   stat:
     path: "{{ restore_openstack_in_progress_flag }}"
   register: restore_openstack_in_progress
 
-- name: Fail if restoring StarlingX Openstack is already in progress
+- name: Fail if restoring OpenStack application is already in progress
   fail:
-    msg: "Restoring StarlingX Openstack is already in progress!"
+    msg: "Restoring OpenStack application is already in progress!"
   when: restore_openstack_in_progress.stat.exists
 
 - name: Check if it is the active controller
@@ -31,30 +31,30 @@
 
 - name: Fail if it is not the active controller
   fail:
-    msg: "Restore StarlingX Openstack application can only be done on the active controller."
+    msg: "Restore OpenStack application can only be done on the active controller."
   when: active_ctlr.rc != 0
 
-- name: Search for stx-openstack application
-  shell: source /etc/platform/openrc; system application-show stx-openstack --column status --format value
+- name: Search for openstack application
+  shell: source /etc/platform/openrc; system application-show {{ openstack_app_name }} --column status --format value
   register: check_openstack
   failed_when: false
 
-# If stx-application doesn't exist or is in applied state, the restore is complete.
+# If OpenStack application doesn't exist or is in applied state, the restore is complete.
 - block:
   - debug:
       msg: >-
-        Either StarlingX OpenStack application had not been applied when the system was
+        Either OpenStack application had not been applied when the system was
         backed up or it has already been restored successfully.
   - meta: end_play
 
   when: check_openstack.rc != 0 or check_openstack.stdout == "applied"
 
-# If stx-application is not in uploaded state, it means restore_openstack playbook
+# If OpenStack application is not in uploaded state, it means restore_openstack playbook
 # has been run and was not successful. Re-run the playbook is not supported.
-- name: Fail if StarlingX Openstack is not in the right state for restore
+- name: Fail if OpenStack application is not in the right state for restore
   fail:
     msg: >-
-      stx-openstack application must be in ‘uploaded’ state for the restore to proceed.
+      OpenStack application must be in ‘uploaded’ state for the restore to proceed.
       The restore must have failed already.
   when: check_openstack.stdout != "uploaded"
 

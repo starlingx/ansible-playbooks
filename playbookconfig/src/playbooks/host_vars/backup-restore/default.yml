@@ -63,10 +63,14 @@ platform_backup_filename_prefix: "{{ inventory_hostname }}_platform_backup"
 #
 docker_local_registry_backup_filename_prefix: "{{ inventory_hostname }}_docker_local_registry_backup"
 
-# The stx-openstack application backup tarball will be named in this format:
+# The OpenStack application name that will be considered for backup
+#
+openstack_app_name: "stx-openstack"
+
+# The OpenStack application backup tarball will be named in this format:
 # <openstack_backup_filename_prefix>_<timestamp>.tgz
 #
-openstack_backup_filename_prefix: "{{ inventory_hostname }}_openstack_backup"
+openstack_backup_filename_prefix: "{{ inventory_hostname }}_{{ openstack_app_name }}_backup"
 
 # An indication whether it is a full restore or partial restore.
 #   true:  a full restore where storage partition(s) is/are wiped during
