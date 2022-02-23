@@ -28,7 +28,7 @@ spec:
             add: ["SYS_ADMIN"]
           allowPrivilegeEscalation: true
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/docker.io/netapp/trident:21.04.1
+        image: {{ local_registry }}/docker.io/netapp/trident:22.01.0
         command:
         - /trident_orchestrator
         args:
@@ -39,6 +39,7 @@ spec:
         - "--csi_role=node"
         - "--log_format=text"
         - "--node_prep=false"
+        - "--http_request_timeout=1m30s"
         - "--https_rest"
         - "--https_port=17546"
         #- -debug
@@ -81,6 +82,7 @@ spec:
           mountPath: /plugin
         - name: plugins-mount-dir
           mountPath: /var/lib/kubelet/plugins
+          mountPropagation: "Bidirectional"
         - name: pods-mount-dir
           mountPath: /var/lib/kubelet/pods
           mountPropagation: "Bidirectional"
@@ -98,7 +100,7 @@ spec:
           readOnly: true
       - name: driver-registrar
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/quay.io/k8scsi/csi-node-driver-registrar:v2.1.0
+        image: {{ local_registry }}/k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.4.0
         args:
         - "--v=2"
         - "--csi-address=$(ADDRESS)"
@@ -126,10 +128,10 @@ spec:
         kubernetes.io/os: linux
         kubernetes.io/arch: amd64
       tolerations:
-      - effect: NoExecute
-        operator: Exists
-      - effect: NoSchedule
-        operator: Exists
+      - effect: "NoExecute"
+        operator: "Exists"
+      - effect: "NoSchedule"
+        operator: "Exists"
       volumes:
       - name: plugin-dir
         hostPath:

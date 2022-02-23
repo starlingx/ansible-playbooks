@@ -46,9 +46,6 @@ rules:
   - apiGroups: ["snapshot.storage.k8s.io"]
     resources: ["volumesnapshotcontents"]
     verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
-  - apiGroups: ["csi.storage.k8s.io"]
-    resources: ["csidrivers", "csinodeinfos"]
-    verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
   - apiGroups: ["storage.k8s.io"]
     resources: ["csidrivers", "csinodes"]
     verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
@@ -57,7 +54,9 @@ rules:
     verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
   - apiGroups: ["trident.netapp.io"]
     resources: ["tridentversions", "tridentbackends", "tridentstorageclasses", "tridentvolumes","tridentnodes",
-"tridenttransactions", "tridentsnapshots", "tridentbackendconfigs", "tridentbackendconfigs/status"]
+"tridenttransactions", "tridentsnapshots", "tridentbackendconfigs", "tridentbackendconfigs/status",
+"tridentmirrorrelationships", "tridentmirrorrelationships/status", "tridentsnapshotinfos",
+"tridentsnapshotinfos/status", "tridentvolumepublications"]
     verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
   - apiGroups: ["policy"]
     resources: ["podsecuritypolicies"]
