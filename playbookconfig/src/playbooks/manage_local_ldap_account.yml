@@ -32,9 +32,17 @@
 # playbook enables this option while the user account creation is progressing
 # and disables it when complete.
 #
-# Example command:
+# Example to add user 'na-admin' (mode=create is default):
 #   ansible-playbook --inventory inventory --extra-vars='user_id=na-admin' \
 #     /usr/share/ansible/stx-ansible/playbooks/manage_local_ldap_account.yml
+#
+# Example to add user 'na-admin' with the use of variable mode=create:
+#   ansible-playbook --inventory inventory --extra-vars='user_id=na-admin mode=create' \
+#     /usr/share/ansible/stx-ansible/playbooks/manage_local_ldap_account.yml
+#
+# Example to delete user 'na-admin':
+#   ansible-playbook --inventory inventory --extra-vars='user_id=na-admin \
+#   mode=delete' /usr/share/ansible/stx-ansible/playbooks/manage_local_ldap_account.yml
 #
 
 - hosts: systemcontroller
@@ -45,24 +53,44 @@
     prompt: "What is the name of the user account?"
     private: no
 
-  - name: user_password
-    prompt: "What is the password for the user account?"
-    private: yes
-    unsafe: yes
-
   pre_tasks:
   - set_fact:
-      password_change_period: 90
-      password_warning_period: 2
+      in_mode: "{{ mode }}"
+    when: mode is defined
+
+  - name: Validate in_mode
+    fail:
+      msg: "The mode must be 'create' or 'delete'."
+    when: "in_mode not in ['create', 'delete']"
+
   - name: Validate user_id
     fail:
       msg: "The user account cannot be empty. Please provide a valid user account."
     when: user_id == ''
 
-  - name: Validate user_password
-    fail:
-      msg: "The password cannot be empty. Please provide a valid password for the user account."
-    when: user_password == ''
+  - name: Default to create if mode is not specified
+    set_fact:
+      in_mode: "create"
+    when: "in_mode is not defined"
+
+  - block:
+    - pause:
+        prompt: "What is the password for the user account?"
+        echo: no
+      register: prompt
+      no_log: no
+    - set_fact:
+        in_user_password: "{{ prompt.user_input }}"
+      no_log: no
+    - name: Validate user_password
+      fail:
+        msg: "The password cannot be empty. Please provide a valid password for the user account."
+      when: "in_mode == 'create' and ( in_user_password is not defined and in_user_password == '' )"
+    when: in_mode == 'create'
+
+  - set_fact:
+      password_change_period: 90
+      password_warning_period: 2
 
   # The user id and password variables need to be explicitly set here.
   # Otherwise, there would be undefined variable errors in subsequent
@@ -70,7 +98,6 @@
   - name: Set the user id and password facts for subsequent plays
     set_fact:
       in_user_id: "{{ user_id }}"
-      in_user_password: "{{ user_password }}"
 
   - name: Set sudo_permission flag fact upfront
     set_fact:
@@ -82,8 +109,14 @@
   vars:
     ssh_internal_args: -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no
 
-  roles:
-    - manage-local-ldap-account/create-account
+  tasks:
+    - include_role:
+        name: manage-local-ldap-account/create-account
+      when: in_mode == 'create'
+
+    - include_role:
+        name: manage-local-ldap-account/delete-account
+      when: in_mode == 'delete'
 
 - hosts: all
   gather_facts: no
@@ -91,5 +124,45 @@
   vars:
     ssh_internal_args: -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no
 
-  roles:
-    - manage-local-ldap-account/create-keystone-account
+  tasks:
+    - name: Enable AllowTcpForwarding setting in ssh config
+      lineinfile:
+        regexp: ^[ \t]*AllowTcpForwarding([ \t]+.*)$
+        line: AllowTcpForwarding yes
+        dest: /etc/ssh/sshd_config
+        validate: sshd -t -f %s
+      notify:
+      - reload sshd
+      become: yes
+      when: ('systemcontroller' in group_names)
+
+    - meta: flush_handlers
+
+    - name: Manage keystone user {{ in_user_id }}
+      block:
+      - include_role:
+          name: manage-local-ldap-account/create-keystone-account
+        when: in_mode == 'create'
+
+      - include_role:
+          name: manage-local-ldap-account/delete-keystone-account
+        when: in_mode == 'delete'
+
+      always:
+      - name: Disable AllowTcpForwarding setting in ssh config
+        lineinfile:
+          regexp: ^[ \t]*AllowTcpForwarding([ \t]+.*)$
+          line: AllowTcpForwarding no
+          dest: /etc/ssh/sshd_config
+          validate: sshd -t -f %s
+        notify:
+        - reload sshd
+        when: ('systemcontroller' in group_names)
+        become: yes
+
+  handlers:
+    - name: reload sshd
+      service:
+        name: sshd
+        state: reloaded
+      become: true

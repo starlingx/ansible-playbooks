@@ -3,10 +3,9 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Tasks to check LDAP user existence, to create LDAP users and to set new
-# initial password and to create home directory. If the system is distributed
-# cloud, this role also builds the list of subclouds that are currently online
-# and managed to be used in the next play.
+# Tasks to check LDAP user existence, to create LDAP users and set a new
+# initial password, and to create the home directory. If the system is
+# distributed cloud, it dynamically adds subclouds to the target host list.
 
 - name: Check if LDAP user exists
   shell: ldapsearch -x -LLL uid={{ in_user_id }}
@@ -38,46 +37,18 @@
     no_log: true
   when: in_user_id_check.stdout == ""
 
-- name: Get distributed_cloud role
-  shell: |
-    source /etc/platform/openrc
-    system show | grep distributed_cloud_role | awk '{ print $4 }'
-  register: distributed_cloud_role
+- name: Get distributed cloud role
+  include_role:
+    name: manage-local-ldap-account/common/get-distributed-role
 
-- name: Set if system is a DC
-  set_fact:
-    is_dc: "{{ true if  distributed_cloud_role.stdout == 'systemcontroller' else false }}"
+- name: Get online subclouds
+  include_role:
+    name: manage-local-ldap-account/common/get-online-subclouds
 
-- name: Tasks for distributed cloud
-  block:
-  - name: Get subcloud list
-    shell: |
-      source /etc/platform/openrc
-      dcmanager subcloud list --format yaml
-    register: subcloud_list_result
-
-  - name: Set a list for subclouds
-    set_fact:
-      subcloud_list: "{{ subcloud_list | default([]) + [ item.name ] }}"
-    when: (item.management == "managed" and item.availability == "online")
-    loop: "{{ subcloud_list_result.stdout | from_yaml if subcloud_list_result.stdout else [] }}"
-
-  - name: Populate inventory with subclouds
-    add_host:
-      name: "{{ item }}"
-      groups: "subclouds"
-      in_user_id: "{{ in_user_id }}"
-      in_user_password: "{{ in_user_password }}"
-      password_change_period: "{{ password_change_period }}"
-      password_warning_period: "{{ password_warning_period }}"
-      ssh_internal_args: "{{ ssh_internal_args }}"
-      ansible_ssh_common_args:
-        '-o ProxyCommand="sshpass -p {{ ansible_password }} ssh -W [%h]:%p -q {{ ansible_user }}@{{ ansible_host }}"'
-      in_sudo_permission: "{{ in_sudo_permission }}"
-    loop: "{{ subcloud_list }}"
-
+- name: Populate inventory with subclouds
+  include_role:
+    name: manage-local-ldap-account/common/add-hosts
+  vars:
+    in_item: "{{ item }}"
+  loop: "{{ subcloud_list }}"
   when: is_dc | bool
-
-- name: Set os_param_region_name if system is a DC
-  set_fact:
-    os_param_region_name: "{{ '--os-region-name SystemController' if is_dc | bool else '' }}"
