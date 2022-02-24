@@ -106,7 +106,7 @@
       privatekey_path: "{{ kubeadm_pki_dir }}/ca.key"
       common_name: kubernetes
       basic_constraints:
-        - CA:true
+        - CA:TRUE
         - pathlen:1
       basic_constraints_critical: true
       key_usage:
