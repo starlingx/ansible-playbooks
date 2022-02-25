@@ -269,7 +269,7 @@ docker_registries:
 # apiserver_extra_args:
 #   default-not-ready-toleration-seconds: "30"
 #   default-unreachable-toleration-seconds: "30"
-#   feature-gates: "SCTPSupport=true,TTLAfterFinished=true,HugePageStorageMediumSize=true,RemoveSelfLink=false"
+#   feature-gates: "TTLAfterFinished=true,RemoveSelfLink=false"
 #   event-ttl: "24h"
 #
 # controllermanager_extra_args:
