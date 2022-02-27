@@ -8,12 +8,14 @@
 # the specified list of images and store them in the specified directory.
 #
 set -e
+set -o pipefail
+
 STAGING_DIR=$1
 IMAGE_FILE=$2
 OUTPUT_FILE=$STAGING_DIR"/container-image"
 
 # Max bundle size in bytes (uncompressed)
-IMAGE_BUNDLE_MAX_SIZE=8000000000
+IMAGE_BUNDLE_MAX_SIZE=$3
 
 IMAGE_BUNDLES=""
 

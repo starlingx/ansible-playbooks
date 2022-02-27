@@ -153,6 +153,22 @@
     - meta: end_play
     when: prestage_reason == 'upgrade' and image_list_file is undefined
 
+  - name: Check available docker space
+    shell: df -h /var/lib/docker|tail -n +2|awk '{print $4}'
+    register: avail_space_check
+
+  # Fail if the available docker space is below 10G
+  - name: Fail if available docker space is below the minimum required
+    fail:
+      msg: "Available docker space is below the minimum required space for images prestage."
+    when: (avail_space_check.stdout[-1] != 'G' or
+           avail_space_check.stdout[:-1]|int < 10)
+
+  - name: Reduce max bundle size if docker space is less than 16G
+    set_fact:
+      bundle_size: 4000000000
+    when: avail_space_check.stdout[:-1]|int < 16
+
   - block:
     - name: Verify that the images list file exists if provided
       stat:
