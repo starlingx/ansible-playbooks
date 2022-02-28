@@ -1,0 +1,147 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This playbook fetches the previous release package checksum file from
+# the subcloud if it is not available on the system controller and
+# invokes the prepare-prestage-packages.sh to generate shared packages
+# that will be downloaded to the subcloud(s) in the subsequent phase of
+# prestage.
+#
+# Usage:
+#   ansible-playbook prepare_prestage_packages.yml -i <inventory-file> \
+#       -e "current_software_version=<release-number> \
+#           previous_software_version=<release-number>"
+
+- hosts: all
+  gather_facts: no
+
+  vars:
+    pkg_chksum_dir: /usr/local/share/pkg-list
+    deploy_dir: /opt/platform/deploy
+
+  tasks:
+    - name: Retrieve the distributed cloud role
+      shell: source /etc/platform/platform.conf; echo $distributed_cloud_role
+      register: dc_role
+      connection: local
+
+    - name: Fail if the playbook is not run on the system controller
+      fail:
+        msg: >
+          The prepare_prestage_packages.yml playbook must be run on the
+          system controller of a distributed cloud system.
+      when: dc_role.stdout != 'systemcontroller'
+
+    - name: Fail if mandatory parameters are not specified
+      fail:
+        msg: >
+          Please specify the values of previous_software_version and
+          current_software_version.
+      when: (previous_software_version is undefined or
+             current_software_version is undefined)
+
+    - name: Get the system controller software version
+      shell: source /etc/platform/platform.conf; echo $sw_version
+      register: system_controller_sw_version
+      connection: local
+
+    - name: Fail if the current_software_version is invalid
+      fail:
+        msg: "The expected current_software_version value is {{ system_controller_sw_version.stdout }}"
+      when: current_software_version != system_controller_sw_version.stdout
+
+    - name: Fail if the previous_software_version is higher than current_software_version
+      fail:
+        msg: "The previous_software_version must be lower than {{ current_software_version }}."
+      when: previous_software_version is version(current_software_version, '>=')
+
+    - name: Set prestage shared dir and package checksum file facts
+      set_fact:
+        prestage_shared_dir: "{{ deploy_dir }}/{{ current_software_version }}/prestage/shared"
+        prev_rel_chksum_file: "{{ pkg_chksum_dir }}/{{ previous_software_version }}_packages_list.txt"
+        curr_rel_chksum_file: "{{ pkg_chksum_dir }}/{{ current_software_version }}_packages_list.txt"
+
+    - name: Look for prestage_preparation_completed flag
+      stat:
+        path: "{{ prestage_shared_dir }}/.prestage_preparation_completed"
+      connection: local
+      register: prestage_preparation_completed_flag
+
+    - name: Skip the play if shared packages data have been prepared before
+      meta: end_play
+      when: prestage_preparation_completed_flag.stat.exists
+
+    - block:
+      - block:
+        - name: Ensure prestage shared directory exists
+          file:
+            path: "{{ prestage_shared_dir }}"
+            owner: root
+            group: root
+            state: directory
+            mode: 0755
+            recurse: yes
+          become: yes
+
+        - name: Look for package checksum file for the current release
+          stat:
+            path: "{{ curr_rel_chksum_file }}"
+          register: curr_file_check
+
+        - name: Fail if the package checksum file for the current release does not exist
+          fail:
+            msg: "File {{ curr_rel_chksum_file }} does not exist on the system controller"
+          when: not curr_file_check.stat.exists
+
+        - name: Look for the package checksum file for the previous release on the system controller
+          stat:
+            path: "{{ prev_rel_chksum_file }}"
+          register: prev_file_check
+
+        - name: Move the package checksum file for the previous release to prestage directory
+          command: mv {{ prev_rel_chksum_file }} {{ prestage_shared_dir }}
+          become: yes
+          when: prev_file_check.stat.exists
+        delegate_to: localhost
+
+      - block:
+        - name: Look for the package checksum file for the previous release on the subcloud
+          stat:
+            path: "{{ prev_rel_chksum_file }}"
+          register: prev_file_check_remote
+
+        - name: Fail if the package checksum file for the previous release does not exist
+          fail:
+            msg: "File {{ prev_rel_chksum_file }} does not exist on {{ inventory_hostname }}"
+          when: not prev_file_check_remote.stat.exists
+
+        # Need to fetch to tmp then move to destination direction so that this playbook can be run
+        # either as root or sysadmin. Note that become only affects the remote machine not ansible
+        # control machine for fetch module.
+        - name: Fetch the package checksum file from {{ inventory_hostname }}
+          fetch:
+            src: "{{ prev_rel_chksum_file }}"
+            dest: /tmp/
+            flat: yes
+
+        - name: Move the fetched file to prestage share directory
+          command: mv /tmp/{{ prev_rel_chksum_file|basename }} {{ prestage_shared_dir }}
+          become: yes
+          connection: local
+        when: not prev_file_check.stat.exists
+
+      - name: Generate shared packages for prestage on the system controller
+        command: /usr/local/bin/prepare-prestage-packages.sh --release-id {{ current_software_version }}
+        become: yes
+        connection: local
+
+      rescue:
+        - name: Clean up the prestage shared directory
+          file:
+            path: "{{ deploy_dir }}/{{ current_software_version }}/prestage"
+            state: absent
+          connection: local
+          become: yes
