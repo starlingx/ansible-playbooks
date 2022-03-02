@@ -101,8 +101,8 @@
             path: "{{ prev_rel_chksum_file }}"
           register: prev_file_check
 
-        - name: Move the package checksum file for the previous release to prestage directory
-          command: mv {{ prev_rel_chksum_file }} {{ prestage_shared_dir }}
+        - name: Copy the package checksum file for the previous release to prestage directory
+          command: cp {{ prev_rel_chksum_file }} {{ prestage_shared_dir }}
           become: yes
           when: prev_file_check.stat.exists
         delegate_to: localhost
@@ -145,3 +145,7 @@
             state: absent
           connection: local
           become: yes
+
+        - name: Fail the play after cleanup
+          fail:
+            msg: "Prestage packages preparation failed. Please check ansible logs for the last failed task."
