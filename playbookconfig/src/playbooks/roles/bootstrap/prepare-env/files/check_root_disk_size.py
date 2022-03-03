@@ -11,7 +11,7 @@ import pyudev
 import re
 import sys
 
-DEVICE_NAME_NVME = 'nvme'
+from sysinv.common import constants as sysinv_constants
 
 
 def get_rootfs_node():
@@ -37,8 +37,10 @@ def get_rootfs_node():
                         device = os.path.basename(os.readlink(symlink))
 
     if device is not None:
-        if DEVICE_NAME_NVME in device:
+        if sysinv_constants.DEVICE_NAME_NVME in device:
             re_line = re.compile(r'^(nvme[0-9]*n[0-9]*)')
+        elif sysinv_constants.DEVICE_NAME_DM in device:
+            return get_mpath_from_dm(os.path.join("/dev", device))
         else:
             re_line = re.compile(r'^(\D*)')
         match = re_line.search(device)
@@ -46,6 +48,23 @@ def get_rootfs_node():
             return os.path.join("/dev", match.group(1))
 
     return
+
+
+def get_mpath_from_dm(dm_device):
+    """Get mpath node from /dev/dm-N"""
+    mpath_device = None
+
+    context = pyudev.Context()
+
+    pydev_device = pyudev.Device.from_device_file(context, dm_device)
+
+    if sysinv_constants.DEVICE_NAME_MPATH in pydev_device.get("DM_NAME", ""):
+        re_line = re.compile(r'^(\D*)')
+        match = re_line.search(pydev_device.get("DM_NAME"))
+        if match:
+            mpath_device = os.path.join("/dev/mapper", match.group(1))
+
+    return mpath_device
 
 
 def parse_fdisk(device_node):
@@ -71,7 +90,10 @@ def get_root_disk_size():
         major = device['MAJOR']
         if (major == '8' or major == '3' or major == '253' or
                 major == '259'):
-            devname = device['DEVNAME']
+            if sysinv_constants.DEVICE_NAME_MPATH in device.get("DM_NAME", ""):
+                devname = os.path.join("/dev/mapper", device.get("DM_NAME"))
+            else:
+                devname = device['DEVNAME']
             if devname == rootfs_node:
                 try:
                     size_gib = parse_fdisk(devname)

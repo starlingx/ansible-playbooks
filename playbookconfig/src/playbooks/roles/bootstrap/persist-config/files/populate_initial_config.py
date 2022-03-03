@@ -1,13 +1,14 @@
 #!/usr/bin/python
 
 #
-# Copyright (c) 2019-2021 Wind River Systems, Inc.
+# Copyright (c) 2019-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # OpenStack Keystone and Sysinv interactions
 #
 
+import glob
 import os
 import pyudev
 import re
@@ -925,6 +926,8 @@ def get_rootfs_node():
     if device is not None:
         if sysinv_constants.DEVICE_NAME_NVME in device:
             re_line = re.compile(r'^(nvme[0-9]*n[0-9]*)')
+        elif sysinv_constants.DEVICE_NAME_DM in device:
+            return get_mpath_from_dm(os.path.join("/dev", device))
         else:
             re_line = re.compile(r'^(\D*)')
         match = re_line.search(device)
@@ -932,6 +935,23 @@ def get_rootfs_node():
             return os.path.join("/dev", match.group(1))
 
     return
+
+
+def get_mpath_from_dm(dm_device):
+    """Get mpath node from /dev/dm-N"""
+    mpath_device = None
+
+    context = pyudev.Context()
+
+    pydev_device = pyudev.Device.from_device_file(context, dm_device)
+
+    if sysinv_constants.DEVICE_NAME_MPATH in pydev_device.get("DM_NAME", ""):
+        re_line = re.compile(r'^(\D*)')
+        match = re_line.search(pydev_device.get("DM_NAME"))
+        if match:
+            mpath_device = os.path.join("/dev/mapper", match.group(1))
+
+    return mpath_device
 
 
 def find_boot_device():
@@ -945,7 +965,10 @@ def find_boot_device():
         part = pyudev.Device.from_device_number(context,
                                                 'block',
                                                 os.stat('/boot')[stat.ST_DEV])
-        boot_device = part.parent.device_node
+        if part.parent:
+            boot_device = part.parent.device_node
+        elif sysinv_constants.DEVICE_NAME_DM in part.device_node:
+            boot_device = get_mpath_from_dm(part.device_node)
 
     except Exception:
         raise ConfigFail("Failed to determine the boot partition")
@@ -958,7 +981,12 @@ def find_boot_device():
 
 def device_node_to_device_path(dev_node):
     device_path = None
-    cmd = ["find", "-L", "/dev/disk/by-path/", "-samefile", dev_node]
+
+    if sysinv_constants.DEVICE_NAME_MPATH in dev_node:
+        cmd = (["find", "-L"] + glob.glob("/dev/disk/by-id/dm-uuid*") +
+               ["-samefile", dev_node])
+    else:
+        cmd = ["find", "-L", "/dev/disk/by-path/", "-samefile", dev_node]
 
     try:
         out = subprocess.check_output(cmd, universal_newlines=True)
