@@ -131,7 +131,7 @@
 - name: Create kubelet override config file
   template:
     src: "kubelet.conf.j2"
-    dest: /etc/sysconfig/kubelet
+    dest: "{{ '/etc/default' if os_release == 'debian' else '/etc/sysconfig' }}/kubelet"
 
 - name: Enable kubelet
   systemd:
