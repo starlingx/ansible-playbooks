@@ -454,6 +454,17 @@
     kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f
     {{ psp_file }}
 
+# The following labels are used by pod security admission controller
+- name: Add pod security labels to the kube-system namespace
+  command: kubectl --kubeconfig=/etc/kubernetes/admin.conf
+           label --overwrite namespaces kube-system
+           pod-security.kubernetes.io/audit-version=v1.23
+           pod-security.kubernetes.io/enforce-version=v1.23
+           pod-security.kubernetes.io/warn-version=v1.23
+           pod-security.kubernetes.io/audit=privileged
+           pod-security.kubernetes.io/enforce=privileged
+           pod-security.kubernetes.io/warn=privileged
+
 - name: Mark Kubernetes config complete
   file:
     path: /etc/platform/.initial_k8s_config_complete
