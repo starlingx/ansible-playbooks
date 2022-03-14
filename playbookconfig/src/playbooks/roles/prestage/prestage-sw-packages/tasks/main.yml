@@ -55,28 +55,25 @@
       --files-from={{ prestage_dir }}/common_packages.txt
       {{ packages_prestage_dir }}
 
-  # TODO(tngo): Check if the rsync method below is faster than ansible fileglob
-  # copy for batch subcloud prestage in large DC. Also consider limiting rsync
-  # bandwidth with --bwlimit option.
-  # - name: Download new packages to prestage directory on {{ inventory_hostname }}
-  #   shell: >
-  #     sshpass -p {{ ansible_ssh_pass }}
-  #     rsync -a -e 'ssh -o StrictHostKeyChecking=no'
-  #     sysadmin@registry.central:{{ packages_download_source }}/* {{ packages_prestage_dir }}
-  #   register: rpm_transfer
-  #   retries: 3
-  #   delay: 2
-  #   until: rpm_transfer.rc == 0
-  #   no_log: true
-
   - name: Download new packages to prestage directory on {{ inventory_hostname }}
-    copy:
-      src: "{{ item }}"
-      dest: "{{ packages_prestage_dir }}"
-      owner: root
-      mode: 0644
-    with_fileglob:
-      - "{{ packages_download_source }}/*.rpm"
+    shell: >
+      sshpass -p {{ ansible_ssh_pass }}
+      rsync -a -e 'ssh -o StrictHostKeyChecking=no'
+      sysadmin@registry.central:{{ packages_download_source }}/* {{ packages_prestage_dir }}
+    register: rpm_transfer
+    retries: 3
+    delay: 2
+    until: rpm_transfer.rc == 0
+    no_log: true
+
+  # - name: Download new packages to prestage directory on {{ inventory_hostname }}
+  #   copy:
+  #     src: "{{ item }}"
+  #     dest: "{{ packages_prestage_dir }}"
+  #     owner: root
+  #     mode: 0644
+  #   with_fileglob:
+  #     - "{{ packages_download_source }}/*.rpm"
 
   - name: Generate prestage repodata
     command: createrepo -g {{ comps_file | basename }} .
