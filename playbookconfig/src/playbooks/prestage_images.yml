@@ -24,7 +24,7 @@
     platform_backup_dir: /opt/platform-backup
     image_list: []
     # Max image bundle size in bytes
-    bundle_size: 8000000000
+    bundle_size: 4000000000
 
   roles:
     - prestage/prepare-env
