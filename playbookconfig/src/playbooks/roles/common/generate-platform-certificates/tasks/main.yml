@@ -1,0 +1,56 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# These tasks get information from the running system and use it to
+# generate a certificate spec file which is going to be applied to
+# kubernetes at a later step
+#
+- name: Get address pool information for system
+  shell: |
+    source /etc/platform/openrc; system addrpool-list --nowrap
+  register: address_table
+
+- name: Get floating management ip
+  shell: |
+    echo "{{ address_table.stdout }}" | awk  '$4 == "management" { print $14 }'
+  register: management_ip
+
+- name: Get floating oam ip
+  shell: |
+    echo "{{ address_table.stdout }}" | awk  '$4 == "oam" { print $14 }'
+  register: oam_ip
+
+- name: Get floating kubernetes cluster ip
+  shell: |
+    echo "{{ address_table.stdout }}" | awk  '$4 == "cluster-host-subnet" { print $14 }'
+  register: kubernetes_cluster_floating_ip
+
+- name: Get controller0 kubernetes cluster ip
+  shell: |
+    echo "{{ address_table.stdout }}" | awk  '$4 == "cluster-host-subnet" { print $16 }'
+  register: kubernetes_cluster_c0_ip
+
+- name: Get controller1 kubernetes cluster ip
+  shell: |
+    echo "{{ address_table.stdout }}" | awk  '$4 == "cluster-host-subnet" { print $18 }'
+  register: kubernetes_cluster_c1_ip
+
+- name: Get region name
+  shell: |
+    source /etc/platform/openrc
+    system show | grep region_name | awk '{ print $4 }'
+  register: region_name
+
+- name: Get distributed_cloud role
+  shell: |
+    source /etc/platform/openrc
+    system show | grep distributed_cloud_role | awk '{ print $4 }'
+  register: distributed_cloud_role
+
+- name: Generate kubernetes yaml for cert-manager resources
+  template:
+    src: platform_certificates.yml.j2
+    dest: "{{ destination }}"
