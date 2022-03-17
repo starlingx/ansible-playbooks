@@ -172,6 +172,7 @@
     reconfigure_endpoints: false
     dc_role_changed: false
     etcd_root_ca_changed: false
+    kube_extra_config_changed: false
 
     # Replay related flags
     last_config_file_exists: false
@@ -258,6 +259,8 @@
                           | combine(apiserver_extra_args|default({})) }}"
     controllermanager_extra_args: "{{ controllermanager_extra_args_defaults \
                                   | combine(controllermanager_extra_args|default({})) }}"
+    scheduler_extra_args: "{{ scheduler_extra_args_defaults \
+                                  | combine(scheduler_extra_args|default({})) }}"
     kubelet_extra_args: "{{ kubelet_extra_args_defaults \
                         | combine(kubelet_extra_args|default({})) }}"
     kubelet_configurations: "{{ kubelet_configurations_defaults \
@@ -265,12 +268,65 @@
     networking_configurations: "{{ networking_configurations_defaults \
                                | combine(networking_configurations|default({})) }}"
 
+- name: Add OpenID Connect parameter oidc-client-id to apiserver extraArgs section
+  set_fact:
+    apiserver_extra_args: "{{ apiserver_extra_args | combine({ 'oidc-client-id' : apiserver_oidc.client_id })}}"
+  when: apiserver_oidc.client_id is defined
+
+- name: Add OpenID Connect parameter oidc-issuer-url to apiserver extraArgs section
+  set_fact:
+    apiserver_extra_args: "{{ apiserver_extra_args | combine({ 'oidc-issuer-url' : apiserver_oidc.issuer_url })}}"
+  when: apiserver_oidc.issuer_url is defined
+
+- name: Add OpenID Connect parameter oidc-username-claim to apiserver extraArgs section
+  set_fact:
+    apiserver_extra_args: "{{ apiserver_extra_args | combine({ 'oidc-username-claim' : apiserver_oidc.username_claim })}}"
+  when: apiserver_oidc.username_claim is defined
+
+- name: Add OpenID Connect parameter oidc-groups-claim to apiserver extraArgs section
+  set_fact:
+    apiserver_extra_args: "{{ apiserver_extra_args | combine({ 'oidc-groups-claim' : apiserver_oidc.groups_claim })}}"
+  when: apiserver_oidc.groups_claim is defined
+
 # Give the bootstrap config output file on the host a generic name so the
 # same file is referenced if the host is bootstrapped locally and remotely
 # in whatever order.
 - name: Set bootstrap output file
   set_fact:
     last_bootstrap_config_file: "{{ config_permdir }}/last_bootstrap_config.yml"
+    tmp_kubernetes_extra_config_file: "/tmp/kube_extra_config_bootstrap.yaml"
+    last_kubernetes_extra_config_file: "{{ config_permdir }}/last_kube_extra_config_bootstrap.yaml"
+
+- name: Remove tmp kubernetes configuration file
+  file:
+    path: "{{ tmp_kubernetes_extra_config_file }}"
+    state: absent
+
+- name: Save the current kubernetes extraArgs and extraVolumes configuration
+  include_role:
+    name: common/prepare-env
+    tasks_from: kube-extra-save-configuration
+  vars:
+    dst_file: "{{ tmp_kubernetes_extra_config_file }}"
+
+- name: Look for tmp kubernetes configuration file stats
+  stat:
+    path: "{{ tmp_kubernetes_extra_config_file }}"
+    get_checksum: yes
+  register: tmp_kubernetes_extra_config_stat
+
+- name: Look for last kubernetes configuration file stats
+  stat:
+    path: "{{ last_kubernetes_extra_config_file }}"
+    get_checksum: yes
+  register: last_kubernetes_extra_config_stat
+
+- block:  # exexcuted if the last kubernetes extra config file exists
+  - name: Turn on kube_extra_config_changed flag
+    set_fact:
+      kube_extra_config_changed: true
+  when: last_kubernetes_extra_config_stat.stat.exists and
+        last_kubernetes_extra_config_stat.stat.checksum != tmp_kubernetes_extra_config_stat.stat.checksum
 
 - name: Check Docker status
   command: systemctl status docker
@@ -457,10 +513,10 @@
               (prev_cluster_pod_subnet != cluster_pod_subnet) or
               (prev_cluster_service_subnet != cluster_service_subnet)
 
-      - name: Turn on restart services flag if Kubernetes OpenID config is changed
+      - name: Turn on restart services flag if Kubernetes OpenID or extraArgs or extraVolumes are changed
         set_fact:
           restart_services: true
-        when: (prev_apiserver_oidc|default({})) != (apiserver_oidc)
+        when: (prev_apiserver_oidc|default({})) != (apiserver_oidc) or kube_extra_config_changed
 
       # Re-evaluate the condition to persist config data to sysinv database
       - name: Turn off save_config_to_db flag

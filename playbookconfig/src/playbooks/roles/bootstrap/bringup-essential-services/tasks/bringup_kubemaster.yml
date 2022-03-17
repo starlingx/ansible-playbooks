@@ -149,6 +149,13 @@
     mode: 0600
   when: mode == 'bootstrap'
 
+- name: Create extra volumes files
+  copy:
+    dest: "/etc/kubernetes/{{ item.name }}.yaml"
+    content: "{{ item.content }}"
+  when: (item.pathType == 'File')
+  loop: "{{ apiserver_extra_volumes + controllermanager_extra_volumes + scheduler_extra_volumes }}"
+
 - name: Set loopback ip for kubeadm configuration
   set_fact:
     loopback_ip: "{{ '127.0.0.1' if ipv6_addressing == False else '::1' }}"
@@ -365,6 +372,16 @@
     remote_src: yes
     force: yes
     mode: 0400
+
+- name: Copy kubernetes extra volumes config files
+  copy:
+    src: "/etc/kubernetes/{{ item.name }}.yaml"
+    dest: "{{ config_permdir }}/kubernetes/{{ item.name }}.yaml"
+    remote_src: yes
+    force: yes
+    mode: 0400
+  when: (item.pathType == 'File')
+  loop: "{{ apiserver_extra_volumes + controllermanager_extra_volumes + scheduler_extra_volumes }}"
 
 - name: Apply pod security policy
   command: >

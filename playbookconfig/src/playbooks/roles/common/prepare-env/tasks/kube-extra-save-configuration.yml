@@ -1,0 +1,36 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to persist kubernetes extra configuration in a file when bootstrap is running
+#   and load the content last_kube_extra_config_bootstrap.yaml and copy to override_backup_file when
+#   backup is running.
+#
+- name: Read in last kubernetes config values (extraArgs and extraVolumes)
+  include_vars:
+    file: "{{ config_permdir }}/last_kube_extra_config_bootstrap.yaml"
+  when: mode == 'backup'
+
+- name: Append kubernetes extra configuration (extraArgs and extraVolumes)
+  blockinfile:
+    path: "{{ dst_file }}"
+    marker: ""
+    create: yes
+    block: |
+      apiserver_extra_args:
+      {{ apiserver_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
+      controllermanager_extra_args:
+      {{ controllermanager_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
+      scheduler_extra_args:
+      {{ scheduler_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
+      kubelet_configurations:
+      {{ kubelet_configurations | to_nice_yaml | indent(2, indentfirst=True) }}
+      apiserver_extra_volumes:
+      {{ apiserver_extra_volumes | to_yaml | indent(2, indentfirst=True) }}
+      controllermanager_extra_volumes:
+      {{ controllermanager_extra_volumes | to_yaml | indent(2, indentfirst=True) }}
+      scheduler_extra_volumes:
+      {{ scheduler_extra_volumes | to_yaml | indent(2, indentfirst=True) }}

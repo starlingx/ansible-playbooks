@@ -62,6 +62,16 @@
       state: absent
   when: config_find.matched != 0
 
+- name: Delete extraArgs and extraVolumes configuration
+  file:
+    path: "{{ last_kubernetes_extra_config_file }}"
+    state: absent
+
+- name: persist extraArgs and extraVolumes configuration file
+  command: >
+      mv -f {{ tmp_kubernetes_extra_config_file }}
+      {{ last_kubernetes_extra_config_file }}
+
 # Postgres, PXE, Branding, Grub config tasks and filesystem resizing are
 # moved to a separate file as they don't need to be executed again once the
 # controller-0 host has been created.
