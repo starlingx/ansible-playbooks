@@ -1,0 +1,18 @@
+---
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Tasks to populate the inventory with managed subclouds.
+
+- name: Populate inventory with subclouds
+  add_host:
+    name: "{{ in_item }}"
+    groups: "subclouds"
+    in_user_id: "{{ in_user_id }}"
+    ssh_internal_args: "{{ ssh_internal_args }}"
+    ansible_ssh_common_args:
+      '-o ProxyCommand="sshpass -p {{ ansible_password }} ssh -W [%h]:%p -q {{ ansible_user }}@{{ ansible_host }}"'
+    in_sudo_permission: "{{ in_sudo_permission }}"
+    in_mode: "{{ in_mode }}"
+    in_user_password: "{{ in_user_password if in_mode == 'create' else '' }}"

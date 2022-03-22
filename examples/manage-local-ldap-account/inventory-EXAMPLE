@@ -32,8 +32,12 @@
 # ansible-playbook --inventory inventory-secure --ask-vault-pass \
 # --extra-vars='user_id=JohnDoo sudo_permission=yes' \
 # /usr/share/ansible/stx-ansible/playbooks/manage_local_ldap_account.yml
-
-
+#
+# If you wish to delete an existing user account (e.g. na-admin):
+#
+# ansible-playbook --inventory inventory --extra-vars='user_id=na-admin \
+# mode=delete' /usr/share/ansible/stx-ansible/playbooks/manage_local_ldap_account.yml
+#
 
 [all:vars]
 ansible_user=sysadmin

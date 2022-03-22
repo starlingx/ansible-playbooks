@@ -1,0 +1,33 @@
+---
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Tasks to check LDAP user existence, to delete LDAP account. If the system is
+# distributed cloud, it dynamically adds subclouds to the target host list.
+
+- name: Check if LDAP user exists
+  command: ldapsearch -x -LLL uid={{ in_user_id }}
+  register: in_user_id_check
+  become: yes
+
+- name: Delete LDAP user {{ in_user_id }} only if it exists
+  command: ldapdeleteuser {{ in_user_id }}
+  become: yes
+  when: in_user_id_check.stdout | length != 0
+
+- name: Get distributed role
+  include_role:
+    name: manage-local-ldap-account/common/get-distributed-role
+
+- name: Get online subclouds
+  include_role:
+    name: manage-local-ldap-account/common/get-online-subclouds
+
+- name: Populate inventory with subclouds
+  include_role:
+    name: manage-local-ldap-account/common/add-hosts
+  vars:
+    in_item: "{{ item }}"
+  loop: "{{ subcloud_list }}"
+  when: is_dc | bool

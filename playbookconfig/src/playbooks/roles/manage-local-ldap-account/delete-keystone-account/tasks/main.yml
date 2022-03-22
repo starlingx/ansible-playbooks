@@ -1,0 +1,23 @@
+---
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Tasks to delete both keystone and LDAP user account inside the system
+# controller, and subclouds as well for distributed systems.
+
+- name: Delete keystone user on System Controller
+  block:
+  - name: Delete the keystone user {{ in_user_id }}
+    shell: >-
+      source /etc/platform/openrc; openstack {{ os_param_region_name }} user delete {{ in_user_id }}
+
+  when: ('systemcontroller' in group_names)
+
+- name: Wait for keystone user to be deleted in all subclouds
+  shell: source /etc/platform/openrc; ! openstack user show {{ in_user_id }}
+  register: user_output
+  until: user_output.rc == 0
+  retries: 12
+  delay: 10
+  when: ('systemcontroller' not in group_names)
