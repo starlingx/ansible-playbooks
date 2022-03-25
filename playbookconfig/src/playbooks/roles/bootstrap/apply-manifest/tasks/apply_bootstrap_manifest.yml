@@ -176,6 +176,15 @@
       backup_size: 25
     when: root_disk_size|int > small_root_disk_size
 
+  - name: Expand systemcontroller filesystems sizes for standard deployments
+    set_fact:
+      platform_size: 20
+      backup_size: 35
+    when: >
+      (root_disk_size|int > small_root_disk_size and
+       distributed_cloud_role == 'systemcontroller' and
+       system_type == 'Standard')
+
   - name: Write filesystem settings to runtime hieradata
     lineinfile:
       path: "{{ hieradata_workdir }}/runtime.yaml"
