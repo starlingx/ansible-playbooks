@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -54,26 +54,30 @@
       - "{{ ping_result.stdout_lines|list }}"
     when: ping_result.rc != 0 and item is search('100% packet loss')
 
-  - name: Check existing SSH known host
-    local_action: command ssh-keygen -lF {{ ssh_hostname }}
-    failed_when: false
-    register: stored_ssh_key
+  - name: Gather remote SSH public key
+    command: ssh-keyscan -T 20 -t ecdsa {{ ssh_hostname }}
+    register: remote_keyscan
+    until: remote_keyscan.stdout != ""
+    retries: 6
+    delay: "{{ 3 | random }}"
+    delegate_to: localhost
 
-  - block:
-    - name: Gather remote SSH public key
-      command: ssh-keyscan -t ecdsa {{ ssh_hostname }}
-      register: remote_keyscan
-      delegate_to: localhost
+  - name: Print warning if ssh-keyscan command is timed out
+    debug:
+      msg: "ssh-keyscan command is timed out."
+    when: remote_keyscan.stdout == ""
 
-    - name: Add remote SSH public keys into the known_hosts
-      lineinfile:
-        path: "~/.ssh/known_hosts"
-        create: yes
-        line: "{{ item }}"
-      with_items: "{{ remote_keyscan.stdout_lines | list }}"
-      delegate_to: localhost
-
-    when: stored_ssh_key.stdout | length > 0
+  - name: Add remote SSH public keys into the known_hosts
+    lineinfile:
+      path: "~/.ssh/known_hosts"
+      create: yes
+      line: "{{ item }}"
+    with_items: "{{ remote_keyscan.stdout_lines | list }}"
+    register: add_sshkey
+    until: not add_sshkey.changed
+    retries: 6
+    delay: "{{ 3 | random }}"
+    delegate_to: localhost
 
   - block:
     - name: Fail if password change response sequence is not defined
@@ -81,22 +85,27 @@
       when: (vault_password_change_responses is not defined) and
             (password_change_responses is not defined)
 
-    - debug:
-        msg: "Changing the initial password.."
-
-    - name: Change initial password
-      expect:
-        echo: yes
-        command: "ssh -p {{ ansible_port }} {{ ansible_ssh_user }}@{{ ansible_host }}"
-        responses: "{{ vault_password_change_responses | default(password_change_responses) }}"
-      failed_when: false
-      delegate_to: localhost
-
-    rescue:
-      # Initial password has been changed and the user forgot to exclude
-      # password_change option in the command line for the replay.
+    - block:
       - debug:
-          msg: "Password has already been changed"
+          msg: "Changing the initial password.."
+
+      - name: Change initial password
+        expect:
+          echo: yes
+          command: "ssh -p {{ ansible_port }} {{ ansible_ssh_user }}@{{ ansible_host }}"
+          responses: "{{ vault_password_change_responses | default(password_change_responses) }}"
+          timeout: 150
+        register: passwd_change
+        failed_when: "passwd_change.rc != 0 and 'successfully' not in passwd_change.stdout"
+        delegate_to: localhost
+
+      rescue:
+        # Password change timed out. We are not going to fail it here.
+        # It should be allowed for instance when initial password has been
+        # changed and the user forgot to exclude password_change option
+        # in the command line for the replay.
+        - debug:
+            msg: "Timed out or the password has already been changed"
 
     when: password_change
 
