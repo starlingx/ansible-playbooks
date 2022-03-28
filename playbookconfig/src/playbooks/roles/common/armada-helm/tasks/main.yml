@@ -78,6 +78,17 @@
       when: create_ns.rc is defined and create_ns.rc !=0 and
             create_ns.stderr is not search('AlreadyExists')
 
+    # The following labels are used by pod security admission controller
+    - name: Add pod security labels to the armada namespace
+      command: kubectl --kubeconfig=/etc/kubernetes/admin.conf
+               label --overwrite namespaces armada
+               pod-security.kubernetes.io/audit-version=v1.23
+               pod-security.kubernetes.io/enforce-version=v1.23
+               pod-security.kubernetes.io/warn-version=v1.23
+               pod-security.kubernetes.io/audit=baseline
+               pod-security.kubernetes.io/enforce=baseline
+               pod-security.kubernetes.io/warn=baseline
+
     # Retrieve local registry credentials if it's unknown
     - block:
       - name: Get local registry credentials

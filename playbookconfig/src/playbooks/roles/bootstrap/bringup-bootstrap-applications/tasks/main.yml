@@ -38,6 +38,17 @@
   shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace deployment --dry-run -o yaml |
           kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
 
+# The following labels are used by pod security admission controller
+- name: Add pod security labels to the deployment namespace
+  command: kubectl --kubeconfig=/etc/kubernetes/admin.conf
+           label --overwrite namespaces deployment
+           pod-security.kubernetes.io/audit-version=v1.23
+           pod-security.kubernetes.io/enforce-version=v1.23
+           pod-security.kubernetes.io/warn-version=v1.23
+           pod-security.kubernetes.io/audit=baseline
+           pod-security.kubernetes.io/enforce=baseline
+           pod-security.kubernetes.io/warn=baseline
+
 # Check if there is a default-registry-key for kube-system and create it when
 # there is not during platform-restore process
 - block:
