@@ -103,6 +103,8 @@
         - "{{ pause_img }}"
         - "{{ nginx_ingress_controller_img }}"
         - "{{ default_backend_img }}"
+        - "{{ flux_helm_controller_img }}"
+        - "{{ flux_source_controller_img }}"
       storage_images:
         - "{{ snapshot_controller_img }}"
       security_images:
