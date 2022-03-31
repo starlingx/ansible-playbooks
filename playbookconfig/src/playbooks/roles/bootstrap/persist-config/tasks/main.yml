@@ -17,13 +17,13 @@
     register: tmp_keyring
 
   - block:
-    - name: Delete the previous python_keyring directory if exists
-      file:
-        path: "{{ keyring_permdir + '/' + keyring_workdir | basename }}"
-        state: absent
+    - name: Persist keyring data (overwrite if exists)
+      command: "cp -r {{ keyring_workdir }} {{ keyring_permdir }}"
 
-    - name: Persist keyring data
-      command: "mv {{ keyring_workdir }} {{ keyring_permdir }}"
+    - name: Delete the temporary keyring work dir
+      file:
+        path: "{{ keyring_workdir }}"
+        state: absent
     when: tmp_keyring.stat.exists
   when: save_password
 
