@@ -220,6 +220,8 @@ spec:
       tolerations:
       - operator: Exists
         effect: NoSchedule
+      - operator: Exists
+        effect: NoExecute
       serviceAccountName: multus
       imagePullSecrets:
         - name: registry-local-secret
