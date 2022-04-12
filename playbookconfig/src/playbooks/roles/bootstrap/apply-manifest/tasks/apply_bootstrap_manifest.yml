@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2021 Wind River Systems, Inc.
+# Copyright (c) 2019-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -50,11 +50,10 @@
     set_fact:
       temp_ssh_config_dir: /tmp/config/ssh_config
 
-  - name: Prefetch static and system hieradata
+  - name: Prefetch all hieradata
     command: >-
       tar -C {{ hieradata_workdir }} -xpf {{ restore_data_file }} --transform='s,.*/,,'
-      '{{ archive_puppet_permdir }}/*static.yaml'
-      '{{ archive_puppet_permdir }}/*system.yaml'
+      '{{ archive_puppet_permdir }}/*.yaml'
     args:
       warn: false
 
@@ -215,6 +214,45 @@
     with_items:
       - "{{ hieradata_workdir }}/system.yaml"
       - "{{ hieradata_workdir }}/secure_system.yaml"
+
+  # Search the hieradata file name for controller-0 host, if
+  # the command doesn't find the pattern it will return != 0
+  - name: Get controller-0 host hieradata filename
+    shell: "grep -l 'platform::params::hostname:.*controller-0' {{ hieradata_workdir }}/*.yaml"
+    register: c0_hiera_file
+    no_log: true
+    ignore_errors: true
+
+  # If for any reason the previous command fails to find the hieradata file,
+  # the process will continue with puppet using default docker filesystem size
+  - block:
+    - name: Read docker filesystem size from host hieradata
+      shell: >
+        grep 'platform::filesystem::docker::params::lv_size' {{ c0_hiera_file.stdout_lines[0] }} |
+        cut -d' ' -f2 |
+        head -n1
+      register: host_docker_lv_size
+
+    - name: Write docker filesystem size to runtime hieradata
+      lineinfile:
+        path: "{{ hieradata_workdir }}/runtime.yaml"
+        line: "platform::filesystem::docker::params::bootstrap::lv_size: {{ item }}"
+      with_items: "{{ host_docker_lv_size.stdout_lines }}"
+
+    when: c0_hiera_file.rc == 0
+
+  - name: Fetch unwanted hieradata files
+    find:
+      paths: "{{ hieradata_workdir }}"
+      patterns: "*.yaml"
+      excludes: "runtime.yaml,*static.yaml"
+    register: host_hieradata_file
+
+  - name: Remove remaining hieradata files
+    file:
+      path: "{{ item.path }}"
+      state: absent
+    with_items: "{{ host_hieradata_file.files }}"
 
   when: mode == 'restore'
 
