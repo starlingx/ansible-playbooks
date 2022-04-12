@@ -22,6 +22,12 @@ IMAGE_BUNDLES=""
 # Registry Images are loaded into this array
 declare -a IMAGE_ARRAY=()
 
+# Find out how many CPUs are assigned to platform
+NUM_OF_PLATFORM_CPU=$(cat /etc/platform/worker_reserved.conf | \
+grep PLATFORM_CPU_LIST | \
+perl -pe 's/(\d+)-(\d+)/join(",",$1..$2)/eg' | \
+grep -Eo '[0-9]+' | wc -l)
+
 LOG_FILE="/tmp/$(basename $0).log"
 
 function log {
@@ -41,7 +47,11 @@ function generate_image_bundle {
     log "Generating image bundle ${bundle_num}..."
     log "Image list: ${images}, list size: ${list_size}, \
     bundle: ${bundle_num}, output file: ${OUTPUT}"
-    docker save $(echo "${images}") | gzip > ${OUTPUT}
+    if (( NUM_OF_PLAT_CPU < 4)); then
+        docker save $(echo "${images}") | gzip > ${OUTPUT}
+    else
+        docker save $(echo "${images}") | pigz > ${OUTPUT}
+    fi
     IMAGE_BUNDLES=${IMAGE_BUNDLES}" "$(basename ${OUTPUT})
 }
 
