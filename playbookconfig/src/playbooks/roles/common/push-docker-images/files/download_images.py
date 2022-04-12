@@ -34,6 +34,8 @@ DEFAULT_REGISTRIES = {
     'ghcr.io': 'ghcr.io'
 }
 
+REGISTRY_PATTERNS = ['.io', 'docker.elastic.co']
+
 image_outfile = None
 registries = json.loads(os.environ['REGISTRIES'])
 
@@ -70,8 +72,9 @@ def convert_img_for_local_lookup(img):
             img_name = img[img.find('/'):]
             new_img = registry_url.split(':')[0] + img_name
         else:
-            if ".io" not in registry_url:
+            if not any(pattern in registry_url for pattern in REGISTRY_PATTERNS):
                 # Default to docker.io
+                # e.g. fluxcd/helm-controller
                 new_img = "docker.io/" + img
             else:
                 new_img = img

@@ -16,6 +16,7 @@ import time  # noqa: E402
 import keyring  # noqa: E402
 
 MAX_PUSH_THREAD = 5
+REGISTRY_PATTERNS = ['.io', 'docker.elastic.co']
 
 
 def get_local_registry_auth():
@@ -58,8 +59,9 @@ def push_an_image(img):
             img_name = img[img.find('/'):]
             new_img = registry_url.split(':')[0] + img_name
         else:
-            if ".io" not in registry_url:
+            if not any(pattern in registry_url for pattern in REGISTRY_PATTERNS):
                 # Default to docker.io
+                # e.g. fluxcd/helm-controller
                 new_img = "docker.io/" + img
             else:
                 new_img = img

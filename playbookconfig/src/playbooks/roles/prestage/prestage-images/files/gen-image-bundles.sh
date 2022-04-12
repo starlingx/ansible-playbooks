@@ -87,7 +87,8 @@ function build_image_archive {
 function remove_images {
     for image in "${IMAGE_ARRAY[@]}"; do
         log "docker image rm ${image}"
-        docker image rm ${image} 1>>${LOG_FILE} 2>&1
+        # Don't fail if the image has been removed already
+        docker image rm ${image} || true 1>>${LOG_FILE} 2>&1
     done
 }
 
