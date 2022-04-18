@@ -149,6 +149,12 @@
     mode: 0600
   when: mode == 'bootstrap'
 
+- name: Create default audit policy config
+  copy:
+    src: "default-audit-policy.yaml"
+    dest: "{{ default_audit_policy_config }}"
+    mode: 0600
+
 - name: Create extra volumes files
   copy:
     dest: "/etc/kubernetes/{{ item.name }}.yaml"
@@ -368,6 +374,14 @@
 - name: Copy kube api server encryption provider config
   copy:
     src: "{{ encryption_provider_config }}"
+    dest: "{{ config_permdir }}/kubernetes/"
+    remote_src: yes
+    force: yes
+    mode: 0400
+
+- name: Copy default audit policy config
+  copy:
+    src: "{{ default_audit_policy_config }}"
     dest: "{{ config_permdir }}/kubernetes/"
     remote_src: yes
     force: yes
