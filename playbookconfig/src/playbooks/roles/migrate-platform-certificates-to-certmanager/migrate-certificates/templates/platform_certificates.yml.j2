@@ -11,109 +11,118 @@ metadata:
   namespace: cert-manager
 type: kubernetes.io/tls
 ---
-apiVersion: cert-manager.io/v1alpha2
-kind: ClusterIssuer
-metadata:
-  name: system-local-ca
-spec:
-  ca:
-    secretName: system-local-ca
----
-{% if https_enabled.stdout | bool %}
-apiVersion: cert-manager.io/v1alpha3
-kind: Certificate
-metadata:
-  name: system-restapi-gui-certificate
-  namespace: deployment
-spec:
-  secretName: system-restapi-gui-certificate
-  duration: "{{ duration }}"
-  renewBefore: "{{ renewBefore }}"
-  issuerRef:
+apiVersion: v1
+items:
+- apiVersion: cert-manager.io/v1
+  kind: ClusterIssuer
+  metadata:
+    creationTimestamp: null
     name: system-local-ca
-    kind: ClusterIssuer
-  commonName: "{{ oam_ip.stdout }}"
-  ipAddresses:
-    - "{{ oam_ip.stdout }}"
-  dnsNames:
+  spec:
+    ca:
+      secretName: system-local-ca
+  status: {}
+{% if https_enabled.stdout | bool %}
+- apiVersion: cert-manager.io/v1
+  kind: Certificate
+  metadata:
+    creationTimestamp: null
+    name: system-restapi-gui-certificate
+    namespace: deployment
+  spec:
+    commonName: "{{ oam_ip.stdout }}"
+    dnsNames:
     - "{{ clean_region_name }}.{{ dns_domain }}"
-  subject:
-    countries:
+    duration: "{{ duration }}"
+    ipAddresses:
+    - "{{ oam_ip.stdout }}"
+    issuerRef:
+      kind: ClusterIssuer
+      name: system-local-ca
+    renewBefore: "{{ renewBefore }}"
+    secretName: system-restapi-gui-certificate
+    subject:
+      countries:
       - "{{ subject_C }}"
-    provinces:
-      - "{{ subject_ST }}"
-    localities:
+      localities:
       - "{{ subject_L }}"
       - "{{ subject_prefix + ':' if subject_prefix is defined else '' }}{{ clean_region_name }}:system-restapi-gui"
-    organizations:
-      - "{{ subject_O }}"
-    organizationalUnits:
+      organizationalUnits:
       - "{{ subject_OU }}"
----
+      organizations:
+      - "{{ subject_O }}"
+      provinces:
+      - "{{ subject_ST }}"
+  status: {}
 {% endif %}
-apiVersion: cert-manager.io/v1alpha3
-kind: Certificate
-metadata:
-  name: system-registry-local-certificate
-  namespace: deployment
-spec:
-  secretName: system-registry-local-certificate
-  duration: "{{ duration }}"
-  renewBefore: "{{ renewBefore }}"
-  issuerRef:
-    name: system-local-ca
-    kind: ClusterIssuer
-  commonName: "{{ oam_ip.stdout }}"
-  ipAddresses:
-    - "{{ oam_ip.stdout }}"
-    - "{{ management_ip.stdout }}"
-  dnsNames:
+- apiVersion: cert-manager.io/v1
+  kind: Certificate
+  metadata:
+    creationTimestamp: null
+    name: system-registry-local-certificate
+    namespace: deployment
+  spec:
+    commonName: "{{ oam_ip.stdout }}"
+    dnsNames:
     - "{{ clean_region_name }}.{{ dns_domain }}"
     - registry.local
 {% if distributed_cloud_role.stdout == 'systemcontroller' %}
     - registry.central
 {% endif %}
-  subject:
-    countries:
+    duration: "{{ duration }}"
+    ipAddresses:
+    - "{{ oam_ip.stdout }}"
+    - "{{ management_ip.stdout }}"
+    issuerRef:
+      kind: ClusterIssuer
+      name: system-local-ca
+    renewBefore: "{{ renewBefore }}"
+    secretName: system-registry-local-certificate
+    subject:
+      countries:
       - "{{ subject_C }}"
-    provinces:
-      - "{{ subject_ST }}"
-    localities:
+      localities:
       - "{{ subject_L }}"
       - "{{ subject_prefix + ':' if subject_prefix is defined else '' }}{{ clean_region_name }}:system-registry-local"
-    organizations:
-      - "{{ subject_O }}"
-    organizationalUnits:
+      organizationalUnits:
       - "{{ subject_OU }}"
----
-{% if oidc_applied.stdout | bool %}
-apiVersion: cert-manager.io/v1alpha3
-kind: Certificate
-metadata:
-  name: oidc-auth-apps-certificate
-  namespace: kube-system
-spec:
-  secretName: oidc-auth-apps-certificate
-  duration: "{{ duration }}"
-  renewBefore: "{{ renewBefore }}"
-  issuerRef:
-    name: system-local-ca
-    kind: ClusterIssuer
-  commonName: "{{ oam_ip.stdout }}"
-  ipAddresses:
-    - "{{ oam_ip.stdout }}"
-  dnsNames:
-    - "{{ clean_region_name }}.{{ dns_domain }}"
-  subject:
-    countries:
-      - "{{ subject_C }}"
-    provinces:
+      organizations:
+      - "{{ subject_O }}"
+      provinces:
       - "{{ subject_ST }}"
-    localities:
+  status: {}
+{% if oidc_applied.stdout | bool %}
+- apiVersion: cert-manager.io/v1
+  kind: Certificate
+  metadata:
+    creationTimestamp: null
+    name: oidc-auth-apps-certificate
+    namespace: kube-system
+  spec:
+    commonName: "{{ oam_ip.stdout }}"
+    dnsNames:
+    - "{{ clean_region_name }}.{{ dns_domain }}"
+    duration: "{{ duration }}"
+    ipAddresses:
+    - "{{ oam_ip.stdout }}"
+    issuerRef:
+      kind: ClusterIssuer
+      name: system-local-ca
+    renewBefore: "{{ renewBefore }}"
+    secretName: oidc-auth-apps-certificate
+    subject:
+      countries:
+      - "{{ subject_C }}"
+      localities:
       - "{{ subject_L }}"
       - "{{ subject_prefix + ':' if subject_prefix is defined else '' }}{{ clean_region_name }}:system-oidc-dex"
-    organizations:
-      - "{{ subject_O }}"
-    organizationalUnits:
+      organizationalUnits:
       - "{{ subject_OU }}"
+      organizations:
+      - "{{ subject_O }}"
+      provinces:
+      - "{{ subject_ST }}"
+  status: {}
 {% endif %}
+kind: List
+metadata: {}

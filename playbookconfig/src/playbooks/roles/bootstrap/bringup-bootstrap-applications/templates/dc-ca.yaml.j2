@@ -1,55 +1,57 @@
----
-apiVersion: cert-manager.io/v1alpha2
-kind: Issuer
-metadata:
-  name: dc-selfsigning-issuer
-  namespace: dc-cert
-spec:
-  selfSigned: {}
-
----
-apiVersion: cert-manager.io/v1alpha2
-kind: Certificate
-metadata:
-  name: dc-adminep-root-ca-certificate
-  namespace: dc-cert
-spec:
-  secretName: dc-adminep-root-ca-certificate
-  commonName: "{{ controller_floating_address }}"
-  duration: 43800h  # 1825 days or 5 years
-  renewBefore: 720h # 30 days
-  isCA: true
-  issuerRef:
+apiVersion: v1
+items:
+- apiVersion: cert-manager.io/v1
+  kind: Issuer
+  metadata:
+    creationTimestamp: null
     name: dc-selfsigning-issuer
-    kind: Issuer
-  subject:
-    organizationalUnits:
-    - 'StarlingX DC Root CA'
-    organizations:
-    - StarlingX
-
----
-apiVersion: cert-manager.io/v1alpha2
-kind: Issuer
-metadata:
-  name: dc-adminep-root-ca-issuer
-  namespace: dc-cert
-spec:
-  ca:
+    namespace: dc-cert
+  spec:
+    selfSigned: {}
+  status: {}
+- apiVersion: cert-manager.io/v1
+  kind: Certificate
+  metadata:
+    creationTimestamp: null
+    name: dc-adminep-root-ca-certificate
+    namespace: dc-cert
+  spec:
+    commonName: '{{ controller_floating_address }}'
+    duration: 43800h0m0s # 1825 days or 5 years
+    isCA: true
+    issuerRef:
+      kind: Issuer
+      name: dc-selfsigning-issuer
+    renewBefore: 720h0m0s # 30 days
     secretName: dc-adminep-root-ca-certificate
-
----
-apiVersion: cert-manager.io/v1alpha3
-kind: Certificate
-metadata:
-  name: dc-adminep-certificate
-  namespace: dc-cert
-spec:
-  commonName: "{{ controller_floating_address }}"
-  duration: 4320h
-  isCA: false
-  issuerRef:
-    kind: Issuer
+    subject:
+      organizationalUnits:
+      - StarlingX DC Root CA
+  status: {}
+- apiVersion: cert-manager.io/v1
+  kind: Issuer
+  metadata:
+    creationTimestamp: null
     name: dc-adminep-root-ca-issuer
-  renewBefore: 720h # 30 days
-  secretName: dc-adminep-certificate
+    namespace: dc-cert
+  spec:
+    ca:
+      secretName: dc-adminep-root-ca-certificate
+  status: {}
+- apiVersion: cert-manager.io/v1
+  kind: Certificate
+  metadata:
+    creationTimestamp: null
+    name: dc-adminep-certificate
+    namespace: dc-cert
+  spec:
+    commonName: '{{ controller_floating_address }}'
+    duration: 4320h0m0s
+    issuerRef:
+      kind: Issuer
+      name: dc-adminep-root-ca-issuer
+    renewBefore: 720h0m0s
+    secretName: dc-adminep-certificate
+  status: {}
+kind: List
+metadata: {}
