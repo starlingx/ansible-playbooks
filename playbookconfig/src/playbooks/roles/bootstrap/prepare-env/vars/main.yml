@@ -30,6 +30,10 @@ apiserver_extra_args_defaults:
   default-unreachable-toleration-seconds: "30"
   feature-gates: "TTLAfterFinished=true,RemoveSelfLink=false"
   event-ttl: "24h"
+  audit-log-path: "/var/log/kubernetes/audit/audit.log"
+  audit-log-maxage: "3"
+  audit-log-maxbackup: "10"
+  audit-log-maxsize: "100"
 
 controllermanager_extra_args_defaults:
   node-monitor-period: "2s"
