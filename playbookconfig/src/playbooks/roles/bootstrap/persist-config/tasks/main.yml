@@ -272,10 +272,19 @@
       - "{{ containerd_proxy_conf }}"
     when: docker_https_proxy != 'undef'
 
-  - name: Add no proxy address list to docker proxy config file
+  - name: Add no proxy address list to docker proxy config file on CentOS
     lineinfile:
       path: "{{ docker_proxy_conf }}"
       line: "Environment='NO_PROXY={{ docker_no_proxy_combined | join(',') }}'"
+    when: os_release == "centos"
+
+  # Docker on Debian doesn't work with the NO_PROXY environment variable if it
+  # has IPv6 addresses with square brackets, thus remove the square brackets
+  - name: Add no proxy address list to docker proxy config file on Debian
+    lineinfile:
+      path: "{{ docker_proxy_conf }}"
+      line: "Environment='NO_PROXY={{ docker_no_proxy_combined | join(',') | regex_replace('\\[|\\]', '') }}'"
+    when: os_release == "debian"
 
   # Containerd doesn't work with the NO_PROXY environment
   # variable if it has IPv6 addresses with square brackets,
