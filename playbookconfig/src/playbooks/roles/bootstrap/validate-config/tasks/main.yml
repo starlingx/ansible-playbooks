@@ -852,6 +852,20 @@
         (restore_k8s_version is defined) and
         (kubernetes_version != restore_k8s_version)
 
+- name: Check overridden extraVolumes configuration.
+  fail:
+    msg: >
+      Attribute is missing in extra volume {{ item.name }}.
+      Or readOnly attribute's value is not 'false' or 'true'
+      Or pathType attribute's value is not 'File' or 'DirectoryOrCreate'
+  when: (item.name is not defined) or
+        (item.mountPath is not defined) or
+        (item.pathType is not defined) or
+        (item.pathType != 'File' and item.pathType != 'DirectoryOrCreate') or
+        (item.readOnly is not defined) or
+        (item.readOnly | type_debug != 'bool')
+  loop: "{{ apiserver_extra_volumes + controllermanager_extra_volumes + scheduler_extra_volumes }}"
+
 # Wipe ceph osds
 # Note that due to Ansible mishandling of boolean values via extra-vars we are
 # adding supplementary validation here.

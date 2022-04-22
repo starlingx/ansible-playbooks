@@ -247,6 +247,8 @@ docker_registries:
 # required three fields of the apiserver_oidc parameter are defined, the
 # feature is considered active. Their values will be used to configure the
 # Kubernetes cluster for authentication with OpenID Connect.
+# apiserver_oidc parameters will override oidc-client-id, oidc-issuer-url, oidc-username-claim
+# if they are defined in apiserver_extra_args
 #
 # apiserver_oidc:
 #   client_id:
@@ -258,9 +260,14 @@ docker_registries:
 #
 # apiserver_extra_args: {}
 # controllermanager_extra_args: {}
+# scheduler_extra_args: {}
 #
 # kubelet_extra_args: {}
 # kubelet_configurations: {}
+#
+# apiserver_extra_volumes: []
+# controllermanager_extra_volumes: []
+# scheduler_extra_volumes: []
 #
 # networking_configurations: {}
 #
@@ -278,6 +285,9 @@ docker_registries:
 #   pod-eviction-timeout: '30s'
 #   feature-gates: "TTLAfterFinished=true"
 #
+# scheduler_extra_args:
+#   feature-gates: "TTLAfterFinished=true"
+#
 # kubelet_configurations: {}
 #   nodeStatusUpdateFrequency: "4s"
 #   featureGates:
@@ -287,6 +297,78 @@ docker_registries:
 #   dnsDomain: 'cluster.local'
 #
 # Please refer to the official documentation for more details on these overwritable parameters.
+#
+# Some extraArgs parameters point out to configuration file, which need to be added in extraVolumes
+# section. In order to do that, apiserver_extra_volumes, controllermanager_extra_volumes and
+# scheduler_extra_volumes have been added, and must be overrided by the end-user.
+# For instance, if admission plugins are configured and they need extra
+#     configuration, that configuration should be set in a specific file
+#     referenced by admission-control-config-file parameter.
+#     Some admission-plugins that need extra configuration are:
+#      - PodSecurity
+#      - PodNodeSelector
+#      - EventRateLimit
+#
+# Configuration example
+#
+# apiserver_extra_volumes, controllermanager_extra_volumes and scheduler_extra_volumes are an
+# array of dictionary
+# e.g. [{name: string, mountPath: string, readOnly: boolean, content: string, pathType: string}]
+#
+# SAMPLE EXTRA VOLUMES CONFIGURATIONS
+#
+# a) File type
+# apiserver_extra_args:
+#   admission-control-config-file: "/etc/kubernetes/admission-control-config-file.yaml"
+#   enable-admission-plugins: "PodNodeSelector"
+#
+# apiserver_extra_volumes:
+#   - name: admission-control-config-file
+#     mountPath: "/etc/kubernetes/admission-control-config-file.yaml"
+#     readOnly: true
+#     pathType: "File"
+#     content: |
+#       apiVersion: apiserver.config.k8s.io/v1
+#       kind: AdmissionConfiguration
+#       plugins:
+#       - name: PodNodeSelector
+#         path: /etc/kubernetes/pod-node-selector.yaml
+#   - name: pod-node-selector
+#     mountPath: "/etc/kubernetes/pod-node-selector.yaml"
+#     readOnly: true
+#     pathType: "File"
+#     content: |
+#       podNodeSelectorPluginConfig:
+#       clusterDefaultNodeSelector: name-of-node-selector
+#       namespace1: name-of-node-selector
+#       namespace2: name-of-node-selector
+#
+# b) Directory type
+# To set auditing audit-policy-file and audit-log-path in extra volumes section
+#
+# apiserver_extra_args:
+#   audit-policy-file: /etc/kubernetes/audit-policy-file.yaml
+#   audit-log-path: /var/log/kubernetes/audit/audit.log
+#
+# apiserver_extra_volumes:
+#   - name: audit-policy-file
+#     mountPath: "/etc/kubernetes/audit-policy-file.yaml"
+#     readOnly: true
+#     pathType: "File"
+#     content: |
+#       # Log all requests at the Metadata level.
+#       apiVersion: audit.k8s.io/v1
+#       kind: Policy
+#       rules:
+#       - level: Metadata
+#   - name: audit-log-path
+#     mountPath: "/var/log/kubernetes/audit/"
+#     readOnly: false
+#     pathType: "DirectoryOrCreate"
+
+apiserver_extra_volumes: []
+controllermanager_extra_volumes: []
+scheduler_extra_volumes: []
 
 # ADMIN CREDENTIALS
 # =================

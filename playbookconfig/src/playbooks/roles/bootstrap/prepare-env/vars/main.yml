@@ -37,6 +37,8 @@ controllermanager_extra_args_defaults:
   feature-gates: "TTLAfterFinished=true"
   flex-volume-plugin-dir: "{{ kubelet_vol_plugin_dir }}"
 
+scheduler_extra_args_defaults: { }
+
 # KubeletConfiguration
 kubelet_extra_args_defaults:
   v: '2'
