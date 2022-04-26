@@ -753,9 +753,30 @@ def populate_docker_kube_config(client):
     parameters = client.sysinv.service_parameter.list()
     for parameter in parameters:
         if (parameter.name in [
+                sysinv_constants.SERVICE_PARAM_NAME_AUDIT_POLICY_FILE,
                 sysinv_constants.SERVICE_PARAM_NAME_KUBERNETES_API_SAN_LIST,
                 sysinv_constants.SERVICE_PARAM_NAME_KUBERNETES_POD_MAX_PIDS]):
             client.sysinv.service_parameter.delete(parameter.uuid)
+
+    audit_policy_file = CONF.get('BOOTSTRAP_CONFIG', 'AUDIT_POLICY_FILE')
+
+    if audit_policy_file != 'undef':
+        parameters = {
+            sysinv_constants.SERVICE_PARAM_NAME_AUDIT_POLICY_FILE:
+                str(audit_policy_file)
+        }
+
+        values = {
+            'service': sysinv_constants.SERVICE_TYPE_KUBERNETES,
+            'section':
+                sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_APISERVER,
+            'personality': None,
+            'resource': None,
+            'parameters': parameters
+        }
+
+        print("Populating/Updating audit policy config...")
+        client.sysinv.service_parameter.create(**values)
 
     apiserver_san_list = CONF.get('BOOTSTRAP_CONFIG', 'APISERVER_SANS')
     if apiserver_san_list:
