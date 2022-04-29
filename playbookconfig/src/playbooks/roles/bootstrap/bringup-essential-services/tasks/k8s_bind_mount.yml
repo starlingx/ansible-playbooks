@@ -13,20 +13,6 @@
     set_fact:
       kube_local_dir: "/usr/local/kubernetes"
 
-  - name: Create Kubernetes bind mounts directories
-    file:
-      path: "{{ item }}"
-      state: directory
-      recurse: yes
-      owner: root
-      group: root
-      mode: 0755
-    with_items:
-      - "{{ kube_local_dir }}/current/stage1"
-      - "{{ kube_local_dir }}/current/stage2"
-      - "{{ kube_local_dir }}/{{ kubernetes_version }}/stage1"
-      - "{{ kube_local_dir }}/{{ kubernetes_version }}/stage2"
-
   # When updating kubernetes, kubeadm and kubelet/kubectl need to be updated separately
   # and we will have "stage1" and "stage2" subdirectories to separate these different stages.
   - name: Bind Kubernetes stage1 and stage2 directories

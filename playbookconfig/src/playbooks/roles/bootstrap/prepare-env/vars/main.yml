@@ -11,7 +11,7 @@ os_release: "centos"
 
 # KUBERNETES PARAMETERS
 # =====================
-kubelet_vol_plugin_dir: /usr/libexec/kubernetes/kubelet-plugins/volume/exec/
+kubelet_vol_plugin_dir: /opt/libexec/kubernetes/kubelet-plugins/volume/exec/
 # Kubernetes api server encryption provider configuration file
 encryption_provider_config: /etc/kubernetes/encryption-provider.yaml
 default_audit_policy_config: /etc/kubernetes/default-audit-policy.yaml
