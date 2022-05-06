@@ -23,14 +23,9 @@ apiServer:
       mountPath: {{ encryption_provider_config }}
       readOnly: true
       pathType: File
-    - name: "audit-policy-file"
-{% if 'audit-policy-file' in apiserver_extra_args %}
-      hostPath:  {{ apiserver_extra_args['audit-policy-file'] }}
-      mountPath: {{ apiserver_extra_args['audit-policy-file'] }}
-{% else %}
+    - name: "default-audit-policy-file"
       hostPath:  {{ default_audit_policy_config }}
       mountPath: {{ default_audit_policy_config }}
-{% endif %}
       readOnly: true
       pathType: File
     - name: "audit-log-dir"
