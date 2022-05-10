@@ -16,8 +16,8 @@
     args:
       warn: false
     with_items:
-      - "sed -i -e 's|0.0.0.0/0|::0/0|g' /etc/postgresql/pg_hba.conf"
-      - "sed -i -e 's|0.0.0.0/32|::0/128|g' /etc/postgresql/pg_hba.conf"
+      - "sed --follow-symlinks -i -e 's|0.0.0.0/0|::0/0|g' /etc/postgresql/pg_hba.conf"
+      - "sed --follow-symlinks -i -e 's|0.0.0.0/32|::0/128|g' /etc/postgresql/pg_hba.conf"
 
   - name: Restart postgresql
     systemd:
