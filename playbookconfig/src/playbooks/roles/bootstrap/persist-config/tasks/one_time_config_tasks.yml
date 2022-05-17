@@ -49,11 +49,19 @@
     - "{{ ssl_ca_certs_dir }}"
     - "{{ etcd_certs_dir }}"
 
-- name: Get list of Postgres conf files
+- name: Get list of Postgres conf files (type file)
   find:
     paths: /etc/postgresql
-    patterns: '*.conf'
-  register: postgres_result
+    pattern: '*.conf'
+    file_type: file
+  register: postgres_result_file
+
+- name: Get list of Postgres conf files (type links)
+  find:
+    paths: /etc/postgresql
+    pattern: '*.conf'
+    file_type: link
+  register: postgres_result_link
 
 - name: Copy postgres conf files for mate
   copy:
@@ -63,7 +71,7 @@
     owner: postgres
     group: postgres
     remote_src: yes
-  with_items: "{{ postgres_result.files }}"
+  with_items: "{{ postgres_result_file.files + postgres_result_link.files }}"
 
 - name: Create a symlink to PXE config files
   file:
