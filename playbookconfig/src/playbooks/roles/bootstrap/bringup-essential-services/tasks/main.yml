@@ -98,10 +98,6 @@
     retries: 10
     until: check_online.stdout == "online"
 
-  - name: Wait for {{ pods_wait_time }} seconds to ensure kube-system pods are all started
-    wait_for:
-      timeout: "{{ pods_wait_time }}"
-
   - name: Set async parameters
     set_fact:
       async_timeout: 30
@@ -176,6 +172,10 @@
     import_role:
       name: common/upgrade-k8s-networking
     when: migrate_platform_data is defined and migrate_platform_data
+
+  - name: Wait for {{ pods_wait_time }} seconds to ensure kube-system pods are all started
+    wait_for:
+      timeout: "{{ pods_wait_time }}"
 
   - name: Start parallel tasks to wait for Kubernetes component and Networking pods to reach ready state
     # Only check for pods on the current host to avoid waiting for pods on downed nodes
