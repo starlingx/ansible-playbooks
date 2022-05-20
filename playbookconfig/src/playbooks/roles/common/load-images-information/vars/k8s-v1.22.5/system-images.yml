@@ -1,0 +1,31 @@
+---
+# System images that are pre-pulled and pushed to local registry
+n3000_opae_img: docker.io/starlingx/n3000-opae:stx.6.0-v1.0.1
+tiller_img: ghcr.io/helm/tiller:v2.16.9
+armada_img: quay.io/airshipit/armada:ddbdd7256c20f138737f6cbd772312f7a19f58b8-ubuntu_bionic
+kubernetes_entrypoint_img: quay.io/stackanetes/kubernetes-entrypoint:v0.3.1
+calico_cni_img: quay.io/calico/cni:v3.22.2
+calico_node_img: quay.io/calico/node:v3.22.2
+calico_kube_controllers_img: quay.io/calico/kube-controllers:v3.22.2
+calico_flexvol_img: quay.io/calico/pod2daemon-flexvol:v3.22.2
+multus_img: ghcr.io/k8snetworkplumbingwg/multus-cni:v3.8
+sriov_cni_img: ghcr.io/k8snetworkplumbingwg/sriov-cni:v2.6.2
+sriov_network_device_img: ghcr.io/k8snetworkplumbingwg/sriov-network-device-plugin:v3.4.0
+# Nginx images
+nginx_ingress_controller_img: k8s.gcr.io/ingress-nginx/controller:v1.1.1
+nginx_kube_webhook_certgen_img: k8s.gcr.io/ingress-nginx/kube-webhook-certgen:v1.1.1
+default_backend_img: k8s.gcr.io/defaultbackend:1.4
+# Cert-manager images
+cert_manager_acmesolver_img: quay.io/jetstack/cert-manager-acmesolver:v1.7.1
+cert_manager_cainjector_img: quay.io/jetstack/cert-manager-cainjector:v1.7.1
+cert_manager_controller_img: quay.io/jetstack/cert-manager-controller:v1.7.1
+cert_manager_webhook_img: quay.io/jetstack/cert-manager-webhook:v1.7.1
+cert_manager_ctl_img: quay.io/jetstack/cert-manager-ctl:v1.7.1
+# Keep the snapshot-controller image in sync with the one provided at:
+# cluster/addons/volumesnapshots/volume-snapshot-controller/volume-snapshot-controller-deployment.yaml
+# in the kubernetes github repo
+snapshot_controller_img: quay.io/k8scsi/snapshot-controller:v2.0.0-rc2
+rvmc_img: docker.io/starlingx/rvmc:stx.5.0-v1.0.0
+pause_img: k8s.gcr.io/pause:3.4.1
+flux_helm_controller_img: docker.io/fluxcd/helm-controller:v0.15.0
+flux_source_controller_img: docker.io/fluxcd/source-controller:v0.20.1
