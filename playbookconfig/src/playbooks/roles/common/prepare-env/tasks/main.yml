@@ -8,6 +8,22 @@
 #   This role is to perform tasks that are common to the playbooks.
 #
 
+# Check for Host OS release
+- name: Gather Host OS release
+  raw: "grep '^NAME=' /etc/os-release | sed s'/NAME=//'"
+  register: distro
+  changed_when: false
+
+- name: Set OS Release to Debian
+  set_fact:
+    os_release: "debian"
+  when: "'Debian' in distro.stdout"
+
+- name: Set OS Release to Centos
+  set_fact:
+    os_release: "centos"
+  when: "'Debian' not in distro.stdout"
+
 # Include user override files for a play
 - stat:
     path: "{{ item }}"
