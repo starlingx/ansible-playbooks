@@ -155,26 +155,27 @@
     args:
       warn: false
 
-  - name: Gather latest SSH public key
-    command: ssh-keyscan -T 20 -t ecdsa {{ ssh_hostname }}
-    register: remote_keyscan
-    until: remote_keyscan.stdout != ""
-    retries: 6
-    delay: "{{ 3 | random }}"
-    delegate_to: localhost
+  - block:
+    - name: Gather latest SSH public key
+      command: ssh-keyscan -T 20 -t ecdsa {{ ssh_hostname }}
+      register: remote_keyscan
+      until: remote_keyscan.stdout != ""
+      retries: 6
+      delay: "{{ 3 | random }}"
+      delegate_to: localhost
 
-  - name: Update the known_hosts file with collected SSH public keys
-    lineinfile:
-      path: "~/.ssh/known_hosts"
-      create: yes
-      line: "{{ item }}"
-    with_items: "{{ remote_keyscan.stdout_lines | list }}"
-    register: add_sshkey
-    until: not add_sshkey.changed
-    retries: 6
-    delay: "{{ 3 | random }}"
-    delegate_to: localhost
-
+    - name: Update the known_hosts file with collected SSH public keys
+      lineinfile:
+        path: "~/.ssh/known_hosts"
+        create: yes
+        line: "{{ item }}"
+      with_items: "{{ remote_keyscan.stdout_lines | list }}"
+      register: add_sshkey
+      until: not add_sshkey.changed
+      retries: 6
+      delay: "{{ 3 | random }}"
+      delegate_to: localhost
+    when: inventory_hostname != 'localhost'
   when: check_ssh_dir.rc is defined and check_ssh_dir.rc == 0
 
 # Restore resolv.conf and dnsmaq
