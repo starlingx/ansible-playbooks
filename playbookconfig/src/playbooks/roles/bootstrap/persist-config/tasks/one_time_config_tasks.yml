@@ -110,22 +110,15 @@
 
   when: branding_result.stat.exists and branding_result.stat.isdir
 
-- name: Add default security feature to kernel parameters (Centos)
-  block:
-    - name: Get grub default kernel
-      command: grubby --default-kernel
-      register: grub_kernel_output
+- name: Get grub default kernel
+  command: grubby --default-kernel
+  register: grub_kernel_output
 
-    - name: Update grub default kernel parameters
-      command: "{{ item }}"
-      with_items:
-        - "grubby --update-kernel={{ grub_kernel_output.stdout_lines[0] }} --args='{{ default_security_feature }}'"
-        - "grubby --efi --update-kernel={{ grub_kernel_output.stdout_lines[0] }} --args='{{ default_security_feature }}'"
-  when: os_release == 'centos'
-
-- name: Add default security feature to kernel parameters (Debian)
-  command: /usr/local/bin/puppet-update-grub-env.py --add-kernelparams '{{ default_security_feature }}'
-  when: os_release == 'debian'
+- name: Add default security feature to kernel parameters
+  command: "{{ item }}"
+  with_items:
+    - "grubby --update-kernel={{ grub_kernel_output.stdout_lines[0] }} --args='{{ default_security_feature }}'"
+    - "grubby --efi --update-kernel={{ grub_kernel_output.stdout_lines[0] }} --args='{{ default_security_feature }}'"
 
 - name: Gather drbd status
   command: drbd-overview
