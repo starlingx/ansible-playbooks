@@ -18,8 +18,9 @@
 #   is used, as resources are populated and based on datanetwork names.
 # - For k8s 1.19, the matchLabels are the same as the k8s 1.18 labels to
 #   allow a rolling update to succeed.
+# - Set CPU requests to 0
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -75,7 +76,7 @@ spec:
           privileged: true
         resources:
           requests:
-            cpu: "250m"
+            cpu: "0"
             memory: "40Mi"
           limits:
             cpu: 1
