@@ -1,0 +1,71 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# DESCRIPTION:
+#   These tasks configure and launch FluxCD helm and source controllers.
+#
+
+# Retrieve local registry credentials if it's unknown
+- name: set local registry facts
+  block:
+  - name: Get local registry credentials
+    vars:
+      script_content: |
+        import keyring
+        password = keyring.get_password("sysinv", "services")
+        if not password:
+            raise Exception("Local registry password not found.")
+        print(dict(username='sysinv', password=str(password)))
+    shell: "{{ script_content }}"
+    args:
+      executable: /usr/bin/python
+    register: local_registry_credentials_output
+
+  - set_fact:
+      local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
+      local_registry: "registry.local:9001"
+  when: local_registry_credentials is not defined
+  become: yes
+
+- name: Bring up FluxCD helm and source controllers
+  import_tasks: bringup_fluxcd.yml
+  become: yes
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+    HOME: /home/sysadmin
+
+- name: Configure fluxcd deployments
+  block:
+  - name: Start wait for fluxcd deployments to reach Available state
+    # Check the deployment status rather than the pod status in case some pods are down on other nodes
+    command: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --namespace={{ item.namespace }}
+      --for=condition=Available deployment {{ item.deployment }} --timeout={{ async_timeout }}s
+    async: "{{ async_timeout }}"
+    poll: 0
+    with_items:
+      - { namespace: flux-helm, deployment: helm-controller }
+      - { namespace: flux-helm, deployment: source-controller }
+    register: wait_for_fluxcd_deployments
+
+  - name: Get wait tasks results
+    async_status:
+      jid: "{{ item.ansible_job_id }}"
+    register: wait_fluxcd_job_result
+    until: wait_fluxcd_job_result.finished
+    # The retry length should be x2 the length of the async_timeout
+    # eg async_retries = async_timeout * 2 / delay
+    retries: "{{ async_retries }}"
+    delay: 6
+    failed_when: false
+    with_items: "{{ wait_for_fluxcd_deployments.results }}"
+
+  - name: Fail if the helm and source controllers are not ready by this time
+    fail:
+      msg: "Pod {{ item.item.item }} is still not ready."
+    when: item.stdout is not search(" condition met")
+    with_items: "{{ wait_fluxcd_job_result.results }}"
+  when: enable_fluxcd_controllers

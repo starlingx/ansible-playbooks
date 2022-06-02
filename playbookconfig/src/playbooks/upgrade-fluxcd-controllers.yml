@@ -1,0 +1,15 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- hosts: all
+
+  vars:
+    playbooks_root: "/usr/share/ansible/stx-ansible/playbooks"
+
+  # Main play
+  roles:
+    - { role: common/fluxcd-controllers, become: yes }

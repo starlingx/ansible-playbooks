@@ -74,7 +74,8 @@
     import_tasks: bringup_helm.yml
 
   - name: Bring up FluxCD helm and source controllers
-    import_tasks: bringup_fluxcd.yml
+    import_role:
+      name: common/fluxcd-controllers
     when: enable_fluxcd_controllers
 
   - name: Bring up essential flock services
@@ -221,37 +222,6 @@
     when: item.stdout is not search(" condition met")
     with_items: "{{ wait_job_result.results }}"
 
-  - block:
-    - name: Start wait for fluxcd deployments to reach Available state
-      # Check the deployment status rather than the pod status in case some pods are down on other nodes
-      command: >-
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --namespace={{ item.namespace }}
-        --for=condition=Available deployment {{ item.deployment }} --timeout={{ async_timeout }}s
-      async: "{{ async_timeout }}"
-      poll: 0
-      with_items:
-        - { namespace: flux-helm, deployment: helm-controller }
-        - { namespace: flux-helm, deployment: source-controller }
-      register: wait_for_fluxcd_deployments
-
-    - name: Get wait tasks results
-      async_status:
-        jid: "{{ item.ansible_job_id }}"
-      register: wait_fluxcd_job_result
-      until: wait_fluxcd_job_result.finished
-      # The retry length should be x2 the length of the async_timeout
-      # eg async_retries = async_timeout * 2 / delay
-      retries: "{{ async_retries }}"
-      delay: 6
-      failed_when: false
-      with_items: "{{ wait_for_fluxcd_deployments.results }}"
-
-    - name: Fail if the helm and source controllers are not ready by this time
-      fail:
-        msg: "Pod {{ item.item.item }} is still not ready."
-      when: item.stdout is not search(" condition met")
-      with_items: "{{ wait_fluxcd_job_result.results }}"
-    when: enable_fluxcd_controllers
 
   - name: Enable volume snapshot support
     include_role:
