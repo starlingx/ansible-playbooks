@@ -26,7 +26,8 @@
   when: restore_openstack_in_progress.stat.exists
 
 - name: Check if it is the active controller
-  shell: source /etc/platform/openrc; system host-show $(cat /etc/hostname) | grep -i "Controller-Active"
+  shell: source /etc/platform/openrc; system host-show $(cat /etc/hostname) --column capabilities --format value
+         | grep -i "Controller-Active"
   register: active_ctlr
 
 - name: Fail if it is not the active controller
