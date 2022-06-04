@@ -18,8 +18,10 @@
 # - The cnibin volume hostPath is made variable
 # - An updateStrategy was added to the DaemonSet spec to allow controlled template
 #   updates of pods with "kubectl apply".
+# - The attributes confDir, cniDir and binDir are added to the configmap of
+#   multus-cni-config.
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -137,6 +139,9 @@ data:
       "name": "multus-cni-network",
       "type": "multus",
       "cniVersion": "0.3.1",
+      "confDir": "/etc/cni/net.d",
+      "cniDir": "/var/lib/cni/multus",
+      "binDir": "/opt/cni/bin",
       "logFile": "/var/log/multus.log",
       "logLevel": "debug",
       "capabilities": {
