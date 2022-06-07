@@ -195,6 +195,11 @@
   failed_when: item | ipaddr == False
   with_items: "{{ dns_servers }}"
 
+- name: Update resolv.conf with list of dns servers
+  lineinfile:
+    path: /etc/resolv.conf
+    line: "nameserver {{ item }}"
+  with_items: "{{ dns_servers }}"
 
 # Networks config validation
 - block:
