@@ -26,33 +26,37 @@
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
 
-- name: Create override file for dex-client-secret
+- name: Create override file for oidc-client helm chart
   copy:
-    dest: "/tmp/dex-client-secret.yaml"
+    dest: "/tmp/oidc-client-override.yaml"
     content: |
       tlsName: oidc-auth-apps-certificate
       config:
         issuer_root_ca: /home/dex-ca.pem
         issuer_root_ca_secret: system-local-ca-oidc-secret
 
-- name: Create override file for oidc-auth-apps-certificate
-  copy:
-    dest: "/tmp/oidc-auth-apps-certificate-override.yaml"
-    content: |
-      certs:
-        web:
-          secret:
-            tlsName: oidc-auth-apps-certificate
-            caName: oidc-auth-apps-certificate
-        grpc:
-          secret:
-            serverTlsName: oidc-auth-apps-certificate
-            clientTlsName: oidc-auth-apps-certificate
-            caName: oidc-auth-apps-certificate
+- name: Merge new volume and volumeMounts overrides with existing ones
+  vars:
+    new_overrides: |
+      volumes:
+      - name: https-tls
+        secret:
+          defaultMode: 420
+          secretName: oidc-auth-apps-certificate
+      volumeMounts:
+      - mountPath: /etc/dex/tls/
+        name: https-tls
+  script: merge_certificate_mounts.py "{{ new_overrides }}"
+  become_user: postgres
+  become: yes
+  register: yaml_merge_out
+
+- name: Create override file for dex helm chart
+  shell: echo "{{ yaml_merge_out.stdout }}" > /tmp/dex-override.yaml
 
 - name: Create override file for secret-observer helm chart
   copy:
-    dest: "/tmp/secret-observer.yaml"
+    dest: "/tmp/secret-observer-override.yaml"
     content: |
       observedSecrets:
         - secretName: "system-local-ca-oidc-secret"
@@ -75,9 +79,9 @@
   retries: 10
   delay: 30
   with_items:
-    - { chart: oidc-client, overrides_file: /tmp/dex-client-secret.yaml }
-    - { chart: dex, overrides_file: /tmp/oidc-auth-apps-certificate-override.yaml }
-    - { chart: secret-observer, overrides_file: /tmp/secret-observer.yaml }
+    - { chart: oidc-client, overrides_file: /tmp/oidc-client-override.yaml }
+    - { chart: dex, overrides_file: /tmp/dex-override.yaml }
+    - { chart: secret-observer, overrides_file: /tmp/secret-observer-override.yaml }
 
 - name: Apply oidc-auth-apps so that it picks up new certificates
   shell: |
@@ -102,8 +106,9 @@
   delay: 60
 
 - name: Wait for oidc-auth-apps pods to become active
-  command: >-
-    kubectl wait -n kube-system --for=condition=Ready pods --selector app=dex --timeout=90s
+  shell: >-
+    kubectl wait -n kube-system --for=condition=Ready pods --selector app.kubernetes.io/name=dex --timeout=90s \
+    && kubectl wait -n kube-system --for=condition=Ready pods --selector app=stx-oidc-client --timeout=90s
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
   register: wait_oidc_ep
