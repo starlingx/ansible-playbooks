@@ -54,3 +54,7 @@ kubelet_configurations_defaults:
     HugePageStorageMediumSize: true
   cgroupDriver: "cgroupfs"
   cgroupRoot: "{{ kubelet_cgroup_root }}"
+  imageGCHighThresholdPercent: 79
+  imageGCLowThresholdPercent: 75
+  evictionHard:
+    imagefs.available: "2Gi"
