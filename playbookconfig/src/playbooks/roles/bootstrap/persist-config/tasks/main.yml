@@ -400,18 +400,6 @@
     line: distributed_cloud_role={{ distributed_cloud_role }}
   when: distributed_cloud_role != 'none'
 
-- name: Update resolv.conf with list of dns servers
-  lineinfile:
-    path: /etc/resolv.conf
-    line: "nameserver {{ item }}"
-  with_items: "{{ dns_servers }}"
-
-- name: Remove localhost address from resolv.conf
-  lineinfile:
-    path: /etc/resolv.conf
-    regex: "nameserver ::1"
-    state: absent
-
 - name: Invalidate name service caching server
   command: nscd -i hosts
 
