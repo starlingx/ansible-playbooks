@@ -162,6 +162,7 @@
       until: remote_keyscan.stdout != ""
       retries: 6
       delay: "{{ 3 | random }}"
+      become: no
       delegate_to: localhost
 
     - name: Update the known_hosts file with collected SSH public keys
@@ -174,6 +175,7 @@
       until: not add_sshkey.changed
       retries: 6
       delay: "{{ 3 | random }}"
+      become: no
       delegate_to: localhost
     when: inventory_hostname != 'localhost'
   when: check_ssh_dir.rc is defined and check_ssh_dir.rc == 0
