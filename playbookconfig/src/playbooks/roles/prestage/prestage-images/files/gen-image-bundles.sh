@@ -47,10 +47,10 @@ function generate_image_bundle {
     log "Generating image bundle ${bundle_num}..."
     log "Image list: ${images}, list size: ${list_size}, \
     bundle: ${bundle_num}, output file: ${OUTPUT}"
-    if (( NUM_OF_PLATFORM_CPU < 4)); then
-        docker save $(echo "${images}") | gzip > ${OUTPUT}
-    else
+    if command -v pigz >/dev/null && (( NUM_OF_PLATFORM_CPU >= 4 )); then
         docker save $(echo "${images}") | pigz > ${OUTPUT}
+    else
+        docker save $(echo "${images}") | gzip > ${OUTPUT}
     fi
     IMAGE_BUNDLES=${IMAGE_BUNDLES}" "$(basename ${OUTPUT})
 }
