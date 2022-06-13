@@ -86,6 +86,24 @@
 - name: Update Multus Networking
   command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_multus.yaml"
 
+- block:
+  - name: Check if SRIOV config file is present in the backup tarball
+    shell: "tar -tf {{ restore_data_file }} | grep 'etc/pcidp/config.json'"
+    args:
+      warn: false
+    failed_when: false
+    register: sriov_config_file_check_output
+
+  - name: Restore SRIOV config file
+    shell: mkdir -p /etc/pcidp && tar -C /etc/pcidp/ -xpf {{ restore_data_file }}
+        --overwrite --transform='s,.*/,,' *pcidp/config.json*
+    args:
+      warn: false
+    failed_when: false
+    when: sriov_config_file_check_output.rc == 0
+
+  when: previous_mode == 'restore'
+
 - name: Create SRIOV Networking config file
   template:
     src: "roles/bootstrap/bringup-essential-services/templates/k8s-{{ kubernetes_long_version }}/sriov-cni.yaml.j2"
