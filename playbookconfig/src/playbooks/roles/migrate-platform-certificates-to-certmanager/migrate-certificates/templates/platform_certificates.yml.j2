@@ -105,6 +105,11 @@ items:
     duration: "{{ duration }}"
     ipAddresses:
     - "{{ oam_ip.stdout }}"
+    # Add kubernetes cluster ip to make sure certificate has issuer ip in san list
+    # https://bugs.launchpad.net/starlingx/+bug/1971500
+    - "{{ kubernetes_cluster_floating_ip.stdout }}"
+    - "{{ kubernetes_cluster_c0_ip.stdout }}"
+    - "{{ kubernetes_cluster_c1_ip.stdout }}"
     issuerRef:
       kind: ClusterIssuer
       name: system-local-ca

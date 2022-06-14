@@ -37,6 +37,21 @@
         echo "{{ address_table.stdout }}" | awk  '$4 == "oam" { print $14 }'
       register: oam_ip
 
+    - name: Get floating kubernetes cluster ip
+      shell: |
+        echo "{{ address_table.stdout }}" | awk  '$4 == "cluster-host-subnet" { print $14 }'
+      register: kubernetes_cluster_floating_ip
+
+    - name: Get controller0 kubernetes cluster ip
+      shell: |
+        echo "{{ address_table.stdout }}" | awk  '$4 == "cluster-host-subnet" { print $16 }'
+      register: kubernetes_cluster_c0_ip
+
+    - name: Get controller1 kubernetes cluster ip
+      shell: |
+        echo "{{ address_table.stdout }}" | awk  '$4 == "cluster-host-subnet" { print $18 }'
+      register: kubernetes_cluster_c1_ip
+
     - name: Get region name
       shell: |
         source /etc/platform/openrc
@@ -129,6 +144,10 @@
 
       - debug:
           msg: "{{ certs_output.stdout_lines }}"
+
+      - fail:
+          msg: "Error occurred. Please check failed steps."
+
       when: backup_directory is defined
 
   when: mode == 'update'
