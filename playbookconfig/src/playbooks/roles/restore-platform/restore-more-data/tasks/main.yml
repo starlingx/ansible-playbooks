@@ -511,12 +511,6 @@
       - sysinv-agent
       - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
 
-  - name: Stop sysinv-fpga-agent service if it is AIO system
-    systemd:
-      name: sysinv-fpga-agent
-      state: stopped
-    when: system_type == 'All-in-one'
-
   - block:
     - name: Create staging directory for postgres data
       file:
@@ -623,12 +617,6 @@
       - sysinv-conductor
       - sysinv-agent
       - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
-
-  - name: Restart sysinv-fpga-agent service if it is AIO system
-    systemd:
-      name: sysinv-fpga-agent
-      state: restarted
-    when: system_type == 'All-in-one'
 
   - name: Wait for 90 secs before check if services come up
     wait_for: timeout=90
