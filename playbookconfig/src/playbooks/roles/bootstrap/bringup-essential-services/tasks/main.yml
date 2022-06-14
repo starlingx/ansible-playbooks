@@ -73,11 +73,6 @@
   - name: Bring up Helm
     import_tasks: bringup_helm.yml
 
-  - name: Bring up FluxCD helm and source controllers
-    import_role:
-      name: common/fluxcd-controllers
-    when: enable_fluxcd_controllers
-
   - name: Bring up essential flock services
     import_tasks: bringup_flock_services.yml
 
@@ -222,6 +217,10 @@
     when: item.stdout is not search(" condition met")
     with_items: "{{ wait_job_result.results }}"
 
+  - name: Bring up FluxCD helm and source controllers
+    import_role:
+      name: common/fluxcd-controllers
+    when: enable_fluxcd_controllers
 
   - name: Enable volume snapshot support
     include_role:
