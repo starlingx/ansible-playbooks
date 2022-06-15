@@ -20,11 +20,6 @@
     os_release: "debian"
   when: "'Debian' in distro.stdout"
 
-- name: Set Kubelet cgroupRoot
-  set_fact:
-    kubelet_cgroup_root: "/"
-  when: os_release == "debian"
-
 - name: Set package lookup command
   set_fact:
     pkg_lookup_cmd: "{{ 'rpm -q' if os_release == 'centos' else 'dpkg -l' }}"
