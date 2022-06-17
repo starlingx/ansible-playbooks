@@ -67,7 +67,7 @@
     path: "{{ last_kubernetes_extra_config_file }}"
     state: absent
 
-- name: persist extraArgs and extraVolumes configuration file
+- name: Persist extraArgs and extraVolumes configuration file
   command: >
       mv -f {{ tmp_kubernetes_extra_config_file }}
       {{ last_kubernetes_extra_config_file }}

@@ -65,12 +65,12 @@
   when: mode == 'bootstrap'
 
 - block:
-  - name: restore /etc/hosts file
+  - name: Restore /etc/hosts file
     command: tar -C /etc -xpf {{ restore_data_file }} --transform='s,.*/,,' etc/hosts
     args:
       warn: false
 
-  - name: restore hosts in config permdir
+  - name: Restore hosts in config permdir
     command: >-
       tar -C {{ config_permdir }} -xpf {{ restore_data_file }} --transform='s,.*/,,'
       {{ archive_config_permdir }}/hosts

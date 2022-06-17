@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2021 Wind River Systems, Inc.
+# Copyright (c) 2019-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -138,8 +138,12 @@
     download_images_task_name: "Download images and push to local registry"
 
 - block:
+  - name: Retrieve system virtual info
+    command: facter virtual
+    register: virtual_type
+
   - name: Push imported images to local registry
-    script: push_imported_images_to_local_registry.py
+    script: push_imported_images_to_local_registry.py {{ virtual_type.stdout|lower }}
     register: push_imported_images_output
 
   - set_fact:

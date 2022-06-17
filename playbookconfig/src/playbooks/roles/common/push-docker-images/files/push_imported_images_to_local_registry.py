@@ -1,19 +1,21 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # This script is used to push images that were previously
 # imported from local image archive(s) to the local registry.
 
+import docker
 import eventlet
+import keyring
+import sys
+import time
+
 eventlet.monkey_patch(os=False)
 from eventlet import greenpool  # noqa: E402
 
-import docker  # noqa: E402
-import time  # noqa: E402
-import keyring  # noqa: E402
 
 MAX_PUSH_THREAD = 5
 REGISTRY_PATTERNS = ['.io', 'docker.elastic.co']
@@ -119,6 +121,11 @@ def push_images(images):
 
 
 if __name__ == '__main__':
+    if len(sys.argv) == 2:
+        if sys.argv[1] != 'physical':
+            MAX_PUSH_THREAD = 1
+            print("Subcloud is virtual. MAX_PUSH_THREAD is set to %d" % MAX_PUSH_THREAD)
+
     image_list = get_list_of_imported_images()
     print("List of imported images: {}".format(image_list))
     start = time.time()
