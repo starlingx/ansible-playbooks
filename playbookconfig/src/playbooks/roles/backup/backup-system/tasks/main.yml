@@ -236,6 +236,7 @@
         - "{{ deploy_permdir }}"
         - "{{ postgres_dir.path }}"
         - "{{ armada_permdir }}"
+        - "{{ fluxcd_permdir }}"
         - "{{ helm_charts_permdir }}"
         - "{{ helm_overrides_permdir }}"
         - "{{ helm_overrides_dir.path }}"
@@ -516,6 +517,7 @@
            {{ ldap_db_backup }} \
            {{ postgres_dir.path }} \
            {{ armada_permdir }} \
+           {{ fluxcd_permdir }} \
            {{ helm_overrides_permdir }} \
            {{ helm_charts_permdir }} \
            {{ fernet_keys_permdir }} 2>/dev/null)"
