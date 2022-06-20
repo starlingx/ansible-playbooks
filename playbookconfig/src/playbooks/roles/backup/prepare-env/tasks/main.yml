@@ -60,6 +60,7 @@
     sysinv_permdir: "{{ platform_path }}/sysinv/{{ software_version }}"
     puppet_permdir: "{{ platform_path }}/puppet/{{ software_version }}"
     armada_permdir: "{{ platform_path }}/armada/{{ software_version }}"
+    fluxcd_permdir: "{{ platform_path }}/fluxcd/{{ software_version }}"
     deploy_permdir: "{{ platform_path }}/deploy/{{ software_version }}"
     helm_overrides_permdir: "{{ platform_path }}/helm/{{ software_version }}"
     helm_charts_permdir: "{{ platform_path }}/helm_charts"

@@ -249,14 +249,53 @@
     warn: false
   become_user: root
 
-- name: Restore armada manifests and extension filesystem
+- name: Restore extension filesystem
+  command: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
+  args:
+    warn: false
+  become_user: root
+  with_items:
+    - "{{ extension_permdir | regex_replace('^\\/', '') }}"
+
+- name: Check if armada folder is present in the backup tarball
+  shell: "tar -tf {{ restore_data_file }} | grep '{{ armada_permdir | regex_replace('^\\/', '') }}'"
+  args:
+    warn: false
+  failed_when: false
+  register: bkp_has_armada
+
+- name: Restore armada manifests
   command: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
   args:
     warn: false
   become_user: root
   with_items:
     - "{{ armada_permdir | regex_replace('^\\/', '') }}"
-    - "{{ extension_permdir | regex_replace('^\\/', '') }}"
+  when: (migrate_platform_data is not defined or
+        not migrate_platform_data) or
+        (migrate_platform_data and
+         bkp_has_armada.rc is defined and
+         bkp_has_armada.rc == 0)
+
+- name: Check if fluxcd folder is present in the backup tarball
+  shell: "tar -tf {{ restore_data_file }} | grep '{{ fluxcd_permdir | regex_replace('^\\/', '') }}'"
+  args:
+    warn: false
+  failed_when: false
+  register: bkp_has_fluxcd
+
+- name: Restore fluxcd manifests
+  command: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
+  args:
+    warn: false
+  become_user: root
+  with_items:
+    - "{{ fluxcd_permdir | regex_replace('^\\/', '') }}"
+  when: (migrate_platform_data is not defined or
+        not migrate_platform_data) or
+        (migrate_platform_data and
+         bkp_has_fluxcd.rc is defined and
+         bkp_has_fluxcd.rc == 0)
 
 - name: Restore helm overrides
   command: tar -C / --overwrite -xpf {{ restore_data_file }} {{ archive_helm_permdir }}

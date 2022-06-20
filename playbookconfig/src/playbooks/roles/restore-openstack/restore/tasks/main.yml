@@ -67,6 +67,7 @@
   - name: Set config path facts
     set_fact:
       armada_permdir: "{{ platform_path }}/armada/{{ software_version }}"
+      fluxcd_permdir: "{{ platform_path }}/fluxcd/{{ software_version }}"
       helm_charts_permdir: "{{ platform_path }}/helm_charts"
 
   - name: Restore Helm charts, armada manifests and extension filesystem
@@ -77,6 +78,7 @@
     with_items:
       - "{{ helm_charts_permdir | regex_replace('^\\/', '') }}"
       - "{{ armada_permdir | regex_replace('^\\/', '') }}"
+      - "{{ fluxcd_permdir | regex_replace('^\\/', '') }}"
 
   - name: Set Helm Overrides backup directory
     tempfile:
