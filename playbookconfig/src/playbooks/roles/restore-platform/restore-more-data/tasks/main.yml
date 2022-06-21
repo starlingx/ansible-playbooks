@@ -271,11 +271,8 @@
   become_user: root
   with_items:
     - "{{ armada_permdir | regex_replace('^\\/', '') }}"
-  when: (migrate_platform_data is not defined or
-        not migrate_platform_data) or
-        (migrate_platform_data and
-         bkp_has_armada.rc is defined and
-         bkp_has_armada.rc == 0)
+  when: bkp_has_armada.rc is defined and
+        bkp_has_armada.rc == 0
 
 - name: Check if fluxcd folder is present in the backup tarball
   shell: "tar -tf {{ restore_data_file }} | grep '{{ fluxcd_permdir | regex_replace('^\\/', '') }}'"
@@ -291,11 +288,8 @@
   become_user: root
   with_items:
     - "{{ fluxcd_permdir | regex_replace('^\\/', '') }}"
-  when: (migrate_platform_data is not defined or
-        not migrate_platform_data) or
-        (migrate_platform_data and
-         bkp_has_fluxcd.rc is defined and
-         bkp_has_fluxcd.rc == 0)
+  when: bkp_has_fluxcd.rc is defined and
+        bkp_has_fluxcd.rc == 0
 
 - name: Restore helm overrides
   command: tar -C / --overwrite -xpf {{ restore_data_file }} {{ archive_helm_permdir }}
