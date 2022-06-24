@@ -519,12 +519,6 @@
       state: restarted
     when: system_type == 'All-in-one'
 
-  - name: Bring up Maintenance Agent
-    command: /usr/lib/ocf/resource.d/platform/mtcAgent start
-    environment:
-      OCF_ROOT: "/usr/lib/ocf"
-      OCF_RESKEY_state: "active"
-
   - name: Wait for 90 secs before check if services come up
     wait_for: timeout=90
 
@@ -536,6 +530,12 @@
     until: result.stdout.find("keystone") != -1
     retries: 6
     delay: 10
+
+  - name: Bring up Maintenance Agent
+    command: /usr/lib/ocf/resource.d/platform/mtcAgent start
+    environment:
+      OCF_ROOT: "/usr/lib/ocf"
+      OCF_RESKEY_state: "active"
 
   # Run "system host-list" to verify that controller-0 is in
   # "online" state. This will ensure that keystone, sysinv and
