@@ -52,8 +52,8 @@
 
   - name: Prefetch all hieradata
     command: >-
-      tar -C {{ hieradata_workdir }} -xpf {{ restore_data_file }} --transform='s,.*/,,'
-      '{{ archive_puppet_permdir }}/*.yaml'
+      tar -C {{ hieradata_workdir }} -xpf {{ restore_data_file }} --wildcards
+      --transform='s,.*/,,' '{{ archive_puppet_permdir }}/*.yaml'
     args:
       warn: false
 
