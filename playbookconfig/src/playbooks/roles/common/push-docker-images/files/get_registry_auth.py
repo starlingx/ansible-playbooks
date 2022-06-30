@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+import base64
 import boto3
 from botocore.config import Config
 import re
@@ -57,7 +58,7 @@ def get_aws_ecr_registry_credentials(registry, username, password):
 
         response = client.get_authorization_token()
         token = response['authorizationData'][0]['authorizationToken']
-        username, password = token.decode('base64').split(':')
+        username, password = base64.b64decode(token).decode('utf-8').split(':')
     except Exception as e:
         raise Exception(
             "Failed to get AWS ECR credentials: %s" % e)
