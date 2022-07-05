@@ -15,6 +15,11 @@
     archive_ceph_backend_flag: "{{ ceph_backend_flag | regex_replace('^\\/', '') }}"
     archive_fernet_keys_permdir: "{{ fernet_keys_permdir | regex_replace('^\\/', '') }}"
 
+- name: Set parameters for ldap different paths by OS
+  set_fact:
+    ldap_schema_path: "{{ '/etc/openldap/schema' if os_release == 'centos' else '/etc/ldap/schema' }}"
+    ldap_permdir: "{{ ldap_permdir_centos if os_release == 'centos' else ldap_permdir_debian }}"
+
 # User postgres needs access files in this folder during restore
 # Permissions will be set back to 0750 when host is unlocked
 - name: Correct staging directory permissions for restore
@@ -217,36 +222,66 @@
   args:
     warn: false
 
-- block:
-  - name: Stop openldap service
-    shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap stop"
+- name: Stop openldap service
+  shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap stop"
 
-  - name: Delete ldap directory
-    file:
-      path: "{{ ldap_permdir }}"
-      state: absent
+- name: Delete ldap directory
+  file:
+    path: "{{ ldap_permdir }}"
+    state: absent
 
-  - name: Recreate ldap directory
-    file:
-      path: "{{ ldap_permdir }}"
-      state: directory
-      recurse: yes
-      owner: root
-      group: root
-      mode: 0755
+- name: Recreate ldap directory
+  file:
+    path: "{{ ldap_permdir }}"
+    state: directory
+    recurse: yes
+    owner: root
+    group: root
+    mode: 0755
 
-  - name: Restore /etc/openldap CentOS configuration
-    command: tar -C / -xpf {{ restore_data_file }} --overwrite etc/openldap/*
-    args:
-      warn: false
+- name: Check if there is openldap (CentOS) configuration on backup
+  shell: "tar -tf {{ restore_data_file }} | grep -E 'etc\/openldap\/.*'"
+  args:
+    warn: false
+  failed_when: false
+  register: bkp_has_centos_ldap_config
 
-  - name: Restore LDAP DB on CentOS
-    command: slapadd -F /etc/openldap/schema -l {{ staging_dir }}/ldap.db
+- name: Restore openldap configuration
+  command: tar -C / -xpf {{ restore_data_file }} --wildcards --overwrite etc/openldap/*
+  args:
+    warn: false
+  when: bkp_has_centos_ldap_config.rc is defined and
+    bkp_has_centos_ldap_config.rc == 0
 
-  - name: Start openldap service
-    shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap start"
+- name: Move /etc/openldap configuration to /etc/ldap if restoring on Debian
+  command: mv -Rf /etc/openldap/* /etc/ldap/
+  args:
+    warn: false
+  when: bkp_has_centos_ldap_config.rc is defined and
+    bkp_has_centos_ldap_config.rc == 0 and
+    os_release == "debian"
 
-  when: os_release == "centos"
+- name: Check if there is ldap configuration on backup
+  shell: "tar -tf {{ restore_data_file }} | grep -E 'etc\/ldap\/.*'"
+  args:
+    warn: false
+  failed_when: false
+  register: bkp_has_debian_ldap_config
+  when: bkp_has_centos_ldap_config.rc is not defined or
+    bkp_has_centos_ldap_config.rc != 0
+
+- name: Restore ldap configuration
+  command: tar -C / -xpf {{ restore_data_file }} --wildcards --overwrite etc/ldap/*
+  args:
+    warn: false
+  when: bkp_has_debian_ldap_config.rc is defined and
+    bkp_has_debian_ldap_config.rc == 0
+
+- name: Restore ldap
+  shell: "slapadd -F {{ ldap_schema_path }} -l {{ staging_dir }}/ldap.db"
+
+- name: Start openldap service
+  shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap start"
 
 - name: Delete file from staging dir
   file:

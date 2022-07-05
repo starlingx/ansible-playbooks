@@ -9,6 +9,11 @@
 #   StarlingX OpenStack Application data if the app exists.
 #   The backup data are stored in two separate tar files.
 #
+
+- name: Set parameters for ldap different paths by OS
+  set_fact:
+    ldap_schema_path: "{{ '/etc/openldap/schema' if os_release == 'centos' else '/etc/ldap/schema' }}"
+
 - name: Do StarlingX backup
   block:
     - name: Get kube-system default-registry-key
@@ -326,13 +331,8 @@
       set_fact:
         ldap_db_backup: "{{ ldap_dir.path }}/ldap.db"
 
-    - name: Backup LDAP DB on CentOS
-      command: "slapcat -d 0 -F /etc/openldap/schema -l {{ ldap_db_backup }}"
-      when: os_release == "centos"
-
-    - name: Backup LDAP DB on Debian
-      command: "slapcat -d 0 -F /etc/ldap/schema -l {{ ldap_db_backup }}"
-      when: os_release == "debian"
+    - name: Backup LDAP DB
+      command: "slapcat -d 0 -F {{ ldap_schema_path }} -l {{ ldap_db_backup }}"
 
     - block:
       - name: Create ceph temp dir
