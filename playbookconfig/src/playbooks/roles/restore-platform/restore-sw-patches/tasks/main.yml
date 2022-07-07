@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2021 Wind River Systems, Inc.
+# Copyright (c) 2019-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -17,7 +17,7 @@
 - block:
   - name: Set fact for patching staging dir
     set_fact:
-      patching_staging_dir: /scratch/patching
+      patching_staging_dir: /opt/platform-backup/patching
 
   - name: Create staging directory {{ patching_staging_dir }} for patch files
     file:

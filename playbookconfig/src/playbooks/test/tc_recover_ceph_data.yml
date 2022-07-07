@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -34,9 +34,9 @@
 
     - name: Set default folder facts
       set_fact:
-        staging_dir: /scratch
+        staging_dir: /opt/platform-backup
         platform_path: /opt/platform
-        target_backup_dir: /scratch
+        target_backup_dir: /opt/platform-backup
 
     # Get system_type
     - name: Retrieve system type

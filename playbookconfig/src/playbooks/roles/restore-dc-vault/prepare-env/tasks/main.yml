@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -45,12 +45,6 @@
   fail:
     msg: "Controller must be in an unlocked state before restoring dc-vault"
   when: '"unlocked" not in (check_unlocked.stdout | lower)'
-
-# Set the restore staging directory to scratch so it's a consistent
-# behavior regardless of where the restore playbook is executed (locally vs remotely)
-- name: Set restore staging directory to /scratch
-  set_fact:
-    target_backup_dir: /scratch
 
 - name: Transfer backup tarball to target if the file is off-box
   include_role:

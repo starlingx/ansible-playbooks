@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2021 Wind River Systems, Inc.
+# Copyright (c) 2019-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -9,7 +9,7 @@
 #     1. Validate user input.
 #     2. Verify that the target is in the right state for platform restore.
 #     3. Transfer the backup tarball to the target if it is off-box, otherwise
-#        copy it to the designated staging directory (/scratch).
+#        copy it to the designated staging directory (/opt/platform-backup).
 #     4. Extract the host override file from the tarball and load bootstrap
 #        parameters in memory.
 #     5. Create restore_in_progress flag.
@@ -101,12 +101,6 @@
     fail:
       msg: " Restore is already in progress!"
     when: restore_in_progress.stat.exists
-
-  # Set the restore staging directory to scratch so it's a consistent
-  # behavior regardless of where the restore playbook is executed (locally vs remotely)
-  - name: Set restore staging directory to /scratch
-    set_fact:
-      target_backup_dir: /scratch
 
   - name: Set restore file parameter
     set_fact:

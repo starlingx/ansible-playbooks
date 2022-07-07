@@ -69,12 +69,6 @@
     msg: Application platform-integ-apps was not applied successfully during controller-0 unlock
   when: check_platform_integ.stdout not in ['applied', 'completed']
 
-# Set the restore staging directory to scratch so it's a consistent
-# behavior regardless of where the restore playbook is executed (locally vs remotely)
-- name: Set restore staging directory to /scratch
-  set_fact:
-    target_backup_dir: /scratch
-
 - name: Transfer backup tarball to target if the file is off-box
   include_role:
     name: backup-restore/transfer-file
