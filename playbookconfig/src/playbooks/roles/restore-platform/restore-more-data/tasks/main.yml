@@ -217,28 +217,36 @@
   args:
     warn: false
 
-- name: Stop openldap service
-  shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap stop"
+- block:
+  - name: Stop openldap service
+    shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap stop"
 
-- name: Delete ldap directory
-  file:
-    path: "{{ ldap_permdir }}"
-    state: absent
+  - name: Delete ldap directory
+    file:
+      path: "{{ ldap_permdir }}"
+      state: absent
 
-- name: Recreate ldap directory
-  file:
-    path: "{{ ldap_permdir }}"
-    state: directory
-    recurse: yes
-    owner: root
-    group: root
-    mode: 0755
+  - name: Recreate ldap directory
+    file:
+      path: "{{ ldap_permdir }}"
+      state: directory
+      recurse: yes
+      owner: root
+      group: root
+      mode: 0755
 
-- name: Restore ldap
-  shell: slapadd -F /etc/openldap/schema -l {{ staging_dir }}/ldap.db
+  - name: Restore /etc/openldap CentOS configuration
+    command: tar -C / -xpf {{ restore_data_file }} --overwrite etc/openldap/*
+    args:
+      warn: false
 
-- name: Start openldap service
-  shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap start"
+  - name: Restore LDAP DB on CentOS
+    command: slapadd -F /etc/openldap/schema -l {{ staging_dir }}/ldap.db
+
+  - name: Start openldap service
+    shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap start"
+
+  when: os_release == "centos"
 
 - name: Delete file from staging dir
   file:
