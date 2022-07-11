@@ -47,7 +47,9 @@
 - block:
   - name: Extract kubeadm version from the backup tarball
     # Match kube_cmd_versions VALUES from sysinv database table.
-    command: "zgrep -a 'INSERT INTO kube_cmd_versions VALUES' {{ initial_backup_dir }}/{{ backup_filename }}"
+    command: >-
+        zgrep -aE '^INSERT INTO .*kube_cmd_versions VALUES'
+        {{ initial_backup_dir }}/{{ backup_filename }}
     args:
       warn: false
     failed_when: false
