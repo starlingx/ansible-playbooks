@@ -28,7 +28,7 @@
 
 - name: Extract etcd database backup to temporary folder
   command: >-
-    tar -C {{ etcd_tmp_dir }} -xpf {{ restore_data_file }}
+    tar -C {{ etcd_tmp_dir }} -xpf {{ restore_data_file }} --wildcards
     --transform='s,.*/,,' '*/etcd-snapshot.db'
   args:
     warn: false

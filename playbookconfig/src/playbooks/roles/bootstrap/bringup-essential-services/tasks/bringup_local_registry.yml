@@ -216,8 +216,8 @@
 - block:
   - name: Restore certificate and key files
     command: >-
-      tar -C /etc/ssl/private -xpf {{ restore_data_file }} --transform='s,.*/,,'
-      'etc/ssl/private/*cert*'
+      tar -C /etc/ssl/private -xpf {{ restore_data_file }} --wildcards
+      --transform='s,.*/,,' 'etc/ssl/private/*cert*'
     args:
       warn: false
 

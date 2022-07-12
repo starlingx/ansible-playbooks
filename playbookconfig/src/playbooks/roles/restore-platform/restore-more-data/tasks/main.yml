@@ -141,7 +141,7 @@
         check_platform_license.rc == 0
 
 - name: Check if SSH config directory exists in backup tarball
-  command: tar -tf {{ restore_data_file }} 'etc/ssh/*'
+  command: tar -tf {{ restore_data_file }} --wildcards 'etc/ssh/*'
   register: check_ssh_dir
   failed_when: false
   args:
@@ -151,7 +151,7 @@
   - name: Restore SSH config directory
     command: >-
       tar -C /etc/ssh -xpf {{ restore_data_file }} --overwrite
-      --transform='s,.*/,,' etc/ssh/*
+      --wildcards --transform='s,.*/,,' etc/ssh/*
     args:
       warn: false
 
@@ -193,16 +193,16 @@
   args:
     warn: false
 
-- name: Restore dnsmaq in config permdir (/opt/platform/config/...)
+- name: Restore dnsmasq in config permdir (/opt/platform/config/...)
   command: >-
-    tar -C {{ config_permdir }} -xpf {{ restore_data_file }}
+    tar -C {{ config_permdir }} -xpf {{ restore_data_file }} --wildcards
     --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/dnsmasq*'
   args:
     warn: false
 
 - name: Restore boot files in pxelinux.cfg dir
   command: >-
-    tar -C {{ pxe_config_permdir }} -xpf {{ restore_data_file }}
+    tar -C {{ pxe_config_permdir }} -xpf {{ restore_data_file }} --wildcards
     --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/pxelinux.cfg/*-*-*'
   args:
     warn: false
@@ -210,7 +210,7 @@
 
 - name: Extract ldap.db to staging directory
   command: >-
-    tar -C {{ staging_dir }} -xpf {{ restore_data_file }}
+    tar -C {{ staging_dir }} -xpf {{ restore_data_file }} --wildcards
     --transform='s,.*/,,' '*/ldap.db'
   args:
     warn: false
@@ -244,7 +244,7 @@
     state: absent
 
 - name: Restore home directory
-  shell: tar -C / --overwrite -xpf {{ restore_data_file }} 'home/*'
+  shell: tar -C / --wildcards --overwrite -xpf {{ restore_data_file }} 'home/*'
   args:
     warn: false
   become_user: root
@@ -300,13 +300,13 @@
 - name: Restore sysinv default configuration file
   command: >-
     tar -C {{ sysinv_config_permdir }} -xpf {{ restore_data_file }}
-    --transform='s,.*/,,' '*/sysinv.conf.default'
+    --wildcards --transform='s,.*/,,' '*/sysinv.conf.default'
   args:
     warn: false
 
 - name: Restore coredump.conf.d directory
   command: >-
-    tar -C /etc/systemd/coredump.conf.d -xpf {{ restore_data_file }}
+    tar -C /etc/systemd/coredump.conf.d -xpf {{ restore_data_file }} --wildcards
     --overwrite --transform='s,.*/,,' etc/systemd/coredump.conf.d/*
   args:
     warn: false
@@ -337,7 +337,7 @@
   - name: Restore ceph crush map
     command: >-
       tar -C {{ ceph_crushmap_dir }} -xpf {{ restore_data_file }}
-      --transform='s,.*/,,' '*/crushmap.bin.backup'
+      --wildcards --transform='s,.*/,,' '*/crushmap.bin.backup'
     args:
       warn: false
 
@@ -419,7 +419,7 @@
     - name: Extract postgres db to staging directory
       command: >-
         tar -C {{ staging_dir }}/postgres -xpf {{ restore_data_file }}
-        --transform='s,.*/,,' '*/*\.postgreSql\.*'
+        --wildcards --transform='s,.*/,,' '*/*\.postgreSql\.*'
       args:
         warn: false
 
@@ -462,7 +462,7 @@
     - name: Migrate fernet keys
       command: >-
         tar -C {{ fernet_keys_permdir }} -xpf {{ restore_data_file }} --overwrite
-        --transform='s,.*/,,' {{ archive_fernet_keys_permdir }}/*
+        --wildcards --transform='s,.*/,,' {{ archive_fernet_keys_permdir }}/*
       args:
         warn: false
       when: check_fernet_keys_dir.rc == 0
