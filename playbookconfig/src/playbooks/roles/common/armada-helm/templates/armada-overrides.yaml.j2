@@ -1,7 +1,7 @@
 # Overrides yaml file for armada chart
 images:
   tags:
-    api: 'registry.local:9001/quay.io/airshipit/armada:ddbdd7256c20f138737f6cbd772312f7a19f58b8-ubuntu_bionic'
+    api: "registry.local:9001/{{ armada_img | regex_replace('^(?P<host>.+):(?P<port>\\d+)?/(?P<rest>.+)$', '\\g<host>/\\g<rest>') }}"
     dep_check: 'registry.local:9001/quay.io/stackanetes/kubernetes-entrypoint:v0.3.1'
     tiller: 'registry.local:9001/ghcr.io/helm/tiller:v2.16.9'
 labels:
