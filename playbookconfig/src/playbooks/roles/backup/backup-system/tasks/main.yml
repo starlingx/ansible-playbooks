@@ -326,8 +326,13 @@
       set_fact:
         ldap_db_backup: "{{ ldap_dir.path }}/ldap.db"
 
-    - name: Backup ldap db
+    - name: Backup LDAP DB on CentOS
       command: "slapcat -d 0 -F /etc/openldap/schema -l {{ ldap_db_backup }}"
+      when: os_release == "centos"
+
+    - name: Backup LDAP DB on Debian
+      command: "slapcat -d 0 -F /etc/ldap/schema -l {{ ldap_db_backup }}"
+      when: os_release == "debian"
 
     - block:
       - name: Create ceph temp dir

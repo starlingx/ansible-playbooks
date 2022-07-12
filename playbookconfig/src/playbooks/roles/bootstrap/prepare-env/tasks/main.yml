@@ -9,17 +9,6 @@
 #   the next step.
 #
 
-# Check for Host OS release
-- name: Gather Host OS release
-  raw: "grep '^NAME=' /etc/os-release | sed s'/NAME=//'"
-  register: distro
-  changed_when: false
-
-- name: Set OS Release to Debian
-  set_fact:
-    os_release: "debian"
-  when: "'Debian' in distro.stdout"
-
 - name: Set package lookup command
   set_fact:
     pkg_lookup_cmd: "{{ 'rpm -q' if os_release == 'centos' else 'dpkg -l' }}"
