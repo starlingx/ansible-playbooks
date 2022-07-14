@@ -253,8 +253,25 @@
     path: "{{ staging_dir }}/ldap.db"
     state: absent
 
+# In order to determine the home dir pattern of the backed up data
+# we only check var/home and use that to know how to extract.
+# /var/home will exist on Debian, and not on CentOS. Cannot use /home
+# because it exists in both (a directory vs a symlink)
+# This enables home directory content of a CentOS backup to be restored
+# on Debian during upgrade.
+- name: Check if var/home directory is in the backup tarball
+  command: "tar -tf {{ restore_data_file }} var/home"
+  args:
+    warn: false
+  failed_when: false
+  register: debian_homedir
+
+- name: Set the home directory to extract
+  set_fact:
+    home_dir_pattern: "{{ 'var/home/*' if debian_homedir.rc == 0 else 'home/*' }} "
+
 - name: Restore home directory
-  shell: tar -C / --wildcards --overwrite -xpf {{ restore_data_file }} 'home/*'
+  shell: tar -C / --wildcards --overwrite -xpf {{ restore_data_file }} {{ home_dir_pattern }}
   args:
     warn: false
   become_user: root

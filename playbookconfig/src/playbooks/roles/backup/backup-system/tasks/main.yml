@@ -224,7 +224,7 @@
       shell: "du -sh -k  {{ item }} | awk '{print $1}'"
       with_items:
         - /etc
-        - /home
+        - "{{ homedir }} "
         - "{{ config_permdir }}"
         - "{{ sysinv_permdir }}"
         - "{{ puppet_permdir }}/hieradata"
@@ -506,7 +506,7 @@
       shell: "tar -czf {{ platform_backup_file_path }} $(ls -d \
            {{ override_backup_file }} \
            /etc \
-           /home \
+           {{ homedir }} \
            {{ config_permdir }} \
            {{ sysinv_permdir }} \
            {{ puppet_permdir }}/hieradata \

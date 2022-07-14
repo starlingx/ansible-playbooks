@@ -29,8 +29,12 @@
     msg: "Backup can only be done on the active controller."
   when: active_ctlr.rc != 0
 
+- name: Declare homedir fact
+  set_fact:
+    homedir: "{{ '/home' if os_release == 'centos' else '/var/home' }}"
+
 - name: Check disk usage of /home directory
-  shell: "du -sh -m  /home | awk '{print $1}'"
+  shell: "du -sh -m  {{ homedir }}  | awk '{print $1}'"
   register: home_dir_usage
 
 - name: Fail if disk usage of /home directory is over {{ max_home_dir_usage }}MB
