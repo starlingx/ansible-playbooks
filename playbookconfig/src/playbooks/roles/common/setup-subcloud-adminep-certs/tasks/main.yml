@@ -1,6 +1,6 @@
 ---
 #
-# copyright (c) 2020-21 Wind River Systems, Inc.
+# copyright (c) 2020-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -14,8 +14,13 @@
     content: "{{ dc_root_ca_cert | b64decode }}"
     mode: 0400
 
+- name: Set update trusted CA certificate command
+  set_fact:
+    update_ca_cmd: "{{ ('/usr/sbin/update-ca-certificates --localcertsdir ' + ca_cert_dir) \
+                   if os_release == 'debian' else '/usr/bin/update-ca-trust extract' }}"
+
 - name: Update trusted CA certficate list
-  command: /usr/bin/update-ca-trust extract
+  command: "{{ update_ca_cmd }}"
 
 - name: Create temporary working directory
   file:

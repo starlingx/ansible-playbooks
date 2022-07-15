@@ -10,3 +10,6 @@ sc_adminep_ca_cert_ns: sc-cert
 sc_adminep_cert_duration: 4320h
 sc_adminep_cert_renew_before: 720h
 setup_sc_adminep_certs_yaml: setup-sc-adminep-certs.yaml
+
+# dc_adminep_root_ca_cert directory
+ca_cert_dir: "/etc/pki/ca-trust/source/anchors"
