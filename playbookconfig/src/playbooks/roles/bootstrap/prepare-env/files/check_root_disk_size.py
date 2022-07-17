@@ -85,15 +85,27 @@ def get_root_disk_size():
     print(rootfs_node)
     size_gib = 0
 
+    # Determine if we are using the new Device API, or the older
+    # (deprecated in debian) API:
+    use_new_api = hasattr(pyudev.Device, 'properties')
+
     for device in context.list_devices(DEVTYPE='disk'):
         # /dev/nvmeXn1 259 are for NVME devices
-        major = device['MAJOR']
+        # For debian/centos compatibility:
+        if use_new_api:
+            major = device.properties['MAJOR']
+        else:
+            # Deprecated in python3 version:
+            major = device['MAJOR']
         if (major == '8' or major == '3' or major == '253' or
                 major == '259'):
             if sysinv_constants.DEVICE_NAME_MPATH in device.get("DM_NAME", ""):
                 devname = os.path.join("/dev/mapper", device.get("DM_NAME"))
             else:
-                devname = device['DEVNAME']
+                if use_new_api:
+                    devname = device.properties['DEVNAME']
+                else:
+                    devname = device['DEVNAME']
             if devname == rootfs_node:
                 try:
                     size_gib = parse_fdisk(devname)
