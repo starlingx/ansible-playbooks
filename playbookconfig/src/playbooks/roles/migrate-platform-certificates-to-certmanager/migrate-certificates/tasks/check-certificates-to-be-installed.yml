@@ -19,3 +19,8 @@
     system application-show oidc-auth-apps --column status --format value | \
     awk  '{ if ($0 == "applied") print "true"; else print "false"; }'
   register: oidc_applied
+
+- set_fact:
+    install_system_registry_local_certificate: true
+    install_system_restapi_gui_certificate: "{{ true if https_enabled.stdout | bool else false }}"
+    install_oidc_auth_apps_certificate: "{{ true if oidc_applied.stdout | bool else false }}"

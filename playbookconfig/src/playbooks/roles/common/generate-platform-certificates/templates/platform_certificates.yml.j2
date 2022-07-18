@@ -22,7 +22,7 @@ items:
     ca:
       secretName: system-local-ca
   status: {}
-{% if https_enabled.stdout | bool %}
+{% if install_system_restapi_gui_certificate | bool %}
 - apiVersion: cert-manager.io/v1
   kind: Certificate
   metadata:
@@ -55,6 +55,7 @@ items:
       - "{{ subject_ST }}"
   status: {}
 {% endif %}
+{% if install_system_registry_local_certificate | bool %}
 - apiVersion: cert-manager.io/v1
   kind: Certificate
   metadata:
@@ -91,7 +92,8 @@ items:
       provinces:
       - "{{ subject_ST }}"
   status: {}
-{% if oidc_applied.stdout | bool %}
+{% endif %}
+{% if install_oidc_auth_apps_certificate | bool %}
 - apiVersion: cert-manager.io/v1
   kind: Certificate
   metadata:
