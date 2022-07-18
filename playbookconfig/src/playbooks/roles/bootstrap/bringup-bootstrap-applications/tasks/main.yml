@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020-21 Wind River Systems, Inc.
+# Copyright (c) 2020-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -157,8 +157,3 @@
     # Nested dictionaries are picky about having things on the same line
     - "prev_docker_registries: "
     - "{{ docker_registries | to_yaml }}"
-
-- name: Mark the bootstrap as completed
-  file:
-    path: "{{ bootstrap_completed_flag }}"
-    state: touch

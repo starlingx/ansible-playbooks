@@ -1,0 +1,13 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Task to mark the playbook as complete.
+# It indicates that the controller was successfully bootstrapped.
+#
+- name: Mark the bootstrap as completed
+  file:
+    path: "{{ bootstrap_completed_flag }}"
+    state: touch

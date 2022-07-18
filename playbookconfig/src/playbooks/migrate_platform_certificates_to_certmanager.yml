@@ -79,10 +79,10 @@
   tasks:
     - name: Install certificates as system Trusted CA certificates
       include_role:
-        name: migrate-platform-certificates-to-certmanager/install-trusted-ca
+        name: common/install-trusted-ca
       with_items:
         - { name: system_local_ca_cert, content: "{{ system_local_ca_cert }}" }
-        - { name: root_ca_cert, content: "{{ root_ca_cert }}" }
+        - { name: system_root_ca_cert, content: "{{ system_root_ca_cert }}" }
       loop_control:
         label: "{{ item.name }}"
 

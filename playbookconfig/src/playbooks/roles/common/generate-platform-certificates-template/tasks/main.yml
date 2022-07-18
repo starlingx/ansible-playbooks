@@ -16,7 +16,17 @@
 - name: Get floating management ip
   shell: |
     echo "{{ address_table.stdout }}" | awk  '$4 == "management" { print $14 }'
-  register: management_ip
+  register: management_floating_ip
+
+- name: Get controller0 floating management ip
+  shell: |
+    echo "{{ address_table.stdout }}" | awk  '$4 == "management" { print $16 }'
+  register: management_c0_ip
+
+- name: Get controller1 floating management ip
+  shell: |
+    echo "{{ address_table.stdout }}" | awk  '$4 == "management" { print $18 }'
+  register: management_c1_ip
 
 - name: Get floating oam ip
   shell: |
@@ -42,7 +52,7 @@
   shell: |
     source /etc/platform/openrc
     system show | grep region_name | awk '{ print $4 }'
-  register: region_name
+  register: region_name_register
 
 - name: Get distributed_cloud role
   shell: |

@@ -104,7 +104,7 @@
     openssl_csr:
       path: "{{ kubeadm_pki_dir }}/ca.csr"
       privatekey_path: "{{ kubeadm_pki_dir }}/ca.key"
-      common_name: kubernetes
+      common_name: starlingx
       basic_constraints:
         - CA:TRUE
         - pathlen:1

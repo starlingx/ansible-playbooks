@@ -4,10 +4,33 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
+# This is an example inventory file to be used for
+# usr/share/ansible/stx-ansible/playbooks/migrate_platform_certificates_to_certmanager.yml
+# playbook.
+#
+# To run the playbook, the user would define an overrides file (as exemplified here)
+# providing the required variable settings and pass it on the ansible command-line as a parameter.
+#
+# Example ansible command:
+# ansible-playbook migrate_platform_certificates_to_certmanager.yml \
+#     -i @my-inventory-file.yml \
+#     --extra-vars "target_list=subcloud1 mode=update"
+
+# Use target_list to target individual subclouds, or a comma-separated
+# list of subclouds such as 'subcloud1,subcloud2'. To target all online
+# subclouds at once use target_list=all_online_subclouds
+#
+# To target the system controller or standalone systems use target_list=localhost
+#
+# Note on the example parameters below :
+#
 # Parameter system_local_ca_cert will be the certificate that will be used as the
 # issuer for platform certificates (registry.local, https / rest-api, oidc)
 #
-# Please make sure that you use a root_ca_cert and system_local_ca_cert certificate
+# If system_local_ca_cert is an Intermediate CA (recommended), make sure that
+# system_root_ca_cert is the Root CA which is its Issuer.
+#
+# Please make sure that you use a system_root_ca_cert and system_local_ca_cert certificate
 # with a long duration. The playbook will fail if any of these CA certificates expire in
 # less than 3 years.
 #
@@ -15,19 +38,23 @@
 # it by setting a different value to validation parameter ca_duration:
 # Example:
 # ca_duration: 2
-# Notice that ca_duration is applied to both root_ca_cert and system_local_ca_cert
+# Notice that ca_duration is applied to both system_root_ca_cert and system_local_ca_cert
 #
 # Please also make sure that duration and renewBefore are sensible values
 # considering the system_local_ca_cert remaining duration.
 #
+# See: https://docs.starlingx.io/security/kubernetes/migrate-platform-certificates-to-use-cert-manager-c0b1727e4e5d.html
+#
 all:
   vars:
-    root_ca_cert: <base64_cert>
-    # It's strongly recommended using an Intermediate CA for system-local-ca_cert
+    # If using an Intermediate CA for system_local_ca_cert (recommended), the value
+    # for system_root_ca_cert needs to be the Root CA which is the Issuer of system_local_ca_cert
+    system_root_ca_cert: <base64_cert>
+    # It's strongly recommended using an Intermediate CA for system_local_ca_cert
     # as that has the advantages of anchoring your certificates to your external Root CA.
-    # However, it is possible to simply specify a Root CA for system-local-ca_cert.
+    # However, it is possible to simply specify a Root CA for system_local_ca_cert.
     # For that, specify system_local_ca_cert and system_local_ca_key with values from your Root CA.
-    # Note that system_local_ca_cert and root_ca_cert must be the same for that configuration.
+    # Note: system_local_ca_cert and system_root_ca_cert must be the same for that configuration.
     system_local_ca_cert: <base64_cert>
     system_local_ca_key: <base64_key>
     # the ca_duration parameter is optional. If not specified, it defaults to 3.
@@ -40,16 +67,17 @@ all:
     # Use the below example in hosts to override particulars for a subcloud such as passwords
     target_group:
       vars:
-        dns_domain: xyz.com
-        duration: 2160h    # 90d
-        renewBefore: 360h  # 15d
-        subject_C: canada
-        subject_ST: ontario
-        subject_L: ottawa
-        subject_O: myorganization
-        subject_OU: engineering
-        subject_CN: myorganization.com
-        subject_prefix: starlingx
+        system_platform_certificate:
+          dns_domain: xyz.com
+          duration: 2160h      # 90d
+          renewBefore: 360h    # 15d
+          subject_C: canada
+          subject_ST: ontario
+          subject_L: ottawa
+          subject_O: myorganization
+          subject_OU: engineering
+          subject_CN: myorganization.com
+          subject_prefix: starlingx
         # SSH password to connect to all subclouds
         ansible_ssh_user: sysadmin
         ansible_ssh_pass: <sysadmin-pwd>

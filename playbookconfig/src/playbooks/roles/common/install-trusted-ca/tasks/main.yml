@@ -11,18 +11,19 @@
   shell: echo "{{ item.content }}" | base64 -d > /tmp/ca.pem
 
 - block:
-  - name: Check if system_local_ca_cert is signed by root_ca_cert or self-signed
+  - name: Check if system_local_ca_cert is signed by system_root_ca_cert or self-signed
     shell: |
-      echo "{{ root_ca_cert }}" | base64 -d > /tmp/root.pem
+      echo "{{ system_root_ca_cert }}" | base64 -d > /tmp/root.pem
       openssl verify -verbose -CAfile /tmp/root.pem /tmp/ca.pem
     register: ca_verification
     # failed_when as false in order to print a better error msg in the task below
     failed_when: false
 
-  - name: Fail when system_local_ca_cert is not signed by root_ca_cert or self-signed
+  - name: Fail when system_local_ca_cert is not signed by system_root_ca_cert or self-signed
     fail:
       msg: |
-        The system_local_ca_cert provided is not signed by root_ca_cert provided or self-signed.
+        The system_local_ca_cert provided is not signed by
+        system_root_ca_cert provided or self-signed.
         Please review your inventory parameters.
     when: ca_verification.rc | int != 0
   when: item.name == 'system_local_ca_cert'
