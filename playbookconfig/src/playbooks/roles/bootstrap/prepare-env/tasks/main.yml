@@ -13,6 +13,17 @@
   set_fact:
     pkg_lookup_cmd: "{{ 'rpm -q' if os_release == 'centos' else 'dpkg -l' }}"
 
+- name: Create SSL CA cert directory
+  file:
+    path: "{{  ca_cert_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+    recurse: yes
+  become: yes
+  when: os_release == 'debian'
+
 # Check for unmistakenly StarlingX packages
 - name: "Look for unmistakenly {{ image_brand }} packages"
   command: "{{ pkg_lookup_cmd }} sysinv cgts-client"
