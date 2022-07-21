@@ -572,6 +572,7 @@
   set_fact:
     root_disk: "{{ disk_size_check_result.stdout_lines[root_disk_idx|int] }}"
     root_disk_size: "{{ disk_size_check_result.stdout_lines[root_disk_idx|int + 1] }}"
+  failed_when: root_disk_size|int == 0
 
 - debug:
     msg: >-
