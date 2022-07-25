@@ -402,13 +402,13 @@
       name: "{{ item }}"
       state: stopped
     with_items:
-      - openstack-keystone
+      - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
       - fminit
       - fm-api
       - sysinv-api
       - sysinv-conductor
       - sysinv-agent
-      - openstack-barbican-api
+      - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
 
   - name: Stop sysinv-fpga-agent service if it is AIO system
     systemd:
@@ -515,13 +515,13 @@
       name: "{{ item }}"
       state: restarted
     with_items:
-      - openstack-keystone
+      - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
       - fminit
       - fm-api
       - sysinv-api
       - sysinv-conductor
       - sysinv-agent
-      - openstack-barbican-api
+      - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
 
   - name: Restart sysinv-fpga-agent service if it is AIO system
     systemd:
