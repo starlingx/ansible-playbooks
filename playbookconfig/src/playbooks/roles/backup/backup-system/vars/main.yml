@@ -1,7 +1,14 @@
 ---
 kube_config_dir: /etc/kubernetes/admin.conf
 
-skip_os_dbs: ['Database', 'information_schema', 'performance_schema', 'mysql', 'horizon', 'panko', 'gnocchi']
+skip_os_dbs:
+  - 'Database'
+  - 'information_schema'
+  - 'performance_schema'
+  - 'mysql'
+  - 'horizon'
+  - 'panko'
+  - 'gnocchi'
 
 mariadb_pod: mariadb-server-0
 
@@ -10,3 +17,51 @@ backup_include_apps: []
 
 # List of apps on DC system controller whose images will be included in the backup
 backup_include_dc_controller_apps: ["platform-integ-apps"]
+
+homedir: "{{ '/home' if os_release == 'centos' else '/var/home' }}"
+armada_permdir: "{{ platform_path }}/armada/{{ software_version }}"
+config_permdir: "{{ platform_path }}/config/{{ software_version }}"
+deploy_permdir: "{{ platform_path }}/deploy/{{ software_version }}"
+extension_permdir: "/opt/extension"
+extra_permdir: "{{ platform_path }}/extra"
+fernet_keys_permdir: "{{ platform_path }}/keystone/fernet-keys"
+fluxcd_permdir: "{{ platform_path }}/fluxcd/{{ software_version }}"
+helm_overrides_permdir: "{{ platform_path }}/helm/{{ software_version }}"
+helm_charts_permdir: "{{ platform_path }}/helm_charts"
+keyring_permdir: "{{ platform_path }}/.keyring/{{ software_version }}"
+patching_permdir: "/opt/patching"  # TODO(outbrito): Remove when CentOS deprecates
+patching_repo_permdir: "/var/www/pages/updates"  # TODO(outbrito): Remove when CentOS deprecates
+puppet_permdir: "{{ platform_path }}/puppet/{{ software_version }}"
+sysinv_permdir: "{{ platform_path }}/sysinv/{{ software_version }}"
+
+# Use plain paths or glob
+backup:
+  targets:
+    - "/etc"
+    - "{{ armada_permdir }}"
+    - "{{ config_permdir }}"
+    - "{{ deploy_permdir }}"
+    - "{{ extension_permdir }}"
+    - "{{ extra_permdir }}"
+    - "{{ fernet_keys_permdir}}"
+    - "{{ fluxcd_permdir }}"
+    - "{{ helm_charts_permdir }}"
+    - "{{ helm_overrides_permdir }}"
+    - "{{ homedir }}"
+    - "{{ keyring_permdir }}"
+    - "{{ patching_permdir }}"  # TODO(outbrito): Remove when CentOS deprecates
+    - "{{ patching_repo_permdir }}"  # TODO(outbrito): Remove when CentOS deprecates
+    - "{{ puppet_permdir }}/hieradata"
+    - "{{ postgres_dir.path }}"
+    - "{{ sysinv_permdir }}"
+  exclude:
+    - "/etc/selinux/**"
+    - "/etc/selinux"
+    - "/etc/udev/**"
+    - "/etc/udev"
+    - "{{ homedir }}/*/ansible.log"
+    - "{{ homedir }}/*/.ansibl**"
+    - "{{ homedir }}/*/.cache/**"
+    - "{{ homedir }}/*/.cache"
+    - "{{ homedir }}/*/.kube/**"
+    - "{{ homedir }}/*/.kube"

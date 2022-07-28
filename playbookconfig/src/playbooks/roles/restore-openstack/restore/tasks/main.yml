@@ -83,24 +83,24 @@
   - name: Set Helm Overrides backup directory
     tempfile:
       state: directory
-    register: helm_overrides_dir
+    register: helm_overrides_sqldump_dir
     become_user: postgres
 
   - name: Restore Helm Overrides dump file
     command: >-
-      tar -C {{ helm_overrides_dir.path }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
+      tar -C {{ helm_overrides_sqldump_dir.path }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
       --wildcards --transform='s,.*/,,' '*/helm_overrides*.sql'
     args:
       warn: false
 
   - name: Apply Helm Overrides dump file
     shell: >-
-      psql -f {{ helm_overrides_dir.path }}/helm_overrides_dump.sql sysinv
+      psql -f {{ helm_overrides_sqldump_dir.path }}/helm_overrides_dump.sql sysinv
     become_user: postgres
 
   - name: Remove Helm Overrides backup directory
     file:
-      path: "{{ helm_overrides_dir.path }}"
+      path: "{{ helm_overrides_sqldump_dir.path }}"
       state: absent
 
   # This override is required by the tidy_storage helper script when we do a full restore.

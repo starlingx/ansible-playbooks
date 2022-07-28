@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -29,10 +29,6 @@
     msg: "Backup can only be done on the active controller."
   when: active_ctlr.rc != 0
 
-- name: Declare homedir fact
-  set_fact:
-    homedir: "{{ '/home' if os_release == 'centos' else '/var/home' }}"
-
 - name: Check disk usage of /home directory
   shell: "du -sh -m  {{ homedir }}  | awk '{print $1}'"
   register: home_dir_usage
@@ -57,23 +53,9 @@
   set_fact:
     system_mode: "{{ check_system_mode.stdout.split('=')[1] }}"
 
-- name: Set config path facts
+- name: Set dc-vault config path fact
   set_fact:
-    keyring_permdir: "{{ platform_path }}/.keyring/{{ software_version }}"
-    config_permdir: "{{ platform_path }}/config/{{ software_version }}"
-    sysinv_permdir: "{{ platform_path }}/sysinv/{{ software_version }}"
-    puppet_permdir: "{{ platform_path }}/puppet/{{ software_version }}"
-    armada_permdir: "{{ platform_path }}/armada/{{ software_version }}"
-    fluxcd_permdir: "{{ platform_path }}/fluxcd/{{ software_version }}"
-    deploy_permdir: "{{ platform_path }}/deploy/{{ software_version }}"
-    helm_overrides_permdir: "{{ platform_path }}/helm/{{ software_version }}"
-    helm_charts_permdir: "{{ platform_path }}/helm_charts"
-    patching_permdir: "/opt/patching"
-    patching_repo_permdir: "/var/www/pages/updates"
-    extension_permdir: "/opt/extension"
     dc_vault_permdir: "/opt/dc-vault"
-    extra_permdir: "{{ platform_path }}/extra"
-    fernet_keys_permdir: "{{ platform_path }}/keystone/fernet-keys"
 
 - name: Check if ceph is configured
   stat:

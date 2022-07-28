@@ -197,9 +197,9 @@
     # overrides are already created when we uploaded the application.
     - name: Create Helm overrides temp dir
       file:
-        path: "{{ tempdir.path }}/helm_overrides_dir"
+        path: "{{ tempdir.path }}/helm_overrides_sqldump_dir"
         state: directory
-      register: helm_overrides_dir
+      register: helm_overrides_sqldump_dir
 
     - name: Get the openstack Helm overrides from the from the database
       shell: >-
@@ -219,34 +219,16 @@
 
     - name: Backup Helm overrides
       copy:
-        dest: "{{ helm_overrides_dir.path }}/helm_overrides_dump.sql"
+        dest: "{{ helm_overrides_sqldump_dir.path }}/helm_overrides_dump.sql"
         mode: 0755
         content: '{{ updates_list | default("") }}'
 
     # Now Postgres data and MariaDB data are stored in staging dir, we can estimate
     # the disk size requirement for the backup archive.
     - name: Check the size (in KiB) of directories that will be backed up for platform
-      shell: "du -sh -k  {{ item }} | awk '{print $1}'"
-      with_items:
-        - /etc
-        - "{{ homedir }} "
-        - "{{ config_permdir }}"
-        - "{{ sysinv_permdir }}"
-        - "{{ puppet_permdir }}/hieradata"
-        - "{{ keyring_permdir }}"
-        - "{{ extra_permdir }}"
-        - "{{ patching_permdir }}"
-        - "{{ patching_repo_permdir }}"
-        - "{{ extension_permdir }}"
-        - "{{ deploy_permdir }}"
-        - "{{ postgres_dir.path }}"
-        - "{{ armada_permdir }}"
-        - "{{ fluxcd_permdir }}"
-        - "{{ helm_charts_permdir }}"
-        - "{{ helm_overrides_permdir }}"
-        - "{{ helm_overrides_dir.path }}"
-        - "{{ fernet_keys_permdir }}"
+      shell: "du -sh -k  {{ item }} --exclude {{ backup.exclude|join(' --exclude ') }} | awk '{print $1}'"
       register: size_output_platform
+      with_items: "{{ backup.targets }}"
 
     # Estimate the backup size. We add 128M overhead for things like ceph crushmap,
     # ldap data, etc. that will be generated and stored in the staging dir later on.
@@ -294,7 +276,7 @@
         shell: "du -sh -k  {{ item }} | awk '{print $1}'"
         with_items:
           - "{{ mariadb_dir.path }}"
-          - "{{ helm_overrides_dir.path }}"
+          - "{{ helm_overrides_sqldump_dir.path }}"
           - "{{ armada_permdir }}/{{ openstack_app_name }}"
           - "{{ helm_charts_permdir }}/starlingx"
         register: size_output_openstack
@@ -497,37 +479,40 @@
         msg: "Failed to run post-backup action [{{ post_backup_notification_result.rc }}]"
       when: post_backup_notification_result.rc != 0
 
+    # NOTE: Backup contents are defined on roles/backup/backup-system/vars/main.yml
+    # Some additional files generated during this playbook's execution are appended to the backup targets here
+    - name: Set fact for backup targets with extra files
+      set_fact:
+        final_backup_targets: "{{ (backup.targets + [
+          etcd_snapshot_file,
+          helm_overrides_sqldump_dir.path,
+          ldap_db_backup,
+          override_backup_file,
+          postgres_dir.path,
+          crushmap_file_,
+          ceph_conf_ctrl_0_
+        ]) | reject('equalto', '') | list }}"  # rejecting vars that might be empty
+      vars:
+        crushmap_file_: "{{ crushmap_file | default(\"\") }}"
+        ceph_conf_ctrl_0_: "{{ ceph_conf_ctrl_0 | default(\"\") }}"
 
-    # Archive module has a known bug that doesn't handle empty symbolic links
-    # well. Restore to tar command. Can add -P option to keep the leading
-    # '/'s in file names in the tar file, so that the tasks that strip leading
-    # '/' from the directory names before untar won't be required.
+    # This is nasty to understand, but check the -vvv output to see what is going on
+    # When we update the community.general collection from 1.3.6 to >=5.2.0, we can use "archive"
+    # with exclusion_patterns
     - name: Create a tgz archive for platform backup
-      shell: "tar -czf {{ platform_backup_file_path }} $(ls -d \
-           {{ override_backup_file }} \
-           /etc \
-           {{ homedir }} \
-           {{ config_permdir }} \
-           {{ sysinv_permdir }} \
-           {{ puppet_permdir }}/hieradata \
-           {{ keyring_permdir }} \
-           {{ extra_permdir }} \
-           {{ patching_permdir }} \
-           {{ patching_repo_permdir }} \
-           {{ extension_permdir }} \
-           {{ deploy_permdir }} \
-           {{ crushmap_file | default(\"\") }} \
-           {{ ceph_conf_ctrl_0 | default(\"\") }} \
-           {{ etcd_snapshot_file }} \
-           {{ ldap_db_backup }} \
-           {{ postgres_dir.path }} \
-           {{ armada_permdir }} \
-           {{ fluxcd_permdir }} \
-           {{ helm_overrides_permdir }} \
-           {{ helm_charts_permdir }} \
-           {{ fernet_keys_permdir }} 2>/dev/null)"
+      shell: >-
+        tar
+        --exclude {{ backup.exclude | map('regex_replace', '^/', '') | list | join(' --exclude ') }}
+        -czf {{ platform_backup_file_path }}
+        $(ls -d
+        {{ final_backup_targets | join(' ') }}
+        2> /dev/null)
       args:
         warn: false
+      # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it", which
+      # makes tar return 1
+      register: tar_cmd
+      failed_when: tar_cmd.rc >= 2
 
     - name: Create a tgz archive for dc-vault backup
       shell: "tar -czf {{ dc_vault_backup_file_path }} $(ls -d \
@@ -541,7 +526,7 @@
            {{ armada_permdir }}/{{ openstack_app_name }} \
            {{ helm_charts_permdir }}/starlingx \
            {{ mariadb_dir.path }} \
-           {{ helm_overrides_dir.path }} 2>/dev/null)"
+           {{ helm_overrides_sqldump_dir.path }} 2>/dev/null)"
       args:
         warn: false
       when: check_mariadb_pod.rc == 0 or openstack_status.stdout == "uploaded"
