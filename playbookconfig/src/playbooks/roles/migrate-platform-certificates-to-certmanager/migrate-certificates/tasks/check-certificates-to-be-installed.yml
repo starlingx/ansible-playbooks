@@ -20,7 +20,14 @@
     awk  '{ if ($0 == "applied") print "true"; else print "false"; }'
   register: oidc_applied
 
+- name: Check if openldap certificate exists
+  shell: |
+    source /etc/platform/openrc
+    system certificate-list | grep openldap
+  register: openldap_certificate_exists
+
 - set_fact:
+    install_oidc_auth_apps_certificate: "{{ true if oidc_applied.stdout | bool else false }}"
+    install_system_open_ldap_certificate: "{{ true if openldap_certificate_exists.stdout | int == 0 else false }}"
     install_system_registry_local_certificate: true
     install_system_restapi_gui_certificate: "{{ true if https_enabled.stdout | bool else false }}"
-    install_oidc_auth_apps_certificate: "{{ true if oidc_applied.stdout | bool else false }}"

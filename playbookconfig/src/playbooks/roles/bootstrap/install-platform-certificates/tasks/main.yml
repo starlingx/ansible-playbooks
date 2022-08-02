@@ -1,0 +1,62 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# These tasks get information from the running system and use it to
+# generate a certificate spec file which is going to be applied to
+# kubernetes at a later step
+#
+
+- name: Read kubernetes Root CA certificate
+  shell: cat "{{ kubeadm_pki_dir }}/ca.crt" | base64 -w0
+  register: kubernetes_root_ca_crt
+  become: true
+
+- name: Read kubernetes Root CA key
+  shell: cat "{{ kubeadm_pki_dir }}/ca.key" | base64 -w0
+  register: kubernetes_root_ca_key
+  become: true
+
+- name: Set Root CA and local CA based on kubernetes Root CA
+  set_fact:
+    system_root_ca_cert: "{{ kubernetes_root_ca_crt.stdout }}"
+    system_local_ca_cert: "{{ kubernetes_root_ca_crt.stdout }}"
+    system_local_ca_key: "{{ kubernetes_root_ca_key.stdout }}"
+
+- name: Get distributed_cloud role
+  shell: |
+    source /etc/platform/openrc
+    system show | grep distributed_cloud_role | awk '{ print $4 }'
+  register: distributed_cloud_role
+
+- name: Set which platform certificates to install
+  set_fact:
+    install_oidc_auth_apps_certificate: false
+    install_system_open_ldap_certificate: "{{ true if distributed_cloud_role.stdout == 'systemcontroller' else false }}"
+    install_system_registry_local_certificate: false
+    install_system_restapi_gui_certificate: false
+
+- name: Generate kubernetes yaml for cert-manager resources
+  include_role:
+    name: common/generate-platform-certificates-template
+  vars:
+    destination: /tmp/platform_certificates.yaml
+
+- name: Install system_root_ca_cert as system Trusted CA certificate
+  include_role:
+    name: common/install-trusted-ca
+  with_items:
+    - { name: system_root_ca_cert, content: "{{ system_root_ca_cert }}" }
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Apply kubernetes yaml to create cert-manager clusterissuer and certificates
+  command: kubectl apply -f /tmp/platform_certificates.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: create_k8_apply_ep
+  until: create_k8_apply_ep is not failed
+  retries: 10
+  delay: 30

@@ -1,0 +1,11 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+ca_duration: 3
+system_platform_certificate:
+  dns_domain: starlingx.local
+  duration: 2160h      # 90d
+  renewBefore: 360h    # 15d

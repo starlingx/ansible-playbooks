@@ -1,0 +1,24 @@
+{% if system_platform_certificate is defined %}
+    subject:
+{% if system_platform_certificate.subject_C is defined %}
+      countries:
+        - "{{ system_platform_certificate.subject_C }}"
+{% endif %}
+{% if system_platform_certificate.subject_ST is defined %}
+      provinces:
+        - "{{ system_platform_certificate.subject_ST }}"
+{% endif %}
+{% if system_platform_certificate.subject_L is defined %}
+      localities:
+        - "{{ system_platform_certificate.subject_L }}"
+        - "{{ system_platform_certificate.subject_prefix + ':' if system_platform_certificate.subject_prefix is defined else '' }}{{ clean_region_name }}:{{ short_certificate_name }}"
+{% endif %}
+{% if system_platform_certificate.subject_O is defined %}
+      organizations:
+        - "{{ system_platform_certificate.subject_O }}"
+{% endif %}
+{% if system_platform_certificate.subject_OU is defined %}
+      organizationalUnits:
+        - "{{ system_platform_certificate.subject_OU }}"
+{% endif %}
+{% endif %}

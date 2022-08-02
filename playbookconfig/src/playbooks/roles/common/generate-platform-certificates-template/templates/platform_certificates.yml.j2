@@ -1,5 +1,5 @@
 ## strips out any bad character from region name. Only [^A-Za-z0-9-]" is supported
-{% set clean_region_name = region_name.stdout | replace("_", "-") | regex_replace("[^A-Za-z0-9-]","") | lower %}
+{% set clean_region_name = region_name_register.stdout | replace("_", "-") | regex_replace("[^A-Za-z0-9-]","") | lower %}
 ---
 apiVersion: v1
 data:
@@ -23,6 +23,7 @@ items:
       secretName: system-local-ca
   status: {}
 {% if install_system_restapi_gui_certificate | bool %}
+{% set short_certificate_name = 'system-restapi-gui' %}
 - apiVersion: cert-manager.io/v1
   kind: Certificate
   metadata:
@@ -32,30 +33,20 @@ items:
   spec:
     commonName: "{{ oam_ip.stdout }}"
     dnsNames:
-    - "{{ clean_region_name }}.{{ dns_domain }}"
-    duration: "{{ duration }}"
+    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain }}"
+    duration: "{{ system_platform_certificate.duration }}"
     ipAddresses:
     - "{{ oam_ip.stdout }}"
     issuerRef:
       kind: ClusterIssuer
       name: system-local-ca
-    renewBefore: "{{ renewBefore }}"
+    renewBefore: "{{ system_platform_certificate.renewBefore }}"
     secretName: system-restapi-gui-certificate
-    subject:
-      countries:
-      - "{{ subject_C }}"
-      localities:
-      - "{{ subject_L }}"
-      - "{{ subject_prefix + ':' if subject_prefix is defined else '' }}{{ clean_region_name }}:system-restapi-gui"
-      organizationalUnits:
-      - "{{ subject_OU }}"
-      organizations:
-      - "{{ subject_O }}"
-      provinces:
-      - "{{ subject_ST }}"
+{% include 'subject_snippet.j2' %}
   status: {}
 {% endif %}
 {% if install_system_registry_local_certificate | bool %}
+{% set short_certificate_name = 'system-registry-local' %}
 - apiVersion: cert-manager.io/v1
   kind: Certificate
   metadata:
@@ -65,35 +56,25 @@ items:
   spec:
     commonName: "{{ oam_ip.stdout }}"
     dnsNames:
-    - "{{ clean_region_name }}.{{ dns_domain }}"
+    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain }}"
     - registry.local
 {% if distributed_cloud_role.stdout == 'systemcontroller' %}
     - registry.central
 {% endif %}
-    duration: "{{ duration }}"
+    duration: "{{ system_platform_certificate.duration }}"
     ipAddresses:
     - "{{ oam_ip.stdout }}"
-    - "{{ management_ip.stdout }}"
+    - "{{ management_floating_ip.stdout }}"
     issuerRef:
       kind: ClusterIssuer
       name: system-local-ca
-    renewBefore: "{{ renewBefore }}"
+    renewBefore: "{{ system_platform_certificate.renewBefore }}"
     secretName: system-registry-local-certificate
-    subject:
-      countries:
-      - "{{ subject_C }}"
-      localities:
-      - "{{ subject_L }}"
-      - "{{ subject_prefix + ':' if subject_prefix is defined else '' }}{{ clean_region_name }}:system-registry-local"
-      organizationalUnits:
-      - "{{ subject_OU }}"
-      organizations:
-      - "{{ subject_O }}"
-      provinces:
-      - "{{ subject_ST }}"
+{% include 'subject_snippet.j2' %}
   status: {}
 {% endif %}
 {% if install_oidc_auth_apps_certificate | bool %}
+{% set short_certificate_name = 'system-oidc-dex' %}
 - apiVersion: cert-manager.io/v1
   kind: Certificate
   metadata:
@@ -103,8 +84,8 @@ items:
   spec:
     commonName: "{{ oam_ip.stdout }}"
     dnsNames:
-    - "{{ clean_region_name }}.{{ dns_domain }}"
-    duration: "{{ duration }}"
+    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain }}"
+    duration: "{{ system_platform_certificate.duration }}"
     ipAddresses:
     - "{{ oam_ip.stdout }}"
     # Add kubernetes cluster ip to make sure certificate has issuer ip in san list
@@ -115,20 +96,35 @@ items:
     issuerRef:
       kind: ClusterIssuer
       name: system-local-ca
-    renewBefore: "{{ renewBefore }}"
+    renewBefore: "{{ system_platform_certificate.renewBefore }}"
     secretName: oidc-auth-apps-certificate
-    subject:
-      countries:
-      - "{{ subject_C }}"
-      localities:
-      - "{{ subject_L }}"
-      - "{{ subject_prefix + ':' if subject_prefix is defined else '' }}{{ clean_region_name }}:system-oidc-dex"
-      organizationalUnits:
-      - "{{ subject_OU }}"
-      organizations:
-      - "{{ subject_O }}"
-      provinces:
-      - "{{ subject_ST }}"
+{% include 'subject_snippet.j2' %}
+  status: {}
+{% endif %}
+{% if install_system_open_ldap_certificate | bool %}
+{% set short_certificate_name = 'system-openldap' %}
+- apiVersion: cert-manager.io/v1
+  kind: Certificate
+  metadata:
+    creationTimestamp: null
+    name: system-openldap-local-certificate
+    namespace: deployment
+  spec:
+    commonName: "{{ short_certificate_name }}"
+    dnsNames:
+    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain }}"
+    - controller
+    duration: "{{ system_platform_certificate.duration }}"
+    ipAddresses:
+    - "{{ management_floating_ip.stdout }}"
+    - "{{ management_c0_ip.stdout }}"
+    - "{{ management_c1_ip.stdout }}"
+    issuerRef:
+      kind: ClusterIssuer
+      name: system-local-ca
+    renewBefore: "{{ system_platform_certificate.renewBefore }}"
+    secretName: system-openldap-local-certificate
+{% include 'subject_snippet.j2' %}
   status: {}
 {% endif %}
 kind: List
