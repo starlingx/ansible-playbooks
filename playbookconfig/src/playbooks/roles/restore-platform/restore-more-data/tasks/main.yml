@@ -240,7 +240,7 @@
     mode: 0755
 
 - name: Check if there is openldap (CentOS) configuration on backup
-  shell: "tar -tf {{ restore_data_file }} | grep -E 'etc\/openldap\/.*'"
+  shell: "tar -tf {{ restore_data_file }} | grep -E 'etc\\/openldap\\/.*'"
   args:
     warn: false
   failed_when: false
@@ -262,7 +262,7 @@
     os_release == "debian"
 
 - name: Check if there is ldap configuration on backup
-  shell: "tar -tf {{ restore_data_file }} | grep -E 'etc\/ldap\/.*'"
+  shell: "tar -tf {{ restore_data_file }} | grep -E 'etc\\/ldap\\/.*'"
   args:
     warn: false
   failed_when: false
