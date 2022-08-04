@@ -89,7 +89,7 @@
   - name: Restore Helm Overrides dump file
     command: >-
       tar -C {{ helm_overrides_dir.path }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
-      --transform='s,.*/,,' '*/helm_overrides*.sql'
+      --wildcards --transform='s,.*/,,' '*/helm_overrides*.sql'
     args:
       warn: false
 

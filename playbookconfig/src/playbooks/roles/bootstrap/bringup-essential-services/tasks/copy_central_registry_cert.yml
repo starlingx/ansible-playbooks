@@ -48,14 +48,14 @@
 
   - name: Restore registry.central certs (/etc/docker/certs.d)
     command: >-
-      tar -C {{ docker_cert_dir }} -xpf {{ restore_data_file }}
+      tar -C {{ docker_cert_dir }} -xpf {{ restore_data_file }} --wildcards
       --overwrite --transform='s,{{ archive_docker_cert_dir }},,' '{{ archive_docker_cert_dir }}/registry.central*'
     args:
       warn: false
 
   - name: Restore registry.central certs (opt/platform/config/...)
     command: >-
-      tar -C {{ config_permdir }} -xpf {{ restore_data_file }}
+      tar -C {{ config_permdir }} -xpf {{ restore_data_file }} --wildcards
       --overwrite --transform='s,{{ archive_config_permdir }},,' '{{ archive_config_permdir }}/registry.central*'
     args:
       warn: false

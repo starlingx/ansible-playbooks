@@ -66,10 +66,10 @@
         state: absent
     when: banner_result.rc == 0
 
-  - name: Extract ssl_ca certifcate from backup archive
+  - name: Extract ssl_ca certificate from backup archive
     command: >-
       tar -xf {{ restore_data_file }} -C {{ temp_ssl_ca_dir }} -p --transform='s,.*/,,'
-      */{{ temp_ssl_ca_file }}*
+      --wildcards */{{ temp_ssl_ca_file }}*
     args:
       warn: false
     failed_when: false
