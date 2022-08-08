@@ -18,6 +18,17 @@
     inspection_target: localhost
   when: on_box_data|bool == false
 
+# roles/bootstrap/validate-config/tasks/main.yml#L877
+# Note that due to Ansible mishandling of boolean values via extra-vars we are
+# adding supplementary validation here.
+# See: https://github.com/ansible/ansible/issues/17193
+- name: Check for Ceph data wipe flag
+  fail:
+    msg: "wipe_ceph_osds is misconfigured. Valid value is either 'true' or 'false'"
+  when: (not wipe_ceph_osds | type_debug == 'bool') and
+        (wipe_ceph_osds != 'true') and
+        (wipe_ceph_osds != 'false')
+
 - block:
   - name: Fail if backup_filename is not defined or set
     fail:
@@ -53,7 +64,13 @@
         when: (on_box_data|bool == false)
     when: not backup_stat_result.stat.exists
 
-  - name: Verify if registry image backup is provided
+
+  - name: If optimized restore, verify if registry filesystem backup was provided
+    fail:
+      msg: For optimized restore, you must provide 'registry_backup_filename'
+    when: restore_mode == 'optimized' and registry_backup_filename is not defined
+
+  - name: Verify if image registry backup is provided
     block:
       - set_fact:
           registry_backup_initial_path: "{{ initial_backup_dir }}/{{ registry_backup_filename }}"
@@ -97,6 +114,6 @@
         when: (on_box_data|bool == false)
       when: not ssl_ca_certificate_stat_result.stat.exists
 
-    when: ssl_ca_certificate_file is not none
+    when: ssl_ca_certificate_file is defined and ssl_ca_certificate_file is not none
 
   delegate_to: "{{ inspection_target }}"

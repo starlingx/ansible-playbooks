@@ -240,8 +240,21 @@
       - "{{ encryption_provider_config | regex_replace('^\\/', '') }}"
     become_user: root
 
+  - name: Stop etcd
+    service:
+      name: etcd
+      state: stopped
+
   - name: Restore etcd database
-    import_tasks: restore_etcd.yml
+    include_role:
+      name: backup-restore/restore-etcd
+    vars:
+      platform_backup_fqpn: "{{ restore_data_file }}"
+
+  - name: Start etcd
+    service:
+      name: etcd
+      state: started
 
   when: mode == 'restore'
 

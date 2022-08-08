@@ -6,16 +6,10 @@
 #
 # ROLE DESCRIPTION:
 #   This role performs the following tasks:
-#     1. Validate user input.
-#     2. Verify that the target is in the right state for images restore.
-#     3. Transfer the backup tarball to the target if it is off-box, otherwise
+#     1. Verify that the target is in the right state for images restore.
+#     2. Transfer the backup tarball to the target if it is off-box, otherwise
 #        copy it to the designated staging directory (/opt/platform-backup).
-#     5. Create restore_in_progress flag.
-
-- name: Perform generic user input validation for restore
-  import_role:
-    name: backup-restore/validate-input
-  become: no
+#     3. Create restore_in_progress flag.
 
 - name: Check if restoring user images is already in progress
   stat:

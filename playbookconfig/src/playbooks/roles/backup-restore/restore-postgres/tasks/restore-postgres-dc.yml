@@ -1,0 +1,34 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   The tasks below restore the postgres Distributed Cloud related data.
+
+- name: Check if the system is a DC controller
+  command: >-
+    grep -i "distributed_cloud_role\s*=\s*systemcontroller"
+    /etc/platform/platform.conf
+  register: check_dc_controller
+  failed_when: false
+
+- name: Restore postgres for DC
+  block:
+
+  - name: Determine which postgresql database files exist
+    stat:
+      path: "{{ postgres_staging_dir }}/{{ item }}"
+    with_items:
+      - "dcmanager.postgreSql.data"
+      - "dcorch.postgreSql.data"
+    register: pgfiles_dc
+
+  - name: Restore postgres db for DC systemcontroller
+    shell: "psql -f {{ item.stat.path }} {{ item.item.split('.')[0] }}"
+    become_user: postgres
+    with_items: "{{ pgfiles_dc.results }}"
+    when: item.stat.exists
+
+  when: check_dc_controller.rc == 0

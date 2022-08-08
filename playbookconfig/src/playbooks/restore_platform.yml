@@ -4,30 +4,12 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-- hosts: all
-  gather_facts: no
-
-  vars_files:
-    - vars/common/main.yml
-    - host_vars/backup-restore/default.yml
-
-  roles:
-    - common/prepare-env
-    - restore-platform/precheck
-    - common/validate-target
-    - restore-platform/prepare-env
-    - restore-platform/restore-sw-patches
-
-- name: Run bootstrap playbook with restore mode
-  import_playbook: bootstrap.yml mode='restore'
 
 - hosts: all
   gather_facts: no
 
-  vars_files:
-    - host_vars/bootstrap/default.yml
-    - host_vars/backup-restore/default.yml
-
-  roles:
-    - common/prepare-env
-    - { role: restore-platform/restore-more-data, become: yes }
+- name: "Running restore playbook {{ restore_playbook }}"
+  import_playbook: "{{ restore_playbook }}"
+  vars:
+    restore_mode: "old"
+    restore_playbook: "{{ 'restore_optimized.yml' if restore_mode == 'optimized' else 'restore_platform_old.yml' }}"

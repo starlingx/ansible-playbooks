@@ -1,0 +1,57 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   The tasks below restore the postgres database schema and data.
+
+- set_fact:
+    postgres_staging_dir: "{{ staging_dir }}/postgres"
+
+- block:
+  - name: Create staging directory for postgres data
+    file:
+      path: "{{ postgres_staging_dir }}"
+      state: directory
+      recurse: yes
+      owner: root
+      group: root
+      mode: 0755
+
+  - name: Extract postgres db to staging directory
+    command: >-
+      tar -C {{ staging_dir }}/postgres -xpf {{ platform_backup_fqpn }}
+      --wildcards --transform='s,.*/,,' '*/*\.postgreSql\.*'
+    args:
+      warn: false
+
+  - name: Determine which postgresql database files exist
+    stat:
+      path: "{{ postgres_staging_dir }}/{{ item }}"
+    with_items:
+      - "postgres.postgreSql.config"
+      - "postgres.postgreSql.data"
+      - "template1.postgreSql.data"
+      - "sysinv.postgreSql.data"
+      - "keystone.postgreSql.data"
+      - "fm.postgreSql.data"
+      - "barbican.postgreSql.data"
+      - "helmv2.postgreSql.data"
+    register: pgfiles
+
+  - name: Restore postgres db
+    shell: "psql -f {{ item.stat.path }} {{ item.item.split('.')[0] }}"
+    become_user: postgres
+    with_items: "{{ pgfiles.results }}"
+    when: item.stat.exists
+
+  - import_tasks: restore-postgres-dc.yml
+
+  - name: Remove postgres staging directory
+    file:
+      path: "{{ postgres_staging_dir }}"
+      state: absent
+
+  when: migrate_platform_data is undefined or not migrate_platform_data

@@ -1,0 +1,83 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   The tasks below restore the ldap database and configuration files.
+
+- name: Set parameters for ldap different paths by OS
+  set_fact:
+    ldap_schema_path: "{{ '/etc/openldap/schema' if os_release == 'centos' else '/etc/ldap/schema' }}"
+
+- name: Check if CentOS openldap configuration is included in the backup
+  shell: "tar -tf {{ platform_backup_fqpn }} | grep -E 'etc\\/openldap\\/.*'"
+  args:
+    warn: false
+  failed_when: false
+  register: bkp_has_centos_ldap_config
+
+- block:
+  - block:
+    - name: Restore openldap configuration
+      command: tar -C / -xpf {{ platform_backup_fqpn }} --wildcards --overwrite etc/openldap/*
+      args:
+        warn: false
+
+    # TODO (heitormatsui): remove when Centos -> Debian upgrade support become deprecated
+    - block:
+        - name: Copy openldap configuration to staging directory
+          command: cp -Rf /etc/openldap/ {{ staging_dir }}/openldap
+          args:
+            warn: false
+
+        - name: Replace Centos paths with Debian paths on files
+          shell: >-
+            find {{ staging_dir }}/openldap/schema/ -type f | xargs sed -i
+            "s#/usr/lib64/openldap#/usr/lib/ldap#;
+            s#/var/lib/openldap-data#/var/lib/ldap#;
+            s#/etc/openldap#/etc/ldap#"
+          args:
+            warn: false
+
+        - name: Copy /etc/openldap configuration to /etc/ldap if restoring on Debian
+          command: cp -Rf {{ staging_dir }}/openldap/. /etc/ldap
+      when: os_release == "debian"
+    when: bkp_has_centos_ldap_config.rc == 0
+
+  - block:
+      - name: Check if Debian ldap configuration is included in the backup
+        shell: "tar -tf {{ platform_backup_fqpn }} | grep -E 'etc\\/ldap\\/.*'"
+        args:
+          warn: false
+        failed_when: false
+        register: bkp_has_debian_ldap_config
+
+      - name: Restore ldap configuration
+        command: tar -C / -xpf {{ platform_backup_fqpn }} --wildcards --overwrite etc/ldap/*
+        args:
+          warn: false
+        when: bkp_has_debian_ldap_config.rc == 0
+    when: bkp_has_centos_ldap_config.rc != 0
+
+  - name: Extract ldap.db to staging directory
+    command: >-
+      tar -C {{ staging_dir }} -xpf {{ platform_backup_fqpn }} --wildcards
+      --transform='s,.*/,,' '*/ldap.db'
+    args:
+      warn: false
+
+  - name: Restore ldap
+    command: "slapadd -F {{ ldap_schema_path }} -l {{ staging_dir }}/ldap.db"
+    register: slapadd_result
+    failed_when: slapadd_result.rc != 0 and slapadd_result.rc != 1
+
+  always:
+    - name: Delete files from staging dir
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - "{{ staging_dir }}/ldap.db"
+        - "{{ staging_dir }}/openldap"

@@ -11,6 +11,7 @@
     - host_vars/backup-restore/default.yml
 
   roles:
+    - restore-user-images/validate-input
     - { role: common/prepare-env }
     - { role: restore-user-images/prepare-env, become: yes }
     - { role: restore-user-images/restore-local-registry-images, become: yes,

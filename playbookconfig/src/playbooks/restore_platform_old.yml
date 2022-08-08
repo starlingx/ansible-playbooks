@@ -1,0 +1,34 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- hosts: all
+  gather_facts: no
+
+  vars_files:
+    - vars/common/main.yml
+    - host_vars/backup-restore/default.yml
+
+  roles:
+    - common/prepare-env
+    - restore-platform/precheck
+    - common/validate-target
+    - backup-restore/validate-input
+    - restore-platform/prepare-env
+    - restore-platform/restore-sw-patches
+
+- name: Run bootstrap playbook with restore mode
+  import_playbook: bootstrap.yml mode='restore'
+
+- hosts: all
+  gather_facts: no
+
+  vars_files:
+    - host_vars/bootstrap/default.yml
+    - host_vars/backup-restore/default.yml
+
+  roles:
+    - common/prepare-env
+    - { role: restore-platform/restore-more-data, become: yes }

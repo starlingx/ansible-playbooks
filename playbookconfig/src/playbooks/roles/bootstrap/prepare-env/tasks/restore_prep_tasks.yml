@@ -90,7 +90,7 @@
         dest: "{{ temp_ssl_ca_dir }}/{{ temp_ssl_ca_file }}"
       when: (on_box_data is defined) and (on_box_data|bool == false)
 
-    when: ssl_ca_certificate_file is defined
+    when: ssl_ca_certificate_file is defined and ssl_ca_certificate_file is not none
 
   - name: Extract ssl_ca certificate from backup archive
     command: >-
@@ -101,7 +101,7 @@
     args:
       warn: false
     failed_when: false
-    when: ssl_ca_certificate_file is not defined
+    when: ssl_ca_certificate_file is not defined or ssl_ca_certificate_file is none
 
   - name: Check that ssl_ca certificate exists
     stat:

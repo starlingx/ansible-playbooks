@@ -14,19 +14,6 @@
 #        parameters in memory.
 #     5. Create restore_in_progress flag.
 #
-# Note that due to Ansible mishandling of boolean values via extra-vars we are
-# adding supplementary validation here
-# See: https://github.com/ansible/ansible/issues/17193
-- name: Check for Ceph data wipe flag
-  fail:
-    msg: "wipe_ceph_osds is misconfigured. Valid value is either 'true' or 'false'"
-  when: (not wipe_ceph_osds | type_debug == 'bool') and
-        (wipe_ceph_osds != 'true') and
-        (wipe_ceph_osds != 'false')
-
-- name: Perform generic user input validation for restore
-  import_role:
-    name: backup-restore/validate-input
 
 - block:
   - name: Look for override backup file in the backup tarball
@@ -96,31 +83,9 @@
     set_fact:
       restore_data_file: "{{ target_backup_dir }}/{{ backup_filename }}"
 
-  - name: Transfer backup tarballs to target if the file is off-box
+  - name: Stage backup tarballs
     include_role:
-      name: backup-restore/transfer-file
-    when: on_box_data|bool == false
-
-  - name: Copy the backup tarballs to {{ target_backup_dir }} if the file is already on-box
-    block:
-
-      - copy:
-          src: "{{ initial_backup_dir }}/{{ backup_filename }}"
-          dest: "{{ target_backup_dir }}"
-          remote_src: yes
-
-      - copy:
-          src: "{{ initial_backup_dir }}/{{ registry_backup_filename }}"
-          dest: "{{ target_backup_dir }}"
-          remote_src: yes
-        when: registry_backup_filename is defined
-
-    when: on_box_data|bool == true
-
-  - name: Set image registry backup fqpn
-    set_fact:
-      registry_backup_fqpn: "{{ target_backup_dir }}/{{ registry_backup_filename }}"
-    when: registry_backup_filename is defined
+      name: backup-restore/stage-backup-archives
 
   - name: Extract override file from backup tarball
     command: >
