@@ -38,6 +38,7 @@ sysinv_permdir: "{{ platform_path }}/sysinv/{{ software_version }}"
 backup:
   targets:
     - "/etc"
+    - "/var/lib/kubelet"
     - "{{ armada_permdir }}"
     - "{{ config_permdir }}"
     - "{{ deploy_permdir }}"
@@ -59,6 +60,10 @@ backup:
     - "/etc/selinux"
     - "/etc/udev/**"
     - "/etc/udev"
+    - "/var/lib/kubelet/plugins/**"
+    - "/var/lib/kubelet/plugins"
+    - "/var/lib/kubelet/pods/**"
+    - "/var/lib/kubelet/pods"
     - "{{ homedir }}/*/ansible.log"
     - "{{ homedir }}/*/.ansibl**"
     - "{{ homedir }}/*/.cache/**"
