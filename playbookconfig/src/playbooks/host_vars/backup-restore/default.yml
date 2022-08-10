@@ -109,6 +109,10 @@ restore_openstack_continue: false
 # not wiped. Otherwise, all disks are wiped as part of the bootstrap.
 wipe_ceph_osds: false
 
+# This variable refers to the ssl_ca certificate used in the restore phase
+# The filename must be specified at the command line via ansible-playbook -e option.
+ssl_ca_certificate_file:
+
 # The following parameter indicates where the backup data file(s) reside,
 # on the host itself (true) or off box (false).
 on_box_data: true
