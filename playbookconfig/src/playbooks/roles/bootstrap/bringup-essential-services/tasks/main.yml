@@ -100,6 +100,13 @@
     import_role:
       name: common/push-docker-images
 
+  # TODO (heitormatsui): remove when CentOS -> Debian upgrade support is deprecated
+  - name: Ensure etcd config file from CentOS backup doesn't exist on Debian
+    file:
+      path: /etc/etcd/etcd.conf
+      state: absent
+    when: os_release == "debian"
+
   - name: Bring up etcd
     systemd:
       name: etcd
