@@ -226,6 +226,47 @@
     - "ELASTIC_REGISTRY_SECRET={{ elastic_registry_secret | default('none') }}"
     - "GHCR_REGISTRY_SECRET={{ ghcr_registry_secret | default('none') }}"
 
+- name: Add section [KUBE_APISERVER]
+  set_fact:
+    sysinv_k8s_vars: "[KUBE_APISERVER]\n"
+
+- name: Populate k8s kube_apiserver section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
+  loop: "{{ apiserver_extra_args|dict2items }}"
+
+- name: Add section [KUBE_CONTROLLER_MANAGER]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_CONTROLLER_MANAGER]\n"
+
+- name: Populate k8s kube_controller_manager section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
+  loop: "{{ controllermanager_extra_args|dict2items }}"
+
+- name: Add section [KUBE_SCHEDULER]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_SCHEDULER]\n"
+
+- name: Populate k8s kube_scheduler section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
+  loop: "{{ scheduler_extra_args|dict2items }}"
+
+- name: Add section [KUBE_KUBELET]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_KUBELET]\n"
+
+- name: Populate k8s kubelet section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
+  loop: "{{ kubelet_configurations|dict2items }}"
+
+- name: Append k8s sections to config ini
+  lineinfile:
+    path: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
+    line: "{{ sysinv_k8s_vars }}"
+
 - include: update_sysinv_database.yml
   when: save_config_to_db
 

@@ -16,7 +16,8 @@ import stat
 import subprocess
 import sys
 import time
-from six.moves.configparser import ConfigParser
+import six.moves.configparser as configparser
+
 
 from netaddr import IPNetwork
 from cgtsclient import client as cgts_client
@@ -31,7 +32,13 @@ RECONFIGURE_SERVICE = False
 INITIAL_POPULATION = True
 INCOMPLETE_BOOTSTRAP = False
 SYSTEM_CONFIG_TIMEOUT = 420
-CONF = ConfigParser()
+
+# By default, configparse transforms all loaded parameters to lowercase.
+# This is a problem for Kubernetes kubelet configurations because they are
+# written with Camel Case notation. With the optionxform attribute it is
+# possible to disable the transformation to lowercase.
+CONF = configparser.ConfigParser()
+CONF.optionxform = str
 
 
 class CgtsClient(object):
@@ -751,6 +758,12 @@ def populate_docker_kube_config(client):
 
     # Remove any kubernetes entries that might have been created in the
     # previous run.
+    kube_sections = [
+        sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_APISERVER,
+        sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_CONTROLLER_MANAGER,
+        sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_SCHEDULER,
+        sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_KUBELET]
+
     parameters = client.sysinv.service_parameter.list()
     for parameter in parameters:
         if (parameter.name in [
@@ -758,9 +771,10 @@ def populate_docker_kube_config(client):
                 sysinv_constants.SERVICE_PARAM_NAME_KUBERNETES_API_SAN_LIST,
                 sysinv_constants.SERVICE_PARAM_NAME_KUBERNETES_POD_MAX_PIDS]):
             client.sysinv.service_parameter.delete(parameter.uuid)
+        elif parameter.section in kube_sections:
+            client.sysinv.service_parameter.delete(parameter.uuid)
 
     audit_policy_file = CONF.get('BOOTSTRAP_CONFIG', 'AUDIT_POLICY_FILE')
-
     if audit_policy_file != 'undef':
         parameters = {
             sysinv_constants.SERVICE_PARAM_NAME_AUDIT_POLICY_FILE:
@@ -832,12 +846,17 @@ def populate_docker_kube_config(client):
         if parameter.name in oidc_params.values():
             client.sysinv.service_parameter.delete(parameter.uuid)
 
+    # Populating k8s kube-apiserver section
+    # It includes subsections extra_args, extra_volumes and root parameters (e.g.: oidc params).
     parameters = {}
 
     for ansible_oidc_param, sysinv_oidc_param in oidc_params.items():
         bootstrap_value = CONF.get('BOOTSTRAP_CONFIG', ansible_oidc_param)
         if bootstrap_value != 'undef':
             parameters[sysinv_oidc_param] = bootstrap_value
+
+    for kube_apiserver_param, kube_apiserver_value in CONF.items(section="KUBE_APISERVER"):
+        parameters[kube_apiserver_param] = kube_apiserver_value
 
     if parameters:
         values = {
@@ -851,7 +870,58 @@ def populate_docker_kube_config(client):
 
         print("Populating/Updating kube-apiserver config...")
         client.sysinv.service_parameter.create(**values)
-        print("kube-apiserver config completed.")
+
+    # Populating k8s kube-controller-manager section
+    # It includes subsections extra_args, extra_volumes and root parameters
+    parameters = {}
+    for kube_cm_param, kube_cm_value in CONF.items(section="KUBE_CONTROLLER_MANAGER"):
+        parameters[kube_cm_param] = kube_cm_value
+    if parameters:
+        values = {
+            'service': sysinv_constants.SERVICE_TYPE_KUBERNETES,
+            'section':
+                sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_CONTROLLER_MANAGER,
+            'personality': None,
+            'resource': None,
+            'parameters': parameters
+        }
+        print("Populating/Updating kube-controller-manager config...")
+        client.sysinv.service_parameter.create(**values)
+
+    # Populating k8s kube-scheduler section
+    # It includes subsections extra_args, extra_volumes and root parameters
+    parameters = {}
+    for kube_sch_param, kube_sch_value in CONF.items(section="KUBE_SCHEDULER"):
+        parameters[kube_sch_param] = kube_sch_value
+    if parameters:
+        values = {
+            'service': sysinv_constants.SERVICE_TYPE_KUBERNETES,
+            'section':
+                sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_SCHEDULER,
+            'personality': None,
+            'resource': None,
+            'parameters': parameters
+        }
+        print("Populating/Updating kube-scheduler config...")
+        client.sysinv.service_parameter.create(**values)
+
+    # Populating k8s kubelet section
+    parameters = {}
+    for kube_klt_param, kube_klt_value in CONF.items(section="KUBE_KUBELET"):
+        parameters[kube_klt_param] = kube_klt_value
+    if parameters:
+        values = {
+            'service': sysinv_constants.SERVICE_TYPE_KUBERNETES,
+            'section':
+                sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_KUBELET,
+            'personality': None,
+            'resource': None,
+            'parameters': parameters
+        }
+        print("Populating/Updating cluster-level kubelet config...")
+        client.sysinv.service_parameter.create(**values)
+
+    print("kubernetes control plane components and kubelet completed.")
 
 
 def populate_platform_config(client):
