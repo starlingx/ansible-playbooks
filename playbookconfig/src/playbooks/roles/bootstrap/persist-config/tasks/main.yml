@@ -316,11 +316,26 @@
   when: use_docker_proxy
 
 
-# Install certificate if SSL CA certifcate is configured
+# Install certificate if SSL CA certificate is configured
 - block:
   - name: Set source for copying certificate
     set_fact:
       ssl_ca_source: "{{ mode == 'restore' }}"
+
+  - block:
+    - name: Check for existing ssl_ca certificates
+      shell: |
+        source /etc/platform/openrc
+        system certificate-list | grep ssl_ca | awk '{ print $2 }'
+      register: existing_ssl_ca_certificates_uuid
+
+    - name: Delete existing ssl_ca certificates
+      shell: source /etc/platform/openrc; system certificate-uninstall -m ssl_ca {{ item }}
+      with_items:
+      - "{{ existing_ssl_ca_certificates_uuid.stdout_lines }}"
+      when: existing_ssl_ca_certificates_uuid.stdout_lines | length > 0
+
+    when: replayed and mode != 'restore'
 
   - name: Copy ssl_ca certificate
     copy:
