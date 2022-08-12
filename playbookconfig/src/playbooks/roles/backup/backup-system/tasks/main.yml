@@ -16,6 +16,39 @@
 
 - name: Do StarlingX backup
   block:
+    - name: Check if pigz package is installed
+      block:
+
+        - name: Issue command to pkg manager
+          command: "{{ 'rpm -q' if os_release == 'centos' else 'dpkg -l' }} pigz"
+          args:
+            warn: false
+          failed_when: false
+          register: check
+
+        - set_fact:
+            pigz_check: "{{ 'succeeded' if check.rc == 0 else 'failed' }}"
+
+      when: os_release in ["centos", "debian"]
+
+    - name: Check if pigz package is installed
+      package:
+        name: pigz
+        state: present
+      check_mode: true
+      register: pigz_check
+      when: os_release not in ["centos", "debian"]
+
+    - name: Check number of platform cores
+      shell: |
+        source /etc/platform/openrc
+        system host-cpu-list $(hostname) --nowrap | grep " Platform " | wc -l
+      register: num_platform_cores
+
+    - name: Set compress program for backup tarball
+      set_fact:
+        compress_program: "{{ 'pigz' if num_platform_cores.stdout | int >= 4 and pigz_check is succeeded else 'gzip' }}"
+
     - name: Get kube-system default-registry-key
       command: >-
         kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret default-registry-key --namespace=kube-system
@@ -502,8 +535,9 @@
     - name: Create a tgz archive for platform backup
       shell: >-
         tar
+        --use-compress-program={{ compress_program }}
         --exclude {{ backup.exclude | map('regex_replace', '^/', '') | list | join(' --exclude ') }}
-        -czf {{ platform_backup_file_path }}
+        -cf {{ platform_backup_file_path }}
         $(ls -d
         {{ final_backup_targets | join(' ') }}
         2> /dev/null)
@@ -512,7 +546,7 @@
       # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it", which
       # makes tar return 1
       register: tar_cmd
-      failed_when: tar_cmd.rc >= 2
+      failed_when: tar_cmd.rc >= 2 or tar_cmd.rc < 0
 
     - name: Create a tgz archive for dc-vault backup
       shell: "tar -czf {{ dc_vault_backup_file_path }} $(ls -d \
