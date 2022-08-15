@@ -38,15 +38,6 @@
       ansible_host: "{{ ansible_host | ipaddr }}"
     when: ansible_host | ipaddr
 
-  - name: Set SSH hostname
-    set_fact:
-      ssh_hostname: "{{ ansible_host }}"
-
-  - name: Set SSH hostname if SSH port is not default
-    set_fact:
-      ssh_hostname: "[{{ ansible_host }}]:{{ ansible_port }}"
-    when: ansible_port != '22'
-
   - name: Check connectivity
     local_action: command ping -c 1 {{ ansible_host }}
     failed_when: false
@@ -59,7 +50,7 @@
     when: ping_result.rc != 0 and item is search('100% packet loss')
 
   - name: Gather remote SSH public key
-    command: ssh-keyscan -T 20 -t ecdsa {{ ssh_hostname }}
+    command: "ssh-keyscan -T 20 -t ecdsa -p {{ ansible_port if ansible_port else 22 }} {{ ansible_host }}"
     register: remote_keyscan
     until: remote_keyscan.stdout != ""
     retries: 6
