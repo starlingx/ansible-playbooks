@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -32,15 +32,6 @@
         owner: root
         group: root
         mode: 0644
-
-    # As an alternative to Ansible copy, synchronize module may be
-    # used to transfer large files. But synchronize is broken in Ansible 2.8
-    # https://github.com/ansible/ansible/issues/56629.
-    # - name: Transfer backup tarball to /scratch on controller-0
-    #   synchronize:
-    #     src: "{{ initial_backup_dir }}/{{ backup_filename }}"
-    #     dest: "{{ target_backup_dir }}/{{ backup_filename }}"
-
     when: not check_backup_tarball.stat.exists
   when: inventory_hostname != "localhost"
   become: yes

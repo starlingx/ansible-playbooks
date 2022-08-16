@@ -53,6 +53,10 @@ backup_filename:
 # on the active controller
 backup_dir: /opt/backups
 
+# The staging directory to platform-backup to have a consistent behavior
+# regardless of where the restore playbook is executed (locally vs remotely)
+target_backup_dir: /opt/platform-backup
+
 # The platform backup tarball will be named in this format:
 # <platform_backup_filename_prefix>_<timestamp>.tgz
 #
