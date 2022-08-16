@@ -10,8 +10,35 @@
 #   backup is running.
 #
 - name: Read in last kubernetes config values (extraArgs and extraVolumes)
-  include_vars:
-    file: "{{ config_permdir }}/last_kube_extra_config_bootstrap.yaml"
+  block:
+    - name: Check if load has last_kube_extra_config_bootstrap.yaml
+      stat:
+        path: "{{ config_permdir }}/last_kube_extra_config_bootstrap.yaml"
+      register: load_has_extra_config
+
+    - name: Read last_kube_extra_config_bootstrap.yaml if it exists
+      block:
+
+        - name: Read last kubernetes config yaml file
+          command: "cat {{ config_permdir }}/last_kube_extra_config_bootstrap.yaml"
+          register: result
+
+        - name: Get last kubernetes config facts
+          set_fact:
+            last_kube_extra_config: "{{ result.stdout | from_yaml }}"
+
+        - name: Set last kubernetes config facts
+          set_fact:
+            apiserver_extra_args: "{{ last_kube_extra_config.apiserver_extra_args }}"
+            controllermanager_extra_args: "{{ last_kube_extra_config.controllermanager_extra_args }}"
+            scheduler_extra_args: "{{ last_kube_extra_config.scheduler_extra_args }}"
+            kubelet_configurations: "{{ last_kube_extra_config.kubelet_configurations }}"
+            apiserver_extra_volumes: "{{ last_kube_extra_config.apiserver_extra_volumes }}"
+            controllermanager_extra_volumes: "{{ last_kube_extra_config.controllermanager_extra_volumes }}"
+            scheduler_extra_volumes: "{{ last_kube_extra_config.scheduler_extra_volumes }}"
+
+      when: load_has_extra_config.stat.exists
+
   when: mode == 'backup'
 
 - name: Append kubernetes extra configuration (extraArgs and extraVolumes)
@@ -20,17 +47,24 @@
     marker: ""
     create: yes
     block: |
-      apiserver_extra_args:
-      {{ apiserver_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
-      controllermanager_extra_args:
-      {{ controllermanager_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
-      scheduler_extra_args:
-      {{ scheduler_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
-      kubelet_configurations:
-      {{ kubelet_configurations | to_nice_yaml | indent(2, indentfirst=True) }}
-      apiserver_extra_volumes:
-      {{ apiserver_extra_volumes | to_yaml | indent(2, indentfirst=True) }}
-      controllermanager_extra_volumes:
-      {{ controllermanager_extra_volumes | to_yaml | indent(2, indentfirst=True) }}
-      scheduler_extra_volumes:
-      {{ scheduler_extra_volumes | to_yaml | indent(2, indentfirst=True) }}
+      {% if apiserver_extra_args is defined %}
+      apiserver_extra_args: {{ apiserver_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
+      {% endif %}
+      {% if controllermanager_extra_args is defined %}
+      controllermanager_extra_args: {{ controllermanager_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
+      {% endif %}
+      {% if scheduler_extra_args is defined %}
+      scheduler_extra_args: {{ scheduler_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
+      {% endif %}
+      {% if kubelet_configurations is defined %}
+      kubelet_configurations: {{ kubelet_configurations | to_nice_yaml | indent(2, indentfirst=True) }}
+      {% endif %}
+      {% if apiserver_extra_volumes is defined %}
+      apiserver_extra_volumes: {{ apiserver_extra_volumes | to_yaml | indent(2, indentfirst=True) }}
+      {% endif %}
+      {% if controllermanager_extra_volumes is defined %}
+      controllermanager_extra_volumes: {{ controllermanager_extra_volumes | to_yaml | indent(2, indentfirst=True) }}
+      {% endif %}
+      {% if scheduler_extra_volumes is defined %}
+      scheduler_extra_volumes: {{ scheduler_extra_volumes | to_yaml | indent(2, indentfirst=True) }}
+      {% endif %}
