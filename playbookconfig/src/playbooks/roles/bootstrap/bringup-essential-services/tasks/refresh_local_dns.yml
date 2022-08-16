@@ -10,83 +10,100 @@
 
 # Check host connectivity, change password if provided
 
-- name: Remove existing /etc/hosts
-  file:
-    path: /etc/hosts
-    state: absent
+- name: Refresh local DNS
+  block:
 
-- block:
-  - name: Populate /etc/hosts
-    lineinfile:
-      path: /etc/hosts
-      line: "{{ item }}"
-      create: yes
-    with_items:
-      - "{{ localhost_name_ip_mapping }}"
-      - "{{ controller_floating_address }}\tcontroller"
-      # May not need this entry
-      - "{{ controller_0_cluster_host }}\tcontroller-0-infra"
-      - "{{ controller_pxeboot_floating_address }}\tpxecontroller"
-      - "{{ external_oam_floating_address }}\toamcontroller"
-      - "{{ derived_network_params.nfs_management_address_1 }}\tcontroller-platform-nfs"
-      - "{{ derived_network_params.controller_1_address }}\tcontroller-1"
-      - "{{ derived_network_params.controller_0_address }}\tcontroller-0"
-      # May not need this entry
-      - "{{ controller_1_cluster_host }}\tcontroller-1-infra"
-      - "{{ derived_network_params.nfs_management_address_2 }}\tcontroller-nfs"
+    - name: Moving existing /etc/hosts to backup and creating a new one with bare minimum entries
+      copy:
+        dest: /etc/hosts
+        backup: yes
+        # If this is not done, sudo operations might timeout. See bug #1986693
+        content: |
+          {{ localhost_name_ip_mapping }}
+          {{ derived_network_params.controller_0_address }}    controller-0
+          {{ derived_network_params.controller_1_address }}    controller-1
+      register: etc_hosts
 
-  - block:
-    - name: Set central registry for subcloud
-      set_fact:
-        # For virtual subcloud (StarlingX running in OpenStack Nova VM - QEMU/KVM),
-        # central-cloud's local registry has to be exposed on the MGMT interface
-        # instead of the OAM interface as there is no physical OAM interface on
-        # subcloud to access central registry via OAM interface, so set
-        # "registry.central" to system controller's MGMT IP on subcloud to allow
-        # subcloud pull images from central registry
-        registry_central_address:
-          "{{ system_controller_floating_address
-           if (virtual_system is defined and virtual_system|bool)
-           else system_controller_oam_floating_address}}"
+    - block:
+      - name: Populate /etc/hosts
+        lineinfile:
+          path: /etc/hosts
+          line: "{{ item }}"
+          create: yes
+        with_items:
+          - "{{ controller_floating_address }}\tcontroller"
+          # May not need this entry
+          - "{{ controller_0_cluster_host }}\tcontroller-0-infra"
+          - "{{ controller_pxeboot_floating_address }}\tpxecontroller"
+          - "{{ external_oam_floating_address }}\toamcontroller"
+          - "{{ derived_network_params.nfs_management_address_1 }}\tcontroller-platform-nfs"
+          # May not need this entry
+          - "{{ controller_1_cluster_host }}\tcontroller-1-infra"
+          - "{{ derived_network_params.nfs_management_address_2 }}\tcontroller-nfs"
 
-    - name: Update /etc/hosts for subcloud
-      lineinfile:
-        path: /etc/hosts
-        line: "{{ registry_central_address }}\tregistry.central"
-        insertbefore: EOF
-    when: distributed_cloud_role == 'subcloud'
+      - block:
+        - name: Set central registry for subcloud
+          set_fact:
+            # For virtual subcloud (StarlingX running in OpenStack Nova VM - QEMU/KVM),
+            # central-cloud's local registry has to be exposed on the MGMT interface
+            # instead of the OAM interface as there is no physical OAM interface on
+            # subcloud to access central registry via OAM interface, so set
+            # "registry.central" to system controller's MGMT IP on subcloud to allow
+            # subcloud pull images from central registry
+            registry_central_address:
+              "{{ system_controller_floating_address
+               if (virtual_system is defined and virtual_system|bool)
+               else system_controller_oam_floating_address}}"
 
-  - name: Save hosts file to permanent location
-    copy:
-      src: /etc/hosts
-      dest: "{{ config_permdir }}"
-      remote_src: yes
+        - name: Update /etc/hosts for subcloud
+          lineinfile:
+            path: /etc/hosts
+            line: "{{ registry_central_address }}\tregistry.central"
+            insertbefore: EOF
+        when: distributed_cloud_role == 'subcloud'
 
-  when: mode == 'bootstrap'
+      - name: Save hosts file to permanent location
+        copy:
+          src: /etc/hosts
+          dest: "{{ config_permdir }}"
+          remote_src: yes
 
-- block:
-  - name: Restore /etc/hosts file
-    command: tar -C /etc -xpf {{ restore_data_file }} --transform='s,.*/,,' etc/hosts
-    args:
-      warn: false
+      when: mode == 'bootstrap'
 
-  - name: Restore hosts in config permdir
-    command: >-
-      tar -C {{ config_permdir }} -xpf {{ restore_data_file }} --transform='s,.*/,,'
-      {{ archive_config_permdir }}/hosts
-    args:
-      warn: false
+    - block:
+      - name: Restore /etc/hosts file
+        command: tar -C /etc --overwrite -xpf {{ restore_data_file }} --transform='s,.*/,,' etc/hosts
+        args:
+          warn: false
 
-  - name: Temporary add central OAM as registry.central in /etc/hosts for subcloud restore
-    lineinfile:
-      path: /etc/hosts
-      line: "{{ system_controller_oam_floating_address }}\tregistry.central"
-      insertbefore: EOF
-    when: distributed_cloud_role == 'subcloud'
+      - name: Restore hosts in config permdir
+        command: >-
+          tar -C {{ config_permdir }} -xpf {{ restore_data_file }} --transform='s,.*/,,'
+          {{ archive_config_permdir }}/hosts
+        args:
+          warn: false
 
-  # Wei: I noticed that /etc/hosts and /opt/platform/config/<version>/hosts are always different
+      - name: Temporary add central OAM as registry.central in /etc/hosts for subcloud restore
+        lineinfile:
+          path: /etc/hosts
+          line: "{{ system_controller_oam_floating_address }}\tregistry.central"
+          insertbefore: EOF
+        when: distributed_cloud_role == 'subcloud'
 
-  when: mode == 'restore'
+      # Wei: I noticed that /etc/hosts and /opt/platform/config/<version>/hosts are always different
+
+      when: mode == 'restore'
+
+  rescue:
+    - name: Restore backed up /etc/hosts on failure
+      copy:
+        dest: /etc/hosts
+        src: etc_hosts.backup_file
+        remote_src: true
+
+    - name: Force a failure of playbook on /etc/hosts update failure
+      command: /bin/false
+
 
 - name: Update name service caching server
   command: nscd -i hosts
