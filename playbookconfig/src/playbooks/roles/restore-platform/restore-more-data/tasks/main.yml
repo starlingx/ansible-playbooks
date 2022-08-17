@@ -162,7 +162,7 @@
 
   - block:
     - name: Gather latest SSH public key
-      command: ssh-keyscan -T 20 -t ecdsa {{ ssh_hostname }}
+      command: ssh-keyscan -T 20 -t ecdsa -p {{ ansible_port if ansible_port else 22 }} {{ ansible_host }}
       register: remote_keyscan
       until: remote_keyscan.stdout != ""
       retries: 6
