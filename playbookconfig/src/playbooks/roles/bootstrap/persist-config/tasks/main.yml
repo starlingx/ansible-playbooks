@@ -417,6 +417,7 @@
 
 - name: Invalidate name service caching server
   command: nscd -i hosts
+  when: os_release == "centos"
 
 - name: Set config path facts
   set_fact:
