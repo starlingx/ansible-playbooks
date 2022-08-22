@@ -1,0 +1,36 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role exists to save user images from local registry.
+#   Pull them through docker. Save them to a tar.
+#
+
+- name: Attach timestamp to registry backup filename
+  set_fact:
+    registry_fs_backup_file: "{{ registry_fs_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
+
+- name: Set backup files absolute path
+  set_fact:
+    registry_fs_backup_file_path: "{{ backup_dir }}/{{ registry_fs_backup_file }}"
+
+- name: Create a tgz archive for images backup
+  shell: >-
+    tar
+    --use-compress-program={{ compress_program }}
+    -cf {{ registry_fs_backup_file_path }}
+    $(ls -d
+    {{ image_backup.targets | join(' ') }}
+    2> /dev/null)
+  args:
+    warn: false
+  # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it",
+  # which makes tar return 1
+  register: img_tar_cmd
+  failed_when: img_tar_cmd.rc >= 2 or img_tar_cmd.rc < 0
+
+- debug:
+    msg: "Image registry backup available at {{ registry_fs_backup_file_path }}"

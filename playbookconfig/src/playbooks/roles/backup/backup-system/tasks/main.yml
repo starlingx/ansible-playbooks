@@ -10,9 +10,13 @@
 #   The backup data are stored in two separate tar files.
 #
 
-- name: Set parameters for ldap different paths by OS
+- name: Normalize/Set default parameters
   set_fact:
+    # Set parameters for ldap different paths by OS
     ldap_schema_path: "{{ '/etc/openldap/schema' if os_release == 'centos' else '/etc/ldap/schema' }}"
+    backup_registry_filesystem_required: "{{ backup_registry_filesystem | bool }}"
+    should_use_old_image_backup: "{{ backup_user_local_registry|bool == true }}"
+
 
 - name: Do StarlingX backup
   block:
@@ -272,6 +276,24 @@
       loop_control:
         label: "{{ item.item }}"
 
+    # Estimate registry filesystem backup size
+    - name: Verify image registry filesystem backup size
+      block:
+
+        - name: Get the size of each image directories to be backed up (in KiB)
+          shell: "du -sh -k  {{ item }} | awk '{print $1}'"
+          register: size_output_registry_image_fs
+          with_items: "{{ image_backup.targets }}"
+
+        - name: Determine the free disk space requirement for image registry backup
+          set_fact:
+            total_platform_size_estimation: "{{ total_platform_size_estimation|default(1024*128)|int + item.stdout|int }}"
+          with_items: "{{ size_output_registry_image_fs.results }}"
+          loop_control:
+            label: "{{ item.item }}"
+
+      when: backup_registry_filesystem_required
+
     # For SystemController the dc-vault is part of platform but restored after controller-0 unlock
     # Create a separate archive for it
     - block:
@@ -496,11 +518,15 @@
         dc_vault_backup_file_path: "{{ backup_dir }}/{{ dc_vault_backup_file }}"
 
     - name: Save user uploaded images from local registry to an archive
-      import_tasks: export-user-local-registry-images.yml
+      include_tasks: export-user-local-registry-images.yml
       vars:
         export_file_path: "{{ docker_local_registry_backup_file_path }}"
         kilo_free_size: "{{ remaining_disk_size_estimation }}"
-      when: backup_user_local_registry is defined and backup_user_local_registry|bool == true
+      when: should_use_old_image_backup
+
+    - name: Backup registry images filesystem
+      include_tasks: backup-image-registry-filesystem.yml
+      when: backup_registry_filesystem_required
 
     - name: Notify applications that backup succeeded
       command: /usr/bin/sysinv-utils notify post-backup-action success

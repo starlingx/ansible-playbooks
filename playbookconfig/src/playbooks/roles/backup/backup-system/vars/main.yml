@@ -12,6 +12,8 @@ skip_os_dbs:
 
 mariadb_pod: mariadb-server-0
 
+backup_user_local_registry: false
+
 # List of apps whose images will be included in the backup
 backup_include_apps: []
 
@@ -70,3 +72,10 @@ backup:
     - "{{ homedir }}/*/.cache"
     - "{{ homedir }}/*/.kube/**"
     - "{{ homedir }}/*/.kube"
+
+# Image filesystem backup configurations
+backup_registry_filesystem: false
+
+image_backup:
+  targets:
+    - "/var/lib/docker-distribution"

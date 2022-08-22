@@ -17,7 +17,10 @@
 
   # Main play
   roles:
-    - { role: common/prepare-env }
-    - { role: backup-restore/prepare-env }
-    - { role: backup/prepare-env, become: yes }
-    - { role: backup/backup-system, become: yes }
+    - role: backup/validate-input
+    - role: common/prepare-env
+    - role: backup-restore/prepare-env
+    - role: backup/prepare-env
+      become: yes
+    - role: backup/backup-system
+      become: yes
