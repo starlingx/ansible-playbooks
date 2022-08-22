@@ -47,6 +47,8 @@ items:
   spec:
     commonName: '{{ controller_floating_address }}'
     duration: 4320h0m0s
+    ipAddresses:
+    - "{{ controller_floating_address }}"
     issuerRef:
       kind: Issuer
       name: dc-adminep-root-ca-issuer
