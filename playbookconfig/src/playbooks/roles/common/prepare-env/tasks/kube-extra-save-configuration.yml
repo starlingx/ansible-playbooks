@@ -48,23 +48,30 @@
     create: yes
     block: |
       {% if apiserver_extra_args is defined %}
-      apiserver_extra_args: {{ apiserver_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
+      apiserver_extra_args:
+      {{ apiserver_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
       {% endif %}
       {% if controllermanager_extra_args is defined %}
-      controllermanager_extra_args: {{ controllermanager_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
+      controllermanager_extra_args:
+      {{ controllermanager_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
       {% endif %}
       {% if scheduler_extra_args is defined %}
-      scheduler_extra_args: {{ scheduler_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
+      scheduler_extra_args:
+      {{ scheduler_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
       {% endif %}
       {% if kubelet_configurations is defined %}
-      kubelet_configurations: {{ kubelet_configurations | to_nice_yaml | indent(2, indentfirst=True) }}
+      kubelet_configurations:
+      {{ kubelet_configurations | to_nice_yaml | indent(2, indentfirst=True) }}
       {% endif %}
       {% if apiserver_extra_volumes is defined %}
-      apiserver_extra_volumes: {{ apiserver_extra_volumes | to_yaml | indent(2, indentfirst=True) }}
+      apiserver_extra_volumes:
+      {{ apiserver_extra_volumes | to_yaml | indent(2, indentfirst=True) }}
       {% endif %}
       {% if controllermanager_extra_volumes is defined %}
-      controllermanager_extra_volumes: {{ controllermanager_extra_volumes | to_yaml | indent(2, indentfirst=True) }}
+      controllermanager_extra_volumes:
+      {{ controllermanager_extra_volumes | to_yaml | indent(2, indentfirst=True) }}
       {% endif %}
       {% if scheduler_extra_volumes is defined %}
-      scheduler_extra_volumes: {{ scheduler_extra_volumes | to_yaml | indent(2, indentfirst=True) }}
+      scheduler_extra_volumes:
+      {{ scheduler_extra_volumes | to_yaml | indent(2, indentfirst=True) }}
       {% endif %}
