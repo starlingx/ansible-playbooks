@@ -34,7 +34,7 @@
 - name: Set which platform certificates to install
   set_fact:
     install_oidc_auth_apps_certificate: false
-    install_system_open_ldap_certificate: false
+    install_system_open_ldap_certificate: "{{ true if distributed_cloud_role.stdout != 'subcloud' else false }}"
     install_system_registry_local_certificate: false
     install_system_restapi_gui_certificate: false
 
