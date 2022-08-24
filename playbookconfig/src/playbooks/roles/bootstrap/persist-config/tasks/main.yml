@@ -335,7 +335,7 @@
       - "{{ existing_ssl_ca_certificates_uuid.stdout_lines }}"
       when: existing_ssl_ca_certificates_uuid.stdout_lines | length > 0
 
-    when: replayed and mode != 'restore'
+    when: replayed
 
   - name: Copy ssl_ca certificate
     copy:
