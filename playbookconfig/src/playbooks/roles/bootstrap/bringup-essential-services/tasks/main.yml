@@ -50,15 +50,38 @@
     include_tasks: copy_central_registry_cert.yml
     when: distributed_cloud_role == 'subcloud'
 
+  - name: Set insecure registries
+    set_fact:
+      insecure_registries:
+        "{{ (insecure_registries|default([]) + [item.url|regex_replace('/.*', '')]) | unique }}"
+    with_items:
+      - "{{ docker_registry }}"
+      - "{{ gcr_registry }}"
+      - "{{ k8s_registry }}"
+      - "{{ quay_registry }}"
+      - "{{ elastic_registry }}"
+      - "{{ ghcr_registry }}"
+    when: (item.secure is defined and not item.secure)
+    no_log: true
+
   - name: Load images from archives if configured
     include: load_images_from_archive.yml input_archive={{ item.path }}
     with_items: "{{ images_archive_files }}"
     when: images_archive_exists
 
+  - name: Configure local docker registry
+    import_tasks: configure_local_registry.yml
+
   - name: Bring up local docker registry
     import_tasks: bringup_local_registry.yml
 
-  - name: Push images to local docker registry
+  - name: Configure dockerd to use local registry
+    import_tasks: configure_dockerd.yml
+
+  - name: Configure containerd to use local registry
+    import_tasks: configure_containerd.yml
+
+  - name: Populate local image registry
     import_role:
       name: common/push-docker-images
 
