@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -48,10 +48,26 @@
 - name: Update system controller's subnets
   import_tasks: update_system_controller_subnet.yml
 
-- name: Modify docker no_proxy if exists
-  shell: >-
-    source /etc/platform/openrc; system service-parameter-modify
-    docker proxy no_proxy={{ docker_no_proxy_combined | join(',') }}
+- block:
+  - name: Modify docker no_proxy if exists
+    shell: >-
+      source /etc/platform/openrc; system service-parameter-modify
+      docker proxy no_proxy={{ docker_no_proxy_combined | join(',') }}
+
+  - name: Apply docker_no_proxy update
+    shell: source /etc/platform/openrc; system service-parameter-apply docker
+
+  - name: Wait for sysinv agent to apply the runtime manifest
+    pause:
+      seconds: 30
+
+  - name: Check docker service status
+    command: systemctl is-active docker
+    register: docker_status
+    until: docker_status.rc == 0
+    retries: 9
+    delay: 10
+
   when: existing_docker_no_proxy_result.stdout | length > 0
 
 - name: Copy central registy cert
