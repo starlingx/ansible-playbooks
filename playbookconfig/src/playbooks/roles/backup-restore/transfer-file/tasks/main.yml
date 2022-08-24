@@ -15,24 +15,51 @@
       path: "{{ target_backup_dir }}/{{ backup_filename }}"
     register: check_backup_tarball
 
-  - block:
-    # TODO(wzhou): Considering to break backup tarball into multiple small tarfiles
-    # During restore upload each small tarfile one at a time to restore a subfunction.
+  # TODO(wzhou): Considering to break backup tarball into multiple small tarfiles
+  # During restore upload each small tarfile one at a time to restore a subfunction.
 
-    # Because Ansible copy module uses ansible_remote_tmp directory as
-    # a staging area to transfer file, the default ansible_remote_tmp
-    # which is set in /tmp (1GB) may be too small for backup tarball,
-    # we require user to set ansible_remote_tmp to a new directory in
-    # /home/sysadmin via -e option on the command line. For example:
-    # -e "ansible_remote_tmp=/home/sysadmin/ansible-restore"
-    - name: Transfer backup tarball to {{ target_backup_dir }} on controller-0
-      copy:
-        src: "{{ initial_backup_dir }}/{{ backup_filename }}"
-        dest: "{{ target_backup_dir }}"
-        owner: root
-        group: root
-        mode: 0644
+  # Because Ansible copy module uses ansible_remote_tmp directory as
+  # a staging area to transfer file, the default ansible_remote_tmp
+  # which is set in /tmp (1GB) may be too small for backup tarball,
+  # we require user to set ansible_remote_tmp to a new directory in
+  # /home/sysadmin via -e option on the command line. For example:
+  # -e "ansible_remote_tmp=/home/sysadmin/ansible-restore"
+  - name: Transfer backup tarball to {{ target_backup_dir }} on controller-0
+    copy:
+      src: "{{ initial_backup_dir }}/{{ backup_filename }}"
+      dest: "{{ target_backup_dir }}"
+      owner: root
+      group: root
+      mode: 0644
     when: not check_backup_tarball.stat.exists
+
+  - name: Restore registry backup tarball
+    block:
+
+      - name: Check if {{ registry_backup_filename }} has been uploaded already
+        stat:
+          path: "{{ target_backup_dir }}/{{ registry_backup_filename }}"
+        register: check_registry_backup_tarball
+
+      - name: Transfer registry backup tarball to {{ target_backup_dir }} on controller-0
+        copy:
+          src: "{{ initial_backup_dir }}/{{ registry_backup_filename }}"
+          dest: "{{ target_backup_dir }}"
+          owner: root
+          group: root
+          mode: 0644
+        when: not check_registry_backup_tarball.stat.exists
+
+      - name: Set registry backup tarball permissions
+        file:
+          path: "{{ target_backup_dir }}/{{ registry_backup_filename }}"
+          owner: root
+          group: root
+          mode: 0644
+        when: not check_registry_backup_tarball.stat.exists
+
+    when: registry_backup_filename is defined
+
   when: inventory_hostname != "localhost"
   become: yes
   become_user: root
