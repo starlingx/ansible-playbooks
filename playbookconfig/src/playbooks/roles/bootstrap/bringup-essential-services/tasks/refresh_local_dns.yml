@@ -107,3 +107,4 @@
 
 - name: Update name service caching server
   command: nscd -i hosts
+  when: os_release == "centos"
