@@ -576,6 +576,7 @@
           src: "{{ platform_backup_file_path }}"
           dest: "{{ host_backup_dir }}/"
           flat: yes
+        no_log: true
 
       - name: Transfer openstack backup tar files to the local machine if it exists
         fetch:
@@ -583,6 +584,7 @@
           dest: "{{ host_backup_dir }}/"
           flat: yes
         when: check_mariadb_pod.rc == 0 or openstack_status.stdout == "uploaded"
+        no_log: true
 
       # TODO transfer docker image archive which may be very big during remote play.
       # Fetch module fills the memory and has a very slow transfer rate due to base64 encoding
