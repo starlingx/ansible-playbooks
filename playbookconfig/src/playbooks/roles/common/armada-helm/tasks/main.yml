@@ -172,6 +172,9 @@
       - name: Check ingress validating webhook service and pod status
         shell: >-
           kubectl wait pod -n kube-system
+          {%- if mode == 'restore' %}
+          --field-selector spec.nodeName=controller-0
+          {%- endif %}
           -l $(kubectl get service -n kube-system {{ nginx_webhook_service.stdout }}
           -o jsonpath="{.spec.selector}" | tr -d "{}\"" | tr ":" "=")
           --for=condition=Ready --timeout=60s
