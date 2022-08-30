@@ -164,7 +164,7 @@
 
       - name: If on system restore mode, kill ingress validating webhook pod so it can be recreated
         shell: >-
-          kubectl delete pod -n kube-system
+          kubectl delete pod -n kube-system --force
           -l $(kubectl get service -n kube-system {{ nginx_webhook_service.stdout }}
           -o jsonpath="{.spec.selector}" | tr -d "{}\"" | tr ":" "=")
         when: mode == 'restore' and armada_check.rc == 0 and nginx_webhook_service.rc == 0
