@@ -1,0 +1,86 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Configure containerd to use local registry
+
+- name: Create containerd config file directory
+  file:
+    path: /etc/containerd
+    state: directory
+    mode: 0700
+
+- name: Determine the stream_server_address for containerd
+  set_fact:
+    stream_server_address: "{{ '127.0.0.1' if ipv6_addressing == False else '::1' }}"
+
+- name: Get guest local registry credentials
+  vars:
+    script_content: |
+      import keyring
+      password = keyring.get_password("mtce", "services")
+      if not password:
+          raise Exception("Local registry password not found.")
+      print(dict(username='mtce', password=str(password)))
+  shell: "{{ script_content }}"
+  args:
+    executable: /usr/bin/python
+  register: guest_local_registry_credentials_output
+
+- set_fact:
+    guest_local_registry_credentials: "{{ guest_local_registry_credentials_output.stdout }}"
+
+- name: Determine the registry_auth for containerd
+  set_fact:
+    registry_auth: "{{ (guest_local_registry_credentials['username'] + ':'
+    + guest_local_registry_credentials['password']) | b64encode }}"
+
+- name: Create config.toml file for containerd configuration
+  template:
+    src: "config.toml.j2"
+    dest: /etc/containerd/config.toml
+    mode: 0600
+
+- name: Remove puppet template for insecure registries
+  replace:
+    path: /etc/containerd/config.toml
+    after: '# Begin of insecure registries'
+    regexp: '^(<%- @insecure_registries.+)\n(.+)\n(.+)\n(.+end -%>)'
+    replace: ''
+
+- name: Update config.toml with insecure registries
+  blockinfile:
+    path: /etc/containerd/config.toml
+    insertafter: '# Begin of insecure registries'
+    marker: "        # {{ item }}"
+    block: |2
+              [plugins.cri.registry.mirrors."{{ item }}"]
+                endpoint = ["http://{{ item }}"]
+  loop:
+    "{{ insecure_registries }}"
+  when: (insecure_registries is defined and
+        insecure_registries | length > 0)
+
+- name: Get local registry credentials
+  vars:
+    script_content: |
+      import keyring
+      password = keyring.get_password("sysinv", "services")
+      if not password:
+          raise Exception("Local registry password not found.")
+      print(dict(username='sysinv', password=str(password)))
+  shell: "{{ script_content }}"
+  args:
+    executable: /usr/bin/python
+  register: local_registry_credentials_output
+
+- set_fact:
+    local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
+
+- name: Restart containerd
+  systemd:
+    name: containerd
+    state: restarted

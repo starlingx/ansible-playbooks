@@ -1,0 +1,31 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Configure dockerd to use the local registry
+
+- name: Configure docker's daemon.json to use local registry
+  block:
+    - name: Create daemon.json file for insecure registry
+      copy:
+        src: "{{ insecure_docker_registry_template }}"
+        dest: /etc/docker/daemon.json
+        remote_src: yes
+        mode: 0644
+
+    - name: Update daemon.json with registry IP
+      command: "sed -i -e 's|<%= @insecure_registries %>|$INSECURE_REGISTRIES|g' /etc/docker/daemon.json"
+      args:
+        warn: false
+      environment:
+        INSECURE_REGISTRIES: "{{ insecure_registries | to_json }}"
+
+    - name: Restart docker
+      systemd:
+        name: docker
+        state: restarted
+  when: (insecure_registries is defined and
+        insecure_registries | length > 0)
