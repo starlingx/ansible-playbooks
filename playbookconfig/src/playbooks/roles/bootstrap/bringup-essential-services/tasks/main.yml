@@ -64,10 +64,25 @@
     when: (item.secure is defined and not item.secure)
     no_log: true
 
-  - name: Load images from archives if configured
-    include: load_images_from_archive.yml input_archive={{ item.path }}
-    with_items: "{{ images_archive_files }}"
-    when: images_archive_exists
+  - name: Old-style registry backup restore
+    block:
+
+      - name: Load images from archives if configured
+        include: load_images_from_archive.yml input_archive={{ item.path }}
+        with_items: "{{ images_archive_files }}"
+        when: images_archive_exists
+
+    when: registry_backup_fqpn is not defined
+
+  - name: New-style registry backup restore
+    block:
+
+      - name: Restore image registry data to /var/lib/docker-distribution
+        command: tar -C / --overwrite -xpf {{ registry_backup_fqpn }} var/lib/docker-distribution
+        args:
+          warn: false
+
+    when: registry_backup_fqpn is defined
 
   - name: Configure local docker registry
     import_tasks: configure_local_registry.yml

@@ -53,4 +53,30 @@
         when: (on_box_data|bool == false)
     when: not backup_stat_result.stat.exists
 
+  - name: Verify if registry image backup is provided
+    block:
+      - set_fact:
+          registry_backup_initial_path: "{{ initial_backup_dir }}/{{ registry_backup_filename }}"
+
+      - name: Check if image registry backup file exists
+        stat:
+          path: "{{ registry_backup_initial_path }}"
+        register: registry_backup_stat_result
+
+      - block:
+
+          - name: Fail if the registry backup file does not exist on the target
+            fail:
+              msg: "Registry backup file {{ registry_backup_initial_path }} does not exist on the target."
+            when: (on_box_data|bool == true)
+
+          - name: Fail if the registry backup file does not exist locally
+            fail:
+              msg: "Registry backup file {{ registry_backup_initial_path }} does not exist on this machine."
+            when: (on_box_data|bool == false)
+
+        when: not registry_backup_stat_result.stat.exists
+
+    when: registry_backup_filename is defined
+
   delegate_to: "{{ inspection_target }}"

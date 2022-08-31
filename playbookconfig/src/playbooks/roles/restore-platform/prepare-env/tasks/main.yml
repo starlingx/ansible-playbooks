@@ -106,17 +106,31 @@
     set_fact:
       restore_data_file: "{{ target_backup_dir }}/{{ backup_filename }}"
 
-  - name: Transfer backup tarball to target if the file is off-box
+  - name: Transfer backup tarballs to target if the file is off-box
     include_role:
       name: backup-restore/transfer-file
     when: on_box_data|bool == false
 
-  - name: Copy the backup tarball to {{ target_backup_dir }} if the file is already on-box
-    copy:
-      src: "{{ initial_backup_dir }}/{{ backup_filename }}"
-      dest: "{{ target_backup_dir }}"
-      remote_src: yes
+  - name: Copy the backup tarballs to {{ target_backup_dir }} if the file is already on-box
+    block:
+
+      - copy:
+          src: "{{ initial_backup_dir }}/{{ backup_filename }}"
+          dest: "{{ target_backup_dir }}"
+          remote_src: yes
+
+      - copy:
+          src: "{{ initial_backup_dir }}/{{ registry_backup_filename }}"
+          dest: "{{ target_backup_dir }}"
+          remote_src: yes
+        when: registry_backup_filename is defined
+
     when: on_box_data|bool == true
+
+  - name: Set image registry backup fqpn
+    set_fact:
+      registry_backup_fqpn: "{{ target_backup_dir }}/{{ registry_backup_filename }}"
+    when: registry_backup_filename is defined
 
   - name: Extract override file from backup tarball
     command: >

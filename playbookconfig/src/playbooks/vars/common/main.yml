@@ -1,3 +1,7 @@
 ---
 supported_release_versions:
   - "22.12"
+
+# The staging directory to platform-backup to have a consistent behavior
+# regardless of where the restore playbook is executed (locally vs remotely)
+target_backup_dir: /opt/platform-backup
