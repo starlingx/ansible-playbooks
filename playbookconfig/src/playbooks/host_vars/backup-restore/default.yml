@@ -67,6 +67,11 @@ platform_backup_filename_prefix: "{{ inventory_hostname }}_platform_backup"
 #
 docker_local_registry_backup_filename_prefix: "{{ inventory_hostname }}_docker_local_registry_backup"
 
+# The local image registry filesystem backup tarball will be named in this format:
+# <registry_fs_backup_filename_prefix>_<timestamp>.tgz
+#
+registry_fs_backup_filename_prefix: "{{ inventory_hostname }}_image_registry_backup"
+
 # The OpenStack application name that will be considered for backup
 #
 openstack_app_name: "stx-openstack"
