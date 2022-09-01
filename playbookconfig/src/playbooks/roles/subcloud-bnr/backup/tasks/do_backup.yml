@@ -1,0 +1,103 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# TASKS DESCRIPTION:
+#   - Ensure no more than 2 software release backups can exist at a time
+#   - Perform subcloud backup
+#   - Restore the previous backup if exists in case of failure
+#
+- name: Perform subcloud backup
+  block:
+  - name: Set working directory and connection facts
+    set_fact:
+      working_dir: "{{ backup_dir if local else central_backup_dir }}"
+      target_connection: "{{ 'ssh' if local else 'local' }}"
+
+  - name: Purge old backup files
+    block:
+    - name: Check if the previous backup of {{ software_version }} already exists
+      stat:
+        path: "{{ working_dir }}"
+      register: wd_result
+      connection: "{{ target_connection }}"
+
+    - block:
+      - name: Set previous backup dir fact
+        set_fact:
+          previous_backup_dir: "{{ working_dir }}.tbd"
+
+      - name: Temporarily save the previous backup
+        command: mv {{ working_dir }} {{ previous_backup_dir }}
+        connection: "{{ target_connection }}"
+      when: wd_result.stat.exists and wd_result.stat.isdir
+
+    - name: Get current number of backup versions
+      find:
+        paths: "{{ working_dir | dirname }}"
+        file_type: directory
+        recurse: no
+        use_regex: yes
+        patterns: '^[0-9][0-9].[0-9][0-9]$'
+      register: find_result
+      connection: "{{ target_connection }}"
+
+    - block:
+      - name: Build list of backup directories
+        set_fact:
+          release_list: "{{ find_result.files | map(attribute='path') | list | sort }}"
+
+      - name: Remove backup directory of older release(s), keep only the newest version
+        file:
+          path: "{{ item }}"
+          state: absent
+        loop: "{{ release_list[0:-1] }}"
+        connection: "{{ target_connection }}"
+      when: find_result.matched > 1
+
+    when: not local or backup_dir == default_local_backup_dir
+
+  - name: Create local backup directory if it does not exist
+    file:
+      path: "{{ backup_dir }}"
+      state: directory
+      mode: '0755'
+
+  - name: Run {{ inventory_hostname }} backup playbook
+    command: |
+      ansible-playbook /usr/share/ansible/stx-ansible/playbooks/backup.yml -e "@{{ backup_overrides }}"
+    register: platform_backup_output
+
+  - name: Print the output of platform backup playbook
+    debug:
+      msg: "{{ platform_backup_output.stdout }}"
+
+  - name: Remove previous backup upon successful subcloud backup (local storage)
+    file:
+      path: "{{ previous_backup_dir }}"
+      state: absent
+    when: previous_backup_dir is defined and local
+
+  rescue:
+    - name: Remove empty/incomplete backup directory
+      file:
+        path: "{{ working_dir }}"
+        state: absent
+      connection: "{{ target_connection }}"
+
+    - name: Restore previous backup upon failure
+      command: mv {{ previous_backup_dir }} {{ working_dir }}
+      connection: "{{ target_connection }}"
+      when: previous_backup_dir is defined
+
+    - name: Force fail post rescue of backup task failure
+      fail:
+        msg: "Failed to perform backup of {{ inventory_hostname }}"
+
+  always:
+    - name: Remove backup overrides file on {{ inventory_hostname }}
+      file:
+        path: "{{ backup_overrides }}"
+        state: absent

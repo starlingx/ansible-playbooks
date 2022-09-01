@@ -1,0 +1,23 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is used to back up the subcloud by calling the backup.yml playbook
+#   on the subcloud and store the backup data to the location specified in
+#   overrides file.
+#
+- name: Validate user input
+  import_tasks: validate_input.yml
+
+- name: Prepare backup overrides for {{ inventory_hostname }}
+  import_tasks: prepare_subcloud_overrides.yml
+
+- name: Perform subcloud backup
+  import_tasks: do_backup.yml
+
+- name: Transfer subcloud backup to the system controller
+  include_tasks: transfer_backup.yml
+  when: not local

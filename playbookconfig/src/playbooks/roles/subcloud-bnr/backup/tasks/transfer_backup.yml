@@ -1,0 +1,75 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# TASKS DESCRIPTION:
+#   Transfer subcloud backup to the system controller. Restore the previous
+#   backup if exists in case of transfer failure.
+#
+- name: Transfer subcloud platform backup file to the system controller
+  block:
+  - name: Create backup storage directory for {{ inventory_hostname }} on system controller
+    file:
+      path: "{{ central_backup_dir }}"
+      state: directory
+      mode: '0755'
+      owner: root
+      group: root
+      recurse: yes
+    connection: local
+
+  - name: Get files in {{ backup_dir }} on {{ inventory_host_name }}
+    find:
+      paths: "{{ backup_dir }}"
+      patterns: "{{ platform_backup_filename_prefix }}*"
+    register: backup_files
+
+  - name: Get latest backup file
+    set_fact:
+      local_backup_file: "{{ (backup_files.files | sort(attribute='mtime') | last).path }}"
+
+  - name: Transfer platform backup of {{ inventory_hostname }} to the system controller
+    command: >
+       sshpass -p {{ ansible_ssh_pass }}
+       rsync -a -e 'ssh -o StrictHostKeyChecking=no'
+       {{ ansible_ssh_user }}@{{ inventory_hostname }}:{{ local_backup_file }} {{ central_backup_dir }}
+    register: backup_transfer
+    retries: 3
+    delay: 2
+    until: backup_transfer.rc == 0
+    no_log: true
+    connection: local
+
+  - name: Remove previous backup upon successful subcloud backup (central storage)
+    file:
+      path: "{{ previous_backup_dir }}"
+      state: absent
+    connection: local
+    when: previous_backup_dir is defined
+
+  rescue:
+    - name: Remove empty/incomplete backup directory on the system controller
+      file:
+        path: "{{ central_backup_dir }}"
+        state: absent
+      connection: local
+
+    - name: Restore previous backup upon failure
+      command: mv {{ previous_backup_dir }} {{ central_backup_dir }}
+      connection: local
+      when: previous_backup is defined
+
+    - name: Force fail post rescue of transfer task failure
+      fail:
+        msg: "An error occurred while transferring backup file to the system controller."
+
+  always:
+    - name: Remove staging backup file/directory from {{ inventory_hostname }}
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ local_backup_file }}"
+        - "{{ default_local_staging_dir }}"

@@ -1,0 +1,11 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is used to restore the subcloud by calling the restore_platform.yml
+#   playbook on the subcloud using the backup specified in overrides file.
+#
+- debug: var=mode
