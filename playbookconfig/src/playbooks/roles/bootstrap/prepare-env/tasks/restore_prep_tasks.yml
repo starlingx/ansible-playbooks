@@ -71,11 +71,22 @@
       path: "{{ temp_ssl_ca_dir }}/{{ temp_ssl_ca_file }}"
       state: absent
 
-  - name: Transfer ssl_ca certificate file to {{ temp_ssl_ca_dir }}/{{ temp_ssl_ca_file }}
-          if defined in command line
-    copy:
-      src: "{{ ssl_ca_certificate_file }}"
-      dest: "{{ temp_ssl_ca_dir }}/{{ temp_ssl_ca_file }}"
+  - block:
+    - name: When target is on-box, transfer ssl_ca certificate file to
+            {{ temp_ssl_ca_dir }}/{{ temp_ssl_ca_file }} if defined in command line
+      copy:
+        src: "{{ ssl_ca_certificate_file }}"
+        dest: "{{ temp_ssl_ca_dir }}/{{ temp_ssl_ca_file }}"
+        remote_src: yes
+      when: (on_box_data is not defined) or (on_box_data|bool == true)
+
+    - name: When target is off-box, transfer ssl_ca certificate file to
+            {{ temp_ssl_ca_dir }}/{{ temp_ssl_ca_file }} if defined in command line
+      copy:
+        src: "{{ ssl_ca_certificate_file }}"
+        dest: "{{ temp_ssl_ca_dir }}/{{ temp_ssl_ca_file }}"
+      when: (on_box_data is defined) and (on_box_data|bool == false)
+
     when: ssl_ca_certificate_file is defined
 
   - name: Extract ssl_ca certificate from backup archive

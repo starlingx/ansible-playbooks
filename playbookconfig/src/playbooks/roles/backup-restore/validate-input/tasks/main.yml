@@ -79,4 +79,24 @@
 
     when: registry_backup_filename is defined
 
+  - block:
+    - name: Check if ssl_ca certificate file exists
+      stat:
+        path: "{{ ssl_ca_certificate_file }}"
+      register: ssl_ca_certificate_stat_result
+
+    - block:
+      - name: Fail if ssl_ca certificate file does not exist on the target
+        fail:
+          msg: "{{ ssl_ca_certificate_file }} does not exist on the target."
+        when: (on_box_data|bool == true)
+
+      - name: Fail if ssl_ca certificate file does not exist locally
+        fail:
+          msg: "{{ ssl_ca_certificate_file }} does not exist on this machine."
+        when: (on_box_data|bool == false)
+      when: not ssl_ca_certificate_stat_result.stat.exists
+
+    when: ssl_ca_certificate_file is not none
+
   delegate_to: "{{ inspection_target }}"
