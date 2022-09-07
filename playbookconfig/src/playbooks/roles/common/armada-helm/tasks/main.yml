@@ -177,7 +177,11 @@
           {%- endif %}
           -l $(kubectl get service -n kube-system {{ nginx_webhook_service.stdout }}
           -o jsonpath="{.spec.selector}" | tr -d "{}\"" | tr ":" "=")
-          --for=condition=Ready --timeout=60s
+          --for=condition=Ready
+        register: webhook_pod_status
+        until: webhook_pod_status.rc == 0
+        retries: 6
+        delay: 10
         when: armada_check.rc == 0 and nginx_webhook_service.rc == 0
 
     - name: Uninstall Armada revisions
