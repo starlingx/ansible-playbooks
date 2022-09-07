@@ -32,8 +32,10 @@
       path: "{{ hieradata_workdir }}/static.yaml"
       line: "{{ item }}"
     with_items:
-      - "keystone::dc_admin_user_id: {{ system_controller_keystone_admin_user_id }}"
-      - "keystone::dc_admin_project_id: {{ system_controller_keystone_admin_project_id }}"
+      - "keystone::{{ 'bootstrap::' if os_release == 'debian' }}dc_admin_user_id:
+        {{ system_controller_keystone_admin_user_id }}"
+      - "keystone::{{ 'bootstrap::' if os_release == 'debian' }}dc_admin_project_id:
+        {{ system_controller_keystone_admin_project_id }}"
       - "openstack::keystone::bootstrap::dc_services_project_id: {{ system_controller_keystone_services_project_id }}"
       - "platform::sysinv::bootstrap::dc_sysinv_user_id: {{ system_controller_keystone_sysinv_user_id }}"
       - "platform::dcmanager::bootstrap::dc_dcmanager_user_id: {{system_controller_keystone_dcmanager_user_id}}"
