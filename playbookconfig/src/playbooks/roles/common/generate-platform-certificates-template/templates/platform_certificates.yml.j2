@@ -114,6 +114,8 @@ items:
     dnsNames:
     - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain }}"
     - controller
+    - controller-0
+    - controller-1
     duration: "{{ system_platform_certificate.duration }}"
     ipAddresses:
     - "{{ management_floating_ip.stdout }}"
