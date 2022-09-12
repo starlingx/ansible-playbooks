@@ -1,0 +1,5 @@
+---
+supported_release_versions_for_backup:
+  - "21.12"
+  - "22.06"
+  - "22.12"

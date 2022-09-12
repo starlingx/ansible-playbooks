@@ -5,7 +5,19 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
-#   This role is used to remove the backup file of the specified software
-#   release and storage location.
+#   This role is to remove the subcloud backup data of the specified
+#   software release from local/central storage.
 #
-- debug: var=mode
+- name: Validate user input
+  import_tasks: validate_input.yml
+
+- name: Prepare remote execution environment
+  include_role:
+    name: common/prepare-env
+  when: local
+
+- name: Remove {{ software_version }} backup data for {{ inventory_hostname }}
+  file:
+    path: "{{ removal_dir }}"
+    state: absent
+  connection: "{{ target_connection }}"

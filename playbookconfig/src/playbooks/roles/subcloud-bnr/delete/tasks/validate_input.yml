@@ -1,0 +1,48 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# TASKS DESCRIPTION:
+#   Validate user input and set facts for subsequent tasks
+#
+- name: Fail if software_version is not specified
+  fail:
+    msg: "Software version is not specified."
+  when: software_version is undefined
+
+- name: Fail if local is not specified or mis-configured
+  fail:
+    msg: "local parameter must be specified as true or false"
+  when: local is undefined or local|type_debug != 'bool'
+
+- name: Retrieve software version of the system controller
+  shell: source /etc/build.info; echo $SW_VERSION
+  register: system_controller_sw_version
+  connection: local
+
+- name: Fail if the specified software version is invalid
+  fail:
+    msg: "Specified software_version is invalid. Supported version: {{ supported_release_versions_for_backup|join(', ') }}"
+  when: software_version not in supported_release_versions_for_backup
+
+- name: Fail if storage location is not specified for backup removal on system controller
+  fail:
+    msg: "central_backup_dir must be specified if 'local' parameter is set to false."
+  when: central_backup_dir is undefined and not local
+
+- name: Update local_backup_dir fact
+  set_fact:
+    local_backup_dir: "{{ local_backup_dir }}/{{ software_version }}"
+  when: local
+
+- name: Update central_backup_dir fact
+  set_fact:
+    central_backup_dir: "{{ central_backup_dir }}/{{ inventory_hostname }}/{{ software_version }}"
+  when: not local
+
+- name: Set delete path and target connection
+  set_fact:
+    removal_dir: "{{ central_backup_dir if not local else local_backup_dir }}"
+    target_connection: "{{ 'ssh' if local else 'local' }}"
