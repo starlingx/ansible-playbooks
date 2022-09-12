@@ -91,8 +91,10 @@
 
   - name: Extract ssl_ca certificate from backup archive
     command: >-
-      tar -xf {{ restore_data_file }} -C {{ temp_ssl_ca_dir }} -p --transform='s,.*/,,'
-      --wildcards */{{ temp_ssl_ca_file }}*
+      tar -xvf '{{ restore_data_file }}'
+      -C '{{ temp_ssl_ca_dir }}'
+      -p --transform='s,.*/,,'
+      '{{ archive_config_permdir }}/{{ temp_ssl_ca_file }}'
     args:
       warn: false
     failed_when: false
