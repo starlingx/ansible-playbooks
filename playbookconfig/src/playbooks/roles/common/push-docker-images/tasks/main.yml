@@ -149,7 +149,23 @@
   - set_fact:
       download_images_task_name: "Download any missing images and push to local registry"
 
+  - name: Clear alarm if exists
+    script: fm_alarm_set_clear.py "--clear"
+    register: alarm_result
+    failed_when: false
+
   - debug: var=push_imported_images_output.stdout_lines
+
+  rescue:
+  - name: Raise alarm with push_docker failed
+    script: fm_alarm_set_clear.py "--set"
+    register: alarm_result
+    failed_when: false
+
+  - name: Force fail when error occurs
+    fail:
+      msg: "An error occurred while push docker images to local registry."
+
   when: images_archive_exists | default(false)
 
 - name: "{{ download_images_task_name }}"
