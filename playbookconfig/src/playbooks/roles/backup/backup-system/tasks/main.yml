@@ -260,10 +260,17 @@
         mode: 0755
         content: '{{ updates_list | default("") }}'
 
+    - name: Set exclude targets
+      set_fact:
+        exclude_targets:
+          "{{ backup.exclude + _exclude_dirs.split(',') | reject('equalto', '') | list }}"
+      vars:
+        _exclude_dirs: "{{ exclude_dirs | default(\"\") }}"
+
     # Now Postgres data and MariaDB data are stored in staging dir, we can estimate
     # the disk size requirement for the backup archive.
     - name: Check the size (in KiB) of directories that will be backed up for platform
-      shell: "du -sh -k  {{ item }} --exclude {{ backup.exclude|join(' --exclude ') }} | awk '{print $1}'"
+      shell: "du -sh -k  {{ item }} --exclude {{ exclude_targets|join(' --exclude ') }} | awk '{print $1}'"
       register: size_output_platform
       with_items: "{{ backup.targets }}"
 
@@ -562,7 +569,7 @@
       shell: >-
         tar
         --use-compress-program={{ compress_program }}
-        --exclude {{ backup.exclude | map('regex_replace', '^/', '') | list | join(' --exclude ') }}
+        --exclude {{ exclude_targets | map('regex_replace', '^/', '') | list | join(' --exclude ') }}
         -cf {{ platform_backup_file_path }}
         $(ls -d
         {{ final_backup_targets | join(' ') }}
