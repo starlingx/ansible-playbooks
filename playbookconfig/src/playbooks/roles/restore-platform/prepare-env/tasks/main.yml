@@ -67,6 +67,10 @@
       msg: "kubeadm version from kube_cmd_versions {{ restore_k8s_version }}"
   delegate_to: "{{ inspection_target }}"
 
+- name: Wait for system to become reachable
+  wait_for_connection:
+    timeout: 10
+
 - block:
   # Bail if the host has been unlocked
   - name: Check initial config flag
