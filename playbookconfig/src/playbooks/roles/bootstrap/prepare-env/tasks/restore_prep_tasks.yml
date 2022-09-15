@@ -26,6 +26,8 @@
     failed_when: false
     register: bkp_has_branding
 
+  # Restore branding error can be ignored for now as /opt is under ostree read-only
+  # permission, this will fixed on another task tracked under the same storyboard
   - name: Restore branding tar file
     command: >-
       tar -C /opt/branding -xpf {{ restore_data_file }} --transform='s,.*/,,'
@@ -34,6 +36,7 @@
       warn: false
     when: bkp_has_branding.rc is defined and
         bkp_has_branding.rc == 0
+    failed_when: false
 
   - name: Remove unwanted directory
     file:

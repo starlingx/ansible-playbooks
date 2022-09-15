@@ -192,14 +192,10 @@
   include_vars: "{{ temp_upgrade_platform_dir }}/{{ override_filename }}"
 
 - name: Extract the upgrade metadata
-  unarchive:
-    src: "{{ restore_data_file }}"
-    dest: "{{ temp_upgrade_platform_dir }}"
-    extra_opts:
-    - opt/platform/config/*/upgrades/metadata
-    - --transform
-    - s,.*/,,
-    remote_src: yes
+  command: >-
+    tar -C {{ temp_upgrade_platform_dir }} -xf {{ restore_data_file }}
+    --wildcards
+    --transform 's,.*/,,'
 
 - name: Load upgrade metadata
   command: "cat {{ temp_upgrade_platform_dir }}/metadata"

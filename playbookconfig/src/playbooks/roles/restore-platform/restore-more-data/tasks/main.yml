@@ -8,6 +8,21 @@
 #   This role is to restore the remaining data in the backup tarball
 #   during platform restore.
 #
+- name: Get os-release from backup file
+  shell: |
+    tar -tf {{ restore_data_file }}
+    --to-stdout etc/os-release | grep '^NAME=' | sed 's/NAME=//'
+  register: backup_distro
+
+- name: Set backup OS Release to Debian
+  set_fact:
+    backup_os_release: "debian"
+  when: "'Debian' in backup_distro.stdout"
+
+- name: Set backup OS Release to Centos
+  set_fact:
+    backup_os_release: "centos"
+  when: "'Debian' not in backup_distro.stdout"
 
 - name: Set parameters for archive paths
   set_fact:
@@ -153,12 +168,37 @@
     warn: false
 
 - block:
+  - name: Get current MACs sshd config
+    command: grep '^MACs' /etc/ssh/sshd_config
+    register: debian_sshd_macs
+
   - name: Restore SSH config directory
     command: >-
       tar -C /etc/ssh -xpf {{ restore_data_file }} --overwrite
       --wildcards --transform='s,.*/,,' etc/ssh/*
     args:
       warn: false
+
+  # if restoring on Debian, additional work is needed when restoring data from
+  # a CentOS deployment or else sshd will fail when controller-0 is unlocked
+  # TODO (heitormatsui): remove when CentOS -> Debian upgrade support is deprecated
+  - block:
+    - name: Replace MACs from CentOS with Debian
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^MACs"
+        line: "{{ debian_sshd_macs.stdout_lines[0] }}"
+
+    - name: Gather SSH private keys
+      command: find /etc/ssh -name '*_key'
+      register: pvt_keys
+
+    - name: Ensure read-only permissions to private keys
+      file:
+        path: "{{ item }}"
+        mode: 0600
+      with_items: "{{ pvt_keys.stdout_lines }}"
+    when: backup_os_release == "centos" and os_release == "debian"
 
   - block:
     - name: Gather latest SSH public key
@@ -239,54 +279,70 @@
     group: root
     mode: 0755
 
-- name: Check if there is openldap (CentOS) configuration on backup
-  shell: "tar -tf {{ restore_data_file }} | grep -E 'etc\\/openldap\\/.*'"
-  args:
-    warn: false
-  failed_when: false
-  register: bkp_has_centos_ldap_config
+- name: Restore LDAP configuration
+  block:
+    - name: Check if CentOS openldap configuration is included in the backup
+      shell: "tar -tf {{ restore_data_file }} | grep -E 'etc\\/openldap\\/.*'"
+      args:
+        warn: false
+      failed_when: false
+      register: bkp_has_centos_ldap_config
 
-- name: Restore openldap configuration
-  command: tar -C / -xpf {{ restore_data_file }} --wildcards --overwrite etc/openldap/*
-  args:
-    warn: false
-  when: bkp_has_centos_ldap_config.rc is defined and
-    bkp_has_centos_ldap_config.rc == 0
+    - block:
+      - name: Restore openldap configuration
+        command: tar -C / -xpf {{ restore_data_file }} --wildcards --overwrite etc/openldap/*
+        args:
+          warn: false
 
-- name: Move /etc/openldap configuration to /etc/ldap if restoring on Debian
-  command: mv -Rf /etc/openldap/* /etc/ldap/
-  args:
-    warn: false
-  when: bkp_has_centos_ldap_config.rc is defined and
-    bkp_has_centos_ldap_config.rc == 0 and
-    os_release == "debian"
+      # TODO (heitormatsui): remove when Centos -> Debian upgrade support become deprecated
+      - block:
+        - name: Copy openldap configuration to staging directory
+          command: cp -Rf /etc/openldap/ {{ staging_dir }}/openldap
+          args:
+            warn: false
 
-- name: Check if there is ldap configuration on backup
-  shell: "tar -tf {{ restore_data_file }} | grep -E 'etc\\/ldap\\/.*'"
-  args:
-    warn: false
-  failed_when: false
-  register: bkp_has_debian_ldap_config
-  when: bkp_has_centos_ldap_config.rc is not defined or
-    bkp_has_centos_ldap_config.rc != 0
+        - name: Replace Centos paths with Debian paths on files
+          shell: >-
+            find {{ staging_dir }}/openldap/schema/ -type f | xargs sed -i
+            "s#/usr/lib64/openldap#/usr/lib/ldap#;
+            s#/var/lib/openldap-data#/var/lib/ldap#;
+            s#/etc/openldap#/etc/ldap#"
+          args:
+            warn: false
 
-- name: Restore ldap configuration
-  command: tar -C / -xpf {{ restore_data_file }} --wildcards --overwrite etc/ldap/*
-  args:
-    warn: false
-  when: bkp_has_debian_ldap_config.rc is defined and
-    bkp_has_debian_ldap_config.rc == 0
+        - name: Copy /etc/openldap configuration to /etc/ldap if restoring on Debian
+          command: cp -Rf {{ staging_dir }}/openldap/. /etc/ldap
+        when: os_release == "debian"
+      when: bkp_has_centos_ldap_config.rc == 0
 
-- name: Restore ldap
-  shell: "slapadd -F {{ ldap_schema_path }} -l {{ staging_dir }}/ldap.db"
+    - block:
+      - name: Check if Debian ldap configuration is included in the backup
+        shell: "tar -tf {{ restore_data_file }} | grep -E 'etc\\/ldap\\/.*'"
+        args:
+          warn: false
+        failed_when: false
+        register: bkp_has_debian_ldap_config
 
-- name: Start openldap service
-  shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap start"
+      - name: Restore ldap configuration
+        command: tar -C / -xpf {{ restore_data_file }} --wildcards --overwrite etc/ldap/*
+        args:
+          warn: false
+        when: bkp_has_debian_ldap_config.rc == 0
+      when: bkp_has_centos_ldap_config.rc != 0
 
-- name: Delete file from staging dir
-  file:
-    path: "{{ staging_dir }}/ldap.db"
-    state: absent
+    - name: Restore ldap
+      command: "slapadd -F {{ ldap_schema_path }} -l {{ staging_dir }}/ldap.db"
+
+    - name: Start openldap service
+      shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap start"
+  always:
+    - name: Delete files from staging dir
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - "{{ staging_dir }}/ldap.db"
+        - "{{ staging_dir }}/openldap"
 
 # In order to determine the home dir pattern of the backed up data
 # we only check var/home and use that to know how to extract.
