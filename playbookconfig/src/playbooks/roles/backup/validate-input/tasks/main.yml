@@ -13,5 +13,5 @@
   when: >
     backup_user_local_registry is defined and
     backup_registry_filesystem is defined and
-    backup_user_local_registry|bool is true and
-    backup_registry_filesystem|bool is true
+    backup_user_local_registry|bool and
+    backup_registry_filesystem|bool
