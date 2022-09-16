@@ -562,6 +562,16 @@
         crushmap_file_: "{{ crushmap_file | default(\"\") }}"
         ceph_conf_ctrl_0_: "{{ ceph_conf_ctrl_0 | default(\"\") }}"
 
+    - name: Add /etc to backup targets
+      set_fact:
+        final_backup_targets: "{{ final_backup_targets + etc_backup.targets.full }}"
+      when: optimize_etc_backup|bool == false
+
+    - name: Add optimized /etc to backup targets
+      set_fact:
+        final_backup_targets: "{{ final_backup_targets + etc_backup.targets.optimized }}"
+      when: optimize_etc_backup|bool == true
+
     # This is nasty to understand, but check the -vvv output to see what is going on
     # When we update the community.general collection from 1.3.6 to >=5.2.0, we can use "archive"
     # with exclusion_patterns
