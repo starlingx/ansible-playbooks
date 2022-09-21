@@ -8,10 +8,13 @@
 #   This role loads variables containing images.
 #
 
-- name: Set kubernetes long version
-  set_fact:
-    kubernetes_long_version: "{{ kubernetes_version if kubernetes_version.startswith('v')
-                              else 'v' + kubernetes_version }}"
+- name: Fail if kubernetes_version is not defined
+  fail: msg="The mandatory parameter kubernetes_version is not defined."
+  when: kubernetes_version is not defined
+
+- name: Fail if kubernetes_long_version is not defined
+  fail: msg="The mandatory parameter kubernetes_long_version is not defined."
+  when: kubernetes_long_version is not defined
 
 - block:
   - name: Get the list of kubernetes images

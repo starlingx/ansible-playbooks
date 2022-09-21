@@ -825,29 +825,6 @@
         apiserver_oidc.username_claim is defined and
         apiserver_oidc.groups_claim is defined))
 
-# Set the kubernetes_version if the user hasn't overridden it
-- name: Check if kubernetes_version is specified
-  set_fact:
-    found_kubernetes_version: "{{ kubernetes_version is defined }}"
-
-- block:
-  - name: Set kubernetes_version for fresh installs.
-    set_fact:
-      kubernetes_version: "{{ fresh_install_k8s_version }}"
-    when: migrate_platform_data is undefined or not migrate_platform_data
-
-  - name: Set kubernetes_version for upgrades.
-    set_fact:
-      kubernetes_version: "{{ upgrade_k8s_version }}"
-    when: migrate_platform_data is defined and migrate_platform_data
-
-  - name: Set kubernetes_version for restores.
-    set_fact:
-      kubernetes_version: "{{ restore_k8s_version }}"
-    when: restore_k8s_version is defined
-
-  when: not found_kubernetes_version
-
 - name: Check overridden kubernetes_version matches the backup.
   fail:
     msg: >

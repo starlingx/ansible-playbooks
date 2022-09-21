@@ -1,0 +1,2 @@
+---
+apiserver_feature_gates: RemoveSelfLink=false

@@ -135,7 +135,8 @@
   - name: Check controller-0 is in online state
     shell: source /etc/platform/openrc; system host-show controller-0 --column availability --format value
     register: check_online
-    retries: 10
+    retries: 15
+    delay: 10
     until: check_online.stdout == "online"
 
   - name: Set async parameters

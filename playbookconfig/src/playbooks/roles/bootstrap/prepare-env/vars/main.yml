@@ -27,7 +27,6 @@ apiserver_extra_args_defaults:
   encryption-provider-config: "{{ encryption_provider_config }}"
   default-not-ready-toleration-seconds: "30"
   default-unreachable-toleration-seconds: "30"
-  feature-gates: "TTLAfterFinished=true,RemoveSelfLink=false"
   event-ttl: "24h"
   audit-log-path: "/var/log/kubernetes/audit/audit.log"
   audit-log-maxage: "3"
@@ -38,7 +37,6 @@ controllermanager_extra_args_defaults:
   node-monitor-period: "2s"
   node-monitor-grace-period: "20s"
   pod-eviction-timeout: '30s'
-  feature-gates: "TTLAfterFinished=true"
   flex-volume-plugin-dir: "{{ kubelet_vol_plugin_dir }}"
 
 scheduler_extra_args_defaults: { }
@@ -49,8 +47,6 @@ kubelet_extra_args_defaults:
 kubelet_configurations_defaults:
   nodeStatusUpdateFrequency: "4s"
   failSwapOn: false
-  featureGates:
-    HugePageStorageMediumSize: true
   cgroupDriver: "cgroupfs"
   cgroupRoot: "{{ kubelet_cgroup_root }}"
   imageGCHighThresholdPercent: 79
