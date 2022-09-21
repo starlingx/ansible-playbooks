@@ -105,6 +105,10 @@ host_backup_dir: "{{ lookup('env', 'HOME') }}"
 #
 restore_in_progress_flag: /etc/platform/.restore_in_progress
 
+# By default, restore cannot run if a restore is already in progress.
+# By setting this to true, the restore_in_progress_flag will be ignored.
+force_restore: false
+
 # This variable is set to true when restore_openstack playbook is
 # played again to bring up remaining OpenStack services after Ceph
 # data is restored.

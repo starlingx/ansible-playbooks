@@ -92,16 +92,6 @@
       msg: "Host {{ ansible_host }} has been unlocked. Cannot perform restore."
     when: initial_config_done.stat.exists
 
-  - name: Check if restore is in progress
-    stat:
-      path: "{{ restore_in_progress_flag }}"
-    register: restore_in_progress
-
-  - name: Fail if restore is already in progress
-    fail:
-      msg: " Restore is already in progress!"
-    when: restore_in_progress.stat.exists
-
   - name: Set restore file parameter
     set_fact:
       restore_data_file: "{{ target_backup_dir }}/{{ backup_filename }}"
