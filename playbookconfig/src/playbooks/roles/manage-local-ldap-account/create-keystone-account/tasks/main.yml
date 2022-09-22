@@ -18,10 +18,10 @@
         Password: '{{ in_user_password }}'
         "\\~\\$": exit
 
-  - name: Add keystone user to the admin role
+  - name: Add keystone user to the {{ in_user_role }} role
     shell: |
       source /etc/platform/openrc
-      openstack {{ os_param_region_name }} role add --user {{ in_user_id }} --project admin admin
+      openstack {{ os_param_region_name }} role add --user {{ in_user_id }} --project admin {{ in_user_role }}
 
   when: ('systemcontroller' in group_names)
 

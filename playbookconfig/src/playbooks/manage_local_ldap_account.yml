@@ -15,6 +15,8 @@
 #                             (default: 90)
 # - password_warning_period : number of days to warn about changing the password
 #                             (default: 2)
+# - user_role               : role for the new user as 'admin'/'member'/'reader'
+#                             (default: 'admin')
 #
 # The inventory file contains the password of system controller
 # Do not add any subclouds to the inventory file. The list of subclouds
@@ -68,6 +70,11 @@
       msg: "The user account cannot be empty. Please provide a valid user account."
     when: user_id == ''
 
+  - name: Validate user_role
+    fail:
+      msg: "The user role must be 'admin', 'member' or 'reader'."
+    when: "user_role is defined and user_role not in ['admin', 'member', 'reader']"
+
   - name: Default to create if mode is not specified
     set_fact:
       in_mode: "create"
@@ -98,6 +105,10 @@
   - name: Set the user id and password facts for subsequent plays
     set_fact:
       in_user_id: "{{ user_id }}"
+
+  - name: Set the user role fact for subsequent plays
+    set_fact:
+      in_user_role: "{{ user_role if user_role is defined else 'admin' }}"
 
   - name: Set sudo_permission flag fact upfront
     set_fact:
