@@ -156,6 +156,10 @@
   become: yes
   become_user: root
 
+- name: Perform additional validation that requires values from after restore is started
+  import_role:
+    name: backup-restore/validate-with-overrides
+
 - name: Set archive parameters for bootstrap
   set_fact:
     archive_puppet_permdir: "opt/platform/puppet/{{ software_version }}/hieradata"

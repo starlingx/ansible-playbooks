@@ -1,0 +1,16 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role validates user input common to all B&R playbooks
+#
+
+- name: Ensure replacement MAC address is only used for AIO-SX restores
+  fail:
+    msg: "This backup is not AIO-SX, detected: {{ system_type }} - {{ system_mode }}"
+  when: >
+    replacement_mgmt_mac_required and
+    (system_type != 'All-in-one' or system_mode != 'simplex')
