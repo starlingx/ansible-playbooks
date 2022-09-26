@@ -15,7 +15,7 @@
     # Set parameters for ldap different paths by OS
     ldap_schema_path: "{{ '/etc/openldap/schema' if os_release == 'centos' else '/etc/ldap/schema' }}"
     backup_registry_filesystem_required: "{{ backup_registry_filesystem | bool }}"
-    should_use_old_image_backup: "{{ backup_user_local_registry|bool == true }}"
+    should_use_old_image_backup: "{{ backup_user_images|bool == true }}"
 
 
 - name: Do StarlingX backup
@@ -513,21 +513,21 @@
     - name: Attach timestamp to backups filename
       set_fact:
         platform_backup_file: "{{ platform_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
-        docker_local_registry_backup_file: "{{ docker_local_registry_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
+        user_images_backup_file: "{{ user_images_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
         openstack_backup_file: "{{ openstack_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
         dc_vault_backup_file: "{{ dc_vault_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
 
     - name: Set backup files absolute path
       set_fact:
         platform_backup_file_path: "{{ backup_dir }}/{{ platform_backup_file }}"
-        docker_local_registry_backup_file_path: "{{ backup_dir }}/{{ docker_local_registry_backup_file }}"
+        user_images_backup_file_path: "{{ backup_dir }}/{{ user_images_backup_file }}"
         openstack_backup_file_path: "{{ backup_dir }}/{{ openstack_backup_file }}"
         dc_vault_backup_file_path: "{{ backup_dir }}/{{ dc_vault_backup_file }}"
 
     - name: Save user uploaded images from local registry to an archive
       include_tasks: export-user-local-registry-images.yml
       vars:
-        export_file_path: "{{ docker_local_registry_backup_file_path }}"
+        export_file_path: "{{ user_images_backup_file_path }}"
         kilo_free_size: "{{ remaining_disk_size_estimation }}"
       when: should_use_old_image_backup
 

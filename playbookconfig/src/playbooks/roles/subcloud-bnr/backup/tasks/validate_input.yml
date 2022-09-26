@@ -14,12 +14,12 @@
   when: item.key is undefined or item.value|type_debug != 'bool'
   loop:
     - { key: local, value: "{{ local }}" }
-    - { key: backup_user_local_registry, value: "{{ backup_user_local_registry }}" }
+    - { key: backup_user_images, value: "{{ backup_user_images }}" }
 
 - name: Fail if custom images backup is requested for centralized backup
   fail:
     msg: "Custom images backup is not supported for centralized backup request."
-  when: not local and backup_user_local_registry
+  when: not local and backup_user_images
 
 - name: Fail if storage location is not specified for centralized backup
   fail:
@@ -62,15 +62,15 @@
   - name: Set registry backup filename prefix in backup overrides file
     lineinfile:
       path: "{{ backup_overrides }}"
-      line: "docker_local_registry_backup_filename_prefix: {{ default_registry_backup_prefix }}"
+      line: "user_images_backup_filename_prefix: {{ default_user_images_backup_prefix }}"
     # become: yes
     connection: local
 
   - name: Set registry backup filename prefix fact
     set_fact:
-      docker_local_registry_backup_filename_prefix: "{{ default_registry_backup_prefix }}"
+      user_images_backup_filename_prefix: "{{ default_user_images_backup_prefix }}"
 
-  when: docker_local_registry_backup_filename_prefix is undefined
+  when: user_images_backup_filename_prefix is undefined
 
 - name: Retrieve software version number
   shell: source /etc/build.info; echo $SW_VERSION

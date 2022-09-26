@@ -12,7 +12,7 @@ skip_os_dbs:
 
 mariadb_pod: mariadb-server-0
 
-backup_user_local_registry: false
+backup_user_images: false
 
 # By default, all of /etc will be backed up
 optimize_etc_backup: false

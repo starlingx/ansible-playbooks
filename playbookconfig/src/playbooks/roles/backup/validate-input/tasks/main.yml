@@ -8,10 +8,10 @@
 - name: Check if image backup options are defined and mutually exclusive
   fail:
     msg: >-
-      The options backup_user_local_registry and backup_registry_filesystem cannot be used at
+      The options backup_user_images and backup_registry_filesystem cannot be used at
       the same time
   when: >
-    backup_user_local_registry is defined and
+    backup_user_images is defined and
     backup_registry_filesystem is defined and
-    backup_user_local_registry|bool and
+    backup_user_images|bool and
     backup_registry_filesystem|bool

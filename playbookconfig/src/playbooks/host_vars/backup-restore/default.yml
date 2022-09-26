@@ -63,9 +63,9 @@ target_backup_dir: /opt/platform-backup
 platform_backup_filename_prefix: "{{ inventory_hostname }}_platform_backup"
 
 # The local registry images backup tarball will be named in this format:
-# <docker_local_registry_backup_filename_prefix>_<timestamp>.tgz
+# <user_images_backup_filename_prefix>_<timestamp>.tgz
 #
-docker_local_registry_backup_filename_prefix: "{{ inventory_hostname }}_docker_local_registry_backup"
+user_images_backup_filename_prefix: "{{ inventory_hostname }}_user_images_backup"
 
 # The local image registry filesystem backup tarball will be named in this format:
 # <registry_fs_backup_filename_prefix>_<timestamp>.tgz
