@@ -20,15 +20,14 @@ spec:
       hostIPC: true
       hostPID: true
       dnsPolicy: ClusterFirstWithHostNet
+      priorityClassName: system-node-critical
       containers:
       - name: trident-main
         securityContext:
           privileged: true
-          capabilities:
-            add: ["SYS_ADMIN"]
           allowPrivilegeEscalation: true
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/docker.io/netapp/trident:22.01.0
+        image: {{ local_registry }}/docker.io/netapp/trident:22.07.0
         command:
         - /trident_orchestrator
         args:
@@ -38,7 +37,6 @@ spec:
         - "--csi_endpoint=$(CSI_ENDPOINT)"
         - "--csi_role=node"
         - "--log_format=text"
-        - "--node_prep=false"
         - "--http_request_timeout=1m30s"
         - "--https_rest"
         - "--https_port=17546"
@@ -95,12 +93,13 @@ spec:
           mountPropagation: "Bidirectional"
         - name: trident-tracking-dir
           mountPath: /var/lib/trident/tracking
+          mountPropagation: "Bidirectional"
         - name: certs
           mountPath: /certs
           readOnly: true
       - name: driver-registrar
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.4.0
+        image: {{ local_registry }}/k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.5.1
         args:
         - "--v=2"
         - "--csi-address=$(ADDRESS)"
@@ -166,5 +165,9 @@ spec:
           path: /var/lib/trident/tracking
           type: DirectoryOrCreate
       - name: certs
-        secret:
-          secretName: trident-csi
+        projected:
+          sources:
+          - secret:
+              name: trident-csi
+          - secret:
+              name: trident-encryption-keys

@@ -22,7 +22,7 @@ spec:
       containers:
       - name: trident-main
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/docker.io/netapp/trident:22.01.0
+        image: {{ local_registry }}/docker.io/netapp/trident:22.07.0
         ports:
         # STX_change: change ports
         - containerPort: {{ trident_https_rest_api_port }}
@@ -77,9 +77,29 @@ spec:
           mountPath: /certs
           readOnly: true
 
+      - name: trident-autosupport
+        # STX_change: pull image from local registry
+        image: {{ local_registry }}/docker.io/netapp/trident-autosupport:22.07
+        command:
+        - /usr/local/bin/trident-autosupport
+        args:
+        - "--k8s-pod"
+        - "--log-format=text"
+        - "--trident-silence-collector=false"
+
+
+
+
+        #- -debug
+        resources:
+          limits:
+            memory: 1Gi
+        volumeMounts:
+        - name: asup-dir
+          mountPath: /asup
       - name: csi-provisioner
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/k8s.gcr.io/sig-storage/csi-provisioner:v3.1.0
+        image: {{ local_registry }}/k8s.gcr.io/sig-storage/csi-provisioner:v3.2.1
         args:
         - "--v=2"
         - "--timeout=600s"
@@ -95,7 +115,7 @@ spec:
           mountPath: /var/lib/csi/sockets/pluginproxy/
       - name: csi-attacher
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/k8s.gcr.io/sig-storage/csi-attacher:v3.4.0
+        image: {{ local_registry }}/k8s.gcr.io/sig-storage/csi-attacher:v3.5.0
         args:
         - "--v=2"
         - "--timeout=60s"
@@ -109,7 +129,7 @@ spec:
           mountPath: /var/lib/csi/sockets/pluginproxy/
       - name: csi-resizer
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/k8s.gcr.io/sig-storage/csi-resizer:v1.3.0
+        image: {{ local_registry }}/k8s.gcr.io/sig-storage/csi-resizer:v1.5.0
         args:
         - "--v=2"
         - "--timeout=300s"
@@ -122,7 +142,7 @@ spec:
           mountPath: /var/lib/csi/sockets/pluginproxy/
       - name: csi-snapshotter
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/k8s.gcr.io/sig-storage/csi-snapshotter:v3.0.3
+        image: {{ local_registry }}/k8s.gcr.io/sig-storage/csi-snapshotter:v6.0.1
         args:
         - "--v=2"
         - "--timeout=300s"
@@ -143,8 +163,12 @@ spec:
       - name: socket-dir
         emptyDir:
       - name: certs
-        secret:
-          secretName: trident-csi
+        projected:
+          sources:
+          - secret:
+              name: trident-csi
+          - secret:
+              name: trident-encryption-keys
       - name: asup-dir
         emptyDir:
           medium: ""
