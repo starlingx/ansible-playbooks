@@ -399,8 +399,6 @@
         'management_interface_name': lo
         'controller_0_address': "{{ controller_floating_address|ipmath(1) }}"
         'controller_1_address': "{{ controller_floating_address|ipmath(2) }}"
-        'nfs_management_address_1': "{{ controller_floating_address|ipmath(3) }}"
-        'nfs_management_address_2': "{{ controller_floating_address|ipmath(4) }}"
         'controller_pxeboot_address_0': "{{ controller_pxeboot_floating_address|ipmath(1) }}"
         'controller_pxeboot_address_1': "{{ controller_pxeboot_floating_address|ipmath(2) }}"
 
@@ -429,8 +427,6 @@
       pxe_virtual: "{{ controller_pxeboot_floating_address }}/{{ pxe_subnet_prefix }}"
       cluster_floating_virtual: "{{ cluster_floating_address }}/{{ cluster_subnet_prefix }}"
       mgmt_floating_virtual: "{{ controller_floating_address }}/{{ management_subnet_prefix }}"
-      mgmt_nfs_1_virtual: "{{ derived_network_params.nfs_management_address_1 }}/{{ management_subnet_prefix }}"
-      mgmt_nfs_2_virtual: "{{ derived_network_params.nfs_management_address_2 }}/{{ management_subnet_prefix }}"
 
 # Docker config validation
 - block:

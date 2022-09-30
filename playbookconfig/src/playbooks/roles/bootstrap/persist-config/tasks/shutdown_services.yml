@@ -95,8 +95,6 @@
 
   - name: Set facts for the removal of addresses assigned to loopback interface
     set_fact:
-      prev_mgmt_nfs_1_virtual: "{{ prev_controller_floating_address|ipmath(3) }}/{{ prev_management_subnet_prefix }}"
-      prev_mgmt_nfs_2_virtual: "{{ prev_controller_floating_address|ipmath(4) }}/{{ prev_management_subnet_prefix }}"
       prev_mgmt_floating_virtual: "{{ prev_controller_floating_address }}/{{ prev_management_subnet_prefix }}"
       prev_cluster_floating_virtual: "{{ prev_cluster_floating_address }}/{{ prev_cluster_subnet_prefix }}"
       prev_pxe_virtual: "{{ prev_controller_pxeboot_floating_address }}/{{ prev_pxe_subnet_prefix }}"
@@ -112,8 +110,6 @@
     failed_when: false
     with_items:
       - source /etc/platform/openrc; system host-if-delete controller-0 lo
-      - "ip addr delete {{ prev_mgmt_nfs_2_virtual }} dev lo scope host"
-      - "ip addr delete {{ prev_mgmt_nfs_1_virtual }} dev lo scope host"
       - "ip addr delete {{ prev_cluster_floating_virtual }} dev lo scope host"
       - "ip addr delete {{ prev_pxe_virtual }} dev lo scope host"
       - "ip addr delete {{ prev_mgmt_virtual }} brd {{ management_broadcast }} dev lo:1 scope host"
