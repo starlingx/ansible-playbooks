@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -150,6 +150,12 @@ def prepare_monitor():
             os.mkdir(MON_ROOT_DIR, 0o751)
         subprocess.check_output(['mount', "-t", "ext4", CEPH_LV_PATH, MON_ROOT_DIR],
                                 stderr=fnull)
+
+        print("Setting flag .ceph-mon-lv")
+        ceph_mon_lv_flag = '.' + CEPH_MON_LV
+        fname = os.path.join(tsc.PLATFORM_CONF_PATH, ceph_mon_lv_flag)
+        with open(fname, 'a'):
+            os.utime(fname, None)
 
 
 def populate_ceph_mon_fs(mon_name):
