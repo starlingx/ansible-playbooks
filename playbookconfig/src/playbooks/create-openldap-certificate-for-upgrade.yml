@@ -15,6 +15,7 @@
 
   vars:
     kubeadm_pki_dir: /etc/kubernetes/pki
+    install_ca_cert: yes
 
   roles:
     - bootstrap/install-platform-certificates
