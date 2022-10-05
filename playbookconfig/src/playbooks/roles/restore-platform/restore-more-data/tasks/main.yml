@@ -483,7 +483,7 @@
   # Set all the hosts including controller-0 to locked/disabled/offline state.
   # After the services are restarted, mtce will update controller-0 to
   # locked/disabled/online state. Setting controller-0 to offline state now
-  # will ensure that keystone, sysinv and mtcAgent are indeed in-service after being restated.
+  # will ensure that keystone, sysinv and mtcAgent are indeed in-service after being restarted.
   - name: Set all the hosts to locked/disabled/offline state
     shell: >-
       psql -c "update i_host set administrative='locked', operational='disabled',
@@ -537,7 +537,7 @@
 
   # Run "system host-list" to verify that controller-0 is in
   # "online" state. This will ensure that keystone, sysinv and
-  # mtcAgent are indeed in-service after being restated.
+  # mtcAgent are indeed in-service after being restarted.
   - name: Check controller-0 is in online state
     shell: source /etc/platform/openrc; system host-show controller-0 --column availability --format value
     register: check_online
