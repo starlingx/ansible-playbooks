@@ -4,11 +4,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# This playbook fetches the previous release package checksum file from
-# the subcloud if it is not available on the system controller and
-# invokes the prepare-prestage-packages.sh to generate shared packages
-# that will be downloaded to the subcloud(s) in the subsequent phase of
-# prestage.
+# This playbook prepares the ostree repo that is to be copied to the subcloud(s)
+# in the subsequent phase of prestage.
 #
 # Usage:
 #   ansible-playbook prepare_prestage_packages.yml -i <inventory-file> \
@@ -19,8 +16,8 @@
   gather_facts: no
 
   vars:
-    pkg_chksum_dir: /usr/local/share/pkg-list
-    deploy_dir: /opt/platform/deploy
+    prestaging_repo: "/var/run/prestaging_repo"
+    prestage_preparation_completed_file: "{{ prestaging_repo }}/.prestage_preparation_completed"
 
   tasks:
     - name: Retrieve the distributed cloud role
@@ -58,15 +55,9 @@
         msg: "The previous_software_version must be lower than {{ current_software_version }}."
       when: previous_software_version is version(current_software_version, '>=')
 
-    - name: Set prestage shared dir and package checksum file facts
-      set_fact:
-        prestage_shared_dir: "{{ deploy_dir }}/{{ current_software_version }}/prestage/shared"
-        prev_rel_chksum_file: "{{ pkg_chksum_dir }}/{{ previous_software_version }}_packages_list.txt"
-        curr_rel_chksum_file: "{{ pkg_chksum_dir }}/{{ current_software_version }}_packages_list.txt"
-
     - name: Look for prestage_preparation_completed flag
       stat:
-        path: "{{ prestage_shared_dir }}/.prestage_preparation_completed"
+        path: "{{ prestage_preparation_completed_file }}"
       connection: local
       register: prestage_preparation_completed_flag
 
@@ -75,77 +66,41 @@
       when: prestage_preparation_completed_flag.stat.exists
 
     - block:
-      - block:
-        - name: Ensure prestage shared directory exists
-          file:
-            path: "{{ prestage_shared_dir }}"
-            owner: root
-            group: root
-            state: directory
-            mode: 0755
-            recurse: yes
-          become: yes
-
-        - name: Look for package checksum file for the current release
-          stat:
-            path: "{{ curr_rel_chksum_file }}"
-          register: curr_file_check
-
-        - name: Fail if the package checksum file for the current release does not exist
-          fail:
-            msg: "File {{ curr_rel_chksum_file }} does not exist on the system controller"
-          when: not curr_file_check.stat.exists
-
-        - name: Look for the package checksum file for the previous release on the system controller
-          stat:
-            path: "{{ prev_rel_chksum_file }}"
-          register: prev_file_check
-
-        - name: Copy the package checksum file for the previous release to prestage directory
-          command: cp {{ prev_rel_chksum_file }} {{ prestage_shared_dir }}
-          become: yes
-          when: prev_file_check.stat.exists
-        delegate_to: localhost
-
-      - block:
-        - name: Look for the package checksum file for the previous release on the subcloud
-          stat:
-            path: "{{ prev_rel_chksum_file }}"
-          register: prev_file_check_remote
-
-        - name: Fail if the package checksum file for the previous release does not exist
-          fail:
-            msg: "File {{ prev_rel_chksum_file }} does not exist on {{ inventory_hostname }}"
-          when: not prev_file_check_remote.stat.exists
-
-        # Need to fetch to tmp then move to destination direction so that this playbook can be run
-        # either as root or sysadmin. Note that become only affects the remote machine not ansible
-        # control machine for fetch module.
-        - name: Fetch the package checksum file from {{ inventory_hostname }}
-          fetch:
-            src: "{{ prev_rel_chksum_file }}"
-            dest: /tmp/
-            flat: yes
-
-        - name: Move the fetched file to prestage share directory
-          command: mv /tmp/{{ prev_rel_chksum_file|basename }} {{ prestage_shared_dir }}
-          become: yes
-          connection: local
-        when: not prev_file_check.stat.exists
-
-      - name: Generate shared packages for prestage on the system controller
-        command: /usr/local/bin/prepare-prestage-packages.sh --release-id {{ current_software_version }}
+      - name: Ensure prestaging repo exists
+        file:
+          path: "{{ prestaging_repo }}"
+          owner: root
+          group: root
+          state: directory
+          mode: 0755
+          recurse: yes
         become: yes
-        connection: local
+
+      - name: Prepare prestaging ostree repo on the system controller
+        include_role:
+          name: prestage/prepare-ostree-repo
+        vars:
+          release_id: "{{ current_software_version }}"
+          repo_path: "{{ prestaging_repo }}"
+
+      - name: Set prestage_preparation_completed flag
+        file:
+          path: "{{ prestage_preparation_completed_file }}"
+          state: touch
+        become: yes
+
+      delegate_to: localhost
 
       rescue:
-        - name: Clean up the prestage shared directory
+        - name: Clean up the prestaging repo
           file:
-            path: "{{ deploy_dir }}/{{ current_software_version }}/prestage"
+            path: "{{ prestaging_repo }}"
             state: absent
           connection: local
           become: yes
 
         - name: Fail the play after cleanup
           fail:
-            msg: "Prestage packages preparation failed. Please check ansible logs for the last failed task."
+            msg: >-
+              Prestage ostree repo preparation failed.
+              Please check ansible logs for the last failed task.

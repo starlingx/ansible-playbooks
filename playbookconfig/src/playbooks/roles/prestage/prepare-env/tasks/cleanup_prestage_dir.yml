@@ -9,32 +9,15 @@
 #   prestage activities.
 #
 
-- name: Set prestage directory and sub directory facts
+- name: Set prestage directory fact
   set_fact:
     images_cleanup_dir: "{{ platform_backup_dir}}/{{ input_dir }}"
-    packages_cleanup_dir: "{{ platform_backup_dir}}/{{ input_dir }}/Packages"
-    repodata_cleanup_dir: "{{ platform_backup_dir}}/{{ input_dir }}/repodata"
 
-- block:
-  - name: Delete Packages and repodata directories ({{ input_dir }})
-    file:
-      path: "{{ item }}"
-      state: absent
-    loop:
-      - "{{ packages_cleanup_dir }}"
-      - "{{ repodata_cleanup_dir }}"
-      - "{{ platform_backup_dir}}/{{ input_dir }}/{{ packages_prestage_completed_flag }}"
-    become: yes
-
-  - name: Delete common packages and comps files
-    file:
-      path: "{{ item }}"
-      state: absent
-    loop:
-      - "{{ common_packages_list_file }}"
-      - "{{ comps_file }}"
-    when: prestage_reason == 'upgrade'
-    become: yes
+- name: Delete packages prestage completed flag
+  file:
+    path: "{{ platform_backup_dir}}/{{ input_dir }}/{{ packages_prestage_completed_flag }}"
+    state: absent
+  become: yes
   when: prestage_type == "packages"
 
 - block:
