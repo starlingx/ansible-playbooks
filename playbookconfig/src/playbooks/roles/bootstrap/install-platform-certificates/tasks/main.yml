@@ -51,7 +51,7 @@
     - { name: system_root_ca_cert, content: "{{ system_root_ca_cert }}" }
   loop_control:
     label: "{{ item.name }}"
-  when: distributed_cloud_role.stdout != 'subcloud' and install_ca_cert|bool
+  when: distributed_cloud_role.stdout != 'subcloud'
 
 - name: Apply kubernetes yaml to create cert-manager clusterissuer and certificates
   command: kubectl apply -f /tmp/platform_certificates.yaml
