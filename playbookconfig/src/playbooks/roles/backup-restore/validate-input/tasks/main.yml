@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -72,6 +72,29 @@
         when: (on_box_data|bool == false)
     when: not backup_stat_result.stat.exists
 
+  - block:
+    - name: Set temp directory for remote execution
+      set_fact:
+        remote_tmp_dir: "{{ ansible_remote_tmp|default('/tmp') }}"
+      delegate_to: '{{ inventory_hostname }}'
+
+    - name: Check the {{ remote_tmp_dir }} available space (in Kbytes) on the target
+      shell: "df {{ remote_tmp_dir }} --output=avail | tail -1"
+      register: tmp_dir_free_space_on_target
+      delegate_to: '{{ inventory_hostname }}'
+
+    - name: Check the backup file size (in Kbytes) on this machine
+      shell: "du -hsk {{ backup_stat_result.stat.path }} | awk '{print $1}'"
+      register: backup_file_size_local
+
+    - name: Fail if {{ remote_tmp_dir }} doesn't have enough space for backup file transfer
+      fail:
+        msg: "{{ remote_tmp_dir }} doesn't have enough space for backup file
+              {{ initial_backup_dir }}/{{ backup_filename }}.
+              Use ansible_remote_tmp to choose another directory to stage the backup file."
+      when: (tmp_dir_free_space_on_target.stdout | int) - (backup_file_size_local.stdout | int) <= 0
+
+    when: inventory_hostname != 'localhost' and (on_box_data|bool == false)
 
   - name: If optimized restore, verify if registry filesystem backup was provided
     fail:
