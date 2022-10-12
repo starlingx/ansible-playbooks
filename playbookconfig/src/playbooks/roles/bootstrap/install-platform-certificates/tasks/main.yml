@@ -44,15 +44,6 @@
   vars:
     destination: /tmp/platform_certificates.yaml
 
-- name: Install system_root_ca_cert as system Trusted CA certificate
-  include_role:
-    name: common/install-trusted-ca
-  with_items:
-    - { name: system_root_ca_cert, content: "{{ system_root_ca_cert }}" }
-  loop_control:
-    label: "{{ item.name }}"
-  when: distributed_cloud_role.stdout != 'subcloud'
-
 - name: Apply kubernetes yaml to create cert-manager clusterissuer and certificates
   command: kubectl apply -f /tmp/platform_certificates.yaml
   environment:
