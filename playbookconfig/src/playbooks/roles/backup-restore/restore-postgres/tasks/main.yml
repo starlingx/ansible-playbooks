@@ -49,6 +49,8 @@
 
   - import_tasks: restore-postgres-dc.yml
 
+  - import_tasks: aio-sx-node-replacement.yml
+
   - name: Remove postgres staging directory
     file:
       path: "{{ postgres_staging_dir }}"

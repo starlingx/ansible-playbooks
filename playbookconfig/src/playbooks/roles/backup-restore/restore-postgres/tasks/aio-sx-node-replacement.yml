@@ -1,0 +1,51 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Perform an AIO-SX node replacement on controller-0
+
+  block:
+  - name: Read original management MAC address
+    shell: >-
+      psql sysinv -tc "SELECT mgmt_mac
+        FROM public.i_host
+        WHERE hostname = 'controller-0'";
+    become_user: postgres
+    register: mac_query
+
+  - name: Discover constant required to replace disk serial IDs
+    shell: python -c 'from sysinv.common.constants import CLONE_ISO_DISK_SID; print(CLONE_ISO_DISK_SID)'
+    register: disk_const_query
+
+  - set_fact:
+      original_mac: "{{ mac_query.stdout | trim }}"
+      clone_disk_serial_const: "{{ disk_const_query.stdout | trim }}"
+
+  - name: Replace all occurrences of mgmnt MAC addresses
+    shell: >-
+      psql sysinv -c "UPDATE {{ item[0] }}
+        SET {{ item[1] }} = '{{ replacement_mgmt_mac }}'
+        WHERE {{ item[1] }} = '{{ original_mac }}'
+        RETURNING *;"
+    become_user: postgres
+    loop:
+      # Table, column
+      - ['public.i_host', 'mgmt_mac']
+      - ['public.ethernet_ports', 'mac']
+      - ['public.ethernet_interfaces', 'imac']
+      - ['public.ae_interfaces', 'imac']
+      - ['public.vlan_interfaces', 'imac']
+      - ['public.vf_interfaces', 'imac']
+      - ['public.virtual_interfaces', 'imac']
+
+  - name: Update disk serial IDs
+    shell: >-
+      psql sysinv -c "UPDATE public.i_idisk
+        SET serial_id = '{{ clone_disk_serial_const }}' || 'controller-0' || device_node
+        RETURNING *;"
+    become_user: postgres
+
+  when: replacement_mgmt_mac_required

@@ -125,3 +125,7 @@ ssl_ca_certificate_file:
 # The following parameter indicates where the backup data file(s) reside,
 # on the host itself (true) or off box (false).
 on_box_data: true
+
+# This MAC address, if supplied, will be used to replace the management MAC
+# address on controller-0 in the case of node replacement in SX configurations
+replacement_mgmt_mac: null

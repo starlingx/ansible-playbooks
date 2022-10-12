@@ -52,6 +52,14 @@
       path: "{{ initial_backup_dir }}/{{ backup_filename }}"
     register: backup_stat_result
 
+  - name: Validate that replacement MAC address is valid if supplied (lower-case only)
+    set_fact:
+      replacement_mgmt_mac: "{{ replacement_mgmt_mac | ansible.netcommon.hwaddr }}"
+      replacement_mgmt_mac_required: "{{ replacement_mgmt_mac is not none }}"
+    failed_when: >
+      replacement_mgmt_mac_required and
+      replacement_mgmt_mac == ''
+
   - block:
       - name: Fail if backup file does not exist on the target
         fail:
