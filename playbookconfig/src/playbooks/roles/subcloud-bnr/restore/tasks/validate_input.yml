@@ -1,0 +1,185 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# TASKS DESCRIPTION:
+#   Validate user input and set facts for subsequent tasks.
+#
+- name: Fail if location of backup data storage is not specified
+  fail:
+    msg: "local parameter must be specified as true or false."
+  when: local is undefined or local|type_debug != 'bool'
+
+- name: Fail if backup storage location is not specified for centralized backup
+  fail:
+    msg: "central_backup_dir must be specified if 'local' parameter is set to false."
+  when: central_backup_dir is undefined and not local
+
+- name: Fail if user images restore is requested when backup storage location is central
+  fail:
+    msg: "User images backup data are not stored on the system controller."
+  when: not local and (user_images_restore or user_images_backup_filename is defined)
+
+- name: Set target_connection fact
+  set_fact:
+    target_connection: "{{ 'ssh' if local else 'local' }}"
+
+- name: Handling unspecified platform_backup_filename
+  block:
+    - name: Fail if user_images_backup_filename is specified
+      fail:
+        msg: "User images cannot be restored without platform restore."
+      when: user_images_backup_filename is defined
+
+    - name: Retrieve software version number
+      shell: source /etc/build.info; echo $SW_VERSION
+      register: sw_version_result
+      connection: "{{ target_connection }}"
+
+    - name: Set software version for the restore
+      set_fact:
+        software_version: "{{ sw_version_result.stdout }}"
+
+    - name: Ensure central_backup_dir is defined
+      set_fact:
+        central_backup_dir: "{{ default_central_backup_dir }}"
+      when: central_backup_dir is undefined
+
+    - name: Set backup data paths to check
+      set_fact:
+        local_backup_dir: "{{ default_local_backup_dir }}/{{ software_version }}"
+        central_backup_dir: "{{ central_backup_dir }}/{{ inventory_hostname }}/{{ software_version }}"
+
+    - name: Set backup dir fact
+      set_fact:
+        backup_dir: "{{ local_backup_dir if local else central_backup_dir }}"
+
+    - name: Check if platform backup file exists
+      find:
+        path: "{{ backup_dir }}"
+        patterns: "{{ default_backup_prefix }}*"
+        recurse: no
+      register: find_backup
+      connection: "{{ target_connection }}"
+
+    - debug: var=find_backup
+
+    - name: Fail if there is no backup file or there are more than one backup file
+      fail:
+        msg: "There must be one platform backup file in  {{backup_dir }}."
+      when: find_backup.failed or find_backup.files|length != 1
+
+    - name: Set interim platform backup file facts
+      set_fact:
+        tmp_platform_backup_dir: "{{ backup_dir }}"
+        tmp_platform_backup_filename: "{{ find_backup.files[0].path|basename }}"
+
+    - block:
+      - name: Check if user images backup file exists
+        find:
+          path: "{{ backup_dir }}"
+          patterns: "{{ default_registry_backup_prefix }}*"
+        register: find_backup
+
+      - name: Fail if there is no images backup file or there are more than one images backup file
+        fail:
+          msg: "There must be one user images backup file in {{ backup_dir }}"
+        when: find_backup.failed
+
+      - name: Set user images backup file facts
+        set_fact:
+          images_backup_dir: "{{ backup_dir }}"
+          images_backup_filename: "{{ find_backup.files[0].path|basename }}"
+      when: local and user_images_restore
+  when: platform_backup_filename is undefined
+
+- name: Handling specified platform_backup_filename
+  block:
+    - name: Check if specified platform backup file exists
+      stat:
+        path: "{{ platform_backup_filename }}"
+      register: platform_file_check
+      connection: "{{ target_connection }}"
+
+    - name: Fail if platform backup file does not exist
+      fail:
+        msg: "Platform backup file {{ platform_backup_filename }} does not exist."
+      when: not platform_file_check.stat.exists
+
+    - name: Set interim platform backup file facts
+      set_fact:
+        tmp_platform_backup_dir: "{{ platform_backup_filename|dirname }}"
+        tmp_platform_backup_filename: "{{ platform_backup_filename|basename }}"
+
+    - block:
+      - name: Check if specified user images backup file exists
+        stat:
+          path: "{{ user_images_backup_filename }}"
+        register: images_file_check
+
+      - name: Fail if user images backup file does not exist
+        fail:
+          msg: "User images backup file {{ user_images_backup_filename }} does not exist."
+        when: not images_file_check.stat.exists
+
+      - name: Turn on user_images_restore flag
+        set_fact:
+          user_images_restore: true
+
+      - name: Set user images backup file facts
+        set_fact:
+          images_backup_dir: "{{ user_images_backup_filename|dirname }}"
+          images_backup_filename: "{{ user_images_backup_filename|basename }}"
+      when: user_images_backup_filename is defined
+  when: platform_backup_filename is defined
+
+- name: Set platform backup file facts
+  set_fact:
+    platform_backup_dir: "{{ tmp_platform_backup_dir }}"
+    platform_backup_filename: "{{ tmp_platform_backup_filename }}"
+
+- debug:
+    msg: >-
+      platform_backup_dir: {{ platform_backup_dir }}
+      platform_backup_filename: {{ platform_backup_filename }}
+      images_backup_dir: {{ images_backup_dir|default(None) }}
+      images_backup_filename: {{ images_backup_filename|default(None) }}
+
+- name: Create temp file for modified restore overrides
+  tempfile:
+    state: file
+    suffix: "{{ inventory_hostname }}"
+  register: restore_overrides
+  connection: local
+
+- name: Copy content of restore overrides to temp file
+  copy:
+    src: "{{ subcloud_bnr_overrides }}"
+    dest: "{{ restore_overrides.path }}"
+    remote_src: no
+  connection: local
+
+- name: Set subcloud overrides filename
+  set_fact:
+    subcloud_overrides: "{{ restore_overrides.path }}"
+
+- name: Remove parameters that are not supported by platform restore playbook
+  lineinfile:
+    path: "{{ subcloud_overrides }}"
+    state: absent
+    regexp: "{{ item }}"
+  loop:
+    - "^platform_backup_filename(.*)$"
+    - "^user_images_backup_filename(.*)$"
+  connection: local
+
+- name: Write platform backup directory and file name to overrides file
+  lineinfile:
+    path: "{{ subcloud_overrides }}"
+    line: "{{ item }}"
+  loop:
+    - "initial_backup_dir: {{ platform_backup_dir }}"
+    - "backup_filename: {{ platform_backup_filename }}"
+  connection: local

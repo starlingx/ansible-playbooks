@@ -67,7 +67,7 @@
 
   - name: Run {{ inventory_hostname }} backup playbook
     command: |
-      ansible-playbook /usr/share/ansible/stx-ansible/playbooks/backup.yml -e "@{{ backup_overrides }}"
+      ansible-playbook /usr/share/ansible/stx-ansible/playbooks/backup.yml -e "@{{ subcloud_overrides }}"
     register: platform_backup_output
 
   - name: Print the output of platform backup playbook
@@ -97,7 +97,7 @@
         msg: "Failed to perform backup of {{ inventory_hostname }}"
 
   always:
-    - name: Remove backup overrides file on {{ inventory_hostname }}
+    - name: Remove subcloud overrides file on {{ inventory_hostname }}
       file:
-        path: "{{ backup_overrides }}"
+        path: "{{ subcloud_overrides }}"
         state: absent

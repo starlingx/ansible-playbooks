@@ -5,7 +5,34 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
-#   This role is used to restore the subcloud by calling the restore_platform.yml
-#   playbook on the subcloud using the backup specified in overrides file.
+#   This role restores a subcloud from the specified backup file(s)
+#   or software release.
 #
-- debug: var=mode
+- name: Validate user input
+  import_tasks: validate_input.yml
+
+- name: Prepare and transfer restore overrides to {{ inventory_hostname }}
+  import_role:
+    name: common/prepare-and-transfer-subcloud-overrides
+
+- name: Perform platform restore
+  import_tasks: do_platform_restore.yml
+
+- name: Perform images restore
+  import_tasks: do_images_restore.yml
+  when: user_images_restore
+
+- name: Perform host unlock
+  include_role:
+    name: common/host-unlock
+  vars:
+    target_host: 'controller-0'
+
+- name: Waiting up to {{ unlock_timeout }} seconds for ssh port to become available for {{ inventory_hostname }}
+  local_action:
+    module: wait_for
+      port={{ ansible_port }}
+      host={{ ansible_host }}
+      delay=60
+      timeout={{ unlock_timeout }}
+      state=started

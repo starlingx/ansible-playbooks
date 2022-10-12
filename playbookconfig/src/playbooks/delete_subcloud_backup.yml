@@ -9,7 +9,7 @@
 #
 - hosts: all
   # If gathering facts is really necessary, run setup task AFTER host connectivity
-  # check block in common role.
+  # check block in common/prepare-env role.
   gather_facts: no
   become: yes
 

@@ -4,7 +4,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# This playbook is designed to be used by dcmanager to backup a subcloud.
+# This playbook is designed to be used by dcmanager to restore a subcloud from
+# specified backup data.
 #
 - hosts: all
   # If gathering facts is really necessary, run setup task AFTER host connectivity
@@ -15,7 +16,7 @@
   roles:
     - common/subcloud-bnr-precheck
     - common/prepare-env
-    - subcloud-bnr/backup
+    - subcloud-bnr/restore
 
   vars:
     override_files_dir: "{{ lookup('env', 'HOME') }}"
@@ -23,6 +24,10 @@
     vault_pass: "{{ ansible_become_pass|list|shuffle|join }}"
     vault_id_file: "/tmp/vaultid_{{ inventory_hostname }}.tmp"
     default_backup_prefix: "{{ inventory_hostname }}_platform_backup"
-    default_user_images_backup_prefix: "{{ inventory_hostname }}_user_images_backup"
+    default_registry_backup_prefix: "{{ inventory_hostname }}_docker_local_registry_backup"
     default_local_backup_dir: "/opt/platform-backup/backups"
-    default_local_staging_dir: "/opt/backups/{{ inventory_hostname|list|reverse|join }}"
+    default_central_backup_dir: "/opt/dc-vault/backups"
+    default_local_staging_dir: "/opt/platform-backup/{{ inventory_hostname|list|reverse|join }}"
+    user_images_restore: false
+    restore_mode: 'old'
+    unlock_timeout: 900

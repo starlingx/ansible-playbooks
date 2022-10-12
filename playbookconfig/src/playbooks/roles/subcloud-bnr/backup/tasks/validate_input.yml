@@ -42,14 +42,13 @@
 
 - name: Set subcloud overrides filename
   set_fact:
-    backup_overrides: "{{ bkup_overrides.path }}"
+    subcloud_overrides: "{{ bkup_overrides.path }}"
 
 - block:
-  - name: Set backup filename prefix in backup overrides file
+  - name: Set backup filename prefix in subcloud overrides file
     lineinfile:
-      path: "{{ backup_overrides }}"
+      path: "{{ subcloud_overrides }}"
       line: "platform_backup_filename_prefix: {{ default_backup_prefix }}"
-    # become: yes
     connection: local
 
   - name: Set backup filename prefix fact
@@ -59,11 +58,10 @@
   when: platform_backup_filename_prefix is undefined
 
 - block:
-  - name: Set registry backup filename prefix in backup overrides file
+  - name: Set registry backup filename prefix in subcloud overrides file
     lineinfile:
-      path: "{{ backup_overrides }}"
+      path: "{{ subcloud_overrides }}"
       line: "user_images_backup_filename_prefix: {{ default_user_images_backup_prefix }}"
-    # become: yes
     connection: local
 
   - name: Set registry backup filename prefix fact
@@ -75,11 +73,6 @@
 - name: Retrieve software version number
   shell: source /etc/build.info; echo $SW_VERSION
   register: sw_version_result
-
-- name: Fail if software version is not defined
-  fail:
-    msg: "SW_VERSION is missing in /etc/build.info"
-  when: sw_version_result.stdout_lines|length == 0
 
 - name: Set software version for the backup
   set_fact:
@@ -95,9 +88,9 @@
       backup_dir: "{{ default_local_backup_dir if local else default_local_staging_dir }}"
   when: backup_dir is undefined
 
-- name: Write backup directory config to overrides file
+- name: Write backup directory config to subcloud overrides file
   lineinfile:
-    path: "{{ backup_overrides }}"
+    path: "{{ subcloud_overrides }}"
     line: "backup_dir: {{ backup_dir }}"
   connection: local
 

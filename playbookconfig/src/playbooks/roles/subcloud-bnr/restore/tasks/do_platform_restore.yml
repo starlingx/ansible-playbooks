@@ -1,0 +1,72 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# TASKS DESCRIPTION:
+#   - Transfer platform backup file from central storage to staging
+#     directory on the subcloud as needed.
+#   - Invoke subcloud playbook to perform platform restore.
+#
+- name: Perform platform restore
+  block:
+  - block:
+    - name: Get system controller oam ip
+      shell: grep oamcontroller /etc/hosts|awk '{print $1}'
+      register: sc_oam_ip
+      connection: local
+
+    - name: Set system controller oam ip fact
+      set_fact:
+        sc_oam_ip: "{{ sc_oam_ip.stdout | ipwrap }}"
+
+    - name: Create staging dir
+      file:
+        path: "{{ default_local_staging_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Set backup_dir to local_staging_dir in subcloud overrides file
+      lineinfile:
+        path: "{{ subcloud_overrides }}"
+        regexp: '^initial_backup_dir(.*)$'
+        line: "initial_backup_dir: {{ default_local_staging_dir }}"
+        backrefs: yes
+
+    - name: Transfer platform backup to {{ inventory_hostname }}
+      command: >
+        sshpass -p {{ ansible_ssh_pass }}
+        rsync -a -e 'ssh -o StrictHostKeyChecking=no'
+        {{ ansible_ssh_user }}@{{ sc_oam_ip }}:{{ backup_dir }}/*
+        {{ default_local_staging_dir }}
+      register: backup_transfer
+      retries: 3
+      delay: 2
+      until: backup_transfer.rc == 0
+      no_log: true
+
+    when: not local
+
+  - name: Run {{ inventory_hostname }} platform restore playbook
+    command: >
+      ansible-playbook /usr/share/ansible/stx-ansible/playbooks/restore_platform.yml -e
+      "@{{ subcloud_overrides }}"
+    register: platform_restore_output
+
+  - name: Print the output of platform restore playbook
+    debug:
+      msg: "{{ platform_restore_output.stdout }}"
+
+  always:
+    - name: Remove subcloud overrides file on {{ inventory_hostname }}
+      file:
+        path: "{{ subcloud_overrides }}"
+        state: absent
+      when: not user_images_restore
+
+    - name: Remove staging backup directory from {{ inventory_hostname }}
+      file:
+        path: "{{ default_local_staging_dir }}"
+        state: absent
+      when: not local

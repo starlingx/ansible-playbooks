@@ -4,9 +4,9 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# TASKS DESCRIPTION:
-#   Prepare and transfer backup overrides to the subcloud for the execution
-#   of local backup playbook.
+# ROLE DESCRIPTION:
+#   This role prepares and transfers overrides file securely to the subcloud
+#   for the execution of the local playbook.
 #
 - block:
   - name: Create a vault id file
@@ -19,8 +19,8 @@
     register: local_vault_id
     connection: local
 
-  - name: Encrypt backup overrides file
-    command: ansible-vault encrypt {{ backup_overrides }} --vault-id {{ vault_id_file }}
+  - name: Encrypt subcloud overrides file
+    command: ansible-vault encrypt {{ subcloud_overrides }} --vault-id {{ vault_id_file }}
     register: local_encrypt_result
     connection: local
 
@@ -30,22 +30,22 @@
       dest: "{{ vault_id_file }}"
       mode: '0400'
 
-  - name: Copy encrypted backup override file to the subcloud
+  - name: Copy encrypted subcloud overrides file to the subcloud
     copy:
-      src: "{{ backup_overrides }}"
-      dest: "{{ backup_overrides }}"
+      src: "{{ subcloud_overrides }}"
+      dest: "{{ subcloud_overrides }}"
       owner: root
       group: root
       decrypt: no
       backup: no
 
-  - name: Decrypt backup override file
-    command: ansible-vault decrypt {{ backup_overrides }} --vault-id {{ vault_id_file }}
+  - name: Decrypt subcloud overrides file
+    command: ansible-vault decrypt {{ subcloud_overrides }} --vault-id {{ vault_id_file }}
 
   always:
-    - name: Remove local backup overrides file
+    - name: Remove local subcloud overrides file
       file:
-        path: "{{ backup_overrides }}"
+        path: "{{ subcloud_overrides }}"
         state: absent
       connection: local
 
