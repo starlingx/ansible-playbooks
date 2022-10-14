@@ -1,0 +1,38 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# These tasks provide the functionality to send root CA certificate
+# to subcloud and store it as a k8s secret.
+#
+- name: Retrieve system-local-ca from k8s secret (on System Controller)
+  command: kubectl get secret system-local-ca -n cert-manager -o jsonpath='{.data.tls\.crt}'
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  register: cert_result
+  connection: local
+
+- name: Fail if the CA certificate returned is empty
+  fail:
+    msg: "Failed to retrieve system CA certificate from secret."
+  when: cert_result.stdout == ''
+
+- name: Set system local CA cert
+  set_fact:
+    system_local_ca_cert: "{{ cert_result.stdout }}"
+
+- name: Generate kubernetes yaml for the secret resource
+  template:
+    src: system_local_ca_secret.yml.j2
+    dest: /tmp/system_local_ca_secret.yml
+
+- name: Apply kubernetes yaml to create the secret (on subcloud)
+  command: kubectl apply -f /tmp/system_local_ca_secret.yml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: apply_result
+  until: apply_result is not failed
+  retries: 10
+  delay: 30
