@@ -317,7 +317,7 @@
     - name: Restrict coredns to master node
       command: >-
         kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system patch deployment coredns -p
-        '{"spec":{"template":{"spec":{"nodeSelector":{"node-role.kubernetes.io/master":""}}}}}'
+        '{"spec":{"template":{"spec":{"nodeSelector":{"node-role.kubernetes.io/control-plane":""}}}}}'
 
     - name: Use anti-affinity for coredns pods
       command: >-
