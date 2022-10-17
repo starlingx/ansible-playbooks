@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -10,27 +10,29 @@
 #   restarts these services
 #
 
+- name: Backup keystone config
+  command: "cp /etc/keystone/keystone.conf /tmp/keystone.conf"
+
 - name: Temporarily disable lockout in keystone
   lineinfile:
     path: "/etc/keystone/keystone.conf"
     regexp: "^{{ item }}"
     state: absent
-  with_items:
+  loop:
     - "lockout_failure_attempts"
     - "lockout_duration"
 
-- name: Restart keystone service
-  command: "sm-restart service keystone"
-
-- name: Wait until keystone is restarted
-  command: "sm-query service keystone"
-  register: keystone_service_status
-  until: keystone_service_status.stdout == "keystone is enabled-active-"
-  retries: 10
-  delay: 10
+- name: Restart keystone service post config update
+  import_tasks: restart_keystone.yml
 
 - name: Migrate keystone passwords
   import_tasks: migrate_keystone_passwords.yml
 
 - name: Migrate keystone IDs
   import_tasks: migrate_keystone_ids.yml
+
+- name: Restore keystone original config
+  command: "mv /tmp/keystone.conf /etc/keystone/keystone.conf"
+
+- name: Restart keystone service post config update
+  import_tasks: restart_keystone.yml

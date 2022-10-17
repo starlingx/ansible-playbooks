@@ -1,0 +1,20 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   These tasks restart keystone and the services which are under keystone
+#   dependency and wait until the services are back online
+#
+
+- name: Restart keystone service
+  command: sm-restart service keystone
+
+- name: Wait until keystone is restarted
+  shell: sm-query service keystone | grep -c enabled-active
+  register: keystone_service_status
+  until: keystone_service_status.stdout == '1'
+  retries: 10
+  delay: 10

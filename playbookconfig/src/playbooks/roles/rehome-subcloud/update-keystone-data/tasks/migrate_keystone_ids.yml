@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -25,33 +25,32 @@
   become_user: postgres
   no_log: true
 
-  # The values updated will be applied as puppet manifest after unlock
-- name: Write required system controller keystone user and project Ids to static hieradata
-  lineinfile:
-    path: "{{ puppet_path }}/{{ software_version }}/hieradata/static.yaml"
-    regexp: "{{ item.From }}"
-    line: "{{ item.To }}"
-  with_items:
-    - { From: "^keystone::dc_admin_user_id",
-        To: "keystone::dc_admin_user_id: {{ system_controller_keystone_admin_user_id }}" }
-    - { From: "^keystone::dc_admin_project_id",
-        To: "keystone::dc_admin_project_id: {{ system_controller_keystone_admin_project_id }}" }
-    - { From: "^openstack::keystone::bootstrap::dc_services_project_id",
-        To: "openstack::keystone::bootstrap::dc_services_project_id:
-        {{ system_controller_keystone_services_project_id }}" }
-    - { From: "^platform::sysinv::bootstrap::dc_sysinv_user_id",
-        To: "platform::sysinv::bootstrap::dc_sysinv_user_id:
-        {{ system_controller_keystone_sysinv_user_id }}" }
-    - { From: "^platform::dcmanager::bootstrap::dc_dcmanager_user_id",
-        To: "platform::dcmanager::bootstrap::dc_dcmanager_user_id:
-        {{ system_controller_keystone_dcmanager_user_id }}" }
-  no_log: true
+- name: Flush memcached
+  shell: echo flush_all > /dev/tcp/{{ derived_network_params.controller_0_address }}/11211
 
-- name: Apply puppet subcloud rehome manifest
-  command: >
-    /usr/local/bin/puppet-manifest-apply.sh
-    {{ puppet_permdir }}/hieradata
-    {{ derived_network_params.controller_0_address }}
-    controller subcloud_rehome
-  environment:
-    LC_ALL: "en_US.UTF-8"
+- name: Restart keystone service
+  import_tasks: restart_keystone.yml
+
+- name: Restart affected services using sm
+  command: "sm-restart service {{ item }}"
+  loop:
+    - "vim-api"
+    - "barbican-api"
+    - "sysinv-conductor"
+
+- name: Restart affected service using pmon
+  command: pmon-restart fm-api
+
+- name: Wait until services are restarted after changing keystone IDs
+  shell: sm-query service {{ item }} | grep -c enabled-active
+  loop:
+    - "vim-api"
+    - "barbican-api"
+    - "sysinv-conductor"
+    - "sysinv-inv"
+    - "cert-mon"
+    - "cert-alarm"
+  register: service_status
+  until: service_status.stdout == '1'
+  retries: 10
+  delay: 10

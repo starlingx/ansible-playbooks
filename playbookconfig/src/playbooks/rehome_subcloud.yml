@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -17,6 +17,6 @@
     - common/validate-target
     - { role: rehome-subcloud/prepare-env, become: yes }
     - { role: rehome-subcloud/update-network-config, become: yes }
-    - { role: rehome-subcloud/update-keystone-data, become: yes }
     - { role: rehome-subcloud/update-sc-cert, become: yes }
+    - { role: rehome-subcloud/update-keystone-data, become: yes }
     - { role: rehome-subcloud/check-services-status, become: yes }
