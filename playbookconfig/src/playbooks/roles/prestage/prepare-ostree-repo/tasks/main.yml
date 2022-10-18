@@ -1,0 +1,42 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is used for preparing prestaging repo either on system controller
+#   or subclouds.
+#   It requires two parameters:
+#   release_id - the current software version on this host
+#   repo_path  - the path of the repo to be created
+
+- name: Set ostree repo facts
+  set_fact:
+    feed_dir: "file:///var/www/pages/feed/rel-{{ release_id }}/ostree_repo"
+    remote_name: "starlingx"
+    branch_name: "starlingx"
+
+- block:
+  - name: Initialize ostree repo
+    command: ostree --repo={{ repo_path }} init --mode=archive
+
+  - name: List remote repository names
+    command: ostree --repo={{ repo_path }} remote list
+    register: remote_repo_names
+
+  - name: Add remote repository
+    command: ostree --repo={{ repo_path }} remote add {{ remote_name }} {{ feed_dir }}
+    when: (remote_repo_names.stdout_lines|length == 0) or
+          (remote_name not in remote_repo_names.stdout_lines)
+
+  - name: Pull data from remote repository
+    command: >-
+      ostree --repo={{ repo_path }} pull --depth=-1
+      --mirror {{ remote_name }}:{{ branch_name }}
+    retries: 3
+    delay: 5
+    register: result
+    until: result.rc == 0
+
+  become: yes
