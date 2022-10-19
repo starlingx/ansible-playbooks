@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -79,6 +79,9 @@ def update_keystone_user_id(user_name, user_id):
                                 % (user_id, local_user_record['id']))
                     cur.execute("UPDATE public.assignment SET actor_id='%s' from public.local_user \
                                  WHERE public.assignment.actor_id=public.local_user.user_id AND \
+                                 public.local_user.name='%s'" % (user_id, user_name))
+                    cur.execute("UPDATE public.system_assignment SET actor_id='%s' from public.local_user \
+                                 WHERE public.system_assignment.actor_id=public.local_user.user_id AND \
                                  public.local_user.name='%s'" % (user_id, user_name))
                     cur.execute("UPDATE public.local_user SET user_id='%s' \
                                  WHERE public.local_user.name='%s'" % (user_id, user_name))
