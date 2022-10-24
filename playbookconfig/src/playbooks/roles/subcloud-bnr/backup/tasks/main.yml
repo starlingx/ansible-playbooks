@@ -12,8 +12,9 @@
 - name: Validate user input
   import_tasks: validate_input.yml
 
-- name: Prepare backup overrides for {{ inventory_hostname }}
-  import_tasks: prepare_subcloud_overrides.yml
+- name: Prepare and transfer backup overrides to {{ inventory_hostname }}
+  import_role:
+    name: common/prepare-and-transfer-subcloud-overrides
 
 - name: Perform subcloud backup
   import_tasks: do_backup.yml
