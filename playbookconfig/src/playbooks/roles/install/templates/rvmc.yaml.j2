@@ -6,8 +6,7 @@ metadata:
   namespace: {{ rvmc_namespace }}
 spec:
   ttlSecondsAfterFinished: 600
-  activeDeadlineSeconds: 1200
-  backoffLimit: 1
+  backoffLimit: 0
   template:
     spec:
       hostNetwork: true
