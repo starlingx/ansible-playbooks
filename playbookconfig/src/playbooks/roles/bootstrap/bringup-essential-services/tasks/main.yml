@@ -23,8 +23,6 @@
       - ip addr add {{ mgmt_virtual }} brd {{ management_broadcast }} dev lo scope host label lo:1
       - ip addr add {{ pxe_virtual }} dev lo scope host
       - ip addr add {{ cluster_floating_virtual }} dev lo scope host
-      - ip addr add {{ mgmt_nfs_1_virtual }} dev lo scope host
-      - ip addr add {{ mgmt_nfs_2_virtual }} dev lo scope host
 
   - name: Fail if adding interface addresses failed for reason other than it has been done before
     fail:
