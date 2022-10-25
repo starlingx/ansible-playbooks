@@ -247,10 +247,47 @@
     etcd_root_ca_cert: "{{ etcd_root_ca_cert | default('') }}"
     etcd_root_ca_key: "{{ etcd_root_ca_key | default('') }}"
 
+# Set the kubernetes_version if the user hasn't overridden it
+- name: Check if kubernetes_version is specified
+  set_fact:
+    found_kubernetes_version: "{{ kubernetes_version is defined }}"
+
+- block:
+  - name: Set kubernetes_version for fresh installs.
+    set_fact:
+      kubernetes_version: "{{ fresh_install_k8s_version }}"
+    when: migrate_platform_data is undefined or not migrate_platform_data
+
+  - name: Set kubernetes_version for upgrades.
+    set_fact:
+      kubernetes_version: "{{ upgrade_k8s_version }}"
+    when: migrate_platform_data is defined and migrate_platform_data
+
+  - name: Set kubernetes_version for restores.
+    set_fact:
+      kubernetes_version: "{{ restore_k8s_version }}"
+    when: restore_k8s_version is defined
+
+  when: not found_kubernetes_version
+
+- block:
+  - name: Set kubernetes long version
+    set_fact:
+      kubernetes_long_version: "{{ kubernetes_version if kubernetes_version.startswith('v')
+                               else 'v' + kubernetes_version }}"
+
+  - name: Read in kubernetes versioned configuration parameters
+    include_vars:
+      dir: "vars/k8s-{{ kubernetes_long_version }}"
+      extensions: ['yml']
+
+  when: kubernetes_version is defined
+
 - name: Combine k8s user overrides and default config parameters
   set_fact:
     apiserver_extra_args: "{{ apiserver_extra_args_defaults \
-                          | combine(apiserver_extra_args|default({})) }}"
+                          | combine({ 'feature-gates': apiserver_feature_gates|default(omit) }, \
+                          apiserver_extra_args|default({})) }}"
     controllermanager_extra_args: "{{ controllermanager_extra_args_defaults \
                                   | combine(controllermanager_extra_args|default({})) }}"
     scheduler_extra_args: "{{ scheduler_extra_args_defaults \
