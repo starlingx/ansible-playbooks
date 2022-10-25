@@ -38,17 +38,25 @@
     install_system_registry_local_certificate: false
     install_system_restapi_gui_certificate: false
 
-- name: Generate kubernetes yaml for cert-manager resources
-  include_role:
-    name: common/generate-platform-certificates-template
-  vars:
-    destination: /tmp/platform_certificates.yaml
+# Set up certificates for non-subcloud system
+- block:
+  - name: Generate kubernetes yaml for cert-manager resources
+    include_role:
+      name: common/generate-platform-certificates-template
+    vars:
+      destination: /tmp/platform_certificates.yaml
 
-- name: Apply kubernetes yaml to create cert-manager clusterissuer and certificates
-  command: kubectl apply -f /tmp/platform_certificates.yaml
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-  register: create_k8_apply_ep
-  until: create_k8_apply_ep is not failed
-  retries: 10
-  delay: 30
+  - name: Apply kubernetes yaml to create cert-manager clusterissuer and certificates
+    command: kubectl apply -f /tmp/platform_certificates.yaml
+    environment:
+      KUBECONFIG: /etc/kubernetes/admin.conf
+    register: create_k8_apply_ep
+    until: create_k8_apply_ep is not failed
+    retries: 10
+    delay: 30
+  when: distributed_cloud_role.stdout != 'subcloud'
+
+- name: Send root CA certificate to subcloud
+  include_role:
+    name: common/send-ca-cert-to-subcloud
+  when: distributed_cloud_role.stdout == 'subcloud'
