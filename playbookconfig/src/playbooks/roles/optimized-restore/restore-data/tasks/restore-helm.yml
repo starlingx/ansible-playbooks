@@ -1,0 +1,63 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Restore helm service (lighttpd) and charts.
+
+- name: Ensure helm directories are ready
+  file:
+    path: "{{ item }}"
+    state: directory
+    recurse: yes
+    owner: www
+    group: root
+  with_items:
+    - /var/www/var
+    - /var/www/var/log
+    - /var/www/tmp
+
+- name: Create source and target helm bind directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: www
+    group: root
+    mode: 0755
+  with_items:
+    - "{{ source_helm_bind_dir }}"
+    - "{{ target_helm_bind_dir }}"
+
+- name: Bind mount on {{ target_helm_bind_dir }}
+  # Due to deficiency of mount module, resort to command for now
+  command: mount -o bind -t ext4 {{ source_helm_bind_dir }} {{ target_helm_bind_dir }}
+  args:
+    warn: false
+
+- name: Restore Helm charts
+  command: tar -C / --overwrite -xpf {{ platform_backup_fqpn }} {{ item }}
+  args:
+    warn: false
+  with_items:
+    - "{{ source_helm_bind_dir | regex_replace('^\\/', '') }}"
+
+# Note that /opt/platform/helm_charts are owned by www
+# NOTE: helm --debug option displays vital information, no harm enabling.
+# These only show in ansible.log on failure.
+- name: Generate Helm repo indicies
+  command: /sbin/helm repo index "{{ source_helm_bind_dir }}/{{ item }}" --debug
+  become_user: www
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+    HOME: /home/sysadmin
+  with_items:
+    - "{{ helm_repo_name_apps }}"
+    - "{{ helm_repo_name_platform }}"
+
+- name: Enable and Restart lighttpd for Helm
+  systemd:
+    name: lighttpd
+    enabled: yes
+    state: restarted

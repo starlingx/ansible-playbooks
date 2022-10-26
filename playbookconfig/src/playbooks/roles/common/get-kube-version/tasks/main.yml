@@ -15,3 +15,8 @@
       kubernetes_version: "{{ kube_ver_select_result.stdout_lines[0] }}"
 
   when: kubernetes_version is not defined
+
+- name: Set kubernetes_long_version to match
+  set_fact:
+    kubernetes_long_version: "{{ kubernetes_version if kubernetes_version.startswith('v')
+                              else 'v' + kubernetes_version }}"

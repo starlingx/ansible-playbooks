@@ -1,0 +1,81 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Restore kubernetes service.
+#   During restoration of kubernetes, images will be pushed to local
+#   registry.  If the images were not included in the backup
+#   they will be downloaded in the same way as during a bootstrap.
+
+- name: Check if archived kubelet dir present
+  shell: "tar -tf {{ platform_backup_fqpn }} | grep 'var/lib/kubelet'"
+  args:
+    warn: false
+  register: kubelet_dir_result
+
+- name: Restore kubelet configuration
+  command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite var/lib/kubelet/"
+  args:
+    warn: false
+  when: kubelet_dir_result.rc == 0
+
+- name: Get Kubernetes version
+  import_role:
+    name: common/get-kube-version
+
+- name: Mount k8s bind mount
+  import_role:
+    name: common/k8s-bind-mount
+
+# Containerd will become corrupted after first reboot.
+# Removing the pods will fix the corruption by allowing them to be recreated later.
+- name: Add containerd corruption fix
+  block:
+    - name: Add containerd-pod-recovery script
+      template:
+        src: roles/optimized-restore/templates/containerd-pod-recovery.j2
+        dest: "{{ remove_containerd_pods_script }}"
+        mode: 0755
+        owner: root
+        group: root
+
+    - name: Add containerd-pod-recovery service
+      template:
+        src: roles/optimized-restore/templates/containerd-pod-recovery.service.j2
+        dest: /etc/systemd/system/containerd-pod-recovery.service
+        mode: 0755
+        owner: root
+        group: root
+
+    - name: Enable containerd-pod-recovery service
+      systemd:
+        name: containerd-pod-recovery.service
+        daemon_reload: true
+        enabled: true
+
+- name: Reload systemd
+  command: systemctl daemon-reload
+
+- name: Enable kubelet
+  systemd:
+    name: kubelet
+    state: stopped
+    enabled: true
+
+- name: Start containerd service
+  systemd:
+    name: containerd
+    state: restarted
+
+# Running push-docker-images and bringup-kubemaster increases playbook time,
+# but it decreases unlock time by around the same amount.
+- name: Populate local image registry
+  import_role:
+    name: common/push-docker-images
+
+- name: Bring up Kubernetes master
+  import_role:
+    name: common/bringup-kubemaster

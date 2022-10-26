@@ -1,0 +1,20 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Prepare the filesystem for restoring configuration and possibly data.
+
+# TODO(jkraitbe): Doesn't match version in persist-config
+- name: Create device image filesystem paths
+  file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - /opt/platform/device_images
+    - /var/www/pages/device_images
+
+- name: Create device image bind mount
+  command: "mount -o bind -t ext4 /opt/platform/device_images /var/www/pages/device_images"

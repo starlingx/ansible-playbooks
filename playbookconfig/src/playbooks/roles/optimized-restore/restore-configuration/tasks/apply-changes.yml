@@ -1,0 +1,23 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Apply final changes to system after restoring files is complete,
+#   but before data is restored.
+
+- name: Update kernel parameters for iptables
+  command: sysctl --system &>/dev/null
+
+- name: Update boot loader configuration
+  command: "{{ grub_mkconfig }} -o /boot/grub2/grub.cfg"
+  vars:
+    grub_mkconfig: "{{ 'grub2-mkconfig' if os_release == 'centos' else 'grub-mkconfig' }}"
+
+- name: Create a symlink to PXE config files
+  file:
+    src: "{{ pxelinux_config_permdir }}"
+    dest: /var/pxeboot/pxelinux.cfg
+    state: link

@@ -1,0 +1,19 @@
+#!/bin/bash
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This script will run during containerd.service ExecStartPost.
+# If the flag indicating that pods should be removed is present,
+# they will be removed after a delay.  The flag will be cleared afterwards.
+#
+# This is intended to be used as part of optimzed restore.
+# During the reboot following optimized restore,
+# containerd pods will become corrupt. Removed the pods allows
+# them to be recreated.  This process only need to be done once.
+
+FLAG={{ remove_containerd_pods_flag }}
+
+if [ -f "$FLAG" ]; then
+    crictl rmp --all && rm -f "$FLAG"
+fi

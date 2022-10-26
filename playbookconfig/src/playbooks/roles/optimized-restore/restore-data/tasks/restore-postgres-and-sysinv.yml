@@ -1,0 +1,51 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Restore sysinv and flock services.  The sysinv data is stored
+#   in postgres, so that is restored first.  After flock services
+#   are restarted to pick up changes.
+
+- name: Restore Postgres
+  import_role:
+    name: backup-restore/restore-postgres
+
+# restore-more-data/tasks/main.yml#459
+# Set all the hosts including controller-0 to locked/disabled/offline state.
+# After the services are restarted, mtce will update controller-0 to
+# locked/disabled/online state. Setting controller-0 to offline state now
+# will ensure that keystone, sysinv and mtcAgent are indeed in-service after being restarted.
+- name: Set all the hosts to locked/disabled/offline state
+  shell: >-
+    psql -c "update i_host set administrative='locked', operational='disabled',
+    availability='offline'" sysinv
+  become_user: postgres
+
+# Container images may not be present after restore. Inform sysinv so it
+# can download the images. Kubernetes will then start the apps.
+- name: Set applied apps to "restore-requested" state
+  shell: psql -c "update kube_app set status='restore-requested' where status='applied'" sysinv
+  become_user: postgres
+
+- name: Bringup flock services
+  systemd:
+    name: "{{ item }}"
+    state: restarted
+  loop:
+    - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
+    - fminit
+    - fm-api
+    - sysinv-conductor
+    - sysinv-agent
+    - sysinv-api
+    - mtcClient
+    - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
+
+- name: Bringup mtcAgent
+  command: "/usr/lib/ocf/resource.d/platform/mtcAgent start"
+  environment:
+    OCF_ROOT: "/usr/lib/ocf"
+    OCF_RESKEY_state: "active"

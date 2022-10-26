@@ -1,0 +1,3 @@
+---
+hieradata_workdir: /tmp/hieradata
+ca_cert_dir: /etc/pki/ca-trust/source/anchors

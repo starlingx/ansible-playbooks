@@ -1,0 +1,29 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Restore docker image data if supplied in backup.
+
+- name: Stop docker services
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+  loop: "{{ docker_services }}"
+
+- name: Restore container registry filesystem
+  command: "tar -C / -xpf {{ registry_backup_fqpn }} --overwrite var/lib/docker-distribution/"
+  args:
+    warn: false
+  when: registry_backup_fqpn is defined
+
+- name: Disable local registry authentication
+  command: "sed -i '/auth:/,$d' /etc/docker-distribution/registry/config.yml"
+
+- name: Restart docker services
+  systemd:
+    name: "{{ item }}"
+    state: restarted
+  loop: "{{ docker_services }}"

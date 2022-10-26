@@ -1,0 +1,35 @@
+---
+source_helm_bind_dir: /opt/platform/helm_charts
+target_helm_bind_dir: /var/www/pages/helm_charts
+helm_repo_name_apps: starlingx
+helm_repo_name_platform: stx-platform
+helm_repo_port: 8080
+kubelet_override_template: /usr/share/puppet/modules/platform/templates/kube-stx-override.conf.erb
+kubelet_pmond_template: /usr/share/puppet/modules/platform/templates/kubelet-pmond-conf.erb
+kubelet_cni_bin_dir: /var/opt/cni/bin
+lighttpd_conf_template: /usr/share/puppet/modules/openstack/templates/lighttpd.conf.erb
+lighttpd_inc_conf_template: /usr/share/puppet/modules/openstack/templates/lighttpd-inc.conf.erb
+registry_config_template: /usr/share/puppet/modules/platform/templates/dockerdistribution.conf.erb
+registry_runtime_config_file: /etc/docker-distribution/registry/runtime_config.yml
+registry_readonly_config_file: /etc/docker-distribution/registry/readonly_config.yml
+registry_config_file: /etc/docker-distribution/registry/config.yml
+registry_token_server_template: /usr/share/puppet/modules/platform/templates/registry-token-server.conf.erb
+registry_token_server_file: /etc/docker-distribution/registry/token_server.conf
+insecure_docker_registry_template: /usr/share/puppet/modules/platform/templates/insecuredockerregistry.conf.erb
+containerd_template: /usr/share/puppet/modules/platform/templates/config.toml.erb
+cert_cnf_file: /etc/ssl/private/registry-cert-extfile.cnf
+registry_cert_key: /etc/ssl/private/registry-cert.key
+registry_cert_crt: /etc/ssl/private/registry-cert.crt
+registry_cert_pkcs1_key: /etc/ssl/private/registry-cert-pkcs1.key
+server_cert_pem: /etc/ssl/private/server-cert.pem
+docker_cert_dir: /etc/docker/certs.d
+cgroup_root: /sys/fs/cgroup
+k8s_cgroup_name: k8s-infra
+kubeadm_pki_dir: /etc/kubernetes/pki
+etcd_tmp_dir: /opt/backups/etcd_tmp_dir
+psp_file: /usr/share/ansible/stx-ansible/playbooks/roles/common/bringup-kubemaster/files/psp-policies.yaml
+controlplane_endpoint: "{{ cluster_floating_address }}"
+etcd_endpoint: "https://{{ cluster_floating_address | ipwrap }}:2379"
+apiserver_advertise_address: "{{ controller_0_cluster_host }}"
+kubelet_taints: []
+local_registry: registry.local:9001
