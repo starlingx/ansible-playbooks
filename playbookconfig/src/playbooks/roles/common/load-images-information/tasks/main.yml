@@ -12,8 +12,10 @@
   fail: msg="The mandatory parameter kubernetes_version is not defined."
   when: kubernetes_version is not defined
 
-- name: Fail if kubernetes_long_version is not defined
-  fail: msg="The mandatory parameter kubernetes_long_version is not defined."
+- name: Set kubernetes long version
+  set_fact:
+    kubernetes_long_version: "{{ kubernetes_version if kubernetes_version.startswith('v')
+                              else 'v' + kubernetes_version }}"
   when: kubernetes_long_version is not defined
 
 - block:
