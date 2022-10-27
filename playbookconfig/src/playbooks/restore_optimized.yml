@@ -34,6 +34,7 @@
 
   vars_files:
     - host_vars/backup-restore/default.yml
+    - vars/backup-restore/main.yml
 
   tasks:
 
@@ -50,6 +51,7 @@
         sysinv_config_permdir: "{{ '/opt/platform/sysinv/' + software_version }}"
         # SSL certs configuration
         ca_cert_dir: "/etc/pki/ca-trust/source/anchors"
+        pxelinux_config_permdir: "{{ '/opt/platform/config/' + software_version + '/pxelinux.cfg' }}"
 
     - name: Setup flags to control puppet manifest apply
       file:
@@ -126,59 +128,109 @@
       loop:
         - etc/barbican
         - etc/containerd
+        - etc/cni
         - etc/default
         - etc/docker
         - etc/docker-distribution
         - etc/drbd.d
         - etc/etcd
+        - etc/fm
+        - etc/group
+        - etc/group-
         - etc/haproxy
         - etc/hosts
         - etc/keystone
         - etc/kubernetes
+        - etc/lighttpd
+        - etc/mtc
+        - etc/mtc.conf
+        - etc/mtc.ini
+        - etc/passwd
+        - etc/passwd-
         - etc/pki
         - etc/platform/openrc
+        - etc/profile.d/kubeconfig.sh
         - etc/resolv.conf
+        - etc/shadow
+        - etc/shadow-
+        - etc/sm
         - etc/ssl
+        - etc/sysctl.d
         - etc/sysinv
       args:
         warn: false
 
+    - name: Update kernel parameters for iptables
+      command: sysctl --system &>/dev/null
+
     - name: Update boot loader configuration
       command: "{{ grub_mkconfig }} -o /boot/grub2/grub.cfg"
 
-    - name: Determine network configuration files
-      find:
-        paths: "{{ network_scripts_location }}"
-        patterns: "ifcfg-*"
-      register: network_files_to_delete
+    # Bring up networking, meant to replicate state during boostrapping
+    - name: Restore networking
+      block:
+        - name: Determine network configuration files
+          find:
+            paths: "{{ network_scripts_location }}"
+            patterns: "ifcfg-*"
+          register: network_files_to_delete
 
-    - name: Remove network configuration files
-      file:
-        path: "{{ item.path }}"
-        state: absent
-      loop: "{{ network_files_to_delete.files }}"
+        - name: Remove network configuration files
+          file:
+            path: "{{ item.path }}"
+            state: absent
+          loop: "{{ network_files_to_delete.files }}"
 
-    - name: Restore network configuration files
-      command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite --wildcards {{ network_scripts_location_bkp }}/*"
+        - name: Restore network configuration files
+          command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite --wildcards {{ network_scripts_location_bkp }}/*"
 
-    - name: Restore profile files
-      command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite {{ item }}"
-      loop:
-        - "etc/profile.d/kubeconfig.sh"
-      args:
-        warn: false
+        #fails due to enp0s9 not having the ip set on ifcfg-enp0s9
+#        - name: Restart networking daemon
+#          systemd:
+#            name: networking
+#            state: restarted
 
-    - name: Restore ldap data
-      import_role:
-        name: backup-restore/restore-ldap
+        - name: Bring lo up
+          command: ifup lo lo:1 lo:5
 
-    - name: Restore etcd snapshot
-      import_role:
-        name: backup-restore/restore-etcd
+        - name: Lookup controller host address
+          command: "gethostip -d controller"
+          register: host_lookup
+
+        - name: Define controller host address
+          set_fact:
+            controller_address: "{{ host_lookup.stdout_lines[0] }}"
+
+        - name: Configure controller host address
+          command: "ip addr add {{ controller_address }} dev lo scope host"
+
+        - name: Lookup controller host address
+          command: "gethostip -d pxecontroller"
+          register: pxe_host_lookup
+
+        - name: Define controller host address
+          set_fact:
+            pxecontroller_address: "{{ pxe_host_lookup.stdout_lines[0] }}"
+
+        - name: Configure controller host address
+          command: "ip addr add {{ pxecontroller_address }} dev lo scope host"
+
+      ignore_errors: true
 
     - name: Restore Postgres
       import_role:
         name: backup-restore/restore-postgres
+
+    # restore-more-data/tasks/main.yml#459
+    # Set all the hosts including controller-0 to locked/disabled/offline state.
+    # After the services are restarted, mtce will update controller-0 to
+    # locked/disabled/online state. Setting controller-0 to offline state now
+    # will ensure that keystone, sysinv and mtcAgent are indeed in-service after being restarted.
+    - name: Set all the hosts to locked/disabled/offline state
+      shell: >-
+        psql -c "update i_host set administrative='locked', operational='disabled',
+        availability='offline'" sysinv
+      become_user: postgres
 
     - name: Restore persistent configuration
       command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite {{ item }}"
@@ -186,33 +238,6 @@
         - opt/patching
         - opt/platform
         - opt/extension
-      args:
-        warn: false
-
-    - name: Check archived kubelet dir
-      shell: "tar -tf {{ platform_backup_fqpn }} | grep 'var/lib/kubelet'"
-      args:
-        warn: false
-      register: kubelet_dir_result
-
-    - name: Restore kubelet configuration
-      command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite var/lib/kubelet/"
-      args:
-        warn: false
-      when: kubelet_dir_result.rc == 0
-
-    - name: Restore kubelet pmond configuration file
-      command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite {{ item }}"
-      loop:
-        - etc/pmon.d/kubelet.conf
-      args:
-        warn: false
-
-    - name: Reload systemd
-      command: systemctl daemon-reload
-
-    - name: Restore container registry filesystem
-      command: "tar -C / -xpf {{ registry_backup_fqpn }} --overwrite var/lib/docker-distribution/"
       args:
         warn: false
 
@@ -232,7 +257,6 @@
           when: home_dir_result.rc == 0
 
       when: os_release == "centos"
-
     - name: Check home dir for Debian
       block:
 
@@ -250,53 +274,182 @@
 
       when: os_release == "debian"
 
-    - name: Lookup controller host address
-      command: "gethostip -d controller"
-      register: host_lookup
+    # This shouldn't be needed after restoring /etc/shadow and /etc/passwd. Cache?
+    - name: Make sure user sysinv is ready
+      user:
+        name: sysinv
+        group: sysinv
+        groups: sys_protected
+        shell: /sbin/nologin
+        state: present
 
-    - name: Define controller host address
-      set_fact:
-        controller_address: "{{ host_lookup.stdout_lines[0] }}"
-
-    - name: Configure controller host address
-      command: "ip addr add {{ controller_address }} dev lo scope host"
-
-    - name: Disable local registry authentication
-      command: "sed -i '/auth:/,$d' /etc/docker-distribution/registry/config.yml"
-
-    - name: Start docker registry service
+    - name: Bringup flock services
       systemd:
-        name: "{{ docker_registry_service }}"
+        name: "{{ item }}"
         state: restarted
-
-    - name: Start containerd service
-      systemd:
-        name: containerd
-        state: restarted
-
-    - name: Pull kubernetes local container images
-      command: "crictl pull registry.local:9001/{{ item }}"
       loop:
-        - k8s.gcr.io/kube-apiserver:v1.23.1
-        - k8s.gcr.io/kube-scheduler:v1.23.1
-        - k8s.gcr.io/kube-controller-manager:v1.23.1
-        - k8s.gcr.io/coredns/coredns:v1.8.6
+        - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
+        - fminit
+        - fm-api
+        - sysinv-conductor
+        - sysinv-agent
+        - sysinv-api
+        - mtcClient
+        - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
 
-    # restore-more-data/tasks/main.yml#459
-    # Set all the hosts including controller-0 to locked/disabled/offline state.
-    # After the services are restarted, mtce will update controller-0 to
-    # locked/disabled/online state. Setting controller-0 to offline state now
-    # will ensure that keystone, sysinv and mtcAgent are indeed in-service after being restated.
-    - name: Set all the hosts to locked/disabled/offline state
-      shell: >-
-        psql -c "update i_host set administrative='locked', operational='disabled',
-        availability='offline'" sysinv
-      become_user: postgres
+    - name: Bringup ocf flock services
+      command: "{{ item }} start"
+      environment:
+        OCF_ROOT: "/usr/lib/ocf"
+        OCF_RESKEY_state: "active"
+      loop:
+        - /usr/lib/ocf/resource.d/platform/mtcAgent
 
-    # NOTE(outbrito): If I leave the task below like this, sm comes up as part of the restore and
-    # brings drbd up once the node reboots, then I had to enable/start kubelet manually. I also had
-    # to bounce drbd since after the snapshot restore, drbd doesn't get the restored data promptly
-    # I think there is some kind of caching involved
+    - name: Restore ldap data
+      import_role:
+        name: backup-restore/restore-ldap
+
+    - name: Restore docker registry
+      block:
+        - name: Restore container registry filesystem
+          command: "tar -C / -xpf {{ registry_backup_fqpn }} --overwrite var/lib/docker-distribution/"
+          args:
+            warn: false
+
+        - name: Disable local registry authentication
+          command: "sed -i '/auth:/,$d' /etc/docker-distribution/registry/config.yml"
+
+        - name: Start docker registry service
+          systemd:
+            name: "{{ docker_registry_service }}"
+            state: restarted
+
+    - name: Restore etcd
+      block:
+        - name: Restore etcd snapshot
+          import_role:
+            name: backup-restore/restore-etcd
+
+        - name: Start etcd
+          systemd:
+            name: etcd
+            state: restarted
+
+    - name: Restore kubernetes
+      block:
+        - name: Start containerd service
+          systemd:
+            name: containerd
+            state: restarted
+
+        - name: Pull kubernetes local container images
+          command: "crictl pull registry.local:9001/{{ item }}"
+          loop:
+            - k8s.gcr.io/kube-apiserver:v1.23.1
+            - k8s.gcr.io/kube-scheduler:v1.23.1
+            - k8s.gcr.io/kube-controller-manager:v1.23.1
+            - k8s.gcr.io/coredns/coredns:v1.8.6
+
+        - name: Check archived kubelet dir
+          shell: "tar -tf {{ platform_backup_fqpn }} | grep 'var/lib/kubelet'"
+          args:
+            warn: false
+          register: kubelet_dir_result
+
+        - name: Restore kubelet configuration
+          command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite var/lib/kubelet/"
+          args:
+            warn: false
+          when: kubelet_dir_result.rc == 0
+
+        - name: Restore kubelet pmond configuration file
+          command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite {{ item }}"
+          loop:
+            - etc/pmon.d/kubelet.conf
+          args:
+            warn: false
+
+        - name: Get Kubernetes version
+          import_role:
+            name: common/get-kube-version
+
+        - name: Mount k8s bind mount
+          import_role:
+            name: common/k8s-bind-mount
+
+        - name: Reload systemd
+          command: systemctl daemon-reload
+
+        - name: Start kubelet
+          systemd:
+            name: kubelet
+            state: restarted
+
+    - name: Restore helm service
+      block:  # excerpt from bringup_helm.yml
+        - name: Ensure helm directories exist
+          file:
+            path: "{{ item }}"
+            state: directory
+            recurse: yes
+            owner: www
+            group: root
+          with_items:
+            - /var/www/var
+            - /var/www/var/log
+            - /var/www/tmp
+
+        - name: Create source and target helm bind directories
+          file:
+            path: "{{ item }}"
+            state: directory
+            owner: www
+            group: root
+            mode: 0755
+          with_items:
+            - "{{ source_helm_bind_dir }}"
+            - "{{ target_helm_bind_dir }}"
+
+        - name: Restore Helm charts if the host is bootstrapped in restore mode
+          command: tar -C / --overwrite -xpf {{ platform_backup_fqpn }} {{ item }}
+          args:
+            warn: false
+          become_user: root
+          with_items:
+            - "{{ source_helm_bind_dir | regex_replace('^\\/', '') }}"
+
+        # Note that /opt/platform/helm_charts are owned by www
+        # NOTE: helm --debug option displays vital information, no harm enabling.
+        # These only show in ansible.log on failure.
+        - name: Generate Helm repo indicies
+          command: /sbin/helm repo index "{{ source_helm_bind_dir }}/{{ item }}" --debug
+          become_user: www
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+            HOME: /home/sysadmin
+          with_items:
+            - "{{ helm_repo_name_apps }}"
+            - "{{ helm_repo_name_platform }}"
+
+        - name: Bind mount on {{ target_helm_bind_dir }}
+          # Due to deficiency of mount module, resort to command for now
+          command: mount -o bind -t ext4 {{ source_helm_bind_dir }} {{ target_helm_bind_dir }}
+          args:
+            warn: false
+
+        - name: Enable and Restart lighttpd for Helm
+          systemd:
+            name: lighttpd
+            enabled: yes
+            state: restarted
+
+    - name: Create a symlink to PXE config files
+      file:
+        src: "{{ pxelinux_config_permdir }}"
+        dest: /var/pxeboot/pxelinux.cfg
+        state: link
+
+    # Make system ready for unlock
     - name: Restore complete, set flags
       file:
         path: "{{ item }}"

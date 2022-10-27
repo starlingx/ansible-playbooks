@@ -1,0 +1,9 @@
+---
+# Should we move these to vars/common? They're used on:
+#   task bringup_helm.yml
+#   playbook upgrade-k8s-armada-helm.yml
+#   role restore-more-data.yml
+source_helm_bind_dir: /opt/platform/helm_charts
+target_helm_bind_dir: /var/www/pages/helm_charts
+helm_repo_name_apps: starlingx
+helm_repo_name_platform: stx-platform
