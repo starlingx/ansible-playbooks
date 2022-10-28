@@ -1,0 +1,13 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role updates root CA certificate in secret for the subcloud.
+#
+
+- name: Update root CA certificate in secret
+  import_role:
+    name: common/send-ca-cert-to-subcloud

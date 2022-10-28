@@ -16,6 +16,7 @@
     - common/prepare-env
     - common/validate-target
     - { role: rehome-subcloud/prepare-env, become: yes }
+    - { role: rehome-subcloud/update-ca-cert, become: yes }
     - { role: rehome-subcloud/update-network-config, become: yes }
     - { role: rehome-subcloud/update-sc-cert, become: yes }
     - { role: rehome-subcloud/update-keystone-data, become: yes }
