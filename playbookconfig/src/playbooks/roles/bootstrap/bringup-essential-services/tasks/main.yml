@@ -272,4 +272,37 @@
       name: k8s-storage-backends/snapshot-controller
     when: enable_volume_snapshot_support|bool
 
+  - name: Configure k8s-coredump-handler
+    block:
+      - name: Create user account for k8s coredump handler
+        command: kubectl apply -f /etc/k8s-coredump/k8s-coredump.yaml
+        environment:
+          KUBECONFIG: /etc/kubernetes/admin.conf
+        register: create_k8s_coredump_handler_account
+        until: create_k8s_coredump_handler_account is not failed
+        retries: 5
+        delay: 10
+
+      - name: Get secret token from created user account
+        command: kubectl -n kube-system get secrets coredump-secret-token -ojsonpath='{.data.token}'
+        environment:
+          KUBECONFIG: /etc/kubernetes/admin.conf
+        register: k8s_auth_token
+        until: k8s_auth_token is not failed
+        retries: 5
+        delay: 10
+
+      - name: Decode token in base64
+        shell: echo {{ k8s_auth_token.stdout }} | base64 -d
+        register: k8s_auth_token
+
+      - set_fact:
+          k8s_auth_token: "{{ k8s_auth_token.stdout }}"
+
+      - name: Create k8s-coredump-conf.json for k8s-coredump-handler
+        template:
+          src: "k8s-coredump-conf.json.j2"
+          dest: /etc/k8s-coredump-conf.json
+          mode: 0700
+
   when: (not replayed) or (restart_services)
