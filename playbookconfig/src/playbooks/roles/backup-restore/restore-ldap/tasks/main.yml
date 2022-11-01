@@ -41,6 +41,14 @@
           args:
             warn: false
 
+        # Remove files that should be from the to-release side
+        - name: Remove files that come from the backup but shouldn't be used
+          file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - "{{ staging_dir }}/openldap/certs.ldif"
+
         - name: Copy /etc/openldap configuration to /etc/ldap if restoring on Debian
           command: cp -Rf {{ staging_dir }}/openldap/. /etc/ldap
       when: os_release == "debian"
