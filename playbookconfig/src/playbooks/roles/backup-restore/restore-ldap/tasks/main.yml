@@ -51,6 +51,26 @@
 
         - name: Copy /etc/openldap configuration to /etc/ldap if restoring on Debian
           command: cp -Rf {{ staging_dir }}/openldap/. /etc/ldap
+
+        - name: Get ldapadmin password from file
+          command: cat /etc/ldapscripts/ldapscripts.passwd
+          register: password_result
+
+        - name: Set ldapadmin password
+          set_fact:
+            password: "{{ password_result.stdout }}"
+
+        - name: Store ldapadmin password in keyring
+          vars:
+            script_content: |
+              import keyring
+              import os
+              os.environ['XDG_DATA_HOME'] = "/opt/platform/.keyring/{{ software_version }}"
+              keyring.set_password("ldap", "ldapadmin", "{{ password }}")
+          shell: "{{ script_content }}"
+          args:
+            executable: /usr/bin/python
+          no_log: true
       when: os_release == "debian"
     when: bkp_has_centos_ldap_config.rc == 0
 
