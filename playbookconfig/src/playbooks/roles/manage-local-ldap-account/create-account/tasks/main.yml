@@ -24,12 +24,15 @@
       {{ password_change_period }} --passwarning {{ password_warning_period }}
     become: yes
 
+  # In the following task, the string "LDAP Password" is found only in CentOS,
+  # while the string "Current Password" is found only in Debian.
   - name: Change LDAP user initial password and create home directory
     expect:
       command: ssh {{ ssh_internal_args }} {{ in_user_id }}@localhost
       responses:
         s password: "{{ in_user_id }}"
         LDAP Password: "{{ in_user_id }}"
+        Current Password: "{{ in_user_id }}"
         New password: "{{ in_user_password }}"
         new password: "{{ in_user_password }}"
         "\\~\\$": exit
