@@ -86,6 +86,7 @@ backup:
     - "/etc/selinux"
     - "/etc/udev/**"
     - "/etc/udev"
+    - "/etc/openldap/certs.ldif"
     - "/var/lib/kubelet/plugins/**"
     - "/var/lib/kubelet/plugins"
     - "/var/lib/kubelet/pods/**"
