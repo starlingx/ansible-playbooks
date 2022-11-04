@@ -4,9 +4,5 @@ docker_services:
   - docker
   - "{{ 'docker-distribution' if os_release == 'centos' else 'docker-registry' }}"
 
-# These used to remove containerd corruption after first boot
+# Used to remove containerd corruption after first boot
 remove_containerd_pods_flag: /etc/platform/.remove_containerd_pods
-# TODO(jkraitbe): This dest require ostree admin unlock
-# Ideally, file will already be present on system
-# dest: /usr/local/sbin/containerd-pod-recovery
-remove_containerd_pods_script: /etc/platform/containerd-pod-recovery

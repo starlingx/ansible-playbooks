@@ -5,7 +5,8 @@ After=kubelet.service
 ConditionPathExists={{ remove_containerd_pods_flag }}
 
 [Service]
-ExecStart={{ remove_containerd_pods_script }}
+ExecStart=/usr/bin/crictl rmp --all
+ExecStartPost=/usr/bin/rm -f "{{ remove_containerd_pods_flag }}"
 
 [Install]
 WantedBy=multi-user.target
