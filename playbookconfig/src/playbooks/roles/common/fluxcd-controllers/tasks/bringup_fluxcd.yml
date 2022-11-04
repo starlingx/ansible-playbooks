@@ -38,6 +38,25 @@
         msg: "Failed to create {{ fluxcd_namespace }} namespace. Error: {{ create_fluxcd_ns.stderr }}"
       when: create_fluxcd_ns.rc !=0 and create_fluxcd_ns.stderr is not search('AlreadyExists')
 
+    # Label FluxCD namespace with PSAC labels
+    - name: Label namespace for FluxCD with PSAC labels
+      command: kubectl label --overwrite namespaces {{ fluxcd_namespace }}
+               pod-security.kubernetes.io/audit-version=latest
+               pod-security.kubernetes.io/enforce-version=latest
+               pod-security.kubernetes.io/warn-version=latest
+               pod-security.kubernetes.io/audit=privileged
+               pod-security.kubernetes.io/enforce=privileged
+               pod-security.kubernetes.io/warn=privileged
+      register: label_fluxcd_ns
+      failed_when: false
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Fail if labeling namespace fails
+      fail:
+        msg: "Failed to label {{ fluxcd_namespace }} namespace. Error: {{ label_fluxcd_ns.stderr }}"
+      when: label_fluxcd_ns.rc !=0
+
     - name: Check if flux helm and source controllers exist
       command: kubectl -n {{ fluxcd_namespace }} get pods
       register: fluxcd_get_pods
