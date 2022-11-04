@@ -1,0 +1,50 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Restore file from platform_backup.tgz.
+#   Mainly /etc, /opt/platform/, and /home.
+
+- name: Restore configuration files
+  command: >-
+    tar -C / -xpf {{ platform_backup_fqpn }} --overwrite
+    {{ ' '.join(restore_items) }}
+  args:
+    warn: false
+
+- name: Check home dir for CentOS
+  block:
+
+    - name: Check if home was backed up
+      shell: "tar -tf {{ platform_backup_fqpn }} | grep -E '^home\\/'"
+      args:
+        warn: false
+      register: home_dir_result
+
+    - name: Restore home directory
+      command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite home/"
+      args:
+        warn: false
+      when: home_dir_result.rc == 0
+
+  when: os_release == "centos"
+
+- name: Check home dir for Debian
+  block:
+
+    - name: Check if home was backed up
+      shell: "tar -tf {{ platform_backup_fqpn }} | grep 'var/home/'"
+      args:
+        warn: false
+      register: home_dir_result
+
+    - name: Restore home directory
+      command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite var/home/"
+      args:
+        warn: false
+      when: home_dir_result.rc == 0
+
+  when: os_release == "debian"

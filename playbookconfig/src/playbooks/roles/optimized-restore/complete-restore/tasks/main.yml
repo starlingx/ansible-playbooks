@@ -1,0 +1,31 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This will complete the restoration process.
+#   Applying any missing changes or creating any missing flags
+#   that are not created during optimized restore.
+
+- name: Combine required flags
+  set_fact:
+    all_required_flags: "{{ default_required_flags + extra_required_flags }}"
+
+- name: Set restore in progress for sysinv
+  shell: "source /etc/platform/openrc; system restore-start"
+
+# Optimized restore does not create all the required flags.
+# Any missing flags will be created here.
+- name: Set flags for puppet
+  file:
+    path: "{{ (flags_dir, item) | path_join }}"
+    state: touch
+  loop: "{{ all_required_flags }}"
+
+# If the system is online, restore was most likely succesful
+- name: Check if system is in online state
+  shell: source /etc/platform/openrc; system host-show controller-0 --column availability --format value
+  register: check_online
+  failed_when: check_online.stdout != 'online'

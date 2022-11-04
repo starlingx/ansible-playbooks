@@ -1,0 +1,24 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   Restore data onto system.  Data restoration is the last
+#   step before restore can be completed.
+
+- name: Restore sysinv and flock services
+  import_tasks: restore-postgres-and-sysinv.yml
+
+- name: Restore LDAP
+  import_role: name=backup-restore/restore-ldap
+
+- name: Restore docker and docker-registry
+  import_tasks: restore-docker.yml
+
+- name: Restore kubernetes service and data
+  import_tasks: restore-kubernetes.yml
+
+- name: Restore helm service
+  import_tasks: restore-helm.yml

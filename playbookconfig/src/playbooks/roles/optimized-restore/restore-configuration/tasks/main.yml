@@ -1,0 +1,24 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   Restore configuration and prepare for restore more data.
+#   Upon completion of this role, the system will be ready to
+#   have the rest of it's data restored.
+#   The items restored in this role include things like /etc and /home,
+#   but do not include things like sysinv, ldap, or container data.
+
+- name: Prepare filesystem to accept restore data
+  import_tasks: prepare-filesystem.yml
+
+- name: Restore configuration files onto system
+  import_tasks: restore-files.yml
+
+- name: Restore bootstrapping networking configuration
+  import_tasks: restore-networking.yml
+
+- name: Apply final changes after restoring configuration files
+  import_tasks: apply-changes.yml

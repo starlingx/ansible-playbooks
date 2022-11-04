@@ -1,0 +1,50 @@
+---
+# These are to be restored from localhost_platform_backup.tgz
+# Some directories like /etc/kuberenetes and /etc/ldap are not
+# covered here because they are handled by their respective roles
+# like common/bringup-kubemaster and backup-restore/restore-ldap.
+# Files listed here shoud generally be simple to restore and
+# not require complex logic.
+restore_items:
+  - etc/barbican
+  - etc/containerd
+  - etc/cni
+  - etc/default
+  - etc/docker
+  - etc/docker-distribution
+  - etc/drbd.d
+  - etc/etcd
+  - etc/fm
+  - etc/group
+  - etc/group-
+  - etc/haproxy
+  - etc/hosts
+  - etc/keystone
+  - etc/lighttpd
+  - etc/mtc
+  - etc/mtc.conf
+  - etc/mtc.ini
+  - etc/passwd
+  - etc/passwd-
+  - etc/pcidp
+  - etc/pki
+  - etc/platform/openrc
+  - etc/profile.d/kubeconfig.sh
+  - etc/resolv.conf
+  - etc/shadow
+  - etc/shadow-
+  - etc/sm
+  - etc/ssl
+  - etc/sysctl.d
+  - etc/sysinv
+  - opt/patching
+  - opt/platform
+  - opt/extension
+
+pxelinux_config_permdir: "/opt/platform/config/{{ software_version }}/pxelinux.cfg"
+
+# Used to restore networking configuration
+network_scripts_location:
+  "{{ '/etc/sysconfig/network-scripts' if os_release == 'centos' else '/etc/network/interfaces.d' }}"
+network_scripts_location_bkp:
+  "{{ 'etc/sysconfig/network-scripts' if os_release == 'centos' else 'etc/network/interfaces.d' }}"

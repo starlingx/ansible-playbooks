@@ -1,0 +1,11 @@
+[Unit]
+Description=Remove all containerd pods if flag present
+Requires=containerd.service
+After=kubelet.service
+ConditionPathExists={{ remove_containerd_pods_flag }}
+
+[Service]
+ExecStart={{ remove_containerd_pods_script }}
+
+[Install]
+WantedBy=multi-user.target

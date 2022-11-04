@@ -1,0 +1,3 @@
+---
+# Register additional flags that will be created in /etc/platform
+extra_required_flags: []

@@ -969,4 +969,4 @@
       path: /etc/platform/simplex
       state: touch
 
-  when: save_config_to_db
+  when: save_config_to_db and restore_mode|default(none) != 'optimized'

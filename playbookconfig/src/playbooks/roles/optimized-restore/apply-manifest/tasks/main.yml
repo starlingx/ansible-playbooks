@@ -1,0 +1,64 @@
+---
+#
+# Copyright (c) 2022 Intel, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to apply the puppet manifest specific to optimized restore.
+
+- name: Setup flags to control puppet manifest apply
+  file:
+    # Flag is used for simplex and duplex
+    path: /etc/platform/simplex
+    state: touch
+
+- name: Create hieradata workdir
+  file:
+    path: "{{ hieradata_workdir }}"
+    state: directory
+
+- name: Restore puppet hieradata to working directory
+  command: "tar -C {{ hieradata_workdir }} -xpf {{ platform_backup_fqpn }} \
+            --overwrite --transform='s,.*/,,' \
+            opt/platform/puppet/{{ software_version }}/hieradata"
+  args:
+    warn: false
+
+- name: Create puppet hieradata runtime configuration
+  copy:
+    dest: "{{ hieradata_workdir }}/runtime.yaml"
+    content: |
+      platform::network::mgmt::params::subnet_version: 4
+      platform::network::mgmt::params::controller0_address: 127.0.0.1
+      platform::network::mgmt::params::controller1_address: 127.0.0.2
+    force: yes
+
+- name: Create SSL CA cert directory
+  file:
+    path: "{{  ca_cert_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+    recurse: yes
+  when: os_release == 'debian'
+
+- name: Applying puppet restore manifest
+  command: >-
+    /usr/local/bin/puppet-manifest-apply.sh
+    {{ hieradata_workdir }}
+    localhost
+    controller
+    restore
+    {{ hieradata_workdir }}/runtime.yaml
+  environment:
+    INITIAL_CONFIG_PRIMARY: "true"
+    LC_ALL: "en_US.UTF-8"
+
+# TODO(outbrito): puppet sets permission to 750, not sure why...
+- name: Set /opt/backups to 755 so postgres can read it
+  file:
+    path: "/opt/backups"
+    state: directory
+    mode: 0755
