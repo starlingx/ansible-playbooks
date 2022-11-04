@@ -69,7 +69,7 @@
 
 - name: Create Calico config file
   template:
-    src: "roles/bootstrap/bringup-essential-services/templates/k8s-{{ kubernetes_long_version }}/calico-cni.yaml.j2"
+    src: "roles/common/bringup-kubemaster/templates/k8s-{{ kubernetes_long_version }}/calico-cni.yaml.j2"
     dest: /etc/kubernetes/update_calico.yaml
 
 - name: Update Calico Networking
@@ -81,7 +81,7 @@
 
 - name: Create Multus config file
   template:
-    src: "roles/bootstrap/bringup-essential-services/templates/k8s-{{ kubernetes_long_version }}/multus-cni.yaml.j2"
+    src: "roles/common/bringup-kubemaster/templates/k8s-{{ kubernetes_long_version }}/multus-cni.yaml.j2"
     dest: /etc/kubernetes/update_multus.yaml
 
 - name: Update Multus Networking
@@ -112,7 +112,7 @@
 
 - name: Create SRIOV Networking config file
   template:
-    src: "roles/bootstrap/bringup-essential-services/templates/k8s-{{ kubernetes_long_version }}/sriov-cni.yaml.j2"
+    src: "roles/common/bringup-kubemaster/templates/k8s-{{ kubernetes_long_version }}/sriov-cni.yaml.j2"
     dest: /etc/kubernetes/update_sriov-cni.yaml
 
 - name: Update SRIOV Networking
@@ -120,7 +120,7 @@
 
 - name: Create SRIOV device plugin config file
   template:
-    src: "roles/bootstrap/bringup-essential-services/templates/k8s-{{ kubernetes_long_version }}/sriov-plugin.yaml.j2"
+    src: "roles/common/bringup-kubemaster/templates/k8s-{{ kubernetes_long_version }}/sriov-plugin.yaml.j2"
     dest: /etc/kubernetes/update_sriovdp-daemonset.yaml
 
 - name: Update SRIOV device plugin
@@ -128,7 +128,7 @@
 
 - name: Create Coredns config file
   template:
-    src: "roles/bootstrap/bringup-essential-services/templates/coredns.yaml.j2"
+    src: "roles/common/bringup-kubemaster/templates/coredns.yaml.j2"
     dest: /etc/kubernetes/update_coredns.yaml
 
 - name: Update Coredns config map
