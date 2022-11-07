@@ -23,6 +23,7 @@
           yes/no: 'yes'
           sysadmin*: 'sysadmin'
           \(current\) UNIX password: 'sysadmin'
+          Current password: 'sysadmin'
           (?i)New password: "{{ ansible_ssh_pass }}"
           (?i)Retype new password: "{{ ansible_ssh_pass }}"
 

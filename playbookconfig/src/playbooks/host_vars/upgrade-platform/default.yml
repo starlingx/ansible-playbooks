@@ -12,10 +12,14 @@
 #
 password_change: false
 
+# The expected password strings differ between CentOS and Debian. The string
+# "(current) UNIX password" is found only in CentOS, while the string "Current
+# Password" is found only in Debian.
 password_change_responses:
   yes/no: 'yes'
   sysadmin*: 'sysadmin'
   \(current\) UNIX password: 'sysadmin'
+  Current password: 'sysadmin'
   (?i)New password: 'St8rlingX*'
   (?i)Retype new password: 'St8rlingX*'
 
