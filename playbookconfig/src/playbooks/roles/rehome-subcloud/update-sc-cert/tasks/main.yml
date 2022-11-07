@@ -1,12 +1,16 @@
 ---
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
 #   This role updates the certificates for https enabled admin endpoints on a subcloud
 #
+
+- name: Get system current time before updating certs
+  shell: START_TIME=$(date +%s); echo $START_TIME
+  register: start_time
 
 - name: Get sc_adminep_ca_cert namespaces
   shell: >-
@@ -26,20 +30,51 @@
   vars:
     ansible_become: yes
 
-- name: Create dc_root_ca runtime class to pass to puppet
-  copy:
-    dest: "/tmp/dc_root_ca.yml"
-    content: |
-      classes:
-      - platform::config::dc_root_ca::runtime
-      - platform::haproxy::restart::runtime
+- name: Check admin-ep-cert.pem updated
+  command: stat -c %Y "/etc/ssl/private/{{ sc_adminep_cert }}"
+  register: adminep_cert_modify_time
+  until: adminep_cert_modify_time.stdout > start_time.stdout
+  retries: 12
+  delay: 30
 
-- name: Applying puppet runtime manifest
-  command: >
-    /usr/local/bin/puppet-manifest-apply.sh
-    {{ puppet_permdir }}/hieradata
-    {{ derived_network_params.controller_0_address }}
-    controller runtime /tmp/dc_root_ca.yml
-  register: dc_root_ca_apply_result
-  environment:
-    LC_ALL: "en_US.UTF-8"
+- name: Check haproxy service restarted
+  shell: >-
+    date --date="$(ps -p $(ps -eo pid,cmd | grep haproxy |
+    awk 'NR==1{print $1}') -o lstart=)" '+%s'
+  register: haproxy_start_time
+  until: haproxy_start_time.stdout > start_time.stdout
+  retries: 6
+  delay: 10
+
+- name: Check manifest applied and alarm cleared
+  shell: |
+    source /etc/platform/openrc;
+    fm alarm-list --query alarm_id=250.001
+  register: alarm_count
+  retries: 6
+  delay: 30
+  until: alarm_count.stdout == ""
+  # set as false to allow for a better error message in the fail task below
+  failed_when: false
+
+- name: Failed when the manifest apply times out
+  fail:
+    msg: >-
+      Timed out to update DC subcloud cert. Check the cert-mon.log on the
+      subcloud controller for the reason.
+  when: alarm_count.stdout != ""
+
+- name: Restart sysinv-conductor
+  command: sm-restart service sysinv-conductor
+
+- name: Check sysinv-conductor related services enabled
+  shell: sm-query service '{{ item }}' | grep -c enabled-active
+  loop:
+    - "sysinv-inv"
+    - "cert-mon"
+    - "cert-alarm"
+    - "sysinv-conductor"
+  register: service_status
+  until: service_status.stdout == '1'
+  retries: 30
+  delay: 10
