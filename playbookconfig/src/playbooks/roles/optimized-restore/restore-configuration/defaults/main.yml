@@ -46,5 +46,9 @@ pxelinux_config_permdir: "/opt/platform/config/{{ software_version }}/pxelinux.c
 # Used to restore networking configuration
 network_scripts_location:
   "{{ '/etc/sysconfig/network-scripts' if os_release == 'centos' else '/etc/network/interfaces.d' }}"
-network_scripts_location_bkp:
-  "{{ 'etc/sysconfig/network-scripts' if os_release == 'centos' else 'etc/network/interfaces.d' }}"
+
+# When restoring networking, addresses for these hosts are added temporarily
+temporary_address_names:
+  - oamcontroller
+  - pxecontroller
+  - registry.local
