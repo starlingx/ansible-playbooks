@@ -81,7 +81,7 @@
 
 - name: Check if copying of branding files for mate is required
   stat:
-    path: /opt/branding
+    path: /opt/branding/
   register: branding_result
 
 - block:
