@@ -179,7 +179,6 @@
       'system_mode': "{{ system_mode }}"
       'timezone': "{{ timezone }}"
     root_disk_size: "{{ standard_root_disk_size }}"
-    root_disk_idx: 0
     localhost_name_ip_mapping: "127.0.0.1\tlocalhost\tlocalhost.localdomain localhost4 localhost4.localdomain4"
     network_params:
       'pxeboot_subnet': "{{ pxeboot_subnet }}"
@@ -593,17 +592,48 @@
      virtual_system is defined and
      not virtual_system|bool)
 
-# Workaround an Ansible quirk
-- name: Update root disk index for remote play
+# Filter out the preceding blank line(s) from the output of remote execution
+# of check_root_disk_size.py with escalated privilege remotely - a workaround
+# for an Ansible bug/quirk.
+- name: Filter out blank lines from disk size check output
   set_fact:
-    root_disk_idx: "{{ root_disk_idx + 1 }}"
-  when: ansible_connection != "local"
+    disk_size_result: |
+      {% set disk_size_result = [] %}
+      {% for l in disk_size_check_result.stdout_lines %}
+      {% if l != "" %}
+      {% set _ = disk_size_result.append(l) %}
+      {% endif %}
+      {% endfor %}
+      {{ disk_size_result }}
+
+- debug: var=disk_size_check_result
+- debug: var=disk_size_result
+
+# The expected result, after preceding blank line(s) is filtered out, is it
+# must contain at least 2 lines, one is the root disk path and the other
+# the root disk size. For instance:
+#
+# a) if root disk size is smaller than the specified standard root disk size,
+# /dev/sdb
+# 500
+# Traceback (most recent call last):
+#   File "/usr/share/ansible/stx-ansible...."
+#       raise Exception("Failed validation!")
+#       Exception: Failed validation!
+#
+# b) if the root size is larger or equal to the specified standard root disk size:
+# /dev/sdb
+#  500
+- name: Fail if disk size check returned unexpected result
+  fail:
+    msg: "Disk size check script returned unexpected result {{ disk_size_check_result.stdout_lines }}"
+  when: (disk_size_result|length < 2 or
+         disk_size_result[1]|int == 0)
 
 - name: Set root disk and root disk size facts
   set_fact:
-    root_disk: "{{ disk_size_check_result.stdout_lines[root_disk_idx|int] }}"
-    root_disk_size: "{{ disk_size_check_result.stdout_lines[root_disk_idx|int + 1] }}"
-  failed_when: root_disk_size|int == 0
+    root_disk: "{{ disk_size_result[0] }}"
+    root_disk_size: "{{ disk_size_result[1] }}"
 
 - debug:
     msg: >-
