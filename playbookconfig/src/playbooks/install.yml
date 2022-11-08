@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020-2021 Wind River Systems, Inc.
+# Copyright (c) 2020-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -13,143 +13,36 @@
   tasks:
     - set_fact:
         ansible_port: "{{ ansible_port | default(22) }}"
-        rvmc_resource_file: "{{ rvmc_config_dir }}/rvmc.yaml"
-        rvmc_image: "{{ rvmc_image | default('docker.io/starlingx/rvmc') }}"
-        rvmc_config_file: "{{ rvmc_config_dir }}/rvmc-config.yaml"
-        pod_schedule_time: "{{ pod_schedule_time | default(60) }}"
-        job_wait_time: "{{ job_wait_time | default(900) }}"
-        boot_wait_time: " {{ boot_wait_time | default(600) }}"
-        wait_for_timeout: " {{ wait_for_timeout | default(3600) }}"
-        rvmc_namespace: "rvmc"
+        boot_wait_time: "{{ boot_wait_time | default(600) }}"
+        wait_for_timeout: "{{ wait_for_timeout | default(3600) }}"
+        job_retry_delay: "{{ 120 | random }}"
 
     # The following block is executed locally
     - block:
-      - name: Clean up the Redfish Virtual Media Controller from previous run if it has not been cleaned automatically
-        command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }} delete job {{ rvmc_name }}"
-        register: deleted_job
-        failed_when: false
-        no_log: true
+      - name: Start rvmc job
+        include_role:
+          name: install/apply-rvmc-job
 
-      - name: Wait for 60 seconds to ensure Redfish Virtual Media Controller pods are terminated
+      - name: Wait for {{ job_retry_delay }} seconds to retry the rvmc job
         wait_for:
-          timeout: 60
-        when: deleted_job.rc == 0
+          timeout: "{{ job_retry_delay }}"
+        when: wait_for_rvmc.stdout in ['failed', 'not found'] and not credential_failure
 
-      - name: Get rvmc_namespace
-        command: >-
-          kubectl --kubeconfig=/etc/kubernetes/admin.conf get namespace {{ rvmc_namespace }}
-        register: get_namespace
-        failed_when: false
+      # Do not add this and above task to a block although both of them are
+      # the same condition. There's an open issue about "The when conditional
+      # over a block containing an include_role is applied to all role tasks
+      # despite no 'apply'" (https://github.com/ansible/ansible/issues/74382)
+      - name: Retry rvmc job
+        include_role:
+          name: install/apply-rvmc-job
+        when: wait_for_rvmc.stdout in ['failed', 'not found'] and not credential_failure
 
-      - name: Ensure rvmc_namespace is created
-        command: >-
-          kubectl create namespace --kubeconfig=/etc/kubernetes/admin.conf {{ rvmc_namespace }}
-        when: get_namespace.stdout_lines|length == 0
-        register: result
-        failed_when: (result.rc != 0) and ("'AlreadyExists' not in result.stderr")
-
-      - name: Get default registry key
-        command: >-
-          kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret default-registry-key --namespace={{ rvmc_namespace }}
-        failed_when: false
-        register: get_default_registry_key
-
-      - name: Copy default-registry-key to rvmc namespace
-        shell: >-
-          kubectl get secret default-registry-key --namespace=kube-system -o yaml
-          | sed 's/namespace: kube-system/namespace: {{ rvmc_namespace }}/'
-          | kubectl apply --namespace={{ rvmc_namespace }} -f -
-        environment:
-          KUBECONFIG: "/etc/kubernetes/admin.conf"
-        when: get_default_registry_key.stdout == ""
-
-      - name: Create Redfish Virtual Media Controller resource file
-        template:
-          src: "roles/install/templates/rvmc.yaml.j2"
-          dest: "{{ rvmc_resource_file }}"
-
-      - name: Activate Redfish Virtual Media Controller
-        command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ rvmc_resource_file }}"
-
-      - name: Get the pod name that created by Redfish Virtual Media Controller batch job
-        command: >-
-          kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }} get pods -l job-name={{ rvmc_name }}
-          --output=jsonpath='{.items[*].metadata.name}'
-        failed_when: pod_name.stdout == ""
-        register: pod_name
-
-      - block:
-        - set_fact:
-            rvmc_pod_name: "{{ pod_name.stdout_lines[0] }}"
-
-        - name: Wait for {{ pod_schedule_time }} seconds for {{ rvmc_pod_name }} to be ready
-          command: >-
-            kubectl --kubeconfig=/etc/kubernetes/admin.conf wait -n {{ rvmc_namespace }}
-            --for=condition=Ready pod/{{ rvmc_pod_name }}
-            --timeout={{ pod_schedule_time }}s
-          failed_when: false
-          register: wait_for_pod
-
-        - block:
-          - name: Save Redfish Virtual Media Controller logs if {{ rvmc_pod_name }} is not ready
-            command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }} logs {{ rvmc_pod_name }}"
-            register: pod_logs
-
-          - debug:
-              msg: "{{ pod_logs.stdout }}"
-
-          - name: Fail if {{ rvmc_pod_name }} is not ready
-            fail: msg="Redfish Virtual Media Controller failed to start the install"
-
-          when: wait_for_pod.rc != 0
-
-        # The rvmc takes few minutes to open the client connection.
-        # It takes longer when it fails, and the running pod goes to error state
-        - name: Wait for 200 seconds to ensure Redfish Client Connection to BMC is established
-          wait_for:
-            timeout: 200
-
-        - name: Check if the Redfish Virtual Media Controller is in an error state
-          command: >-
-            kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }} get pods -l job-name={{ rvmc_name }}
-            --field-selector=status.phase!=Running,status.phase!=Succeeded
-          register: pod_has_error
-
-        - block:
-          - name: Save Redfish Virtual Media Controller logs if it is in an error state
-            command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }} logs {{ rvmc_pod_name }}"
-            register: pod_error_logs
-
-          - debug:
-              msg: "{{ pod_error_logs.stdout }}"
-
-          - name: Fail if Redfish Virtual Media Controller enters an error state
-            fail: msg="Redfish Virtual Media Controller failed to install the host"
-
-          when: pod_has_error.stdout != ""
-
-      - name: Wait for {{ job_wait_time }} seconds for Redfish Virtual Media Controller to complete
-        command: >-
-          kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }} wait
-          --for=condition=complete job/{{ rvmc_name }} --timeout={{ job_wait_time }}s
-        failed_when: false
-        register: wait_for_rvmc
-
-      - name: Store Redfish Virtual Media Controller log after the job is completed
-        command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }} logs job/{{ rvmc_name }}"
-        register: rvmc_logs
-
-      - debug:
-          msg: "{{ rvmc_logs.stdout }}"
-
-      - block:
-        - debug:
-            msg: "{{ wait_for_rvmc.stdout }}"
-
-        - name: Fail if waiting for Redfish Virtual Media Controller returns an error
-          fail: msg="Failed to install the host via Redfish Virtual Media Controller."
-
-        when: wait_for_rvmc.rc != 0
+      - name: Fail if Redfish Virtual Media Controller job returns an error
+        fail:
+          msg: |
+           Failed to install the host via Redfish Virtual Media Controller.
+           {{ failure_msg }}
+        when: wait_for_rvmc.stdout != "complete"
 
       delegate_to: localhost
 
