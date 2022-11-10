@@ -135,7 +135,7 @@ spec:
           mountPath: /var/lib/csi/sockets/pluginproxy/
       nodeSelector:
         # STX_change: launch only on master nodes
-        node-role.kubernetes.io/master: ""
+        node-role.kubernetes.io/control-plane: ""
         kubernetes.io/os: linux
         kubernetes.io/arch: amd64
       tolerations: []
