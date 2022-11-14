@@ -38,8 +38,11 @@
     - "barbican-api"
     - "sysinv-conductor"
 
-- name: Restart affected service using pmon
-  command: pmon-restart fm-api
+- name: Restart affected services using pmon
+  command: "pmon-restart {{ item }}"
+  loop:
+    - "fm-api"
+    - "sm-api"
 
 - name: Wait until services are restarted after changing keystone IDs
   shell: sm-query service {{ item }} | grep -c enabled-active
