@@ -97,7 +97,7 @@
 
     when: wait_for_pod.rc != 0
 
-- name: Wait for {{ job_wait_time }} seconds for Redfish Virtual Media Controller to complete or failed
+- name: Wait for {{ job_wait_time }} seconds for Redfish Virtual Media Controller to complete or fail
   script: roles/install/files/k8s-job-state-check.sh {{ rvmc_name }} {{ rvmc_namespace }} {{ job_wait_time }}
   register: wait_for_rvmc
   until: wait_for_rvmc.rc == 0
