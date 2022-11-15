@@ -64,8 +64,6 @@
       register: find_backup
       connection: "{{ target_connection }}"
 
-    - debug: var=find_backup
-
     - name: Fail if there is no backup file or there are more than one backup file
       fail:
         msg: "There must be one platform backup file in  {{backup_dir }}."
@@ -80,13 +78,13 @@
       - name: Check if user images backup file exists
         find:
           path: "{{ backup_dir }}"
-          patterns: "{{ default_registry_backup_prefix }}*"
+          patterns: "{{ default_user_images_backup_prefix }}*"
         register: find_backup
 
       - name: Fail if there is no images backup file or there are more than one images backup file
         fail:
           msg: "There must be one user images backup file in {{ backup_dir }}"
-        when: find_backup.failed
+        when: find_backup.failed or find_backup.files|length != 1
 
       - name: Set user images backup file facts
         set_fact:
@@ -182,4 +180,5 @@
   loop:
     - "initial_backup_dir: {{ platform_backup_dir }}"
     - "backup_filename: {{ platform_backup_filename }}"
+    - "restore_mode: {{ restore_mode }}"
   connection: local
