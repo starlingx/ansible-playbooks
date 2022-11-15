@@ -13,13 +13,6 @@
   set_fact:
     images_cleanup_dir: "{{ platform_backup_dir}}/{{ input_dir }}"
 
-- name: Delete packages prestage completed flag
-  file:
-    path: "{{ platform_backup_dir}}/{{ input_dir }}/{{ packages_prestage_completed_flag }}"
-    state: absent
-  become: yes
-  when: prestage_type == "packages"
-
 - block:
   - name: Check if {{ images_cleanup_dir }} exists
     stat:

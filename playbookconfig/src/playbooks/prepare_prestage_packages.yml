@@ -16,7 +16,7 @@
   gather_facts: no
 
   vars:
-    prestaging_repo: "/var/run/prestaging_repo"
+    prestaging_repo: "/var/run/ostree_repo"
     prestage_preparation_completed_file: "{{ prestaging_repo }}/.prestage_preparation_completed"
 
   tasks:

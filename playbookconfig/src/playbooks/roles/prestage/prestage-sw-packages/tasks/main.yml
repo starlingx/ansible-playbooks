@@ -11,7 +11,7 @@
 
 - name: Set local prestaging repo path on the subcloud
   set_fact:
-    local_prestaging_repo: "{{ prestage_dir }}/prestaging_repo"
+    local_prestaging_repo: "{{ prestage_dir }}/ostree_repo"
 
 - name: Ensure local prestaging repo path exist
   file:
@@ -59,10 +59,3 @@
       recurse: yes
 
   when: prestage_reason == 'upgrade'
-
-- name: Mark software prestaging as completed
-  file:
-    path: "{{ prestage_dir }}/{{ packages_prestage_completed_flag }}"
-    state: touch
-    owner: root
-    mode: 0644

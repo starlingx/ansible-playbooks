@@ -22,7 +22,7 @@
 - name: Set prestage dir and subdirectory facts
   set_fact:
     prestage_reason: upgrade
-    prestage_dir: "{{ platform_backup_dir }}/{{ prestage_software_version }}"
+    prestage_dir: "{{ platform_backup_dir }}"
     packages_prestage_completed_flag: ".packages_prestage_completed"
 
 - name: Retrieve current software version of the host
@@ -45,21 +45,6 @@
   set_fact:
     prestage_reason: reinstall
   when: prestage_software_version == host_software_version
-
-- block:
-  - name: Look for packages_prestage_completed flag
-    stat:
-      path: "{{ prestage_dir }}/{{ packages_prestage_completed_flag }}"
-    register: flag_file_check
-
-  - block:
-    - name: Skip packages prestaging if it was completed already
-      debug:
-        msg: "Packages prestaging for {{ prestage_software_version }} is already completed."
-    - meta: end_play
-    when: flag_file_check.stat.exists
-
-  when: prestage_type == "packages"
 
 - block:
   - block:

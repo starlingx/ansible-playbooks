@@ -85,7 +85,7 @@
     no_log: true
 
   - name: Generate image bundles
-    script: gen-image-bundles.sh "{{ prestage_dir }}" "{{ images_output_file }}" "{{ bundle_size }}"
+    script: gen-image-bundles.sh "{{ prestage_dir }}/{{ software_version }}" "{{ images_output_file }}" "{{ bundle_size }}"
     register: gen_image_bundles_output
 
   - debug: var=gen_image_bundles_output.stdout_lines
