@@ -10,6 +10,32 @@
 #   registry.  If the images were not included in the backup
 #   they will be downloaded in the same way as during a bootstrap.
 
+# Cluster host floating IP is required on subclouds for etcd restoration
+- name: Get cluster host floating IP
+  shell: |-
+    source /etc/platform/openrc
+    system addrpool-list | grep cluster-host-subnet | cut -d'|' -f8
+  failed_when: not cluster_vip.stdout
+  register: cluster_vip
+
+- name: Configure controller host addresses
+  command: "ip addr add {{ cluster_vip.stdout_lines[0] }} dev lo scope host"
+
+# We may need to update /etc/hosts because registry.central will not be
+# available on system controllers or subclouds because dnsmasq is not brought up.
+- name: Check if registry.central is present in sysinv
+  shell: |-
+    source /etc/platform/openrc
+    system addrpool-list | grep system-controller-oam-subnet | cut -d'|' -f8
+  register: sc_oam_vip
+
+- name: Add host route to registry.central if present
+  lineinfile:
+    path: /etc/hosts
+    insertafter: EOF
+    line: "{{ sc_oam_vip.stdout_lines[0].strip() }} registry.central"
+  when: sc_oam_vip.stdout
+
 - name: Check if archived kubelet dir present
   shell: "tar -tf {{ platform_backup_fqpn }} | grep 'var/lib/kubelet'"
   args:

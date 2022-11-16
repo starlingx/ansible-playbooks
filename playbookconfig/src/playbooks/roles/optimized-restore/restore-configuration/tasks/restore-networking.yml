@@ -13,50 +13,26 @@
 # Bring up networking, meant to replicate state during boostrapping
 - name: Restore networking
   block:
-    - name: Determine network configuration files
-      find:
-        paths: "{{ network_scripts_location }}"
-        patterns: "ifcfg-*"
-      register: network_files_to_delete
-
     - name: Remove network configuration files
       file:
-        path: "{{ item.path }}"
+        path: "{{ network_scripts_location }}"
         state: absent
-      loop: "{{ network_files_to_delete.files }}"
 
     - name: Restore network configuration files
-      command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite --wildcards {{ network_scripts_location_bkp }}/*"
+      command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite {{ network_scripts_location.lstrip('/') }}"
 
-    # fails due to enp0s9 not having the ip set on ifcfg-enp0s9
-    # - name: Restart networking daemon
-    #   systemd:
-    #     name: networking
-    #     state: restarted
+    - name: Shutdown all network interfaces excluding loopback
+      command: ifdown -a --exclude=lo
 
-    - name: Bring lo up
-      command: ifup lo lo:1 lo:5
+    - name: Bring up original networking
+      shell: ifup -a --exclude="$(ip route show 0.0.0.0/0 | awk '{print $NF}')"
 
-    - name: Lookup controller host address
-      command: "gethostip -d controller"
-      register: host_lookup
+    - name: Bring up temporary addresses
+      block:
+      - name: Lookup controller host addresses
+        shell: "grep -E '{{ '|'.join(temporary_address_names) }}' /etc/hosts | awk '{print $1}'"
+        register: host_addresses
 
-    - name: Define controller host address
-      set_fact:
-        controller_address: "{{ host_lookup.stdout_lines[0] }}"
-
-    - name: Configure controller host address
-      command: "ip addr add {{ controller_address }} dev lo scope host"
-
-    - name: Lookup controller host address
-      command: "gethostip -d pxecontroller"
-      register: pxe_host_lookup
-
-    - name: Define controller host address
-      set_fact:
-        pxecontroller_address: "{{ pxe_host_lookup.stdout_lines[0] }}"
-
-    - name: Configure controller host address
-      command: "ip addr add {{ pxecontroller_address }} dev lo scope host"
-
-  ignore_errors: true
+      - name: Configure controller host address
+        command: "ip addr add {{ item }} dev lo scope host"
+        loop: "{{ host_addresses.stdout_lines }}"
