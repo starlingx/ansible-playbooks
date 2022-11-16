@@ -25,16 +25,22 @@
     system_local_ca_cert: "{{ kubernetes_root_ca_crt.stdout }}"
     system_local_ca_key: "{{ kubernetes_root_ca_key.stdout }}"
 
-- name: Get distributed_cloud role
-  shell: |
-    source /etc/platform/openrc
-    system show | grep distributed_cloud_role | awk '{ print $4 }'
-  register: distributed_cloud_role
+- block:
+  - name: Get distributed_cloud_role if not defined
+    shell: |
+      source /etc/platform/openrc
+      system show | grep distributed_cloud_role | awk '{ print $4 }'
+    register: dc_role
+
+  - name: Set distributed_cloud_role value
+    set_fact:
+      distributed_cloud_role: "{{ dc_role.stdout }}"
+  when: distributed_cloud_role is undefined
 
 - name: Set which platform certificates to install
   set_fact:
     install_oidc_auth_apps_certificate: false
-    install_system_open_ldap_certificate: "{{ true if distributed_cloud_role.stdout != 'subcloud' else false }}"
+    install_system_open_ldap_certificate: "{{ true if distributed_cloud_role != 'subcloud' else false }}"
     install_system_registry_local_certificate: false
     install_system_restapi_gui_certificate: false
 
@@ -54,9 +60,15 @@
     until: create_k8_apply_ep is not failed
     retries: 10
     delay: 30
-  when: distributed_cloud_role.stdout != 'subcloud'
+  when: distributed_cloud_role != 'subcloud'
 
+# The following role should be executed during subcloud bootstrap or upgrade,
+# not subcloud restore as the ca cert is supposed to be restored from the backup.
 - name: Send root CA certificate to subcloud
   include_role:
     name: common/send-ca-cert-to-subcloud
-  when: distributed_cloud_role.stdout == 'subcloud' and mode != 'restore'
+  when: (distributed_cloud_role == 'subcloud') and
+        ((mode == 'bootstrap') or
+         (mode == 'restore' and
+          migrate_platform_data is defined and
+          migrate_platform_data))
