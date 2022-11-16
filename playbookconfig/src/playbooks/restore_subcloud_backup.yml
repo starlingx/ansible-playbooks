@@ -24,10 +24,10 @@
     vault_pass: "{{ ansible_become_pass|list|shuffle|join }}"
     vault_id_file: "/tmp/vaultid_{{ inventory_hostname }}.tmp"
     default_backup_prefix: "{{ inventory_hostname }}_platform_backup"
-    default_registry_backup_prefix: "{{ inventory_hostname }}_docker_local_registry_backup"
+    default_user_images_backup_prefix: "{{ inventory_hostname }}_user_images_backup"
     default_local_backup_dir: "/opt/platform-backup/backups"
     default_central_backup_dir: "/opt/dc-vault/backups"
     default_local_staging_dir: "/opt/platform-backup/{{ inventory_hostname|list|reverse|join }}"
     user_images_restore: false
-    restore_mode: 'old'
+    restore_mode: "optimized"
     unlock_timeout: 900

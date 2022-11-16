@@ -59,4 +59,4 @@
 - name: Send root CA certificate to subcloud
   include_role:
     name: common/send-ca-cert-to-subcloud
-  when: distributed_cloud_role.stdout == 'subcloud'
+  when: distributed_cloud_role.stdout == 'subcloud' and mode != 'restore'
