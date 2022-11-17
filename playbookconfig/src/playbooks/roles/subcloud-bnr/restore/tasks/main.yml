@@ -20,7 +20,7 @@
 
 - name: Perform images restore
   import_tasks: do_images_restore.yml
-  when: user_images_restore
+  when: restore_user_images
 
 - name: Perform host unlock
   include_role:

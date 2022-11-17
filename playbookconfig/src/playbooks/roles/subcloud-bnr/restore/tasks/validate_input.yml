@@ -20,7 +20,7 @@
 - name: Fail if user images restore is requested when backup storage location is central
   fail:
     msg: "User images backup data are not stored on the system controller."
-  when: not local and (user_images_restore or user_images_backup_filename is defined)
+  when: not local and (restore_user_images or user_images_backup_filename is defined)
 
 - name: Set target_connection fact
   set_fact:
@@ -90,7 +90,7 @@
         set_fact:
           images_backup_dir: "{{ backup_dir }}"
           images_backup_filename: "{{ find_backup.files[0].path|basename }}"
-      when: local and user_images_restore
+      when: local and restore_user_images
   when: platform_backup_filename is undefined
 
 - name: Handling specified platform_backup_filename
@@ -122,9 +122,9 @@
           msg: "User images backup file {{ user_images_backup_filename }} does not exist."
         when: not images_file_check.stat.exists
 
-      - name: Turn on user_images_restore flag
+      - name: Turn on restore_user_images flag
         set_fact:
-          user_images_restore: true
+          restore_user_images: true
 
       - name: Set user images backup file facts
         set_fact:
