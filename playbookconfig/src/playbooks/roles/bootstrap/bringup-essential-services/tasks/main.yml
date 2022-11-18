@@ -20,7 +20,6 @@
       - source /etc/platform/openrc; system interface-network-assign controller-0 lo mgmt
       - source /etc/platform/openrc; system interface-network-assign controller-0 lo cluster-host
       - ip addr add {{ cluster_virtual }}  brd {{ cluster_broadcast }} dev lo scope host label lo:5
-      - ip addr add {{ mgmt_virtual }} brd {{ management_broadcast }} dev lo scope host label lo:1
       - ip addr add {{ pxe_virtual }} dev lo scope host
       - ip addr add {{ cluster_floating_virtual }} dev lo scope host
 
@@ -34,6 +33,11 @@
     command: ip addr delete {{ prev_mgmt_floating_virtual }} dev lo scope host
     when: last_config_file_exists and reconfigure_endpoints and
           (mgmt_floating_virtual != prev_mgmt_floating_virtual)
+
+  - name: Remove previous management virtual address if management network config has changed
+    command: ip addr delete {{ prev_mgmt_virtual }} brd {{ management_broadcast }} dev lo:1 scope host
+    when: last_config_file_exists and reconfigure_endpoints and
+          (mgmt_virtual != prev_mgmt_virtual)
 
   - name: Mount current Kubernetes version
     import_role:

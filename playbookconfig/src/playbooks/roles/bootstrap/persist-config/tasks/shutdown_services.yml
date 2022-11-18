@@ -102,8 +102,8 @@
       prev_cluster_virtual: "{{ prev_controller_0_cluster_host }}/{{ prev_cluster_subnet_prefix }}"
 
   # Remove previous addresses associated with lo interface except the previous mgmt floating address
-  # as we still need sysinv-api to be reachable at the previous address until the service endpoints
-  # are reconfigured.
+  # and previous mgmt virtual address as we still need sysinv-api to be reachable at the previous
+  # addresses until the service endpoints are reconfigured.
   - name: Remove loopback interface in sysinv db and associated addresses
     shell: "{{ item }}"
     register: remove_addresses
@@ -112,7 +112,6 @@
       - source /etc/platform/openrc; system host-if-delete controller-0 lo
       - "ip addr delete {{ prev_cluster_floating_virtual }} dev lo scope host"
       - "ip addr delete {{ prev_pxe_virtual }} dev lo scope host"
-      - "ip addr delete {{ prev_mgmt_virtual }} brd {{ management_broadcast }} dev lo:1 scope host"
       - "ip addr delete {{ prev_cluster_virtual }}  brd {{ cluster_broadcast }} dev lo:5 scope host"
 
   - name: Fail if removing interface addresses failed for reason other than it has been done already

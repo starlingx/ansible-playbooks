@@ -54,6 +54,14 @@
       state: absent
     when: dc_role_changed
 
+    # Make sure the management virtual address is available
+  - name: Add the controller-0 address
+    command: ip addr add {{ mgmt_virtual }} brd {{ management_broadcast }} dev lo scope host label lo:1
+    register: add_mgmt_virtual_address
+    failed_when: (add_mgmt_virtual_address.rc != 0) and
+                 (not incomplete_bootstrap) and
+                 (mgmt_virtual != prev_mgmt_virtual)
+
   # Make sure the management floating address is available
   - name: Add the management floating address
     command: ip addr add {{ mgmt_floating_virtual }} dev lo scope host
