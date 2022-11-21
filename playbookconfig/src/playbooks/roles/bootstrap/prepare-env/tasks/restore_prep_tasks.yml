@@ -36,7 +36,6 @@
       warn: false
     when: bkp_has_branding.rc is defined and
         bkp_has_branding.rc == 0
-    failed_when: false
 
   - name: Remove unwanted directory
     file:
