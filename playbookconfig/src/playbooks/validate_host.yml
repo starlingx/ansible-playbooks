@@ -18,6 +18,7 @@
         check_load: "{{ check_load | default(true) }}"
         check_bootstrap_address: "{{ check_bootstrap_address | default(true) }}"
         check_patches: "{{ check_patches | default(true) }}"
+        sync_patch_metadata: "{{ sync_patch_metadata | default(false) }}"
         password_change: "{{ password_change | default(true) }}"
         password_change_responses:
           yes/no: 'yes'
@@ -29,4 +30,8 @@
 
   roles:
     - common/prepare-env
+    - role: common/sync-patch-metadata
+      when: sync_patch_metadata
+      vars:
+        ansible_become_pass: "{{ ansible_ssh_pass }}"
     - common/validate-target
