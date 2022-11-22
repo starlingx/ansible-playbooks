@@ -13,10 +13,23 @@
     state: stopped
   loop: "{{ docker_services }}"
 
-- name: Restore container registry filesystem
-  command: "tar -C / -xpf {{ registry_backup_fqpn }} --overwrite var/lib/docker-distribution/"
-  args:
-    warn: false
+- name: Old-style registry backup restore
+  block:
+
+    - name: Load images from archives if configured
+      include: roles/bootstrap/bringup-essential-services/tasks/load_images_from_archive.yml input_archive={{ item.path }}
+      with_items: "{{ images_archive_files }}"
+      when: images_archive_exists
+
+  when: registry_backup_fqpn is not defined
+
+- name: New-style registry backup restore
+  block:
+    - name: Restore image registry data to /var/lib/docker-distribution
+      shell: pigz -dc {{ registry_backup_fqpn }} | tar -C / --overwrite -xpf - var/lib/docker-distribution
+      args:
+        warn: false
+
   when: registry_backup_fqpn is defined
 
 - name: Disable local registry authentication

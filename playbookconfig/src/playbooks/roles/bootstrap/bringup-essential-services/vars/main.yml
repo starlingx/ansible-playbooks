@@ -27,7 +27,6 @@ cgroup_root: /sys/fs/cgroup
 k8s_cgroup_name: k8s-infra
 kubeadm_pki_dir: /etc/kubernetes/pki
 etcd_tmp_dir: /opt/backups/etcd_tmp_dir
-psp_file: /usr/share/ansible/stx-ansible/playbooks/roles/bootstrap/bringup-essential-services/files/psp-policies.yaml
 controlplane_endpoint: "{{ cluster_floating_address }}"
 etcd_endpoint: "https://{{ cluster_floating_address | ipwrap }}:2379"
 apiserver_advertise_address: "{{ controller_0_cluster_host }}"

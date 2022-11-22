@@ -9,6 +9,14 @@
 #   Applying any missing changes or creating any missing flags
 #   that are not created during optimized restore.
 
+- name: Remove temporary files and directories used during restore
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ ansible_remote_tmp }}"
+    - "{{ override_files_dir }}/{{ override_filename }}"
+
 - name: Combine required flags
   set_fact:
     all_required_flags: "{{ default_required_flags + extra_required_flags }}"

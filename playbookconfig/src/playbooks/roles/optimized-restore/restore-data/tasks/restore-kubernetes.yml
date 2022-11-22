@@ -60,7 +60,7 @@
   template:
     src: roles/optimized-restore/templates/containerd-pod-recovery.service.j2
     dest: /etc/systemd/system/containerd-pod-recovery.service
-    mode: 0755
+    mode: 0644
     owner: root
     group: root
 

@@ -17,7 +17,8 @@
 
   # Main play
   roles:
-    - role: backup/validate-input
+    # For now, input will not be validated.
+    # - role: backup/validate-input
     - role: common/prepare-env
     - role: backup-restore/prepare-env
     - role: backup/prepare-env

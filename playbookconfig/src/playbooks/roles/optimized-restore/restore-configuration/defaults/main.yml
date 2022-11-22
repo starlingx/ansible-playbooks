@@ -29,11 +29,11 @@ restore_items:
   - etc/pcidp
   - etc/pki
   - etc/platform/openrc
-  - etc/profile.d/kubeconfig.sh
   - etc/resolv.conf
   - etc/shadow
   - etc/shadow-
   - etc/sm
+  - etc/ssh
   - etc/ssl
   - etc/sysctl.d
   - etc/sysinv
