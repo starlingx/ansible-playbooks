@@ -30,7 +30,7 @@ def get_rootfs_node():
                         device = os.path.basename(os.readlink(symlink))
                     else:
                         device = os.path.basename(params[1])
-                elif params[0] == "ostree_root":
+                elif params[0] == "ostree_boot":
                     if "LABEL=" in params[1]:
                         key, label = params[1].split("=")
                         symlink = "/dev/disk/by-label/%s" % label
