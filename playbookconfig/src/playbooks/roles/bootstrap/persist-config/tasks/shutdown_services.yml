@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2021 Wind River Systems, Inc.
+# Copyright (c) 2019-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -88,6 +88,15 @@
         if prev_pxeboot_start_address == 'derived' else prev_pxeboot_start_address }}"
       prev_pxe_subnet_prefix: "{{ prev_pxeboot_subnet | ipaddr('prefix') }}"
 
+  - name: Set facts derived from previous admin network configuration
+    set_fact:
+      prev_admin_subnet_prefix: "{{ prev_admin_subnet | ipaddr('prefix') }}"
+      prev_controller_admin_floating_address:
+        "{{ (prev_admin_subnet | ipaddr(1)).split('/')[0]
+        if prev_admin_start_address == 'derived' else prev_admin_start_address }}"
+      prev_admin_floating_virtual: "{{ prev_admin_controller_floating_address }}/{{ prev_admin_subnet_prefix }}"
+    when: (admin_network is defined and (prev_admin_network|bool == true))
+
   - name: Set facts derived from previous floating addresses
     set_fact:
       prev_controller_0_address: "{{ prev_controller_floating_address|ipmath(1) }}"
@@ -113,6 +122,14 @@
       - "ip addr delete {{ prev_cluster_floating_virtual }} dev lo scope host"
       - "ip addr delete {{ prev_pxe_virtual }} dev lo scope host"
       - "ip addr delete {{ prev_cluster_virtual }}  brd {{ cluster_broadcast }} dev lo:5 scope host"
+
+  - name: Remove admin address on the loopback interface
+    shell: "{{ item }}"
+    register: remove_admin_addresses
+    failed_when: false
+    with_items:
+      - "ip addr delete {{ prev_admin_floating_virtual }} brd {{ admin_broadcast }} dev lo:8 scope host"
+    when: (admin_network is defined and (prev_admin_network|bool == true))
 
   - name: Fail if removing interface addresses failed for reason other than it has been done already
     fail:

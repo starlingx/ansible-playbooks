@@ -86,6 +86,17 @@
       Please re-install before attempting to bootstrap it again."
   when: bootstrap_finalized_flag.stat.exists or initial_config_complete.stat.exists
 
+- block:
+  - name: Fail if admin network parameters are defined for non-subcloud host
+    fail:
+      msg: "Admin network parameters can only be specified for a subcloud."
+    when: distributed_cloud_role != 'subcloud'
+
+  - name: Turn on admin_network flag
+    set_fact:
+      admin_network: true
+  when: admin_subnet is defined and admin_gateway_address is defined
+
 - name: Set initial address facts if not defined. They will be updated later
   set_fact:
     pxeboot_start_address: "{{ pxeboot_start_address | default('derived') }}"
@@ -104,6 +115,8 @@
     management_multicast_end_address: "{{ management_multicast_end_address | default('derived') }}"
     external_oam_node_0_address: "{{ external_oam_node_0_address | default('derived') }}"
     external_oam_node_1_address: "{{ external_oam_node_1_address | default('derived') }}"
+    admin_start_address: "{{ admin_start_address | default('derived') }}"
+    admin_end_address: "{{ admin_end_address | default('derived') }}"
 
 - set_fact:
     docker_registries: "{{ vault_docker_registries }}"
@@ -170,6 +183,7 @@
       'external_oam_gateway_address': "{{ external_oam_gateway_address }}"
       'external_oam_floating_address': "{{ external_oam_floating_address }}"
       'management_multicast_subnet': "{{ management_multicast_subnet }}"
+      'admin_subnet': '{{ admin_subnet | default([]) }}'
     # Set this placeholder here to workaround an Ansible quirk
     derived_network_params:
       place_holder: place_holder
@@ -476,7 +490,9 @@
               (prev_external_oam_start_address != external_oam_start_address) or
               (prev_external_oam_end_address != external_oam_end_address) or
               (prev_external_oam_node_0_address != external_oam_node_0_address) or
-              (prev_external_oam_node_1_address != external_oam_node_1_address)
+              (prev_external_oam_node_1_address != external_oam_node_1_address) or
+              (admin_network is defined and prev_admin_subnet != admin_subnet) or
+              (prev_admin_start_address != admin_start_address)
 
       - name: Turn on service endpoints reconfiguration flag if distributed_cloud_role is changed
         set_fact:
@@ -512,7 +528,10 @@
               (prev_cluster_pod_end_address != cluster_pod_end_address) or
               (prev_cluster_service_subnet != cluster_service_subnet) or
               (prev_cluster_service_start_address != cluster_service_start_address) or
-              (prev_cluster_service_end_address != cluster_service_end_address)
+              (prev_cluster_service_end_address != cluster_service_end_address) or
+              (admin_network is defined and prev_admin_subnet != admin_subnet) or
+              (prev_admin_start_address != admin_start_address) or
+              (prev_admin_end_address != admin_end_address)
 
       - name: Turn on restart services flag if management/oam/cluster network or docker config is changed
         set_fact:

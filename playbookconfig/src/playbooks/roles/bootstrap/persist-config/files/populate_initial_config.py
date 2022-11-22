@@ -124,6 +124,11 @@ def is_subcloud():
     return cloud_role == SUBCLOUD_ROLE
 
 
+def has_admin_network():
+    admin_subnet = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_SUBNET')
+    return admin_subnet != 'undef'
+
+
 def wait_system_config(client):
     for _ in range(SYSTEM_CONFIG_TIMEOUT):
         try:
@@ -289,9 +294,12 @@ def delete_network_and_addrpool(client, network_name):
             network_uuid = network.uuid
             addrpool_uuid = network.pool_uuid
     if network_uuid:
-        print("Deleting network and address pool for network %s..." %
+        print("Deleting network, routes, addresses, and address pool for network %s..." %
               network_name)
         host = client.sysinv.ihost.get('controller-0')
+        host_routes = client.sysinv.route.list_by_host(host.uuid)
+        for route in host_routes:
+            client.sysinv.route.delete(route.uuid)
         host_addresses = client.sysinv.address.list_by_host(host.uuid)
         for addr in host_addresses:
             client.sysinv.address.delete(addr.uuid)
@@ -306,6 +314,8 @@ def populate_mgmt_network(client):
                              'MANAGEMENT_START_ADDRESS')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'MANAGEMENT_END_ADDRESS')
+    subcloud_gateway = CONF.get('BOOTSTRAP_CONFIG', 'MANAGEMENT_GATEWAY_ADDRESS')
+
     dynamic_allocation = CONF.getboolean(
         'BOOTSTRAP_CONFIG', 'MANAGEMENT_DYNAMIC_ADDRESS_ALLOCATION')
     network_name = 'mgmt'
@@ -323,6 +333,10 @@ def populate_mgmt_network(client):
         'prefix': management_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
+    if (is_subcloud() and subcloud_gateway != 'undef'):
+        values.update({
+            'gateway_address': subcloud_gateway,
+        })
     pool = create_addrpool(client, values, 'management')
 
     # create the network for the pool
@@ -330,6 +344,45 @@ def populate_mgmt_network(client):
         'type': sysinv_constants.NETWORK_TYPE_MGMT,
         'name': sysinv_constants.NETWORK_TYPE_MGMT,
         'dynamic': dynamic_allocation,
+        'pool_uuid': pool.uuid,
+    }
+    create_network(client, values, network_name)
+
+
+def populate_admin_network(client):
+    admin_subnet = IPNetwork(
+        CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_SUBNET'))
+    start_address = CONF.get('BOOTSTRAP_CONFIG',
+                             'ADMIN_START_ADDRESS')
+    end_address = CONF.get('BOOTSTRAP_CONFIG',
+                           'ADMIN_END_ADDRESS')
+    subcloud_gateway = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_GATEWAY_ADDRESS')
+    network_name = 'admin'
+
+    if RECONFIGURE_NETWORK:
+        delete_network_and_addrpool(client, network_name)
+        print("Updating admin network...")
+    else:
+        print("Populating admin network...")
+
+    # create the address pool
+    values = {
+        'name': 'admin',
+        'network': str(admin_subnet.network),
+        'prefix': admin_subnet.prefixlen,
+        'ranges': [(start_address, end_address)],
+    }
+    if (is_subcloud() and subcloud_gateway != 'undef'):
+        values.update({
+            'gateway_address': subcloud_gateway,
+        })
+    pool = create_addrpool(client, values, 'admin')
+
+    # create the network for the pool
+    values = {
+        'type': sysinv_constants.NETWORK_TYPE_ADMIN,
+        'name': sysinv_constants.NETWORK_TYPE_ADMIN,
+        'dynamic': False,
         'pool_uuid': pool.uuid,
     }
     create_network(client, values, network_name)
@@ -622,6 +675,9 @@ def populate_network_config(client):
     populate_cluster_service_network(client)
     if is_subcloud():
         populate_system_controller_network(client)
+        if has_admin_network():
+            populate_admin_network(client)
+
     print("Network config completed.")
 
 

@@ -37,10 +37,10 @@ items:
     name: {{ sc_adminep_cert_secret }}
     namespace: {{ sc_adminep_ca_cert_ns }}
   spec:
-    commonName: "{{ controller_floating_address }}"
+    commonName: "{{ sc_floating_address }}"
     duration: {{ sc_adminep_cert_duration }}
     ipAddresses:
-    - "{{ controller_floating_address }}"
+    - "{{ sc_floating_address }}"
     issuerRef:
       kind: Issuer
       name: sc-intermediate-ca-adminep-issuer
