@@ -13,24 +13,17 @@
     state: stopped
   loop: "{{ docker_services }}"
 
-- name: Old-style registry backup restore
-  block:
+- name: Unmount docker-lv
+  command: umount /var/lib/docker
 
-    - name: Load images from archives if configured
-      include: roles/bootstrap/bringup-essential-services/tasks/load_images_from_archive.yml input_archive={{ item.path }}
-      with_items: "{{ images_archive_files }}"
-      when: images_archive_exists
+- name: Mount docker-lv
+  command: mount /var/lib/docker
 
-  when: registry_backup_fqpn is not defined
-
-- name: New-style registry backup restore
-  block:
-    - name: Restore image registry data to /var/lib/docker-distribution
-      shell: pigz -dc {{ registry_backup_fqpn }} | tar -C / --overwrite -xpf - var/lib/docker-distribution
-      args:
-        warn: false
-
-  when: registry_backup_fqpn is defined
+- name: Restore image registry data to /var/lib/docker-distribution
+  shell: pigz -dc {{ registry_backup_fqpn }} | tar -C / --overwrite -xpf - var/lib/docker-distribution
+  args:
+    warn: false
+  when: restore_registry_filesystem
 
 - name: Disable local registry authentication
   command: "sed -i '/auth:/,$d' /etc/docker-distribution/registry/config.yml"
@@ -39,4 +32,10 @@
   systemd:
     name: "{{ item }}"
     state: restarted
+    enabled: true
   loop: "{{ docker_services }}"
+
+- name: Load images from archives if configured
+  include: roles/bootstrap/bringup-essential-services/tasks/load_images_from_archive.yml input_archive={{ item.path }}
+  with_items: "{{ images_archive_files }}"
+  when: images_archive_exists

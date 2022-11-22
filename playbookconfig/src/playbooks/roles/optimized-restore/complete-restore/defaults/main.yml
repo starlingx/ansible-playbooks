@@ -5,9 +5,7 @@ default_required_flags:
   - .config_applied
   - .docker-lv
   - .initial_config_complete
-  - .initial_controller_config_complete
   - .initial_k8s_config_complete
-  - .initial_worker_config_complete
   - .kubelet-lv
   - .scratch-lv
   - .service_endpoint_reconfigured

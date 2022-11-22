@@ -16,6 +16,9 @@
   loop:
     - "{{ ansible_remote_tmp }}"
     - "{{ override_files_dir }}/{{ override_filename }}"
+    - "{{ target_backup_dir }}/{{ override_filename }}"
+    - "{{ target_backup_dir }}/{{ backup_filename }}"
+    - "{{ target_backup_dir }}/{{ registry_backup_filename|default(backup_filename) }}"
 
 - name: Combine required flags
   set_fact:

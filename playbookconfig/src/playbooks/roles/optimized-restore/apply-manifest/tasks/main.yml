@@ -62,3 +62,11 @@
     path: "/opt/backups"
     state: directory
     mode: 0755
+
+# Stop and disable slapd here, it produces many errors in logs.
+# It will be re-enabled and started after unlocking is completed.
+- name: Disable slapd
+  systemd:
+    name: slapd
+    state: stopped
+    enabled: false

@@ -9,6 +9,21 @@
 #   in postgres, so that is restored first.  After flock services
 #   are restarted to pick up changes.
 
+- name: Stop flock services
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+  loop:
+    - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
+    - fminit
+    - fm-api
+    - sysinv-conductor
+    - sysinv-agent
+    - sysinv-api
+    - mtcClient
+    - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
+    - sm-api
+
 - name: Restore Postgres
   import_role:
     name: backup-restore/restore-postgres
@@ -43,6 +58,7 @@
     - sysinv-api
     - mtcClient
     - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
+    - sm-api
 
 - name: Bringup mtcAgent
   command: "/usr/lib/ocf/resource.d/platform/mtcAgent start"

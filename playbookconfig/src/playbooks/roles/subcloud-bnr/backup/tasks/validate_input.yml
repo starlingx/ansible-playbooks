@@ -58,17 +58,30 @@
   when: platform_backup_filename_prefix is undefined
 
 - block:
-  - name: Set registry backup filename prefix in subcloud overrides file
+  - name: Set user images backup filename prefix in subcloud overrides file
     lineinfile:
       path: "{{ subcloud_overrides }}"
       line: "user_images_backup_filename_prefix: {{ default_user_images_backup_prefix }}"
     connection: local
 
-  - name: Set registry backup filename prefix fact
+  - name: Set user images backup filename prefix fact
     set_fact:
       user_images_backup_filename_prefix: "{{ default_user_images_backup_prefix }}"
 
   when: user_images_backup_filename_prefix is undefined
+
+- block:
+  - name: Set registry backup filename prefix in subcloud overrides file
+    lineinfile:
+      path: "{{ subcloud_overrides }}"
+      line: "registry_filesystem_backup_filename_prefix: {{ default_registry_filesystem_backup_prefix }}"
+    connection: local
+
+  - name: Set registry backup filename prefix fact
+    set_fact:
+      registry_filesystem_backup_filename_prefix: "{{ default_registry_filesystem_backup_prefix }}"
+
+  when: registry_filesystem_backup_filename_prefix is undefined
 
 - name: Retrieve software version number
   shell: source /etc/build.info; echo $SW_VERSION

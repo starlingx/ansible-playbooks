@@ -1,0 +1,22 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   Prepare environment for optimized restore.
+
+- name: Set image backup filename
+  block:
+    - name: Set image backup filename for user images method
+      set_fact:
+        registry_backup_filename: "{{ backup_filename.replace(default_backup_mark, default_user_images_backup_mark) }}"
+      when: restore_user_images
+
+    - name: Set image backup filename for registry backup method
+      set_fact:
+        registry_backup_filename: "{{ backup_filename.replace(default_backup_mark, default_registry_backup_mark) }}"
+      when: restore_registry_filesystem
+
+  when: not registry_backup_filename|default(none)
