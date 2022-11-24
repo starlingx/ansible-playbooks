@@ -1,0 +1,69 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#   This role is to validate the target host environment before proceeding
+#   to the next step.
+#
+
+# Make sure that it is a subcloud
+- name: Get distributed_cloud role
+  shell: |
+    source /etc/platform/openrc
+    system show | grep distributed_cloud_role | awk '{ print $4 }'
+  register: distributed_cloud_role
+
+- name: Verify that the target is a subcloud
+  fail:
+    msg: "The target is not a subcloud. Only subclouds can be rehomed."
+  when: distributed_cloud_role.stdout != 'subcloud'
+
+# Verify if the software version supports rehoming
+- name: Get software version
+  shell: source /etc/build.info; echo $SW_VERSION
+  register: host_software_version
+
+- name: Check if the subcloud is running a minimum required software version
+  fail:
+    msg: "Cannot rehome a subcloud with software version: {{ host_software_version }}."
+  when: host_software_version.stdout is version(rehoming_min_software_version, '<')
+
+# Verify if it's controller-0
+- name: Get subcloud active controller
+  shell: |
+    source /etc/platform/openrc
+    system host-show $(cat /etc/hostname) --column hostname --format value
+  register: which_ctlr
+
+- name: Fail if controller-0 is not the active controller
+  fail:
+    msg: "Rehoming can only be done when controller-0 is active."
+  when: which_ctlr.stdout != "controller-0"
+
+# Verify if all nodes are online if not simplex
+- name: Query system_mode
+  shell: |
+    source /etc/platform/openrc
+    system show | awk '$2 == "system_mode" { print $4 }'
+  register: current_system_mode
+
+# by default it'll retries 3 times
+- name: Check if controller-1 is available
+  shell: source /etc/platform/openrc; system host-show controller-1 --column availability --format value
+  register: check_online_crtl1
+  until: check_online_crtl1.stdout == "available"
+  when: current_system_mode.stdout != "simplex"
+
+# Verify if there is an alarm of config out-of-date
+- name: Query config out-of-date alarm
+  shell: |
+    source /etc/platform/openrc
+    fm alarm-list --query alarm_id=250.001
+  register: alarm_250001
+
+- name: Fail when there are config out-of-date alarms
+  fail:
+    msg: "The subcloud currently has a config out-of-date alarm. Please resolve the alarm condition and try again."
+  when: alarm_250001.stdout
