@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2021 Wind River Systems, Inc.
+# Copyright (c) 2019-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -259,9 +259,10 @@
 
     - name: Wait for ceph monitor to be up
       shell: ceph -s
-      until: true
       retries: 5
       delay: 2
+      register: result
+      until: result.rc == 0
 
     # During initialization of OSD, it requests the monmap to the monitor
     # before sending the monitor commands to be run. Since there are different
@@ -278,9 +279,10 @@
 
     - name: Enable Ceph Msgr v2 protocol
       shell: ceph mon enable-msgr2
-      until: true
       retries: 5
       delay: 2
+      register: result
+      until: result.rc == 0
 
     - name: Wait for V2 protocol to be enabled
       shell: ceph -s
