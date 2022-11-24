@@ -9,6 +9,7 @@
 #
 
 import glob
+import json
 import os
 import pyudev
 import re
@@ -760,38 +761,21 @@ def populate_docker_kube_config(client):
     # previous run.
     kube_sections = [
         sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_APISERVER,
+        sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_APISERVER_VOLUMES,
         sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_CONTROLLER_MANAGER,
+        sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_CONTROLLER_MANAGER_VOLUMES,
         sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_SCHEDULER,
+        sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_SCHEDULER_VOLUMES,
         sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_KUBELET]
 
     parameters = client.sysinv.service_parameter.list()
     for parameter in parameters:
         if (parameter.name in [
-                sysinv_constants.SERVICE_PARAM_NAME_AUDIT_POLICY_FILE,
                 sysinv_constants.SERVICE_PARAM_NAME_KUBERNETES_API_SAN_LIST,
                 sysinv_constants.SERVICE_PARAM_NAME_KUBERNETES_POD_MAX_PIDS]):
             client.sysinv.service_parameter.delete(parameter.uuid)
         elif parameter.section in kube_sections:
             client.sysinv.service_parameter.delete(parameter.uuid)
-
-    audit_policy_file = CONF.get('BOOTSTRAP_CONFIG', 'AUDIT_POLICY_FILE')
-    if audit_policy_file != 'undef':
-        parameters = {
-            sysinv_constants.SERVICE_PARAM_NAME_AUDIT_POLICY_FILE:
-                str(audit_policy_file)
-        }
-
-        values = {
-            'service': sysinv_constants.SERVICE_TYPE_KUBERNETES,
-            'section':
-                sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_APISERVER,
-            'personality': None,
-            'resource': None,
-            'parameters': parameters
-        }
-
-        print("Populating/Updating audit policy config...")
-        client.sysinv.service_parameter.create(**values)
 
     apiserver_san_list = CONF.get('BOOTSTRAP_CONFIG', 'APISERVER_SANS')
     if apiserver_san_list:
@@ -847,7 +831,7 @@ def populate_docker_kube_config(client):
             client.sysinv.service_parameter.delete(parameter.uuid)
 
     # Populating k8s kube-apiserver section
-    # It includes subsections extra_args, extra_volumes and root parameters (e.g.: oidc params).
+    # It includes subsections extra_args and root parameters (e.g.: oidc params).
     parameters = {}
 
     for ansible_oidc_param, sysinv_oidc_param in oidc_params.items():
@@ -857,7 +841,6 @@ def populate_docker_kube_config(client):
 
     for kube_apiserver_param, kube_apiserver_value in CONF.items(section="KUBE_APISERVER"):
         parameters[kube_apiserver_param] = kube_apiserver_value
-
     if parameters:
         values = {
             'service': sysinv_constants.SERVICE_TYPE_KUBERNETES,
@@ -871,8 +854,23 @@ def populate_docker_kube_config(client):
         print("Populating/Updating kube-apiserver config...")
         client.sysinv.service_parameter.create(**values)
 
+    # Populating k8s kube-apiserver extra-volumes section
+    print("Populating/Updating kube-apiserver-extra-volumes config...")
+    for param, value in CONF.items(section="KUBE_APISERVER_EXTRA_VOLUMES"):
+        # during bootstrap the configmaps are loaded after k8s services are started
+        value = json.loads(value)
+        value['noConfigmap'] = 'true'
+        value = json.dumps(value)
+        values = {
+            'service': sysinv_constants.SERVICE_TYPE_KUBERNETES,
+            'section': sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_APISERVER_VOLUMES,
+            'personality': None,
+            'resource': None,
+            'parameters': {param: value}}
+        client.sysinv.service_parameter.create(**values)
+
     # Populating k8s kube-controller-manager section
-    # It includes subsections extra_args, extra_volumes and root parameters
+    # It includes subsections extra_args and root parameters
     parameters = {}
     for kube_cm_param, kube_cm_value in CONF.items(section="KUBE_CONTROLLER_MANAGER"):
         parameters[kube_cm_param] = kube_cm_value
@@ -888,21 +886,50 @@ def populate_docker_kube_config(client):
         print("Populating/Updating kube-controller-manager config...")
         client.sysinv.service_parameter.create(**values)
 
+    # Populating k8s kube-controller-manager extra-volumes section
+    print("Populating/Updating kube-controller-manager-extra-volumes config...")
+    for param, value in CONF.items(section="KUBE_CONTROLLER_MANAGER_EXTRA_VOLUMES"):
+        # during bootstrap the configmaps are loaded after k8s services are started
+        value = json.loads(value)
+        value['noConfigmap'] = 'true'
+        value = json.dumps(value)
+        values = {
+            'service': sysinv_constants.SERVICE_TYPE_KUBERNETES,
+            'section': sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_CONTROLLER_MANAGER_VOLUMES,
+            'personality': None,
+            'resource': None,
+            'parameters': {param: value}}
+        client.sysinv.service_parameter.create(**values)
+
     # Populating k8s kube-scheduler section
-    # It includes subsections extra_args, extra_volumes and root parameters
+    # It includes subsections extra_args and root parameters
     parameters = {}
     for kube_sch_param, kube_sch_value in CONF.items(section="KUBE_SCHEDULER"):
         parameters[kube_sch_param] = kube_sch_value
     if parameters:
         values = {
             'service': sysinv_constants.SERVICE_TYPE_KUBERNETES,
-            'section':
-                sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_SCHEDULER,
+            'section': sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_SCHEDULER,
             'personality': None,
             'resource': None,
             'parameters': parameters
         }
         print("Populating/Updating kube-scheduler config...")
+        client.sysinv.service_parameter.create(**values)
+
+    # Populating k8s kube-scheduler extra-volumes section
+    print("Populating/Updating kube-scheduler-extra-volumes config...")
+    for param, value in CONF.items(section="KUBE_SCHEDULER_EXTRA_VOLUMES"):
+        # during bootstrap the configmaps are loaded after k8s services are started
+        value = json.loads(value)
+        value['noConfigmap'] = 'true'
+        value = json.dumps(value)
+        values = {
+            'service': sysinv_constants.SERVICE_TYPE_KUBERNETES,
+            'section': sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_SCHEDULER_VOLUMES,
+            'personality': None,
+            'resource': None,
+            'parameters': {param: value}}
         client.sysinv.service_parameter.create(**values)
 
     # Populating k8s kubelet section
@@ -912,8 +939,7 @@ def populate_docker_kube_config(client):
     if parameters:
         values = {
             'service': sysinv_constants.SERVICE_TYPE_KUBERNETES,
-            'section':
-                sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_KUBELET,
+            'section': sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_KUBELET,
             'personality': None,
             'resource': None,
             'parameters': parameters

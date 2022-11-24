@@ -253,6 +253,33 @@
     sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
   loop: "{{ scheduler_extra_args|dict2items }}"
 
+- name: Add section [KUBE_APISERVER_EXTRA_VOLUMES]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_APISERVER_EXTRA_VOLUMES]\n"
+
+- name: Populate k8s kube_apiserver extra_volumes section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.name}}={{item | to_json}}\n"
+  loop: "{{ apiserver_extra_volumes }}"
+
+- name: Add section [KUBE_CONTROLLER_MANAGER_EXTRA_VOLUMES]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_CONTROLLER_MANAGER_EXTRA_VOLUMES]\n"
+
+- name: Populate k8s kube_controller_manager extra_volumes section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.name}}={{item | to_json}}\n"
+  loop: "{{ controllermanager_extra_volumes }}"
+
+- name: Add section [KUBE_SCHEDULER_EXTRA_VOLUMES]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_SCHEDULER_EXTRA_VOLUMES]\n"
+
+- name: Populate k8s kube_scheduler extra_volumes section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.name}}={{item | to_json}}\n"
+  loop: "{{ scheduler_extra_volumes }}"
+
 - name: Add section [KUBE_KUBELET]
   set_fact:
     sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_KUBELET]\n"

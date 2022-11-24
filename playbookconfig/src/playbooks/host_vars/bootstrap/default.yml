@@ -324,6 +324,7 @@ docker_registries:
 #
 # apiserver_extra_volumes:
 #   - name: admission-control-config-file
+#     hostPath: "/etc/kubernetes/admission-control-config-file.yaml"
 #     mountPath: "/etc/kubernetes/admission-control-config-file.yaml"
 #     readOnly: true
 #     pathType: "File"
@@ -334,6 +335,7 @@ docker_registries:
 #       - name: PodNodeSelector
 #         path: /etc/kubernetes/pod-node-selector.yaml
 #   - name: pod-node-selector
+#     hostPath: "/etc/kubernetes/pod-node-selector.yaml"
 #     mountPath: "/etc/kubernetes/pod-node-selector.yaml"
 #     readOnly: true
 #     pathType: "File"
@@ -352,6 +354,7 @@ docker_registries:
 #
 # apiserver_extra_volumes:
 #   - name: audit-policy-file
+#     hostPath: "/etc/kubernetes/audit-policy-file.yaml"
 #     mountPath: "/etc/kubernetes/audit-policy-file.yaml"
 #     readOnly: true
 #     pathType: "File"
@@ -362,6 +365,7 @@ docker_registries:
 #       rules:
 #       - level: Metadata
 #   - name: audit-log-path
+#     hostPath: "/var/log/kubernetes/audit/"
 #     mountPath: "/var/log/kubernetes/audit/"
 #     readOnly: false
 #     pathType: "DirectoryOrCreate"

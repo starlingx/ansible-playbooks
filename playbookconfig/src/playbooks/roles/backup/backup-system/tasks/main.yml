@@ -499,13 +499,6 @@
         marker: ""
         block: "{{ registries|default({}) | to_nice_yaml(indent=2) }}"
 
-    - name: Append kubernetes extra configuration (extraArgs and extraVolumes)
-      include_role:
-        name: common/prepare-env
-        tasks_from: kube-extra-save-configuration
-      vars:
-        dst_file: "{{ override_backup_file }}"
-
     - name: Use current timestamp as backups timestamp
       set_fact:
         backup_timestamp: "{{ lookup('pipe', 'date +%Y_%m_%d_%H_%M_%S') }}"

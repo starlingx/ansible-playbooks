@@ -18,26 +18,11 @@ apiServer:
   extraArgs:
     {{apiserver_extra_args | to_nice_yaml(width=512) | indent(4, indentfirst=False)}}
   extraVolumes:
-    - name: "encryption-config"
-      hostPath:  {{ encryption_provider_config }}
-      mountPath: {{ encryption_provider_config }}
-      readOnly: true
-      pathType: File
-    - name: "default-audit-policy-file"
-      hostPath:  {{ default_audit_policy_config }}
-      mountPath: {{ default_audit_policy_config }}
-      readOnly: true
-      pathType: File
-    - name: "audit-log-dir"
-      hostPath:  {{ apiserver_extra_args['audit-log-path'] | dirname }}
-      mountPath: {{ apiserver_extra_args['audit-log-path'] | dirname }}
-      readOnly: false
-      pathType: DirectoryOrCreate
 {% for volume in apiserver_extra_volumes %}
     - name: "{{ volume.name }}"
       mountPath: {{ volume.mountPath }}
 {% if volume.pathType == 'File' %}
-      hostPath:  "/etc/kubernetes/{{ volume.name }}.yaml"
+      hostPath:  {{ volume.hostPath }}
       pathType: File
 {% else %}
       hostPath: {{ volume.mountPath }}
@@ -57,7 +42,7 @@ controllerManager:
     - name: "{{ volume.name }}"
       mountPath: {{ volume.mountPath }}
 {% if volume.pathType == 'File' %}
-      hostPath:  "/etc/kubernetes/{{ volume.name }}.yaml"
+      hostPath:  {{ volume.hostPath }}
       pathType: File
 {% else %}
       hostPath: {{ volume.mountPath }}
@@ -77,7 +62,7 @@ scheduler:
     - name: "{{ volume.name }}"
       mountPath: {{ volume.mountPath }}
 {% if volume.pathType == 'File' %}
-      hostPath:  "/etc/kubernetes/{{ volume.name }}.yaml"
+      hostPath:  {{ volume.hostPath }}
       pathType: File
 {% else %}
       hostPath: {{ volume.mountPath }}
