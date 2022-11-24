@@ -52,7 +52,10 @@ kubelet_configurations_defaults:
   imageGCHighThresholdPercent: 79
   imageGCLowThresholdPercent: 75
   evictionHard:
-    imagefs.available: "2Gi"
+    memory.available: '100Mi'
+    nodefs.available: '10%'
+    nodefs.inodesFree: '5%'
+    imagefs.available: '2Gi'
 
 # SSL certs configuration
 ca_cert_dir: "/etc/pki/ca-trust/source/anchors"
