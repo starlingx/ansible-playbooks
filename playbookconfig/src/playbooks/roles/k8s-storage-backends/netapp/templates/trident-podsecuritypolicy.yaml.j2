@@ -1,13 +1,12 @@
 
 apiVersion: policy/v1beta1
+# Remove pod security policies at k8s 1.25
 kind: PodSecurityPolicy
 metadata:
   name: tridentpods
 spec:
   privileged: true
   allowPrivilegeEscalation: true
-  allowedCapabilities:
-  - "SYS_ADMIN"
   hostIPC: true
   hostPID: true
   hostNetwork: true
@@ -20,4 +19,6 @@ spec:
   fsGroup:
     rule: RunAsAny
   volumes:
-  - '*'
+  - hostPath
+  - projected
+  - emptyDir

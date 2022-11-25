@@ -13,3 +13,4 @@ Files changed:
 - trident-serviceaccount.yaml.j2
 - trident-deployment.yaml.j2
 - trident-service.yaml.j2
+- trident-resourcequota.yaml.j2

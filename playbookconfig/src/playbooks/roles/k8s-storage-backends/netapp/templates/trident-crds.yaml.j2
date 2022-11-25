@@ -153,12 +153,15 @@ spec:
                   - promoted
                   - established
                   - reestablished
+                replicationPolicy:
+                  type: string
+                replicationSchedule:
+                  type: string
                 volumeMappings:
-                  type: array
                   items:
                     type: object
                     properties:
-                      latestSnapshotHandle:
+                      promotedSnapshotHandle:
                         type: string
                       localPVCName:
                         type: string
@@ -192,6 +195,10 @@ spec:
                       observedGeneration:
                         type: integer
                       state:
+                        type: string
+                      replicationPolicy:
+                        type: string
+                      replicationSchedule:
                         type: string
       subresources:
         status: {}
