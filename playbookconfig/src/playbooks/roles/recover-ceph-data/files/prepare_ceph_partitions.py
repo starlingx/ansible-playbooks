@@ -138,8 +138,8 @@ def prepare_monitor():
             pass
 
         print("Creating ceph-mon lv with size {}GB.".format(ceph_mon_gib))
-        cmd = ['timeout', '20', 'lvcreate', '-n', CEPH_MON_LV, '-L',
-               '{}G'.format(ceph_mon_gib), CEPH_MON_VG]
+        cmd = ['timeout', '-s', 'kill', '20', 'lvcreate', '-n', CEPH_MON_LV, '-L',
+               '{}G'.format(ceph_mon_gib), CEPH_MON_VG, '-y']
         subprocess.check_output(cmd, stderr=fnull)
 
         print("Formatting ceph-mon lv as ext4.")
