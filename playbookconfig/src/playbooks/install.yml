@@ -65,3 +65,4 @@
     check_load: false
     check_bootstrap_address: false
     check_patches: false
+    sync_patch_metadata: true
