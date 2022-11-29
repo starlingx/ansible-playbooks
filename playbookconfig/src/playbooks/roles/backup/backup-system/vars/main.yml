@@ -14,9 +14,6 @@ mariadb_pod: mariadb-server-0
 
 backup_user_images: false
 
-# By default, all of /etc will be backed up
-optimize_etc_backup: false
-
 # List of apps whose images will be included in the backup
 backup_include_apps: []
 
@@ -40,30 +37,9 @@ puppet_permdir: "{{ platform_path }}/puppet/{{ software_version }}"
 sysinv_permdir: "{{ platform_path }}/sysinv/{{ software_version }}"
 
 # Use plain paths or glob
-etc_backup:
-  targets:
-    full:
-      - "/etc/"
-    optimized:
-      - "/etc/ceph/*.keyring"
-      - "/etc/docker/"
-      - "/etc/etcd/"
-      - "/etc/hostname"
-      - "/etc/hosts"
-      - "/etc/keystone/ssl/"
-      - "/etc/kubernetes/"
-      - "/etc/ldap/certs/"
-      - "/etc/platform/platform.conf"
-      - "/etc/puppet/ssl/"
-      - "/etc/rabbitmq/ssl/"
-      - "/etc/resolv.conf"
-      - "/etc/ssh/ssh_host_*"
-      - "/etc/ssl/private/"
-      - "/var/lib/kubelet"
-
-# Use plain paths or glob
 backup:
   targets:
+    - "/etc"
     - "/var/lib/kubelet"
     - "{{ armada_permdir }}"
     - "{{ config_permdir }}"
