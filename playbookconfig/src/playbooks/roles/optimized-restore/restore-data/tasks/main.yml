@@ -22,3 +22,6 @@
 
 - name: Restore helm service
   import_tasks: restore-helm.yml
+
+- name: Restore ceph data
+  import_tasks: restore-ceph-data.yml
