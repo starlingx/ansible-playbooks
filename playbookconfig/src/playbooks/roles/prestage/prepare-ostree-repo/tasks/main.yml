@@ -25,10 +25,12 @@
     command: ostree --repo={{ repo_path }} remote list
     register: remote_repo_names
 
+  - name: Delete any existing remote repository of the same name
+    command: ostree --repo={{ repo_path }} remote delete {{ remote_name }}
+    when: (remote_name in remote_repo_names.stdout_lines)
+
   - name: Add remote repository
     command: ostree --repo={{ repo_path }} remote add {{ remote_name }} {{ feed_dir }}
-    when: (remote_repo_names.stdout_lines|length == 0) or
-          (remote_name not in remote_repo_names.stdout_lines)
 
   - name: Pull data from remote repository
     command: >-
