@@ -32,14 +32,14 @@
   register: ostree_commit_subcloud
 
 - name: Gather system controller patches list
-  shell: sw-patch query | grep -E '(Available|Applied|Committed)'
+  shell: sw-patch query | grep {{ sw_version.stdout }} | grep -E '(Available|Applied|Committed)'
   register: system_controller_patch_list
   failed_when: false
   become: yes
   delegate_to: localhost
 
 - name: Gather subcloud patches list
-  shell: sw-patch query | grep -E '(Available|Applied|Committed)'
+  shell: sw-patch query | grep {{ sw_version.stdout }} | grep -E '(Available|Applied|Committed)'
   register: subcloud_patch_list
   failed_when: false
   become: yes
@@ -91,7 +91,7 @@
       sshpass -p {{ ansible_ssh_pass }}
       rsync -avp --delete -e 'ssh -o StrictHostKeyChecking=no -o Port={{ ansible_port }}'
       {{ patching_dir }}/
-      {{ ansible_ssh_user }}@{{ ansible_host }}:{{ patching_dir }};
+      {{ ansible_ssh_user }}@{{ ansible_host | ipwrap }}:{{ patching_dir }};
     register: patching_transfer
     retries: 2
     delay: 5
