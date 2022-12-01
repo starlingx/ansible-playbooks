@@ -10,7 +10,7 @@
 #   completing a typical bootstrapping, so that unlocking can
 #   be performed immediately after optimized restore is complete.
 
-# Bring up networking, meant to replicate state during boostrapping
+# Bring up networking, meant to replicate state during bootstrapping
 - name: Restore networking
   block:
     - name: Remove network configuration files
@@ -25,7 +25,9 @@
       command: ifdown -a --exclude=lo
 
     - name: Bring up original networking
-      shell: ifup -a --exclude="$(ip route show 0.0.0.0/0 | awk '{print $NF}')"
+      shell:
+        cmd: ifup $(ls ifcfg-* | sed 's/ifcfg-//') --exclude="$(ip route show 0.0.0.0/0 | awk '{print $NF}')"
+        chdir: /etc/network/interfaces.d/
 
     - name: Bring up temporary addresses
       block:
