@@ -18,6 +18,16 @@
     controller_floating_address: "{{ management_start_address }}"
     external_oam_node_0_address: "{{ external_oam_node_0_address | default('derived') }}"
 
+- name: Query system_mode
+  shell: |
+    source /etc/platform/openrc
+    system show | awk '$2 == "system_mode" { print $4 }'
+  register: current_system_mode
+
+- name: Set system mode based on the current config
+  set_fact:
+    system_mode: "{{ current_system_mode.stdout }}"
+
 - name: Set derived facts for subsequent tasks/roles
   set_fact:
     derived_network_params:

@@ -43,18 +43,12 @@
   when: which_ctlr.stdout != "controller-0"
 
 # Verify if all nodes are online if not simplex
-- name: Query system_mode
-  shell: |
-    source /etc/platform/openrc
-    system show | awk '$2 == "system_mode" { print $4 }'
-  register: current_system_mode
-
 # by default it'll retries 3 times
 - name: Check if controller-1 is available
   shell: source /etc/platform/openrc; system host-show controller-1 --column availability --format value
   register: check_online_crtl1
   until: check_online_crtl1.stdout == "available"
-  when: current_system_mode.stdout != "simplex"
+  when: system_mode != "simplex"
 
 # Verify if there is an alarm of config out-of-date
 - name: Query config out-of-date alarm
