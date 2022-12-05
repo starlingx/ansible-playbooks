@@ -37,7 +37,7 @@ SYSTEM_CONFIG_TIMEOUT = 420
 # This is a problem for Kubernetes kubelet configurations because they are
 # written with Camel Case notation. With the optionxform attribute it is
 # possible to disable the transformation to lowercase.
-CONF = configparser.ConfigParser()
+CONF = configparser.ConfigParser(interpolation=None)
 CONF.optionxform = str
 
 
