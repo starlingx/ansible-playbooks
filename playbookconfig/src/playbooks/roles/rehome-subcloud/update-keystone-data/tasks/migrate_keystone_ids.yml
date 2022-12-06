@@ -65,6 +65,7 @@
   loop:
     - "fm-api"
     - "sm-api"
+    - "sw-patch-controller-daemon"
 
 - name: Wait until services are restarted after changing keystone IDs
   shell: sm-query service {{ item }} | grep -c enabled-active
