@@ -9,7 +9,8 @@
 #
 
 - name: Update admin subnet
-  import_tasks: update_admin_subnet.yml
+  include_role:
+    name: common/update-sc-admin-subnet
   when: admin_floating_update_required or admin_gateway_update_required
 
 - name: Check existing host route in controller-0

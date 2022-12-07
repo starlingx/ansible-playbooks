@@ -8,6 +8,12 @@
 #   This role updates the network configuration for rehoming on subcloud
 #
 
+- name: Update admin subnet
+  include_role:
+    name: common/update-sc-admin-subnet
+  when: admin_network is defined and
+        (admin_floating_update_required or admin_gateway_update_required)
+
 - name: Check existing host route in controller-0
   # Checking if the static route to the new system controller subnet
   # is already configured. If it is already configured, e.g. recovery
@@ -18,13 +24,26 @@
     awk '/{{ (system_controller_subnet | ipaddr(0)).split('/')[0] }}/'
   register: existing_route_controller_0
 
+- name: Set subcloud gateway address
+  set_fact:
+    sc_gateway_address: "{{ admin_gateway_address
+                           if admin_network is defined
+                           else management_gateway_address }}"
+
+- name: Set subcloud to systemcontroller route interface
+  set_fact:
+    sc_controller_0_route_interface:
+      "{{ controller_0_admin_network_if.stdout_lines[0]
+          if admin_network is defined
+          else controller_0_management_interface_result.stdout_lines[0] }}"
+
 - name: Add static route from controller-0 to system controller
   shell: >-
     source /etc/platform/openrc; system host-route-add controller-0
-    {{ controller_0_management_interface_result.stdout_lines[0] }}
+    {{ sc_controller_0_route_interface }}
     {{ (system_controller_subnet | ipaddr(0)).split('/')[0] }}
     {{ system_controller_subnet | ipaddr('prefix') }}
-    {{ management_gateway_address }}
+    {{ sc_gateway_address }}
   when: existing_route_controller_0.stdout | length == 0
 
 - block:
@@ -34,13 +53,20 @@
       awk '/{{ (system_controller_subnet | ipaddr(0)).split('/')[0] }}/'
     register: existing_route_controller_1
 
+  - name: Set subcloud to systemcontroller route interface on controller-1
+    set_fact:
+      sc_controller_1_route_interface:
+        "{{ controller_1_admin_network_if.stdout_lines[0]
+            if admin_network is defined
+            else controller_1_management_interface_result.stdout_lines[0] }}"
+
   - name: Add static route from controller-1 to system controller
     shell: >-
       source /etc/platform/openrc; system host-route-add controller-1
-      {{ controller_1_management_interface_result.stdout_lines[0] }}
+      {{ sc_controller_1_route_interface }}
       {{ (system_controller_subnet | ipaddr(0)).split('/')[0] }}
       {{ system_controller_subnet | ipaddr('prefix') }}
-      {{ management_gateway_address }}
+      {{ sc_gateway_address }}
     when: existing_route_controller_1.stdout | length == 0
 
   when: system_mode != 'simplex'
