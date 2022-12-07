@@ -27,5 +27,5 @@ cert_manager_ctl_img: quay.io/jetstack/cert-manager-ctl:v1.7.1
 snapshot_controller_img: quay.io/k8scsi/snapshot-controller:v2.0.0-rc2
 rvmc_img: docker.io/starlingx/rvmc:stx.8.0-v1.0.1
 pause_img: k8s.gcr.io/pause:3.4.1
-flux_helm_controller_img: docker.io/fluxcd/helm-controller:v0.15.0
-flux_source_controller_img: docker.io/fluxcd/source-controller:v0.20.1
+flux_helm_controller_img: docker.io/fluxcd/helm-controller:v0.27.0
+flux_source_controller_img: docker.io/fluxcd/source-controller:v0.32.1

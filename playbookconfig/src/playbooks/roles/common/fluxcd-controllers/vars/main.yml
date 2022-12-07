@@ -2,8 +2,8 @@
 fluxcd_namespace: flux-helm
 fluxcd_secret_name: default-registry-key
 fluxcd_resource_dir: /tmp/fluxcd
-flux_helm_controller_img: docker.io/fluxcd/helm-controller:v0.15.0
-flux_source_controller_img: docker.io/fluxcd/source-controller:v0.20.1
+flux_helm_controller_img: docker.io/fluxcd/helm-controller:v0.27.0
+flux_source_controller_img: docker.io/fluxcd/source-controller:v0.32.1
 local_registry: registry.local:9001
 enable_fluxcd_controllers: true
 async_timeout: 240
