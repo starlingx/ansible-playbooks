@@ -21,12 +21,29 @@
     - name: Restore network configuration files
       command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite {{ network_scripts_location.lstrip('/') }}"
 
+    - name: Get IPv4 default gateway
+      command: ip -4 route show default
+      register: ipv4_route
+
+    - name: Get IPv6 default gateway
+      command: ip -6 route show default
+      register: ipv6_route
+
+    - name: Extract gateway interfaces
+      set_fact:
+        interfaces: "{{
+            [ipv4_route.stdout.strip(), ipv6_route.stdout.strip()]
+            | reject('equalto', '') | map('regex_replace', query, '--exclude==\\1') | list
+          }}"
+      vars:
+        query: '^.*dev (\w+).*$'
+
     - name: Shutdown all network interfaces excluding loopback
       command: ifdown -a --exclude=lo
 
     - name: Bring up original networking
       shell:
-        cmd: ifup $(ls ifcfg-* | sed 's/ifcfg-//') --exclude="$(ip route show 0.0.0.0/0 | awk '{print $NF}')"
+        cmd: "ifup $(ls ifcfg-* | sed 's/ifcfg-//') {{ ' '.join(interfaces) }}"
         chdir: /etc/network/interfaces.d/
 
     - name: Bring up temporary addresses
