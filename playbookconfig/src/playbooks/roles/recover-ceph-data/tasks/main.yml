@@ -268,12 +268,12 @@
     # before sending the monitor commands to be run. Since there are different
     # threads involved, it is possible the OSD sends the command before receiving
     # the monmap, causing an error of "wrong fsid" and making OSD to stop its
-    # execution. So we add a retry of 5 to make sure it will receive the monmap when
+    # execution. So we add a retry of 6 to make sure it will receive the monmap when
     # it should
     - name: Bring up ceph OSDs
       command: /etc/init.d/ceph start osd
-      retries: 5
-      delay: 3
+      retries: 6
+      delay: 10
       register: result
       until: result.rc == 0
 
