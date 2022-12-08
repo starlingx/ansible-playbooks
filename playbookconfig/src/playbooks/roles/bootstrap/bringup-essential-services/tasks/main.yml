@@ -294,5 +294,13 @@
           src: "k8s-coredump-conf.json.j2"
           dest: /etc/k8s-coredump-conf.json
           mode: 0700
+
+      - name: Make k8s-coredump-config.json file available for other nodes config
+        template:
+          src: "k8s-coredump-conf.json.j2"
+          dest: /opt/platform/config/{{ software_version }}/k8s-coredump-conf.json
+          mode: 0700
+
     when: os_release == 'debian'
+
   when: (not replayed) or (restart_services)
