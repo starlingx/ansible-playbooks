@@ -18,6 +18,13 @@
   failed_when: false
   register: bkp_has_centos_ldap_config
 
+- name: Check if ldap database is included in the backup
+  shell: "tar -tf {{ platform_backup_fqpn }} | grep -E '*/ldap.db'"
+  args:
+    warn: false
+  failed_when: false
+  register: bkp_has_ldap_database
+
 - block:
   - block:
     - name: Restore openldap configuration
@@ -89,17 +96,19 @@
         when: bkp_has_debian_ldap_config.rc == 0
     when: bkp_has_centos_ldap_config.rc != 0
 
-  - name: Extract ldap.db to staging directory
-    command: >-
-      tar -C {{ staging_dir }} -xpf {{ platform_backup_fqpn }} --wildcards
-      --transform='s,.*/,,' '*/ldap.db'
-    args:
-      warn: false
+  - block:
+    - name: Extract ldap.db to staging directory
+      command: >-
+        tar -C {{ staging_dir }} -xpf {{ platform_backup_fqpn }} --wildcards
+        --transform='s,.*/,,' '*/ldap.db'
+      args:
+        warn: false
 
-  - name: Restore ldap
-    command: "slapadd -F {{ ldap_schema_path }} -l {{ staging_dir }}/ldap.db"
-    register: slapadd_result
-    failed_when: slapadd_result.rc != 0 and slapadd_result.rc != 1
+    - name: Restore ldap
+      command: "slapadd -F {{ ldap_schema_path }} -l {{ staging_dir }}/ldap.db"
+      register: slapadd_result
+      failed_when: slapadd_result.rc != 0 and slapadd_result.rc != 1
+    when: bkp_has_ldap_database.rc == 0
 
   always:
     - name: Delete files from staging dir
