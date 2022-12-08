@@ -89,6 +89,16 @@
             KUBECONFIG: /etc/kubernetes/admin.conf
       when: fluxcd_get_pods.stderr is search('No resources found')
 
+    - block:
+        - name: Install flux helm and source controllers
+          command: kubectl apply -f {{ fluxcd_resource_dir }}
+          register: create_fluxcd_pods
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+      when: (upgrade_activate_from_release is defined and
+             upgrade_activate_from_release != '21.12')
+
   always:
   - name: Clean FluxCD resource directory
     file:
