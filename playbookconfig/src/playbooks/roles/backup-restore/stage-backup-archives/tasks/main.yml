@@ -12,19 +12,26 @@
     name: backup-restore/transfer-file
   when: on_box_data|bool == false
 
-- name: Copy the backup tarballs to {{ target_backup_dir }} if the file is already on-box
-  become: yes
+- name: Link the backup tarballs to {{ target_backup_dir }} if the file is already on-box
   block:
+    - file:
+        path: "{{ target_backup_dir }}/{{ backup_filename }}"
+        state: absent
 
-    - copy:
+    - file:
         src: "{{ initial_backup_dir }}/{{ backup_filename }}"
-        dest: "{{ target_backup_dir }}"
-        remote_src: yes
+        dest: "{{ target_backup_dir }}/{{ backup_filename }}"
+        state: link
 
-    - copy:
+    - file:
+        path: "{{ target_backup_dir }}/{{ registry_backup_filename }}"
+        state: absent
+      when: registry_backup_filename is defined
+
+    - file:
         src: "{{ initial_backup_dir }}/{{ registry_backup_filename }}"
-        dest: "{{ target_backup_dir }}"
-        remote_src: yes
+        dest: "{{ target_backup_dir }}/{{ registry_backup_filename }}"
+        state: link
       when: registry_backup_filename is defined
 
   when: on_box_data|bool == true
@@ -35,7 +42,11 @@
 
 - name: Set image registry backup fqpn
   set_fact:
+    # These are the same because registry_backup_filename can be either depending on flags
+    # restore_registry_filesystem vs. restore_user_images, but want to keep separate names
+    # for any future changes.
     registry_backup_fqpn: "{{ target_backup_dir }}/{{ registry_backup_filename }}"
+    user_images_backup_fqpn: "{{ target_backup_dir }}/{{ registry_backup_filename }}"
   when: registry_backup_filename is defined
 
 - name: Set image platform legacy restore data file

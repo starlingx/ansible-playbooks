@@ -1,3 +1,12 @@
 ---
 # Register additional flags that will be created in /etc/platform
 extra_required_flags: []
+
+# Determine how images are restored if at all
+restore_user_images: false
+restore_registry_filesystem: false
+
+# Marks for finding tars automatically
+default_backup_mark: platform_backup
+default_user_images_backup_mark: user_images_backup
+default_registry_backup_mark: image_registry_backup

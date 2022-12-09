@@ -3,6 +3,7 @@
 docker_services:
   - docker
   - "{{ 'docker-distribution' if os_release == 'centos' else 'docker-registry' }}"
+  - registry-token-server
 
 # Used to remove containerd corruption after first boot
 remove_containerd_pods_flag: /etc/platform/.remove_containerd_pods

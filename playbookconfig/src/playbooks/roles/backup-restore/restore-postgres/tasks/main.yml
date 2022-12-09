@@ -56,4 +56,9 @@
       path: "{{ postgres_staging_dir }}"
       state: absent
 
+  - name: Restart postgres
+    systemd:
+      name: postgresql
+      state: restarted
+
   when: migrate_platform_data is undefined or not migrate_platform_data

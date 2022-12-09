@@ -96,10 +96,10 @@
 
     when: inventory_hostname != 'localhost' and (on_box_data|bool == false)
 
-  - name: Verify if registry filesystem backup is only used in optimized restore
+  - name: Fail if trying to restore user images and registry at same time
     fail:
-      msg: You can only provide 'registry_backup_filename' during optimized restore
-    when: registry_backup_filename is defined and restore_mode != 'optimized'
+      msg: Do not use restore_user_images and restore_registry_filesystem at same time
+    when: restore_user_images|default(false) and restore_registry_filesystem|default(false)
 
   - name: Verify if image registry backup is provided
     block:

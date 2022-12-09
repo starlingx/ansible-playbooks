@@ -72,9 +72,9 @@ platform_backup_filename_prefix: "{{ inventory_hostname }}_platform_backup"
 user_images_backup_filename_prefix: "{{ inventory_hostname }}_user_images_backup"
 
 # The local image registry filesystem backup tarball will be named in this format:
-# <registry_fs_backup_filename_prefix>_<timestamp>.tgz
+# <registry_filesystem_backup_filename_prefix>_<timestamp>.tgz
 #
-registry_fs_backup_filename_prefix: "{{ inventory_hostname }}_image_registry_backup"
+registry_filesystem_backup_filename_prefix: "{{ inventory_hostname }}_image_registry_backup"
 
 # The OpenStack application name that will be considered for backup
 #

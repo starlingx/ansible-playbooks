@@ -11,17 +11,17 @@
 
 - name: Attach timestamp to registry backup filename
   set_fact:
-    registry_fs_backup_file: "{{ registry_fs_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
+    registry_filesystem_backup_file: "{{ registry_filesystem_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
 
 - name: Set backup files absolute path
   set_fact:
-    registry_fs_backup_file_path: "{{ backup_dir }}/{{ registry_fs_backup_file }}"
+    registry_filesystem_backup_file_path: "{{ backup_dir }}/{{ registry_filesystem_backup_file }}"
 
 - name: Create a tgz archive for images backup
   shell: >-
     tar
     --use-compress-program={{ compress_program }}
-    -cf {{ registry_fs_backup_file_path }}
+    -cf {{ registry_filesystem_backup_file_path }}
     $(ls -d
     {{ image_backup.targets | join(' ') }}
     2> /dev/null)
@@ -33,4 +33,4 @@
   failed_when: img_tar_cmd.rc >= 2 or img_tar_cmd.rc < 0
 
 - debug:
-    msg: "Image registry backup available at {{ registry_fs_backup_file_path }}"
+    msg: "Image registry backup available at {{ registry_filesystem_backup_file_path }}"
