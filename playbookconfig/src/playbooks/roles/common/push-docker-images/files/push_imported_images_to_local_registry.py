@@ -127,6 +127,8 @@ if __name__ == '__main__':
             print("Subcloud is virtual. MAX_PUSH_THREAD is set to %d" % MAX_PUSH_THREAD)
 
     image_list = get_list_of_imported_images()
+    if not image_list:
+        raise Exception("No images have been imported. Docker cache is empty.")
     print("List of imported images: {}".format(image_list))
     start = time.time()
     failed_pushes = push_images(image_list)
