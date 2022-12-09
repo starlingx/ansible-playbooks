@@ -19,6 +19,7 @@
     - subcloud-bnr/restore
 
   vars:
+    optimized_bnr_supported: true
     override_files_dir: "{{ lookup('env', 'HOME') }}"
     password_change: false
     vault_pass: "{{ ansible_become_pass|list|shuffle|join }}"
@@ -29,6 +30,5 @@
     default_local_backup_dir: "/opt/platform-backup/backups"
     default_central_backup_dir: "/opt/dc-vault/backups"
     default_local_staging_dir: "/opt/platform-backup/{{ inventory_hostname|list|reverse|join }}"
-    restore_user_images: false
     restore_mode: "optimized"
     unlock_timeout: 900

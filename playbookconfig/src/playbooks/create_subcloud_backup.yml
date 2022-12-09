@@ -18,12 +18,13 @@
     - subcloud-bnr/backup
 
   vars:
+    optimized_bnr_supported: true
     override_files_dir: "{{ lookup('env', 'HOME') }}"
     password_change: false
     vault_pass: "{{ ansible_become_pass|list|shuffle|join }}"
     vault_id_file: "/tmp/vaultid_{{ inventory_hostname }}.tmp"
     default_backup_prefix: "{{ inventory_hostname }}_platform_backup"
-    default_user_images_backup_prefix: "{{ inventory_hostname }}_user_images_backup"
     default_registry_filesystem_backup_prefix: "{{ inventory_hostname }}_image_registry_backup"
+    default_user_images_backup_prefix: "{{ inventory_hostname }}_user_images_backup"
     default_local_backup_dir: "/opt/platform-backup/backups"
     default_local_staging_dir: "/opt/backups/{{ inventory_hostname|list|reverse|join }}"

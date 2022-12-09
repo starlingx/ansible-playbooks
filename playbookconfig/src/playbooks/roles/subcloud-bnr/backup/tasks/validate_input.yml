@@ -14,12 +14,12 @@
   when: item.key is undefined or item.value|type_debug != 'bool'
   loop:
     - { key: local, value: "{{ local }}" }
-    - { key: backup_user_images, value: "{{ backup_user_images }}" }
+    - { key: backup_registry_images, value: "{{ backup_registry_images }}" }
 
 - name: Fail if custom images backup is requested for centralized backup
   fail:
     msg: "Custom images backup is not supported for centralized backup request."
-  when: not local and backup_user_images
+  when: not local and backup_registry_images
 
 - name: Fail if storage location is not specified for centralized backup
   fail:
@@ -44,6 +44,20 @@
   set_fact:
     subcloud_overrides: "{{ bkup_overrides.path }}"
 
+- name: Retrieve software version number
+  shell: source /etc/build.info; echo $SW_VERSION
+  register: sw_version_result
+
+- name: Set software version for the backup
+  set_fact:
+    software_version: "{{ sw_version_result.stdout }}"
+
+- name: Turn off optimized_bnr_supported flag
+  set_fact:
+    optimized_bnr_supported: false
+  when: software_version is version('22.12', '<') or
+        (test_mode is defined and test_mode == 'legacy')
+
 - block:
   - name: Set backup filename prefix in subcloud overrides file
     lineinfile:
@@ -58,38 +72,36 @@
   when: platform_backup_filename_prefix is undefined
 
 - block:
-  - name: Set user images backup filename prefix in subcloud overrides file
-    lineinfile:
-      path: "{{ subcloud_overrides }}"
-      line: "user_images_backup_filename_prefix: {{ default_user_images_backup_prefix }}"
-    connection: local
-
-  - name: Set user images backup filename prefix fact
-    set_fact:
-      user_images_backup_filename_prefix: "{{ default_user_images_backup_prefix }}"
-
-  when: user_images_backup_filename_prefix is undefined
-
-- block:
-  - name: Set registry backup filename prefix in subcloud overrides file
+  - name: Set registry filesystem backup prefix in overrides file
     lineinfile:
       path: "{{ subcloud_overrides }}"
       line: "registry_filesystem_backup_filename_prefix: {{ default_registry_filesystem_backup_prefix }}"
     connection: local
+    when: registry_filesystem_backup_filename_prefix is undefined
 
-  - name: Set registry backup filename prefix fact
-    set_fact:
-      registry_filesystem_backup_filename_prefix: "{{ default_registry_filesystem_backup_prefix }}"
+  - name: Set user images backup prefix in overrides file
+    lineinfile:
+      path: "{{ subcloud_overrides }}"
+      line: "user_images_backup_filename_prefix: {{ default_user_images_backup_prefix }}"
+    connection: local
+    when: user_images_backup_filename_prefix is undefined
 
-  when: registry_filesystem_backup_filename_prefix is undefined
+  # Backing up registry filesystem implies backing all platform and user images in the registry
+  - name: Set backup_registry_filesystem flag in overrides file
+    lineinfile:
+      path: "{{ subcloud_overrides }}"
+      line: "backup_registry_filesystem: true"
+    connection: local
+    when: optimized_bnr_supported
 
-- name: Retrieve software version number
-  shell: source /etc/build.info; echo $SW_VERSION
-  register: sw_version_result
+  - name: Set backup_user_images flag in overrides file
+    lineinfile:
+      path: "{{ subcloud_overrides }}"
+      line: "backup_user_images: true"
+    connection: local
+    when: not optimized_bnr_supported
 
-- name: Set software version for the backup
-  set_fact:
-    software_version: "{{ sw_version_result.stdout }}"
+  when: backup_registry_images
 
 - block:
   - name: Update default_local_backup_dir fact

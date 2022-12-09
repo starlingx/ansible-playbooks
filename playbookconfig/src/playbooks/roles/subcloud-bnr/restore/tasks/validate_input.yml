@@ -7,41 +7,47 @@
 # TASKS DESCRIPTION:
 #   Validate user input and set facts for subsequent tasks.
 #
-- name: Fail if location of backup data storage is not specified
+- name: Fail if mandatory values are mis-configured
   fail:
-    msg: "local parameter must be specified as true or false."
-  when: local is undefined or local|type_debug != 'bool'
+    msg: "{{ item.key }} parameter must be specified as true or false"
+  when: item.key is undefined or item.value|type_debug != 'bool'
+  loop:
+    - { key: local, value: "{{ local }}" }
+    - { key: restore_registry_images, value: "{{ restore_registry_images }}" }
 
 - name: Fail if backup storage location is not specified for centralized backup
   fail:
     msg: "central_backup_dir must be specified if 'local' parameter is set to false."
   when: central_backup_dir is undefined and not local
 
-- name: Fail if user images restore is requested when backup storage location is central
+- name: Fail if images restore is requested when backup storage location is central
   fail:
-    msg: "User images backup data are not stored on the system controller."
-  when: not local and (restore_user_images or user_images_backup_filename is defined)
+    msg: "Images backup data are not stored on the system controller."
+  when: not local and restore_registry_images
+
+- name: Retrieve software version number
+  shell: source /etc/build.info; echo $SW_VERSION
+  register: sw_version_result
+
+- name: Set software version for restore
+  set_fact:
+    software_version: "{{ sw_version_result.stdout }}"
+
+- name: Turn off optimized_bnr_supported flag and set restore_mode to legacy
+  set_fact:
+    optimized_bnr_supported: false
+    restore_mode: "legacy"
+  when: software_version is version('22.12', '<') or
+        restore_mode != 'optimized' or
+        (test_mode is defined and test_mode == 'legacy')
 
 - name: Set target_connection fact
   set_fact:
     target_connection: "{{ 'ssh' if local else 'local' }}"
 
-- name: Handling unspecified platform_backup_filename
+# Default backup data location (i.e. --restore-values option is not used)
+- name: Handling unspecified platform backup_filename
   block:
-    - name: Fail if user_images_backup_filename is specified
-      fail:
-        msg: "User images cannot be restored without platform restore."
-      when: user_images_backup_filename is defined
-
-    - name: Retrieve software version number
-      shell: source /etc/build.info; echo $SW_VERSION
-      register: sw_version_result
-      connection: "{{ target_connection }}"
-
-    - name: Set software version for the restore
-      set_fact:
-        software_version: "{{ sw_version_result.stdout }}"
-
     - name: Ensure central_backup_dir is defined
       set_fact:
         central_backup_dir: "{{ default_central_backup_dir }}"
@@ -75,63 +81,111 @@
         tmp_platform_backup_filename: "{{ find_backup.files[0].path|basename }}"
 
     - block:
-      - name: Check if user images backup file exists
+      - name: Set fact for images backup file check
+        set_fact:
+          file_pattern: "{{ default_registry_filesystem_backup_prefix if optimized_bnr_supported
+                            else default_user_images_backup_prefix }}"
+
+      - name: Check if images backup file exists
         find:
           path: "{{ backup_dir }}"
-          patterns: "{{ default_user_images_backup_prefix }}*"
+          patterns: "{{ file_pattern }}*"
         register: find_backup
 
       - name: Fail if there is no images backup file or there are more than one images backup file
         fail:
-          msg: "There must be one user images backup file in {{ backup_dir }}"
+          msg: "There must be one images backup file in {{ backup_dir }}"
         when: find_backup.failed or find_backup.files|length != 1
 
-      - name: Set user images backup file facts
+      - name: Set images backup file facts
         set_fact:
           images_backup_dir: "{{ backup_dir }}"
           images_backup_filename: "{{ find_backup.files[0].path|basename }}"
-      when: local and restore_user_images
-  when: platform_backup_filename is undefined
+      when: restore_registry_images
 
-- name: Handling specified platform_backup_filename
+  when: backup_filename is undefined
+
+# Custom backup data location (i.e. backup_filename is specified in --restore-values file).
+#
+# The restore_optimized.yml playbook in 22.12 supports the following options in terms
+# of images related setting:
+#   - default registry filesystem filename via the setting of restore_registry_filesystem flag
+#   - custom registry filesystem filename via the setting of registry_backup_filename parameter
+#
+# The legacy restore_images.yml playbook only supports one option also:
+#   - custome user images backup filename via the setting of backup_filename paramter
+#
+# In order to work with both types of restore (optimized and legacy), this wrapper playbook
+# will pass along the flags that are set in the restore-values overrides file. In addition,
+# it will allow the setting of custom user images filename via the setting of
+# user_images_backup_filename parameter.
+
+- name: Handling specified platform backup_filename
   block:
+    - name: Update backup_filename if initial_backup_dir is specified
+      set_fact:
+        backup_filename: "{{ [initial_backup_dir, backup_filename] | path_join }}"
+      when: initial_backup_dir is defined
+
     - name: Check if specified platform backup file exists
       stat:
-        path: "{{ platform_backup_filename }}"
+        path: "{{ backup_filename }}"
       register: platform_file_check
       connection: "{{ target_connection }}"
 
     - name: Fail if platform backup file does not exist
       fail:
-        msg: "Platform backup file {{ platform_backup_filename }} does not exist."
+        msg: "Platform backup file {{ backup_filename }} does not exist."
       when: not platform_file_check.stat.exists
 
     - name: Set interim platform backup file facts
       set_fact:
-        tmp_platform_backup_dir: "{{ platform_backup_filename|dirname }}"
-        tmp_platform_backup_filename: "{{ platform_backup_filename|basename }}"
+        tmp_platform_backup_dir: "{{ backup_filename|dirname }}"
+        tmp_platform_backup_filename: "{{ backup_filename|basename }}"
 
     - block:
-      - name: Check if specified user images backup file exists
-        stat:
-          path: "{{ user_images_backup_filename }}"
-        register: images_file_check
-
-      - name: Fail if user images backup file does not exist
+      - name: Fail if images related paramaeters are not set
         fail:
-          msg: "User images backup file {{ user_images_backup_filename }} does not exist."
-        when: not images_file_check.stat.exists
+          msg: "Images backup filename is not specified in restore-values file."
+        when:
+          - restore_registry_filesystem is undefined
+          - registry_backup_filename is undefined
+          - user_images_backup_filename is undefined
 
-      - name: Turn on restore_user_images flag
+      - name: Set images_backup_filename if initial_backup_dir is specified (optimized)
         set_fact:
-          restore_user_images: true
+          images_backup_filename: "{{ [initial_backup_dir, registry_backup_filename] | path_join }}"
+        when:
+          - registry_backup_filename is defined
+          - initial_backup_dir is defined
+          - optimized_bnr_supported
 
-      - name: Set user images backup file facts
+      - name: Set images_backup_filename if initial_backup_dir is specified (legacy)
         set_fact:
-          images_backup_dir: "{{ user_images_backup_filename|dirname }}"
-          images_backup_filename: "{{ user_images_backup_filename|basename }}"
-      when: user_images_backup_filename is defined
-  when: platform_backup_filename is defined
+          images_backup_filename: "{{ [initial_backup_dir, user_images_backup_filename] | path_join }}"
+        when:
+          - user_images_backup_filename is defined
+          - not optimized_bnr_supported
+
+      - block:
+        - name: Check if specified images backup file exists
+          stat:
+            path: "{{ images_backup_filename }}"
+          register: images_file_check
+
+        - name: Fail if registry images backup file does not exist
+          fail:
+            msg: "Images backup file {{ images_backup_filename }} does not exist."
+          when: not images_file_check.stat.exists
+
+        - name: Set images backup file facts
+          set_fact:
+            images_backup_dir: "{{ images_backup_filename|dirname }}"
+            images_backup_filename: "{{ images_backup_filename|basename }}"
+        when: images_backup_filename is defined
+
+      when: restore_registry_images
+  when: backup_filename is defined
 
 - name: Set platform backup file facts
   set_fact:
@@ -144,6 +198,7 @@
       platform_backup_filename: {{ platform_backup_filename }}
       images_backup_dir: {{ images_backup_dir|default(None) }}
       images_backup_filename: {{ images_backup_filename|default(None) }}
+      restore_mode: {{ restore_mode }}
 
 - name: Create temp file for modified restore overrides
   tempfile:
@@ -163,14 +218,15 @@
   set_fact:
     subcloud_overrides: "{{ restore_overrides.path }}"
 
-- name: Remove parameters that are not supported by platform restore playbook
+- name: Remove images related settings from override files if images restore is not requested
   lineinfile:
     path: "{{ subcloud_overrides }}"
     state: absent
     regexp: "{{ item }}"
   loop:
-    - "^platform_backup_filename(.*)$"
+    - "^registry_backup_filename(.*)$"
     - "^user_images_backup_filename(.*)$"
+  when: not restore_registry_images
   connection: local
 
 - name: Write platform backup directory and file name to overrides file
@@ -181,4 +237,11 @@
     - "initial_backup_dir: {{ platform_backup_dir }}"
     - "backup_filename: {{ platform_backup_filename }}"
     - "restore_mode: {{ restore_mode }}"
+  connection: local
+
+- name: Add restore registry filesystem flag to overrides file
+  lineinfile:
+    path: "{{ subcloud_overrides }}"
+    line: "restore_registry_filesystem: true"
+  when: restore_mode == 'optimized'
   connection: local

@@ -20,7 +20,7 @@
 
 - name: Perform images restore
   import_tasks: do_images_restore.yml
-  when: restore_user_images
+  when: restore_registry_images and not optimized_bnr_supported
 
 - name: Perform host unlock
   include_role:
@@ -43,5 +43,5 @@
     | grep -v "enabled-active" | wc -l
   register: service_status_result
   until: service_status_result.stdout == "1"
-  retries: 10
+  retries: 20
   delay: 30

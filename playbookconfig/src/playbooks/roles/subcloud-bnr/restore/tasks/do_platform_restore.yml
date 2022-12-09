@@ -63,7 +63,7 @@
       file:
         path: "{{ subcloud_overrides }}"
         state: absent
-      when: not restore_user_images
+      when: not restore_registry_images or optimized_bnr_supported
 
     - name: Remove staging backup directory from {{ inventory_hostname }}
       file:
