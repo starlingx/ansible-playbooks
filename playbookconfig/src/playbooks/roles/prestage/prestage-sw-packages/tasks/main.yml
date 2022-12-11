@@ -51,6 +51,11 @@
     no_log: true
     connection: local
 
+  - name: Copy prestaging repo checksum from system controller to {{ inventory_hostname }}
+    copy:
+      src: "{{ prestaging_repo }}/../.ostree_repo_checksum"
+      dest: "{{ prestage_dir }}/../"
+
   - name: Restore the ownership of the prestage dir on the subcloud
     file:
       path: "{{ platform_backup_dir }}"
