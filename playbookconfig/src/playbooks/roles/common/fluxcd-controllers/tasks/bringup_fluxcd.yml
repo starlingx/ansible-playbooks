@@ -64,6 +64,22 @@
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
 
+    # We scale these deployments down and back up because in setups with more
+    # than 3 nodes, the cluster could be in the PartialDisruption state and
+    # the pods may not be rescheduled off of a down
+    # node. This ensures that the pods will be on controller-0 and will
+    # become available.
+    # See https://bugs.launchpad.net/starlingx/+bug/1893149
+    - name: Scale helm-controller & flux-controller deployments to 0
+      command: >-
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf scale deployment
+        -n {{ item.namespace }} {{ item.deployment }} --replicas=0
+      with_items:
+        - { namespace: flux-helm, deployment: helm-controller }
+        - { namespace: flux-helm, deployment: source-controller }
+      when: (mode is defined and mode == 'restore') and
+            fluxcd_get_pods.stderr is not search('No resources found')
+
     - block:
         - name: Check if secret exists
           command: kubectl -n {{ fluxcd_namespace }} get secret {{ fluxcd_secret_name }}
@@ -82,7 +98,7 @@
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
 
-        - name: Install flux helm and source controllers
+        - name: Install flux helm and source controllers with no prior deployment
           command: kubectl create -f {{ fluxcd_resource_dir }}
           register: create_fluxcd_pods
           environment:
@@ -90,7 +106,18 @@
       when: fluxcd_get_pods.stderr is search('No resources found')
 
     - block:
-        - name: Install flux helm and source controllers
+        # This will scale the deployment up, but will also upgrade FluxCD in case there was a change
+        - name: Install flux helm and source controllers for restore/upgrades over existing deployment
+          command: kubectl apply -f {{ fluxcd_resource_dir }}
+          register: create_fluxcd_pods
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+      when: (mode is defined and mode == 'restore') and
+            fluxcd_get_pods.stderr is not search('No resources found')
+
+    - block:
+        - name: Install flux helm and source controllers for upgrade activate
           command: kubectl apply -f {{ fluxcd_resource_dir }}
           register: create_fluxcd_pods
           environment:
