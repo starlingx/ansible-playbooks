@@ -12,16 +12,16 @@
   - name: Set Kubernetes local directory
     set_fact:
       kube_local_dir: "/usr/local/kubernetes"
+      kube_symlink_dir: "/var/lib/kubernetes"
 
-  # When updating kubernetes, kubeadm and kubelet/kubectl need to be updated separately
-  # and we will have "stage1" and "stage2" subdirectories to separate these different stages.
-  - name: Bind Kubernetes stage1 and stage2 directories
-    mount:
-      path: "{{ kube_local_dir }}/current/{{ item }}"
+  # When updating kubernetes, kubeadm, and kubelet need to be updated separately
+  # so we will have "stage1" and "stage2" symlinks under
+  # /var/lib/kubernetes to separate these different stages.
+  - name: Link Kubernetes stage1 and stage2 directories
+    ansible.builtin.file:
       src: "{{ kube_local_dir }}/{{ kubernetes_version }}/{{ item }}"
-      opts: bind
-      state: mounted
-      fstype: none
+      dest: "{{ kube_symlink_dir }}/{{ item }}"
+      state: link
     with_items:
       - "stage1"
       - "stage2"
