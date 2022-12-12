@@ -9,7 +9,10 @@
 
   vars:
     playbooks_root: "/usr/share/ansible/stx-ansible/playbooks"
+    mode: "upgrade_fluxcd_images"
 
   # Main play
   roles:
+    - { role: common/get-kube-version, become: yes }
+    - { role: common/push-docker-images, become: yes }
     - { role: common/fluxcd-controllers, become: yes }

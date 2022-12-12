@@ -62,6 +62,14 @@
     download_images_list: "{{ download_images_list|default([]) + static_images + security_images }}"
   when: mode == 'upgrade_static_images'
 
+# We only want fluxcd images for fluxcd upgrades, but can live with a broader
+# target for the sake of keeping it variable definitions contained to
+# a variable: static_images
+- name: Set download images list to static images for FluxCD image upgrade
+  set_fact:
+    download_images_list: "{{ download_images_list|default([]) + static_images }}"
+  when: mode == 'upgrade_fluxcd_images'
+
 # Only download k8s networking images if k8s networking upgrade
 - name: Set download images list to k8s network images if upgrading k8s networking
   set_fact:
