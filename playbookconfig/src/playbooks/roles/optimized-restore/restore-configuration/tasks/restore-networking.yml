@@ -33,7 +33,7 @@
       set_fact:
         interfaces: "{{
             [ipv4_route.stdout.strip(), ipv6_route.stdout.strip()]
-            | reject('equalto', '') | map('regex_replace', query, '--exclude==\\1') | list
+            | reject('equalto', '') | map('regex_replace', query, '--exclude=\\1') | list
           }}"
       vars:
         query: '^.*dev (\w+).*$'
