@@ -39,15 +39,12 @@
     when: ansible_host | ipaddr
 
   - name: Check connectivity
-    local_action: command ping -c 1 {{ ansible_host }}
-    failed_when: false
-    register: ping_result
-
-  - name: Fail if host is unreachable
-    fail: msg='Host {{ ansible_host }} is unreachable!'
-    with_items:
-      - "{{ ping_result.stdout_lines|list }}"
-    when: ping_result.rc != 0 and item is search('100% packet loss')
+    local_action:
+      module: wait_for
+        port={{ ansible_port }}
+        host={{ ansible_host }}
+        timeout=10
+        state=started
 
   - name: Gather remote SSH public key
     command: "ssh-keyscan -T 20 -t ecdsa -p {{ ansible_port if ansible_port else 22 }} {{ ansible_host }}"
