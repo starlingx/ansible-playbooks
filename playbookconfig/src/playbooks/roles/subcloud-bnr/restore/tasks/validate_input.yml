@@ -243,5 +243,5 @@
   lineinfile:
     path: "{{ subcloud_overrides }}"
     line: "restore_registry_filesystem: true"
-  when: restore_mode == 'optimized'
+  when: restore_registry_images and restore_mode == 'optimized'
   connection: local
