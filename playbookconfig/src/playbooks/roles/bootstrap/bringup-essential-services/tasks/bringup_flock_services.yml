@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -41,6 +41,11 @@
     with_items:
       - /etc/init.d/fm-api restart
       - /etc/init.d/fminit start
+
+  - name: Enable FM API
+    systemd:
+      name: fm-api
+      enabled: yes
 
   - name: Bring up Maintenance Agent
     command: /usr/lib/ocf/resource.d/platform/mtcAgent start
