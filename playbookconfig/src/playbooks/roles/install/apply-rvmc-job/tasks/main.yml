@@ -40,7 +40,7 @@
     kubectl create namespace --kubeconfig=/etc/kubernetes/admin.conf {{ rvmc_namespace }}
   when: get_namespace.stdout_lines|length == 0
   register: result
-  failed_when: (result.rc != 0) and ("'AlreadyExists' not in result.stderr")
+  failed_when: (result.rc != 0) and ('AlreadyExists' not in result.stderr)
 
 - name: Get default registry key
   command: >-
@@ -76,13 +76,26 @@
   - set_fact:
       rvmc_pod_name: "{{ pod_name.stdout_lines[0] }}"
 
-  - name: Wait for {{ pod_schedule_time }} seconds for {{ rvmc_pod_name }} to be ready
-    command: >-
-      kubectl --kubeconfig=/etc/kubernetes/admin.conf wait -n {{ rvmc_namespace }}
-      --for=condition=Ready pod/{{ rvmc_pod_name }}
-      --timeout={{ pod_schedule_time }}s
-    failed_when: false
-    register: wait_for_pod
+  - block:
+    - name: Wait for {{ pod_schedule_time }} seconds for {{ rvmc_pod_name }} to be ready
+      command: >-
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf wait -n {{ rvmc_namespace }}
+        --for=condition=Ready pod/{{ rvmc_pod_name }}
+        --timeout={{ pod_schedule_time }}s
+
+    # The above check is not reliable. Sometimes the pod completed its job but k8s
+    # did not detect its Ready condition. Either the pod never changed to Ready
+    # condition or k8s might have missed the detection of condition transition to
+    # Ready. The following rescue block is meant to double confirm that the pod
+    # indeed failed before failing the playbook.
+    rescue:
+      - name: Check pod status for completed state
+        shell: >-
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }}
+          get pod --field-selector=status.phase=Succeeded |
+          grep {{ rvmc_pod_name }}
+        failed_when: false
+        register: wait_for_pod
 
   - block:
     - name: Save Redfish Virtual Media Controller logs if {{ rvmc_pod_name }} is not ready
@@ -95,7 +108,7 @@
     - name: Fail if {{ rvmc_pod_name }} is not ready
       fail: msg="Redfish Virtual Media Controller failed to start the install"
 
-    when: wait_for_pod.rc != 0
+    when: wait_for_pod is defined and wait_for_pod.rc != 0
 
 - name: Wait for {{ job_wait_time }} seconds for Redfish Virtual Media Controller to complete or fail
   script: roles/install/files/k8s-job-state-check.sh {{ rvmc_name }} {{ rvmc_namespace }} {{ job_wait_time }}
