@@ -25,6 +25,21 @@
   args:
     warn: false
 
+- name: Extract original LV sizes
+  shell: >
+    tar -xf {{ platform_backup_fqpn }}
+    --wildcards '*/sysinv.postgreSql.data' -O
+    | grep 'public.host_fs'
+    | grep -Eo "[0-9]+, '{{ item }}-lv'"
+    | grep -Eo '[0-9]+'
+  register: lv_size
+  loop:
+    - backup
+    - docker
+    - kubelet
+    - log
+    - scratch
+
 - name: Create puppet hieradata runtime configuration
   copy:
     dest: "{{ hieradata_workdir }}/runtime.yaml"
@@ -33,6 +48,13 @@
       platform::network::mgmt::params::controller0_address: 127.0.0.1
       platform::network::mgmt::params::controller1_address: 127.0.0.2
     force: yes
+
+- name: Add original LV sizes to hierdata runtime configuration
+  lineinfile:
+    path: "{{ hieradata_workdir }}/runtime.yaml"
+    line: "platform::filesystem::{{ item.item }}::restore::lv_size: {{ item.stdout.strip() }}"
+    state: present
+  loop: "{{ lv_size.results }}"
 
 - name: Create SSL CA cert directory
   file:
