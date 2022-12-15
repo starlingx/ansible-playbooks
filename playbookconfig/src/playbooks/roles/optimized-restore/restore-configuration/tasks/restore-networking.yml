@@ -21,29 +21,38 @@
     - name: Restore network configuration files
       command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite {{ network_scripts_location.lstrip('/') }}"
 
-    - name: Get IPv4 default gateway
-      command: ip -4 route show default
+    - name: Get IPv4 default gateways
+      shell: >
+        ip -4 route show default
+        | grep -oE 'dev [0-9a-z]+'
+        | awk '{print "--exclude=" $2}'
       register: ipv4_route
 
-    - name: Get IPv6 default gateway
-      command: ip -6 route show default
+    # There can be multiple default routes
+    - name: Get IPv6 default gateways
+      shell: >
+        ip -6 route show default
+        | grep -oE 'dev [0-9a-z]+'
+        | awk '{print "--exclude=" $2}'
       register: ipv6_route
 
     - name: Extract gateway interfaces
       set_fact:
         interfaces: "{{
-            [ipv4_route.stdout.strip(), ipv6_route.stdout.strip()]
-            | reject('equalto', '') | map('regex_replace', query, '--exclude=\\1') | list
+            ipv4_route.stdout_lines + ipv6_route.stdout_lines
+            | map('trim') | reject('equalto', '')
+            | unique | list
           }}"
-      vars:
-        query: '^.*dev (\w+).*$'
 
-    - name: Shutdown all network interfaces excluding loopback
-      command: ifdown -a --exclude=lo
-
+    # Ignore errors is used here to avoid any issues
+    # with networking interfaces that could not be produced
+    # during regular usage and testing.
+    # Interfaces will be brought up normally after unlocking.
     - name: Bring up original networking
       shell:
-        cmd: "ifup $(ls ifcfg-* | sed 's/ifcfg-//') {{ ' '.join(interfaces) }}"
+        cmd: |
+          ifdown -a --exclude=lo {{ ' '.join(interfaces) }}
+          ifup $(ls ifcfg-* | sed 's/ifcfg-//') --ignore-errors
         chdir: /etc/network/interfaces.d/
 
     - name: Bring up temporary addresses
