@@ -36,3 +36,13 @@
 
 - name: Restart keystone service post config update
   import_tasks: restart_keystone.yml
+
+- name: Restart vim service
+  command: "sm-restart service vim"
+
+- name: Check vim enabled after restart
+  shell: sm-query service vim | grep -c enabled-active
+  register: service_status
+  until: service_status.stdout == '1'
+  retries: 12
+  delay: 10
