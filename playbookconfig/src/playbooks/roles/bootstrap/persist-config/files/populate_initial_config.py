@@ -1094,7 +1094,7 @@ def get_rootfs_node():
 
 
 def get_mpath_from_dm(dm_device):
-    """Get mpath node from /dev/dm-N"""
+    """Get mpath node from DM device"""
     mpath_device = None
 
     context = pyudev.Context()
@@ -1102,10 +1102,9 @@ def get_mpath_from_dm(dm_device):
     pydev_device = pyudev.Device.from_device_file(context, dm_device)
 
     if sysinv_constants.DEVICE_NAME_MPATH in pydev_device.get("DM_NAME", ""):
-        re_line = re.compile(r'^(\D*)')
-        match = re_line.search(pydev_device.get("DM_NAME"))
-        if match:
-            mpath_device = os.path.join("/dev/mapper", match.group(1))
+        mpath = pydev_device.get("DM_MPATH", None)
+        if mpath:
+            mpath_device = os.path.join("/dev/mapper", mpath)
 
     return mpath_device
 
@@ -1139,7 +1138,7 @@ def device_node_to_device_path(dev_node):
     device_path = None
 
     if sysinv_constants.DEVICE_NAME_MPATH in dev_node:
-        cmd = (["find", "-L"] + glob.glob("/dev/disk/by-id/dm-uuid*") +
+        cmd = (["find", "-L"] + glob.glob("/dev/disk/by-id/wwn-*") +
                ["-samefile", dev_node])
     else:
         cmd = ["find", "-L", "/dev/disk/by-path/", "-samefile", dev_node]

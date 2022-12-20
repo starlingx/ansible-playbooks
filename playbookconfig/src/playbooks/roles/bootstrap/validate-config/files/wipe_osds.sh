@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2020 Wind River Systems, Inc.
+# Copyright (c) 2020, 2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -98,7 +98,7 @@ for f in /dev/disk/by-path/*; do
 done
 
 # Only multipath
-for f in /dev/disk/by-id/dm-uuid*; do
+for f in /dev/disk/by-id/wwn-*; do
 
     # list of partitions in the loop may no longer be valid as
     # we are wiping disks.
