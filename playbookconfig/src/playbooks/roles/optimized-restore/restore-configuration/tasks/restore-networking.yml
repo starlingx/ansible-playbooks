@@ -21,39 +21,54 @@
     - name: Restore network configuration files
       command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite {{ network_scripts_location.lstrip('/') }}"
 
-    - name: Get IPv4 default gateways
-      shell: >
-        ip -4 route show default
-        | grep -oE 'dev [0-9a-z]+'
-        | awk '{print "--exclude=" $2}'
-      register: ipv4_route
+    # Ideally, networking is restored by restarting networking service.
+    # But, this is not guaranteed to work on all systems depending on configuration.
+    - name: Restore original networking using service
+      systemd:
+        name: networking
+        state: restarted
+      register: networking
+      failed_when: false
 
-    # There can be multiple default routes
-    - name: Get IPv6 default gateways
-      shell: >
-        ip -6 route show default
-        | grep -oE 'dev [0-9a-z]+'
-        | awk '{print "--exclude=" $2}'
-      register: ipv6_route
+    # If networking service could not be restarted do it this way instead.
+    # This restarts networking in a way that ignores failures that would have
+    # occurred while attempting to restart the service.
+    - block:
+      - name: Get IPv4 default gateways
+        shell: >
+          ip -4 route show default
+          | grep -oE 'dev [0-9a-z]+'
+          | awk '{print "--exclude=" $2}'
+        register: ipv4_route
 
-    - name: Extract gateway interfaces
-      set_fact:
-        interfaces: "{{
-            ipv4_route.stdout_lines + ipv6_route.stdout_lines
-            | map('trim') | reject('equalto', '')
-            | unique | list
-          }}"
+      # There can be multiple default routes
+      - name: Get IPv6 default gateways
+        shell: >
+          ip -6 route show default
+          | grep -oE 'dev [0-9a-z]+'
+          | awk '{print "--exclude=" $2}'
+        register: ipv6_route
 
-    # Ignore errors is used here to avoid any issues
-    # with networking interfaces that could not be produced
-    # during regular usage and testing.
-    # Interfaces will be brought up normally after unlocking.
-    - name: Bring up original networking
-      shell:
-        cmd: |
-          ifdown -a --exclude=lo {{ ' '.join(interfaces) }}
-          ifup $(ls ifcfg-* | sed 's/ifcfg-//') --ignore-errors
-        chdir: /etc/network/interfaces.d/
+      - name: Extract gateway interfaces
+        set_fact:
+          interfaces: "{{
+              ipv4_route.stdout_lines + ipv6_route.stdout_lines
+              | map('trim') | reject('equalto', '')
+              | unique | list
+            }}"
+
+      # Ignore errors is used here to avoid any issues
+      # with networking interfaces that could not be produced
+      # during regular usage and testing.
+      # Interfaces will be brought up normally after unlocking.
+      - name: Bring up original networking
+        shell:
+          cmd: |
+            ifdown -a --exclude=lo {{ ' '.join(interfaces) }}
+            ifup $(ls ifcfg-* | sed 's/ifcfg-//') --ignore-errors
+          chdir: /etc/network/interfaces.d/
+
+      when: not networking.changed
 
     - name: Bring up temporary addresses
       block:
