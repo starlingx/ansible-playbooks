@@ -14,7 +14,6 @@
       banner_permdir: "{{ config_permdir }}/banner/etc"
       ssh_config_permdir: "{{ config_permdir }}/ssh_config"
       pxe_config_permdir: "{{ config_permdir }}/pxelinux.cfg"
-      armada_permdir: "{{ platform_path }}/armada/"
       fluxcd_permdir: "{{ platform_path }}/fluxcd/"
       helm_overrides_permdir: "{{ platform_path + '/helm/' + software_version }}"
       sysinv_config_permdir: "{{ platform_path + '/sysinv/' + software_version }}"

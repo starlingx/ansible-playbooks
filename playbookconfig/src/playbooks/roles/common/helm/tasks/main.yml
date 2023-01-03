@@ -1,0 +1,36 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to perform tasks that configure helm.
+#
+
+# For the IPv6 system, the CIDR address should be changed to IPv6 to allow
+# users from IPv6 address to access DB
+- block:
+  - name: Update postgresql pg_hba.conf with IPv6 address if system is IPv6
+    command: "{{ item }}"
+    args:
+      warn: false
+    with_items:
+      - "sed --follow-symlinks -i -e 's|0.0.0.0/0|::0/0|g' /etc/postgresql/pg_hba.conf"
+      - "sed --follow-symlinks -i -e 's|0.0.0.0/32|::0/128|g' /etc/postgresql/pg_hba.conf"
+
+  - name: Restart postgresql
+    systemd:
+      name: postgresql
+      state: restarted
+  when: (ipv6_addressing is defined and ipv6_addressing != False)
+
+- block:
+  - name: Add Helm repos
+    command: /sbin/helm repo add "{{ item }}" "http://127.0.0.1:{{ helm_repo_port }}/helm_charts/{{ item }}" --debug
+    with_items:
+      - "{{ helm_repo_name_apps }}"
+      - "{{ helm_repo_name_platform }}"
+
+  - name: Update Helm repos
+    command: /sbin/helm repo update --debug

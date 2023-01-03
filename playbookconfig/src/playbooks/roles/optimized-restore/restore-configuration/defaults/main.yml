@@ -29,7 +29,7 @@ restore_items:
   - etc/pcidp
   - etc/pki
   - etc/platform/openrc
-  # See here playbookconfig/src/playbooks/roles/common/armada-helm/tasks/main.yml
+  # See here playbookconfig/src/playbooks/roles/common/helm/tasks/main.yml
   # /etc/postgresql needs to be restored because it is modified on IPv6 only systems
   - etc/postgresql
   - etc/resolv.conf
