@@ -159,9 +159,9 @@
 
 - name: Create extra volumes files
   copy:
-    dest: "/etc/kubernetes/{{ item.name }}.yaml"
+    dest: "{{ item.hostPath }}"
     content: "{{ item.content }}"
-  when: (item.pathType == 'File')
+  when: (item.pathType == 'File') and 'content' in item
   loop: "{{ apiserver_extra_volumes + controllermanager_extra_volumes + scheduler_extra_volumes }}"
 
 - name: Set loopback ip for kubeadm configuration
@@ -404,13 +404,71 @@
 
 - name: Copy kubernetes extra volumes config files
   copy:
-    src: "/etc/kubernetes/{{ item.name }}.yaml"
-    dest: "{{ config_permdir }}/kubernetes/{{ item.name }}.yaml"
+    src: "{{ item.hostPath }}"
+    dest: "{{ config_permdir }}/kubernetes/"
     remote_src: yes
     force: yes
     mode: 0400
   when: (item.pathType == 'File')
   loop: "{{ apiserver_extra_volumes + controllermanager_extra_volumes + scheduler_extra_volumes }}"
+
+# creating the associated service-parameter extra-volumes configmaps.
+# during restore mode configmaps might exist, so a check is done before
+# trying to create new configmaps
+- block:
+  - name: Checking existing kube-apiserver configmaps
+    command: >
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get configmap
+        -n kube-system "kube-apiserver-volumes---{{ item.name }}"
+    when: (item.pathType == 'File')
+    failed_when: false
+    loop: "{{ apiserver_extra_volumes }}"
+    register: existent_configmaps
+
+  - name: Create kube-apiserver extra volumes configmaps from config files
+    command: >
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf create
+      configmap "kube-apiserver-volumes---{{ item.item.name }}"
+      -n kube-system --from-file "{{ item.item.hostPath }}"
+    when: item.item.pathType == 'File' and item.rc != 0
+    with_items:
+      - "{{ existent_configmaps.results }}"
+
+  - name: Checking existing kube-controller-manager configmaps
+    command: >
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get configmap
+        -n kube-system "kube-controller-manager-volumes---{{ item.name }}"
+    when: (item.pathType == 'File')
+    failed_when: false
+    loop: "{{ controllermanager_extra_volumes }}"
+    register: existent_configmaps
+
+  - name: Create kube-controller-manager extra volumes configmaps from config files
+    command: >
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf create configmap
+      "kube-controller-manager-volumes---{{ item.item.name }}"
+      -n kube-system --from-file "{{ item.item.hostPath }}"
+    when: item.item.pathType == 'File' and item.rc != 0
+    with_items:
+      - "{{ existent_configmaps.results }}"
+
+  - name: Checking existing kube-scheduler configmaps
+    command: >
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get configmap
+        -n kube-system "kube-scheduler-volumes---{{ item.name }}"
+    when: (item.pathType == 'File')
+    failed_when: false
+    loop: "{{ scheduler_extra_volumes }}"
+    register: existent_configmaps
+
+  - name: Create kube-scheduler extra volumes configmaps from config files
+    command: >
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf create
+      configmap "kube-scheduler-volumes---{{ item.item.name }}"
+      -n kube-system --from-file "{{ item.item.hostPath }}"
+    when: item.item.pathType == 'File' and item.rc != 0
+    with_items:
+      - "{{ existent_configmaps.results }}"
 
 - name: Apply pod security policy
   command: >

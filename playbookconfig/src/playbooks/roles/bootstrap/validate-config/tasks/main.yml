@@ -830,7 +830,7 @@
         (restore_k8s_version is defined) and
         (kubernetes_version != restore_k8s_version)
 
-- name: Check overridden extraVolumes configuration.
+- name: Check extraVolumes configuration.
   fail:
     msg: >
       Attribute is missing in extra volume {{ item.name }}.
@@ -838,6 +838,7 @@
       Or pathType attribute's value is not 'File' or 'DirectoryOrCreate'
   when: (item.name is not defined) or
         (item.mountPath is not defined) or
+        (item.hostPath is not defined) or
         (item.pathType is not defined) or
         (item.pathType != 'File' and item.pathType != 'DirectoryOrCreate') or
         (item.readOnly is not defined) or
@@ -962,7 +963,6 @@
       - "OIDC_USERNAME_CLAIM={{ apiserver_oidc.username_claim | default('undef') }}"
       - "OIDC_GROUPS_CLAIM={{ apiserver_oidc.groups_claim | default('undef') }}"
       - "KUBERNETES_VERSION={{ kubernetes_version }}"
-      - "AUDIT_POLICY_FILE={{ apiserver_extra_args['audit-policy-file'] | default('undef') }}"
 
   - name: Write simplex flag
     file:

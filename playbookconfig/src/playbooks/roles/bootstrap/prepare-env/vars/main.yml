@@ -13,6 +13,8 @@ temp_k8s_plugins_dir: "/tmp"
 kubelet_vol_plugin_dir: /var/opt/libexec/kubernetes/kubelet-plugins/volume/exec/
 # Kubernetes api server encryption provider configuration file
 encryption_provider_config: /etc/kubernetes/encryption-provider.yaml
+audit_log_root: /var/log/kubernetes/audit/
+audit_log_filename: audit.log
 default_audit_policy_config: /etc/kubernetes/default-audit-policy.yaml
 kubelet_cgroup_root: "/k8s-infra"
 
@@ -28,7 +30,7 @@ apiserver_extra_args_defaults:
   default-not-ready-toleration-seconds: "30"
   default-unreachable-toleration-seconds: "30"
   event-ttl: "24h"
-  audit-log-path: "/var/log/kubernetes/audit/audit.log"
+  audit-log-path: "{{ audit_log_root }}{{audit_log_filename}}"
   audit-log-maxage: "3"
   audit-log-maxbackup: "10"
   audit-log-maxsize: "100"
@@ -40,6 +42,27 @@ controllermanager_extra_args_defaults:
   flex-volume-plugin-dir: "{{ kubelet_vol_plugin_dir }}"
 
 scheduler_extra_args_defaults: { }
+
+apiserver_extra_volumes_defaults:
+  - name: "encryption-config"
+    hostPath: "{{ encryption_provider_config }}"
+    mountPath: "{{ encryption_provider_config }}"
+    readOnly: true
+    pathType: File
+  - name: "default-audit-policy-file"
+    hostPath: "{{ default_audit_policy_config }}"
+    mountPath: "{{ default_audit_policy_config }}"
+    readOnly: true
+    pathType: File
+  - name: "audit-log-dir"
+    hostPath: "{{ audit_log_root }}"
+    mountPath: "{{ audit_log_root }}"
+    readOnly: false
+    pathType: DirectoryOrCreate
+
+controllermanager_extra_volumes_defaults: []
+
+scheduler_extra_volumes_defaults: []
 
 # KubeletConfiguration
 kubelet_extra_args_defaults:

@@ -267,10 +267,13 @@
     apiserver_extra_args: "{{ apiserver_extra_args_defaults \
                           | combine({ 'feature-gates': apiserver_feature_gates|default(omit) }, \
                           apiserver_extra_args|default({})) }}"
+    apiserver_extra_volumes: "{{ apiserver_extra_volumes_defaults + apiserver_extra_volumes }}"
     controllermanager_extra_args: "{{ controllermanager_extra_args_defaults \
                                   | combine(controllermanager_extra_args|default({})) }}"
+    controllermanager_extra_volumes: "{{ controllermanager_extra_volumes_defaults + controllermanager_extra_volumes }}"
     scheduler_extra_args: "{{ scheduler_extra_args_defaults \
                                   | combine(scheduler_extra_args|default({})) }}"
+    scheduler_extra_volumes: "{{ scheduler_extra_volumes_defaults + scheduler_extra_volumes }}"
     kubelet_extra_args: "{{ kubelet_extra_args_defaults \
                         | combine(kubelet_extra_args|default({})) }}"
     kubelet_configurations: "{{ kubelet_configurations_defaults \
