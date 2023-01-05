@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019, 2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -39,6 +39,8 @@
             raise Exception("Failed validation, {{ network }} start or end address must be within its subnet range.")
 
           # min_subnet_size = number of hosts + 1 network address + 1 broadcast address
+          # Note: the admin network is currently only used in distributed cloud systems
+          # for communication between subcloud (controllers) and the system controller.
           min_subnet_sizes = {
               'cluster_pod': 65536,
               'cluster_service': 65536,
@@ -46,7 +48,8 @@
               'multicast': 6,
               'management': 6,
               'cluster_host': 5,
-              'oam': 5
+              'oam': 5,
+              'admin': 5
           }
           max_subnet_sizes = {
               'cluster_service': 1048576

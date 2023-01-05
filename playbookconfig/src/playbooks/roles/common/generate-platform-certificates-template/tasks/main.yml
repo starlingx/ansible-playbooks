@@ -48,6 +48,11 @@
     echo "{{ address_table.stdout }}" | awk  '$4 == "cluster-host-subnet" { print $18 }'
   register: kubernetes_cluster_c1_ip
 
+- name: Get floating admin ip
+  shell: |
+    echo "{{ address_table.stdout }}" | awk  '$4 == "admin" { print $14 }'
+  register: admin_floating_ip
+
 - name: Get region name
   shell: |
     source /etc/platform/openrc

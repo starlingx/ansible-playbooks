@@ -110,6 +110,11 @@
       - Docker no proxy list is {{ docker_no_proxy }}
       - Applications are {{ applications }}
 
+- debug:
+    msg:
+      - Admin subnet is {{ admin_subnet }}
+  when: admin_network is defined
+
 # System parameters config validation
 - block:
   - name: Set system mode fact
@@ -224,6 +229,7 @@
       - "{{ network_params.cluster_service_subnet }}"
       - "{{ network_params.external_oam_subnet }}"
       - "{{ network_params.management_multicast_subnet }}"
+      - "{{ network_params.admin_subnet | default([]) }}"
     when: ipv4_addressing != False
 
   - name: Validate all network subnets are IPv6
@@ -237,6 +243,7 @@
       - "{{ network_params.cluster_service_subnet }}"
       - "{{ network_params.external_oam_subnet }}"
       - "{{ network_params.management_multicast_subnet }}"
+      - "{{ network_params.admin_subnet | default([]) }}"
     when: ipv6_addressing != False
 
   - name: Validate pxeboot subnet is IPv4
@@ -303,6 +310,12 @@
       default_management_multicast_end_address: "{{ (management_multicast_subnet | ipaddr(-2)).split('/')[0] }}"
       default_external_oam_node_0_address: "{{ external_oam_floating_address | ipmath(1) }}"
       default_external_oam_node_1_address: "{{ external_oam_floating_address | ipmath(2) }}"
+
+  - name: Set default start and end admin network addresses based on provided subnets
+    set_fact:
+      default_admin_start_address: "{{ (admin_subnet | ipaddr(1)).split('/')[0] }}"
+      default_admin_end_address: "{{ (admin_subnet | ipaddr(-2)).split('/')[0] }}"
+    when: admin_network is defined
 
   - name: Build address pairs for validation, merging default and user provided values
     set_fact:
@@ -372,6 +385,23 @@
             else default_external_oam_node_1_address }}"
           subnet: "{{ network_params.external_oam_subnet }}"
 
+  - name: Build admin address pairs for validation, merging default and user provided values
+    set_fact:
+      admin_pairs:
+        start:
+          "{{ admin_start_address if admin_start_address != 'derived'
+          else default_admin_start_address }}"
+        end:
+          "{{ admin_end_address if admin_end_address != 'derived'
+          else default_admin_end_address }}"
+        subnet: "{{ network_params.admin_subnet }}"
+    when: admin_network is defined
+
+  - name: Add admin address pairs to address pairs
+    set_fact:
+      address_pairs: "{{ address_pairs | combine({'admin': admin_pairs}) }}"
+    when: admin_network is defined
+
   - include: validate_address_range.yml
     with_dict: "{{ address_pairs }}"
 
@@ -391,6 +421,18 @@
       controller_floating_address: "{{ address_pairs['management']['start'] }}"
       controller_pxeboot_floating_address: "{{ address_pairs['pxeboot']['start'] }}"
       cluster_floating_address: "{{ address_pairs['cluster_host']['start'] }}"
+
+  - name: Set subcloud admin floating address
+    set_fact:
+      controller_admin_floating_address: "{{ address_pairs['admin']['start'] }}"
+    when: address_pairs.admin is defined
+
+  - name: Set subcloud floating address
+    set_fact:
+      sc_floating_address: "{{ controller_admin_floating_address
+                           if controller_admin_floating_address is defined
+                           else address_pairs.management.start }}"
+    when: distributed_cloud_role == 'subcloud'
 
   - name: Set derived facts for subsequent tasks/roles
     set_fact:
@@ -419,7 +461,6 @@
         "{{ controller_floating_address|ipwrap if controller_floating_address|ipv6 != False
         else controller_floating_address}}"
 
-
   - name: Set facts for IP address provisioning against loopback interface
     set_fact:
       mgmt_virtual: "{{ derived_network_params.controller_0_address }}/{{ management_subnet_prefix }}"
@@ -427,6 +468,12 @@
       pxe_virtual: "{{ controller_pxeboot_floating_address }}/{{ pxe_subnet_prefix }}"
       cluster_floating_virtual: "{{ cluster_floating_address }}/{{ cluster_subnet_prefix }}"
       mgmt_floating_virtual: "{{ controller_floating_address }}/{{ management_subnet_prefix }}"
+
+  - name: Set facts for admin IP address provisioning against loopback interface
+    set_fact:
+      admin_broadcast: "{{ admin_subnet | ipaddr('broadcast') }}"
+      admin_virtual: "{{ controller_admin_floating_address }}/{{ admin_subnet | ipaddr('prefix') }}"
+    when: admin_network is defined
 
 # Docker config validation
 - block:
@@ -899,6 +946,7 @@
       - "MANAGEMENT_SUBNET={{ management_subnet }}"
       - "MANAGEMENT_START_ADDRESS={{ address_pairs['management']['start'] }}"
       - "MANAGEMENT_END_ADDRESS={{ address_pairs['management']['end'] }}"
+      - "MANAGEMENT_GATEWAY_ADDRESS={{ management_gateway_address | default('undef')}}"
       - "MANAGEMENT_DYNAMIC_ADDRESS_ALLOCATION={{ management_dynamic_address_allocation }}"
       - "MANAGEMENT_INTERFACE=lo"
       - "CONTROLLER_0_ADDRESS={{ derived_network_params.controller_0_address }}"
@@ -926,6 +974,11 @@
       - "SYSTEM_CONTROLLER_FLOATING_ADDRESS={{ system_controller_floating_address }}"
       - "SYSTEM_CONTROLLER_OAM_SUBNET={{ system_controller_oam_subnet }}"
       - "SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS={{ system_controller_oam_floating_address }}"
+      - "ADMIN_SUBNET={{ admin_subnet | default('undef') }}"
+      - "ADMIN_START_ADDRESS={{ address_pairs['admin']['start'] | default('undef') }}"
+      - "ADMIN_END_ADDRESS={{ address_pairs['admin']['end'] | default('undef') }}"
+      - "ADMIN_GATEWAY_ADDRESS={{ admin_gateway_address | default('undef') }}"
+      - "ADMIN_INTERFACE={{ 'lo' if admin_network is defined else 'undef' }}"
       - "DOCKER_HTTP_PROXY={{ docker_http_proxy }}"
       - "DOCKER_HTTPS_PROXY={{ docker_https_proxy }}"
       - "DOCKER_NO_PROXY={{ docker_no_proxy_combined | join(',') }}"
