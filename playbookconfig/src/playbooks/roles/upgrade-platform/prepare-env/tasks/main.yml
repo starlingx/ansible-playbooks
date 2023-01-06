@@ -196,6 +196,7 @@
     tar -C {{ temp_upgrade_platform_dir }} -xf {{ restore_data_file }}
     --wildcards
     --transform 's,.*/,,'
+    '*metadata'
 
 - name: Load upgrade metadata
   command: "cat {{ temp_upgrade_platform_dir }}/metadata"
@@ -211,6 +212,21 @@
   fail:
     msg: "Incorrect software load installed. Expecting {{ upgrade_metadata.to_release }}"
   when: upgrade_metadata.to_release != software_version
+
+- name: Extract kubeadm.yaml file
+  command: >
+    tar -C {{ temp_upgrade_platform_dir }} -xf {{ restore_data_file }}
+    --wildcards
+    --transform 's,.*/,,'
+    etc/kubernetes/kubeadm.yaml
+
+- name: Get kubernetes version
+  command: grep kubernetesVersion {{ temp_upgrade_platform_dir }}/kubeadm.yaml
+  register: backup_k8s_version
+
+- name: Set upgrade_k8s_version to use the correct k8s version on upgrade
+  set_fact:
+    upgrade_k8s_version: "{{ backup_k8s_version.stdout | regex_replace('^.*: v', '') }}"
 
 - name: Set archive parameters for bootstrap
   set_fact:

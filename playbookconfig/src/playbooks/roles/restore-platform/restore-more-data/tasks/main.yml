@@ -423,6 +423,12 @@
 # TODO: Restore ceph_external when it is supported
 
 - block:
+  - name: Backup default k8s service parameters
+    shell: |
+      source /etc/platform/openrc
+      system service-parameter-list --nowrap | grep kube_ | awk '{ print $4" "$6" "$8"="$10; }'
+    register: default_k8s_service_parameters
+
   - name: Check if the system is a DC controller
     command: >-
       grep -i "distributed_cloud_role\s*=\s*systemcontroller"
@@ -614,6 +620,19 @@
 
   - name: Apply kube-apiserver parameters
     block:
+    # Restore default k8s service parameters to support older stx versions
+    # Will use the restored parameter from database when present, else will
+    # create the parameter with default value from before database restore
+    - name: Restore default k8s service parameters
+      shell: |
+        source /etc/platform/openrc
+        system service-parameter-add {{ item }}
+      with_items: "{{ default_k8s_service_parameters.stdout_lines }}"
+      register: k8s_parameter_add
+      failed_when: >
+        k8s_parameter_add.rc != 0 and
+        "Parameter already exists" not in k8s_parameter_add.stderr
+
     - name: Update host config data
       command: "/usr/bin/sysinv-puppet create-host-config"
 

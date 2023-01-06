@@ -13,7 +13,7 @@ type: kubernetes.io/tls
 ---
 apiVersion: v1
 items:
-- apiVersion: cert-manager.io/v1
+- apiVersion: "{{ cert_manager_api_version.stdout | default('cert-manager.io/v1') }}"
   kind: ClusterIssuer
   metadata:
     creationTimestamp: null
@@ -24,7 +24,7 @@ items:
   status: {}
 {% if install_system_restapi_gui_certificate | bool %}
 {% set short_certificate_name = 'system-restapi-gui' %}
-- apiVersion: cert-manager.io/v1
+- apiVersion: "{{ cert_manager_api_version.stdout | default('cert-manager.io/v1') }}"
   kind: Certificate
   metadata:
     creationTimestamp: null
@@ -47,7 +47,7 @@ items:
 {% endif %}
 {% if install_system_registry_local_certificate | bool %}
 {% set short_certificate_name = 'system-registry-local' %}
-- apiVersion: cert-manager.io/v1
+- apiVersion: "{{ cert_manager_api_version.stdout | default('cert-manager.io/v1') }}"
   kind: Certificate
   metadata:
     creationTimestamp: null
@@ -75,7 +75,7 @@ items:
 {% endif %}
 {% if install_oidc_auth_apps_certificate | bool %}
 {% set short_certificate_name = 'system-oidc-dex' %}
-- apiVersion: cert-manager.io/v1
+- apiVersion: "{{ cert_manager_api_version.stdout | default('cert-manager.io/v1') }}"
   kind: Certificate
   metadata:
     creationTimestamp: null
@@ -103,7 +103,7 @@ items:
 {% endif %}
 {% if install_system_open_ldap_certificate | bool %}
 {% set short_certificate_name = 'system-openldap' %}
-- apiVersion: cert-manager.io/v1
+- apiVersion: "{{ cert_manager_api_version.stdout | default('cert-manager.io/v1') }}"
   kind: Certificate
   metadata:
     creationTimestamp: null

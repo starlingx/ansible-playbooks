@@ -65,6 +65,11 @@
     system show | grep distributed_cloud_role | awk '{ print $4 }'
   register: distributed_cloud_role
 
+- name: Get cert-manager api version
+  shell: |
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf api-versions | grep cert-manager.io | sort -n | tail -1
+  register: cert_manager_api_version
+
 - name: Generate kubernetes yaml for cert-manager resources
   template:
     src: platform_certificates.yml.j2
