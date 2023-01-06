@@ -14,9 +14,17 @@
     path: "{{ backup_in_progress_flag }}"
   register: backup_in_progress
 
-- name: Fail if backup is already in progress
-  fail:
-    msg: "Backup is already in progress!"
+- block:
+  - name: Get unix timestamp from the system
+    shell: "date +%s"
+    register: unix_timestamp
+
+  - name: Fail if backup is already in progress for less than 20 minutes
+    fail:
+      msg: >-
+        A backup has already been started less than 20 minutes ago.
+        Wait to start a new backup or manually remove the backup flag in {{ backup_in_progress_flag }}
+    when: (unix_timestamp.stdout | float - backup_in_progress.stat.ctime) < 1200
   when: backup_in_progress.stat.exists
 
 - name: Check if it is the active controller
