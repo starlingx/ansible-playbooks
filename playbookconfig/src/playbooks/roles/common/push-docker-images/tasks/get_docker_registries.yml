@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2021 Wind River Systems, Inc.
+# Copyright (c) 2019-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -18,6 +18,7 @@
       - { name: 'docker_registry', value: { } }
       - { name: 'elastic_registry', value: { } }
       - { name: 'ghcr_registry', value: { } }
+      - { name: 'registryk8s_registry', value: { } }
 
   - name: Put docker registries into a single variable
     set_fact:
@@ -29,4 +30,5 @@
       - { name: 'docker.io', value: "{{ docker_registry }}" }
       - { name: 'docker.elastic.co', value: "{{ elastic_registry }}" }
       - { name: 'ghcr.io', value: "{{ ghcr_registry }}" }
+      - { name: 'registry.k8s.io', value: "{{ registryk8s_registry }}" }
     no_log: true

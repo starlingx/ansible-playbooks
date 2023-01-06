@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2019-2022 Wind River Systems, Inc.
+# Copyright (c) 2019-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -31,7 +31,8 @@ DEFAULT_REGISTRIES = {
     'k8s.gcr.io': 'k8s.gcr.io',
     'quay.io': 'quay.io',
     'docker.elastic.co': 'docker.elastic.co',
-    'ghcr.io': 'ghcr.io'
+    'ghcr.io': 'ghcr.io',
+    'registry.k8s.io': 'registry.k8s.io'
 }
 
 REGISTRY_PATTERNS = ['.io', 'docker.elastic.co']
