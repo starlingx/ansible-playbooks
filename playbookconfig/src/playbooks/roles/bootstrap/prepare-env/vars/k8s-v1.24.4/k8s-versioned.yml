@@ -1,2 +1,2 @@
 ---
-# no customizations for this k8s version
+image_repository: registry.local:9001/k8s.gcr.io

@@ -83,7 +83,7 @@ etcd:
     caFile: /etc/etcd/ca.crt
     certFile: /etc/kubernetes/pki/apiserver-etcd-client.crt
     keyFile: /etc/kubernetes/pki/apiserver-etcd-client.key
-imageRepository: "registry.local:9001/k8s.gcr.io"
+imageRepository: {{ image_repository }}
 kubernetesVersion: {{ kubernetes_long_version }}
 networking:
   {{networking_configurations | to_nice_yaml(width=512) | indent(2, indentfirst=False)}}
