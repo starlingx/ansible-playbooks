@@ -26,4 +26,5 @@ known_registry_keys:
   - docker.io
   - docker.elastic.co
   - ghcr.io
+  - registry.k8s.io
   - defaults

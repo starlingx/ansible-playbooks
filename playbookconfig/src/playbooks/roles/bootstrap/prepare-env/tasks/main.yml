@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2022 Wind River Systems, Inc.
+# Copyright (c) 2019-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -137,6 +137,8 @@
         url: docker.elastic.co
       ghcr.io:
         url: ghcr.io
+      registry.k8s.io:
+        url: registry.k8s.io
 
 - name: Save the list of user defined registry keys
   set_fact:
@@ -212,6 +214,8 @@
       url: docker.elastic.co
     default_ghcr_registry:
       url: ghcr.io
+    default_registryk8s_registry:
+      url: registry.k8s.io
 
 - name: Set default values for additional images list
   set_fact:

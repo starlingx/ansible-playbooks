@@ -131,7 +131,7 @@ cluster_host_dynamic_address_allocation: true
 # The "defaults" is registry key defines common values that to be applied
 # to all override-able public registries. The following example will apply
 # "url", "type", "username" and "password" to docker.io, gcr.io, k8s.gcr.io,
-# quay.io, ghcr.io and docker.elastic.co registries.
+# quay.io, ghcr.io, registryk8s and docker.elastic.co registries.
 # e.g.
 #   docker_registries:
 #     defaults:
@@ -158,6 +158,8 @@ cluster_host_dynamic_address_allocation: true
 #       url: my.elasticregistry.io
 #     ghcr.io:
 #       url: my.ghcr.io
+#     registry.k8s.io:
+#       url: my.registryk8s.io
 #     defaults:
 #       type: docker
 #       username: adminUser
@@ -187,6 +189,8 @@ docker_registries:
   docker.elastic.co:
     url:
   ghcr.io:
+    url:
+  registry.k8s.io:
     url:
 # defaults:
 #   url: example.domain

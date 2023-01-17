@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2022 Wind River Systems, Inc.
+# Copyright (c) 2019-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -137,6 +137,7 @@
     - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n docker-registry-secret -f value"
     - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n elastic-registry-secret -f value"
     - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n ghcr-registry-secret -f value"
+    - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n registryk8s-registry-secret -f value"
   register: old_barbican_secrets
 
 - name: Delete old registry secrets in Barbican
@@ -214,6 +215,18 @@
 
   when: ghcr_registry.username is defined
 
+- block:
+  - name: Create Barbican secret for registryk8s registry if credentials exist
+    shell: "source /etc/platform/openrc; openstack secret store -n registryk8s-registry-secret
+           -p 'username:{{ registryk8s_registry['username'] }} password:{{ registryk8s_registry['password'] }}'
+           -c 'Secret href' -f value"
+    register: registryk8s_registry_secret_output
+
+  - set_fact:
+      registryk8s_registry_secret: "{{ registryk8s_registry_secret_output.stdout }}"
+
+  when: registryk8s_registry.username is defined
+
 - name: Append config ini file with Barbican secret uuid
   lineinfile:
     path: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
@@ -225,6 +238,7 @@
     - "DOCKER_REGISTRY_SECRET={{ docker_registry_secret | default('none') }}"
     - "ELASTIC_REGISTRY_SECRET={{ elastic_registry_secret | default('none') }}"
     - "GHCR_REGISTRY_SECRET={{ ghcr_registry_secret | default('none') }}"
+    - "REGISTRYK8S_REGISTRY_SECRET={{ registryk8s_registry_secret | default('none') }}"
 
 - name: Add section [KUBE_APISERVER]
   set_fact:
