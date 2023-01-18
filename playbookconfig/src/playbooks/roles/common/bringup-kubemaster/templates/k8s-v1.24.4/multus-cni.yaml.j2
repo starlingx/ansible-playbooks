@@ -20,6 +20,8 @@
 #   updates of pods with "kubectl apply".
 # - The attributes confDir, cniDir and binDir are added to the configmap of
 #   multus-cni-config.
+# - Due to the limitations on resource tracking and CPU usage in Kubernetes,
+#   platform pod's CPU requests are set to zero and must not request CPU resources.
 #
 # Copyright (c) 2022 Wind River Systems, Inc.
 #
@@ -271,7 +273,7 @@ spec:
             - "/host/opt/cni/bin/multus"
           resources:
             requests:
-              cpu: "10m"
+              cpu: 0
               memory: "15Mi"
           securityContext:
             privileged: true
