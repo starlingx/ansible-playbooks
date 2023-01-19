@@ -65,6 +65,7 @@
       - "{{ elastic_registry }}"
       - "{{ ghcr_registry }}"
       - "{{ registryk8s_registry }}"
+      - "{{ icr_registry }}"
     when: (item.secure is defined and not item.secure)
     no_log: true
 

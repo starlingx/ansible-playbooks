@@ -75,6 +75,14 @@
         (docker_registries[default_registryk8s_registry.url].username is not defined and
          docker_registries[default_registryk8s_registry.url].password is defined)
 
+- name: Check icr_registry credentials
+  fail:
+    msg: "icr registry username and password must both be specified or not at all"
+  when: (docker_registries[default_icr_registry.url].username is defined and
+         docker_registries[default_icr_registry.url].password is not defined) or
+        (docker_registries[default_icr_registry.url].username is not defined and
+         docker_registries[default_icr_registry.url].password is defined)
+
 - name: Check defaults registry credentials
   fail:
     msg: "defaults registry username and password must both be specified or not at all"
@@ -494,6 +502,7 @@
       elastic_registry: "{{ default_elastic_registry }}"
       ghcr_registry: "{{ default_ghcr_registry }}"
       registryk8s_registry: "{{ default_registryk8s_registry }}"
+      icr_registry: "{{ default_icr_registry }}"
       default_no_proxy:
         - localhost
         - 127.0.0.1
@@ -557,6 +566,7 @@
         ghcr_registry: "{{ ghcr_registry | combine(docker_registries_with_secrets['defaults'], recursive=true) }}"
         registryk8s_registry: "{{ registryk8s_registry | combine(docker_registries_with_secrets['defaults'],
                               recursive=true) }}"
+        icr_registry: "{{ icr_registry | combine(docker_registries_with_secrets['defaults'], recursive=true) }}"
 
     when: docker_registries['defaults'] is defined and docker_registries['defaults'] is not none
 
@@ -610,6 +620,13 @@
            (docker_registries[default_registryk8s_registry.url]['url'] is not none and
            docker_registries[default_registryk8s_registry.url]['url'] != default_registryk8s_registry.url))
 
+  - set_fact:
+      icr_registry:
+        "{{ icr_registry | combine(docker_registries_with_secrets[default_icr_registry.url], recursive=true) }}"
+    when: (docker_registries[default_icr_registry.url]['url'] is not defined or
+           (docker_registries[default_icr_registry.url]['url'] is not none and
+           docker_registries[default_icr_registry.url]['url'] != default_icr_registry.url))
+
   - name: Update use_default_registries flag
     set_fact:
       use_default_registries: false
@@ -621,7 +638,8 @@
           docker_registry != default_docker_registry or
           elastic_registry != default_elastic_registry or
           ghcr_registry != default_ghcr_registry or
-          registryk8s_registry != default_registryk8s_registry
+          registryk8s_registry != default_registryk8s_registry or
+          icr_registry != default_icr_registry
 
   - block:
     - name: Validate registry type if specified
@@ -647,6 +665,7 @@
         - "{{ elastic_registry.url }}"
         - "{{ ghcr_registry.url }}"
         - "{{ registryk8s_registry.url }}"
+        - "{{ icr_registry.url }}"
     when: not use_default_registries
 
 - name: Validate additional_local_registry_images list
@@ -1010,6 +1029,7 @@
       - "ELASTIC_REGISTRY={{ elastic_registry.url }}"
       - "GHCR_REGISTRY={{ ghcr_registry.url }}"
       - "REGISTRYK8S_REGISTRY={{ registryk8s_registry.url }}"
+      - "ICR_REGISTRY={{ icr_registry.url }}"
       - "K8S_REGISTRY_TYPE={{ k8s_registry.type | default('docker') }}"
       - "GCR_REGISTRY_TYPE={{ gcr_registry.type | default('docker') }}"
       - "QUAY_REGISTRY_TYPE={{ quay_registry.type | default('docker') }}"
@@ -1017,6 +1037,7 @@
       - "ELASTIC_REGISTRY_TYPE={{ elastic_registry.type | default('docker') }}"
       - "GHCR_REGISTRY_TYPE={{ ghcr_registry.type | default('docker') }}"
       - "REGISTRYK8S_REGISTRY_TYPE={{ registryk8s_registry.type | default('docker') }}"
+      - "ICR_REGISTRY_TYPE={{ icr_registry.type | default('docker') }}"
       - "K8S_REGISTRY_SECURE={{ k8s_registry.secure | default(True) }}"
       - "GCR_REGISTRY_SECURE={{ gcr_registry.secure | default(True) }}"
       - "QUAY_REGISTRY_SECURE={{ quay_registry.secure | default(True) }}"
@@ -1024,6 +1045,7 @@
       - "ELASTIC_REGISTRY_SECURE={{ elastic_registry.secure | default(True) }}"
       - "GHCR_REGISTRY_SECURE={{ ghcr_registry.secure | default(True) }}"
       - "REGISTRYK8S_REGISTRY_SECURE={{ registryk8s_registry.secure | default(True) }}"
+      - "ICR_REGISTRY_SECURE={{ icr_registry.secure | default(True) }}"
       - "K8S_REGISTRY_ADDITIONAL_OVERRIDES={{ k8s_registry.additional_overrides | default('undef') }}"
       - "GCR_REGISTRY_ADDITIONAL_OVERRIDES={{ gcr_registry.additional_overrides | default('undef') }}"
       - "QUAY_REGISTRY_ADDITIONAL_OVERRIDES={{ quay_registry.additional_overrides | default('undef') }}"
@@ -1031,6 +1053,7 @@
       - "ELASTIC_REGISTRY_ADDITIONAL_OVERRIDES={{ elastic_registry.additional_overrides | default('undef') }}"
       - "GHCR_REGISTRY_ADDITIONAL_OVERRIDES={{ ghcr_registry.additional_overrides | default('undef') }}"
       - "REGISTRYK8S_REGISTRY_ADDITIONAL_OVERRIDES={{ registryk8s_registry.additional_overrides | default('undef') }}"
+      - "ICR_REGISTRY_ADDITIONAL_OVERRIDES={{ icr_registry.additional_overrides | default('undef') }}"
       - "USE_DEFAULT_REGISTRIES={{ use_default_registries }}"
       - "RECONFIGURE_ENDPOINTS={{ reconfigure_endpoints }}"
       - "INITIAL_DB_POPULATED={{ initial_db_populated }}"

@@ -139,6 +139,8 @@
         url: ghcr.io
       registry.k8s.io:
         url: registry.k8s.io
+      icr.io:
+        url: icr.io
 
 - name: Save the list of user defined registry keys
   set_fact:
@@ -216,6 +218,8 @@
       url: ghcr.io
     default_registryk8s_registry:
       url: registry.k8s.io
+    default_icr_registry:
+      url: icr.io
 
 - name: Set default values for additional images list
   set_fact:

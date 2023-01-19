@@ -138,6 +138,7 @@
     - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n elastic-registry-secret -f value"
     - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n ghcr-registry-secret -f value"
     - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n registryk8s-registry-secret -f value"
+    - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n icr-registry-secret -f value"
   register: old_barbican_secrets
 
 - name: Delete old registry secrets in Barbican
@@ -227,6 +228,17 @@
 
   when: registryk8s_registry.username is defined
 
+- block:
+  - name: Create Barbican secret for icr registry if credentials exist
+    shell: "source /etc/platform/openrc; openstack secret store -n icr-registry-secret
+           -p 'username:{{ icr_registry['username'] }} password:{{ icr_registry['password'] }}' -c 'Secret href' -f value"
+    register: icr_registry_secret_output
+
+  - set_fact:
+      icr_registry_secret: "{{ icr_registry_secret_output.stdout }}"
+
+  when: icr_registry.username is defined
+
 - name: Append config ini file with Barbican secret uuid
   lineinfile:
     path: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
@@ -239,6 +251,7 @@
     - "ELASTIC_REGISTRY_SECRET={{ elastic_registry_secret | default('none') }}"
     - "GHCR_REGISTRY_SECRET={{ ghcr_registry_secret | default('none') }}"
     - "REGISTRYK8S_REGISTRY_SECRET={{ registryk8s_registry_secret | default('none') }}"
+    - "ICR_REGISTRY_SECRET={{ icr_registry_secret | default('none') }}"
 
 - name: Add section [KUBE_APISERVER]
   set_fact:

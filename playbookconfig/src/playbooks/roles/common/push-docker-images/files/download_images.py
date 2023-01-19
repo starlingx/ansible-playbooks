@@ -32,7 +32,8 @@ DEFAULT_REGISTRIES = {
     'quay.io': 'quay.io',
     'docker.elastic.co': 'docker.elastic.co',
     'ghcr.io': 'ghcr.io',
-    'registry.k8s.io': 'registry.k8s.io'
+    'registry.k8s.io': 'registry.k8s.io',
+    'icr.io': 'icr.io'
 }
 
 REGISTRY_PATTERNS = ['.io', 'docker.elastic.co']
