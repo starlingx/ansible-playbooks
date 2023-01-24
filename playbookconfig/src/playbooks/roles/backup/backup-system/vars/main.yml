@@ -32,7 +32,6 @@ helm_overrides_permdir: "{{ platform_path }}/helm/{{ software_version }}"
 helm_charts_permdir: "{{ platform_path }}/helm_charts"
 keyring_permdir: "{{ platform_path }}/.keyring/{{ software_version }}"
 patching_permdir: "/opt/patching"  # TODO(outbrito): Remove when CentOS deprecates
-patching_repo_permdir: "/var/www/pages/updates"  # TODO(outbrito): Remove when CentOS deprecates
 puppet_permdir: "{{ platform_path }}/puppet/{{ software_version }}"
 sysinv_permdir: "{{ platform_path }}/sysinv/{{ software_version }}"
 
@@ -53,7 +52,6 @@ backup:
     - "{{ homedir }}"
     - "{{ keyring_permdir }}"
     - "{{ patching_permdir }}"  # TODO(outbrito): Remove when CentOS deprecates
-    - "{{ patching_repo_permdir }}"  # TODO(outbrito): Remove when CentOS deprecates
     - "{{ puppet_permdir }}/hieradata"
     - "{{ postgres_dir.path }}"
     - "{{ sysinv_permdir }}"

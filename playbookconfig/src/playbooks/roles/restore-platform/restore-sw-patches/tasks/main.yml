@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2022 Wind River Systems, Inc.
+# Copyright (c) 2019-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -98,7 +98,6 @@
       - name: Strip the leading slash in dirname and assign it to a new variable
         set_fact:
           short_patching_permdir: "{{ patching_permdir | regex_replace('^\\/', '') }}"
-          short_patching_repo_permdir: "{{ patching_repo_permdir | regex_replace('^\\/', '') }}"
 
       - name: Delete {{ patching_permdir }} dir if it exists
         file:
@@ -112,28 +111,30 @@
         args:
           warn: false
 
-      - name: Delete {{ patching_repo_permdir }} dir if it exists
-        file:
-          path: "{{ patching_repo_permdir }}"
-          state: absent
+      - name: Retrieve software version number
+        shell: source /etc/build.info; echo $SW_VERSION
+        register: sw_version_result
 
-      - name: Identify patching repo inside tarfile
-        command: tar -tvf {{ restore_data_file }} {{ short_patching_repo_permdir }}
-        register: found_patching_repo
-        failed_when: false
-
-      # Remove /var/ from patching repo variable to support older stx versions
-      - name: Change patching repo path if not found on tarfile
+      - name: Set software version fact
         set_fact:
-          short_patching_repo_permdir: "{{ patching_repo_permdir | regex_replace('^\\/var/', '') }}"
-        when: found_patching_repo.rc != 0
+          software_version: "{{ sw_version_result.stdout_lines[0] }}"
 
-      - name: Restore patching repo
-        command: >-
-          tar -C /var/www/pages -xpf {{ restore_data_file }} --strip-components=3
-          {{ short_patching_repo_permdir }}
-        args:
-          warn: false
+      - name: Check if patching dir exists
+        stat:
+          path: "{{ patching_permdir }}/packages/{{ software_version }}"
+        register: patching_dir
+
+      - block:
+        - name: Create patching repo dir
+          file:
+            path: "{{ patching_repo_permdir }}/rel-{{ software_version }}/Packages"
+            state: directory
+
+        - name: Copy patching to patching repo
+          command: >-
+            rsync -ac --delete {{ patching_permdir }}/packages/{{ software_version }}/
+            {{ patching_repo_permdir }}/rel-{{ software_version }}/Packages
+        when: patching_dir.stat.exists
 
       - name: Apply patches
         command: sw-patch install-local
