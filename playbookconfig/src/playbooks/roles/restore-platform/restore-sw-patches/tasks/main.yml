@@ -117,6 +117,17 @@
           path: "{{ patching_repo_permdir }}"
           state: absent
 
+      - name: Identify patching repo inside tarfile
+        command: tar -tvf {{ restore_data_file }} {{ short_patching_repo_permdir }}
+        register: found_patching_repo
+        failed_when: false
+
+      # Remove /var/ from patching repo variable to support older stx versions
+      - name: Change patching repo path if not found on tarfile
+        set_fact:
+          short_patching_repo_permdir: "{{ patching_repo_permdir | regex_replace('^\\/var/', '') }}"
+        when: found_patching_repo.rc != 0
+
       - name: Restore patching repo
         command: >-
           tar -C /var/www/pages -xpf {{ restore_data_file }} --strip-components=3

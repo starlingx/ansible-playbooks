@@ -160,7 +160,7 @@
           -ojsonpath="{.webhooks[0].clientConfig.service.name}"
           {{ nginx_prefix }}-admission
         register: nginx_webhook_service
-        ignore_errors: true
+        failed_when: false
 
       - name: If on system restore mode, kill ingress validating webhook pod so it can be recreated
         shell: >-
