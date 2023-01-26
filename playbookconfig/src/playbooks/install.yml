@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020-2022 Wind River Systems, Inc.
+# Copyright (c) 2020-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -57,6 +57,8 @@
           delay={{ boot_wait_time }}
           timeout={{ wait_for_timeout }}
           state=started
+          msg="Timeout waiting for {{ ansible_host }}:{{ ansible_port }}. Err_code= wait_install"
+
 
 - name: Run validate host playbook post install
   import_playbook: validate_host.yml

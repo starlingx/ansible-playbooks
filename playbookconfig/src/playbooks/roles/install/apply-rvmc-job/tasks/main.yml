@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 This code was extracted from the original install.yml file
+# Copyright (c) 2022-2023 This code was extracted from the original install.yml file
 # contributed by Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -131,11 +131,35 @@
   - debug:
       msg: "{{ rvmc_job_logs.stdout }}"
 
-  - name: Set credential failure flag
-    set_fact:
-      credential_failure: true
-    when: 'wait_for_rvmc.stdout == "failed" and
-          "Action: Check BMC username and password in config file" in rvmc_job_logs.stdout'
+  # Block to isolate failure message from rvmc pod
+  - block:
+    - name: Set credential failure flag
+      set_fact:
+        credential_failure: true
+        failure_msg: >-
+          Credential failure.
+          Action: Check BMC username and password in config file
+      when: '"Action: Check BMC username and password in config file" in rvmc_job_logs.stdout'
+
+    - name: Set output msg if BMC is unreachable.
+      set_fact:
+        failure_msg: >-
+          Ping to BMC has failed.
+          Check BMC values in install values file.
+          Ensure you can ssh into BMC using these credentials.
+          Err_code= ping_bmc
+      when: '"Action: Check BMC IP address is pingable" in rvmc_job_logs.stdout'
+
+    - name: Set output message if session creation fails
+      set_fact:
+        failure_msg: >-
+          Failed to connect to BMC.
+          Check BMC credentials in install values file.
+          Ensure you can ssh into BMC using these credentials.
+          Err_code= bmc_cred
+      when: '"Failed to Create session" in rvmc_job_logs.stdout'
+
+    when: 'wait_for_rvmc.stdout == "failed"'
 
   when: wait_for_rvmc.stdout in ["failed", "complete"]
 
