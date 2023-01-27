@@ -1,0 +1,45 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#   This role is to update the admin network and add static route to the
+#   system controller via the admin subnet
+#
+
+- name: Update admin subnet
+  import_tasks: update_admin_subnet.yml
+  when: admin_floating_update_required or admin_gateway_update_required
+
+- name: Check existing host route in controller-0
+  shell: >-
+    source /etc/platform/openrc; system host-route-list controller-0 |
+    awk '/{{ admin_gateway_address }}/'
+  register: existing_route_controller_0
+
+- name: Add static route from controller-0 to system controller
+  shell: >-
+    source /etc/platform/openrc; system host-route-add controller-0
+    {{ admin_if_c0 }}
+    {{ (system_controller_subnet | ipaddr(0)).split('/')[0] }}
+    {{ system_controller_subnet | ipaddr('prefix') }}
+    {{ admin_gateway_address }}
+  when: existing_route_controller_0.stdout | length == 0
+
+- block:
+  - name: Check existing host route in controller-1
+    shell: >-
+      source /etc/platform/openrc; system host-route-list controller-1 |
+      awk '/{{ admin_gateway_address }}/'
+    register: existing_route_controller_1
+
+  - name: Add static route from controller-1 to system controller
+    shell: >-
+      source /etc/platform/openrc; system host-route-add controller-1
+      {{ admin_if_c1 }}
+      {{ (system_controller_subnet | ipaddr(0)).split('/')[0] }}
+      {{ system_controller_subnet | ipaddr('prefix') }}
+      {{ admin_gateway_address }}
+    when: existing_route_controller_1.stdout | length == 0
+  when: system_mode != 'simplex'

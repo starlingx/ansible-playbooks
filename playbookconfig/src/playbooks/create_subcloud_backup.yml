@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -13,7 +13,7 @@
   become: yes
 
   roles:
-    - common/subcloud-bnr-precheck
+    - common/remote-execution-precheck
     - common/prepare-env
     - subcloud-bnr/backup
 
@@ -21,6 +21,7 @@
     optimized_bnr_supported: true
     override_files_dir: "{{ lookup('env', 'HOME') }}"
     password_change: false
+    playbook_overrides: "{{ subcloud_bnr_overrides }}"
     vault_pass: "{{ ansible_become_pass|list|shuffle|join }}"
     vault_id_file: "/tmp/vaultid_{{ inventory_hostname }}.tmp"
     default_backup_prefix: "{{ inventory_hostname }}_platform_backup"

@@ -1,12 +1,11 @@
 ---
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
-#   This role checks related services are all enabled-active before
-#   finishing the rehome playbook
+#   This role checks related services are all enabled-active
 #
 
 - name: Check all services are enabled-active

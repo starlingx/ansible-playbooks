@@ -1,19 +1,19 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Precheck to ensure all subcloud backup and restore related playbooks are
-# executed on the system controller and the overrides file is provided.
+#   Precheck to ensure the playbooks are executed on the system controller
+#   and the overrides file is provided.
 #
-- name: Fail if subcloud_bnr_overrides parameter is not specified
+- name: Fail if playbook overrides parameter is not specified
   fail:
     msg: "Location of operation overrides must be specified."
-  when: subcloud_bnr_overrides is undefined
+  when: playbook_overrides is undefined
 
 - name: Load input parameters for operation
-  include_vars: "{{ subcloud_bnr_overrides }}"
+  include_vars: "{{ playbook_overrides }}"
 
 - name: Retrieve the distributed cloud role
   shell: source /etc/platform/platform.conf; echo $distributed_cloud_role

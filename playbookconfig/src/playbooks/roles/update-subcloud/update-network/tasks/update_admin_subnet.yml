@@ -1,0 +1,66 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   These tasks update the subcloud's admin network configurations.
+#
+
+- name: Get previous subcloud admin network address pool uuid
+  shell: >-
+    source /etc/platform/openrc;
+    system addrpool-list | awk '/admin/{ print$2 }'
+  register: subcloud_admin_pool_uuid
+
+- name: Delete previous subcloud admin network address pool
+  shell: >-
+    source /etc/platform/openrc; system addrpool-delete
+    {{ subcloud_admin_pool_uuid.stdout }}
+  when: subcloud_admin_pool_uuid.stdout | length > 0
+
+- name: Add subcloud admin network address pool
+  shell: >-
+    source /etc/platform/openrc; system addrpool-add admin
+    {{ (admin_subnet | ipaddr(0)).split('/')[0]  }}
+    {{ admin_subnet | ipaddr('prefix') }}
+    --floating-address {{ admin_floating_address }}
+    --gateway-address {{ admin_gateway_address }} |
+    awk '/uuid/{ print$4 }'
+  register: add_subcloud_admin_pool_uuid
+
+- name: Add new subcloud admin network
+  shell: >-
+    source /etc/platform/openrc;
+    system network-add admin admin false
+    {{ add_subcloud_admin_pool_uuid.stdout }}
+
+- name: Add new subcloud admin interface network association on controller-0
+  shell: >-
+    source /etc/platform/openrc;
+    system interface-network-assign controller-0
+    {{ admin_if_c0 }} admin
+
+- name: Add new subcloud admin interface network association on controller-1
+  shell: >-
+    source /etc/platform/openrc;
+    system interface-network-assign controller-1
+    {{ admin_if_c1 }} admin
+  when: system_mode != 'simplex'
+
+- name: Wait for ip address configured on the interface of controller-0
+  shell: ip address show "{{ admin_if_c0 }}" | grep -wc "{{ admin_floating_address }}"
+  register: check_c0_new_config
+  until: check_c0_new_config != "0"
+  retries: 30
+  delay: 10
+  when: controller_name.stdout == "controller-0"
+
+- name: Wait for ip address configured on the interface of controller-1
+  shell: ip address show "{{ admin_if_c1 }}" | grep -wc "{{ admin_floating_address }}"
+  register: check_c1_new_config
+  until: check_c1_new_config != "0"
+  retries: 30
+  delay: 10
+  when: controller_name.stdout == "controller-1"

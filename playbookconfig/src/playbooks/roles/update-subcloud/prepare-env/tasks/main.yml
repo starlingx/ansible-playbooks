@@ -1,0 +1,107 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#   This role is to check the target host environment before proceeding to
+#   the next step.
+#
+
+- name: Get subcloud active controller
+  shell: |
+    source /etc/platform/openrc
+    system host-show $(cat /etc/hostname) --column hostname --format value
+  register: controller_name
+
+- name: Set subcloud admin floating address fact
+  set_fact:
+    sc_floating_address: "{{ admin_floating_address }}"
+
+- name: Retrieve software version number
+  # lookup module does not work with /etc/build.info as it does not have ini
+  # format. Resort to shell source.
+  shell: source /etc/build.info; echo $SW_VERSION
+  register: sw_version_result
+
+- name: Fail if software version is not defined
+  fail:
+    msg: "SW_VERSION is missing in /etc/build.info"
+  when: sw_version_result.stdout_lines|length == 0
+
+- name: Retrieve system mode
+  shell: source /etc/platform/platform.conf; echo $system_mode
+  register: system_mode_result
+
+- name: Fail if system mode is not defined
+  fail:
+    msg: "system_mode is missing in /etc/platform/platform.conf"
+  when: system_mode_result.stdout_lines|length == 0
+
+- name: Set host software version, system mode
+  set_fact:
+    software_version: "{{ sw_version_result.stdout }}"
+    system_mode: "{{ system_mode_result.stdout }}"
+
+- name: Set config path fact
+  set_fact:
+    config_permdir: "{{ platform_path + '/config/' + software_version }}"
+
+- name: Check existing admin network
+  shell: >-
+    source /etc/platform/openrc; system network-list | grep admin
+  register: existing_admin_network
+
+- name: Fail if admin network is not configured
+  fail:
+    msg: "admin network is not configured"
+  when: existing_admin_network == ""
+
+- name: Get ifname of the existing admin network of controller-0
+  shell: >-
+    source /etc/platform/openrc; system interface-network-list controller-0 |
+    awk '$8 == "admin" { print $6 }'
+  register: controller_0_admin_network_if
+
+- name: Fail if admin network interface of controller-0 is not assigned
+  fail:
+    msg: "admin network interfaces of controller-0 is not assigned"
+  when: controller_0_admin_network_if.stdout == ""
+
+- name: Set admin_if_c0 fact
+  set_fact:
+    admin_if_c0: "{{ controller_0_admin_network_if.stdout_lines[0] }}"
+
+- block:
+  - name: Get ifname of the existing admin network of controller-1
+    shell: >-
+      source /etc/platform/openrc; system interface-network-list controller-1 |
+      awk '$8 == "admin" { print $6 }'
+    register: controller_1_admin_network_if
+
+  - name: Fail if admin network interface of controller-1 is not assigned
+    fail:
+      msg: "admin network interfaces of controller-1 is not assigned"
+    when: controller_1_admin_network_if.stdout == ""
+
+  - name: Set admin_if_c1 fact
+    set_fact:
+      admin_if_c1: "{{ controller_1_admin_network_if.stdout_lines[0] }}"
+
+  when: system_mode != "simplex"
+
+- name: Get existing admin floating address
+  shell: >-
+    source /etc/platform/openrc; system addrpool-list |
+    awk ' $4 == "admin" && $14 == "{{ admin_floating_address }}" '
+  register: check_existing_admin_floating_address
+
+- name: Get existing admin gateway
+  shell: >-
+    source /etc/platform/openrc; system addrpool-list |
+    awk ' $4 == "admin" && $20 == "{{ admin_gateway_address }}" '
+  register: check_existing_admin_gateway
+
+- name: Set admin gateway and floating address update required facts
+  set_fact:
+    admin_floating_update_required: "{{ true if check_existing_admin_floating_address.stdout | bool else false }}"
+    admin_gateway_update_required: "{{ true if check_existing_admin_gateway.stdout | bool else false }}"

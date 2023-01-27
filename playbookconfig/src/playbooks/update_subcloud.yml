@@ -1,0 +1,34 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#   This playbook updates the admin network of a subcloud.
+#
+#   Example command:
+#   ansible-playbook update_subcloud.yml -i <inventory-file>  \
+#     -e 'subcloud_update_overrides=<subcloudname>_update_values.yml'
+#
+
+- hosts: all
+  gather_facts: no
+
+  vars_files:
+    - vars/common/main.yml
+
+  roles:
+    - common/remote-execution-precheck
+    - common/prepare-env
+    - common/validate-target
+    - update-subcloud/prepare-env
+    - update-subcloud/update-network
+    - update-subcloud/update-admin-endpoints
+    - { role: common/update-sc-cert, become: yes }
+    - { role: update-subcloud/restart-services, become: yes }
+    - common/check-services-status
+
+  vars:
+    override_files_dir: "{{ lookup('env', 'HOME') }}"
+    password_change: false
+    playbook_overrides: "{{ subcloud_update_overrides }}"

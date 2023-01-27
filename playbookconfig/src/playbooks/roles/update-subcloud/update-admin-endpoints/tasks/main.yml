@@ -1,0 +1,37 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#   This role is to update the openstack admin endpoints to reflect the admin
+#   network reconfiguration change
+#
+
+- name: Wrap admin_floating_address in [] brackets if it's an ipv6 address
+  set_fact:
+    parsed_admin_floating_address: "{{ admin_floating_address | ipwrap }}"
+
+- name: Retrieve admin endpoint region name
+  shell: >-
+    source /etc/platform/openrc; system show |
+    grep region_name | awk '{ print $4 }'
+  register: region_name
+
+- name: Create service endpoint list
+  set_fact:
+    service_list:
+      - { port: "5001", service: "keystone" }
+      - { port: "6386/v1", service: "sysinv" }
+      - { port: "5492", service: "patching" }
+      - { port: "4546", service: "vim" }
+      - { port: "18003", service: "fm" }
+      - { port: "9312", service: "barbican" }
+      - { port: "8220/v1.0", service: "dcdbsync" }
+
+- name: Check and update admin endpoints
+  include_tasks: check_and_update_endpoint.yml
+  vars:
+    service: "{{ item.service }}"
+    port: "{{ item.port }}"
+  loop: "{{ service_list }}"

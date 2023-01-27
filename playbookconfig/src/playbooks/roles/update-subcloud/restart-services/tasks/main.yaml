@@ -1,0 +1,47 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#   This role is to restart services post admin network reconfiguration to
+#   ensure all the services are healthy
+#
+
+- name: Restart affected services using pmon
+  command: "pmon-restart {{ item }}"
+  loop:
+    - "sw-patch-controller-daemon"
+    - "sm-api"
+    - "fm-api"
+
+- name: Restart sm managed services
+  command: sm-restart-safe service {{ item }}
+  with_items:
+    - "sysinv-inv"
+    - "sysinv-conductor"
+    - "cert-mon"
+    - "cert-alarm"
+    - "fm-mgr"
+    - "dcdbsync-api"
+    - "barbican-keystone-listener"
+
+- name: Wait until services are restarted
+  shell: sm-query service {{ item }} | grep -c enabled-active
+  loop:
+    - "sysinv-inv"
+    - "sysinv-conductor"
+    - "cert-mon"
+    - "cert-alarm"
+    - "fm-mgr"
+    - "dcdbsync-api"
+    - "barbican-keystone-listener"
+  register: service_status
+  until: service_status.stdout == '1'
+  retries: 10
+  delay: 10
+
+- name: Restart vim service
+  # Vim need to restart at the end until the other services are restarted and
+  # return to healthy
+  command: sm-restart service vim
