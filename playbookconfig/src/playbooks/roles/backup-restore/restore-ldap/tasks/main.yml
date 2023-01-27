@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -41,7 +41,7 @@
 
         - name: Replace Centos paths with Debian paths on files
           shell: >-
-            find {{ staging_dir }}/openldap/schema/ -type f | xargs sed -i
+            find {{ staging_dir }}/openldap/ -type f | xargs sed -i
             "s#/usr/lib64/openldap#/usr/lib/ldap#;
             s#/var/lib/openldap-data#/var/lib/ldap#;
             s#/etc/openldap#/etc/ldap#"
@@ -109,6 +109,14 @@
       register: slapadd_result
       failed_when: slapadd_result.rc != 0 and slapadd_result.rc != 1
     when: bkp_has_ldap_database.rc == 0
+
+  # TODO (rjosemat): remove when Centos -> Debian upgrade support become deprecated
+  - name: Update slapd configuration
+    include_tasks: update-slapd-configuration.yml
+    when:
+      - os_release == "debian"
+      - bkp_has_centos_ldap_config.rc == 0
+      - upgrade_metadata.from_release == "21.12"
 
   always:
     - name: Delete files from staging dir
