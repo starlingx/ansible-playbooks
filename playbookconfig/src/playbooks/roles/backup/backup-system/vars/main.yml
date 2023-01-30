@@ -60,6 +60,7 @@ backup:
   exclude:
     - "/etc/selinux/**"
     - "/etc/selinux"
+    - "/etc/ssl/private/ssl-cert-snakeoil.key"
     - "/etc/udev/**"
     - "/etc/udev"
     - "/etc/openldap/certs.ldif"
