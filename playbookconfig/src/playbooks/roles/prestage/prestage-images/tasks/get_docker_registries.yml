@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -37,6 +37,35 @@
       input_registries: "{{ input_registries|combine({'ghcr.io': ghcr_registry_val}) }}"
   when: (input_registries['ghcr.io'] is not defined or
          input_registries['ghcr.io'].keys()|length == 0)
+
+- block:
+  - set_fact:
+      registryk8s_registry_val: "{{ default_registry_val }}"
+
+  - name: Set registry url for registryk8s registry
+    set_fact:
+      registryk8s_registry_val:
+        "{{ registryk8s_registry_val|combine({'url': default_url_prefix + 'registry.k8s.io'}) }}"
+
+  - name: Add registry.k8s.io registry if it does not exist in the input registries
+    set_fact:
+      input_registries: "{{ input_registries|combine({'registry.k8s.io': registryk8s_registry_val}) }}"
+  when: (input_registries['registry.k8s.io'] is not defined or
+         input_registries['registry.k8s.io'].keys()|length == 0)
+
+- block:
+  - set_fact:
+      icr_registry_val: "{{ default_registry_val }}"
+
+  - name: Set registry url for icr registry
+    set_fact:
+      icr_registry_val: "{{ icr_registry_val|combine({'url': default_url_prefix + 'icr.io'}) }}"
+
+  - name: Add icr.io registry if it does not exist in the input registries
+    set_fact:
+      input_registries: "{{ input_registries|combine({'icr.io': icr_registry_val}) }}"
+  when: (input_registries['icr.io'] is not defined or
+         input_registries['icr.io'].keys()|length == 0)
 
 - name: Retrieve proxy info
   shell: >
