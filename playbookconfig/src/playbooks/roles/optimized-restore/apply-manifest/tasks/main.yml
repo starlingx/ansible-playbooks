@@ -39,6 +39,7 @@
     - kubelet
     - log
     - scratch
+    - var
 
 - name: Create puppet hieradata runtime configuration
   copy:
