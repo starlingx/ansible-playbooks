@@ -40,6 +40,7 @@
     - log
     - scratch
     - var
+    - root
 
 - name: Create puppet hieradata runtime configuration
   copy:
