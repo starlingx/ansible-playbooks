@@ -56,7 +56,7 @@ def get_mpath_from_dm(dm_device):
 
     context = pyudev.Context()
 
-    pydev_device = pyudev.Device.from_device_file(context, dm_device)
+    pydev_device = pyudev.Devices.from_device_file(context, dm_device)
 
     if sysinv_constants.DEVICE_NAME_MPATH in pydev_device.get("DM_NAME", ""):
         re_line = re.compile(r'^(\D*)')

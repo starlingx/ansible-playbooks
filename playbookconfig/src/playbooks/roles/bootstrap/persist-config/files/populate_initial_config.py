@@ -1099,7 +1099,7 @@ def get_mpath_from_dm(dm_device):
 
     context = pyudev.Context()
 
-    pydev_device = pyudev.Device.from_device_file(context, dm_device)
+    pydev_device = pyudev.Devices.from_device_file(context, dm_device)
 
     if sysinv_constants.DEVICE_NAME_MPATH in pydev_device.get("DM_NAME", ""):
         re_line = re.compile(r'^(\D*)')
@@ -1118,9 +1118,9 @@ def find_boot_device():
 
     # Get the boot partition
     try:
-        part = pyudev.Device.from_device_number(context,
-                                                'block',
-                                                os.stat('/boot')[stat.ST_DEV])
+        part = pyudev.Devices.from_device_number(context,
+                                                 'block',
+                                                 os.stat('/boot')[stat.ST_DEV])
         if part.parent:
             boot_device = part.parent.device_node
         elif sysinv_constants.DEVICE_NAME_DM in part.device_node:
