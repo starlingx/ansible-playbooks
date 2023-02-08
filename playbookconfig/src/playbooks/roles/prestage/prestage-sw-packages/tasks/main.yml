@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -50,11 +50,13 @@
     until: prestage_transfer.rc == 0
     no_log: true
     connection: local
+    when: prestage_reason == 'upgrade'
 
-  - name: Copy prestaging repo checksum from system controller to {{ inventory_hostname }}
-    copy:
-      src: "{{ prestaging_repo }}/../.ostree_repo_checksum"
-      dest: "{{ prestage_dir }}"
+  - name: Generate ostree_repo directory checksum
+    shell: >-
+      cd {{ local_prestaging_repo }}/..
+      &&  find ostree_repo -type f -exec md5sum {} + | LC_ALL=C sort | md5sum | awk '{ print $1; }'
+      > .ostree_repo_checksum
 
   - name: Restore the ownership of the prestage dir on the subcloud
     file:
@@ -62,5 +64,3 @@
       state: directory
       owner: root
       recurse: yes
-
-  when: prestage_reason == 'upgrade'

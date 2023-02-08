@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -19,7 +19,7 @@
   vars:
     prestage_type: "packages"
     platform_backup_dir: /opt/platform-backup
-    prestaging_repo: /var/run/ostree_repo
+    prestaging_repo: /var/www/pages/feed/rel-{{ host_software_version }}/ostree_repo
 
   roles:
     - prestage/prepare-env
