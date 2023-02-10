@@ -158,7 +158,13 @@ spec:
         node-role.kubernetes.io/control-plane: ""
         kubernetes.io/os: linux
         kubernetes.io/arch: amd64
-      tolerations: []
+      tolerations:
+      - key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
       volumes:
       - name: socket-dir
         emptyDir:
