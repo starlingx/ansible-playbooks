@@ -192,7 +192,7 @@
       line: "{{ item }}"
     with_items:
       - "platform::filesystem::backup::params::lv_size: {{ backup_size }}"
-      - "platform::filesystem::docker::params::bootstrap::lv_size: {{ docker_size }}"
+      - "platform::filesystem::docker::params::lv_size: {{ docker_size }}"
       - "platform::filesystem::kubelet::params::lv_size: {{ kubelet_size }}"
       - "platform::filesystem::scratch::params::lv_size: {{ scratch_size }}"
       - "platform::drbd::dockerdistribution::params::lv_size: {{ dockerdistribution_size }}"
@@ -247,7 +247,7 @@
     - name: Write docker filesystem size to runtime hieradata
       lineinfile:
         path: "{{ hieradata_workdir }}/runtime.yaml"
-        line: "platform::filesystem::docker::params::bootstrap::lv_size: {{ item }}"
+        line: "platform::filesystem::docker::params::lv_size: {{ item }}"
       with_items: "{{ host_docker_lv_size.stdout_lines }}"
 
     when: c0_hiera_file.rc == 0
