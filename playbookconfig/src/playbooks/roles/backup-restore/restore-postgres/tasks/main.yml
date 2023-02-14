@@ -27,6 +27,21 @@
     args:
       warn: false
 
+  - name: Copy database table to csv
+    block:
+    - name: Remove temporary db.csv file if present
+      file:
+        path: "/tmp/db.csv"
+        state: absent
+
+    - name: Save ssl_ca certificates from postgres database to /tmp/db.csv
+      command: >-
+        psql -d sysinv -c "copy (select * from
+        certificate where certtype='ssl_ca') to
+        '/tmp/db.csv' with delimiter ';'"
+    become_user: postgres
+    when: ssl_ca_certificate_file is defined and ssl_ca_certificate_file is not none
+
   - name: Determine which postgresql database files exist
     stat:
       path: "{{ postgres_staging_dir }}/{{ item }}"
@@ -46,6 +61,45 @@
     become_user: postgres
     with_items: "{{ pgfiles.results }}"
     when: item.stat.exists
+
+  - name: Update ssl_ca certificates in sysinv database
+    block:
+    - name: Reset system table id sequence
+      command: >-
+        psql -d sysinv -c
+        "ALTER SEQUENCE certificate_id_seq
+        RESTART WITH 1000;
+        UPDATE certificate SET id=nextval('certificate_id_seq');"
+
+    - name: Remove ssl_ca certificates from system database
+      command: psql -d sysinv -c "delete from certificate where certtype='ssl_ca'"
+
+    - name: Replace ssl_ca certificates by the ones saved in /tmp/db.csv
+      command: >-
+        psql -d sysinv -c
+        "copy certificate from
+        '/tmp/db.csv' with delimiter ';'"
+
+    - name: Re-sync system table row count after insert ssl_ca certificates
+      command: >-
+        psql -d sysinv -c
+        "SELECT setval('certificate_id_seq',
+        (SELECT MAX(id) FROM certificate)+1);
+        UPDATE certificate SET id=nextval('certificate_id_seq');"
+
+    - name: Restore system table row count
+      command: >-
+        psql -d sysinv -c
+        "ALTER SEQUENCE certificate_id_seq
+        RESTART WITH 1;
+        UPDATE certificate SET id=nextval('certificate_id_seq');"
+
+    - name: Remove temporary db.csv
+      file:
+        path: "/tmp/db.csv"
+        state: absent
+    become_user: postgres
+    when: ssl_ca_certificate_file is defined and ssl_ca_certificate_file is not none
 
   - import_tasks: restore-postgres-dc.yml
 
