@@ -31,7 +31,7 @@ items:
     name: system-restapi-gui-certificate
     namespace: deployment
   spec:
-    commonName: "{{ oam_ip.stdout }}"
+    commonName: "{{ system_platform_certificate.subject_CN | default(oam_ip.stdout) }}"
     dnsNames:
     - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain }}"
     duration: "{{ system_platform_certificate.duration }}"
@@ -54,7 +54,7 @@ items:
     name: system-registry-local-certificate
     namespace: deployment
   spec:
-    commonName: "{{ oam_ip.stdout }}"
+    commonName: "{{ system_platform_certificate.subject_CN | default(oam_ip.stdout) }}"
     dnsNames:
     - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain }}"
     - registry.local
@@ -82,7 +82,7 @@ items:
     name: oidc-auth-apps-certificate
     namespace: kube-system
   spec:
-    commonName: "{{ oam_ip.stdout }}"
+    commonName: "{{ system_platform_certificate.subject_CN | default(oam_ip.stdout) }}"
     dnsNames:
     - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain }}"
     duration: "{{ system_platform_certificate.duration }}"
@@ -110,7 +110,7 @@ items:
     name: system-openldap-local-certificate
     namespace: deployment
   spec:
-    commonName: "{{ short_certificate_name }}"
+    commonName: "{{ system_platform_certificate.subject_CN | default(short_certificate_name) }}"
     dnsNames:
     - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain }}"
     - controller
