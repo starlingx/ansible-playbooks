@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2022 Wind River Systems, Inc.
+# Copyright (c) 2021-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -59,16 +59,22 @@
       include_role:
         name: common/generate-platform-certificates-template
       vars:
-        destination: /tmp/platform_certificates.yaml
+        destination: "{{ cert_manager_spec_file }}"
 
     - name: Apply kubernetes yaml to create cert-manager clusterissuer and certificates
-      command: kubectl apply -f /tmp/platform_certificates.yaml
+      command: kubectl apply -f "{{ cert_manager_spec_file }}"
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: create_k8_apply_ep
       until: create_k8_apply_ep is not failed
       retries: 10
       delay: 30
+
+    - name: Delete kubernetes yaml with certificate spec
+      file:
+        path: "{{ cert_manager_spec_file }}"
+        state: absent
+      become: yes
 
     - name: Force certificate renewals
       include_tasks: delete-kubernetes-objects.yml
