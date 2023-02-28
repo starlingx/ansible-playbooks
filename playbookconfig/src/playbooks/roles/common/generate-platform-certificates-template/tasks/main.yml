@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -74,3 +74,5 @@
   template:
     src: platform_certificates.yml.j2
     dest: "{{ destination }}"
+    mode: '0640'
+  become: yes
