@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -46,13 +46,20 @@
         system interface-network-list controller-0 --nowrap | awk '$8 == "cluster-host" { print $6 }'
       register: cluster_host_if
 
+    - name: Query admin interface configuration
+      shell: |
+        source /etc/platform/openrc
+        system interface-network-list controller-0 --nowrap | awk '$8 == "admin" { print $6 }'
+      register: admin_if
+
     - name: Validate network interface configuration
       fail:
         msg: |
-          The cluster-host and management networks cannot be on the
-          loopback interface for simplex to duplex migration
+          The cluster-host, management and (optional) admin networks cannot
+          be on the loopback interface for simplex to duplex migration
       when: mgmt_if.stdout == 'lo' or
-            cluster_host_if.stdout == 'lo'
+            cluster_host_if.stdout == 'lo' or
+            admin_if.stdout == 'lo'
 
     - set_fact:
         duplex_mode: "{{ duplex_mode | default('duplex') }}"
