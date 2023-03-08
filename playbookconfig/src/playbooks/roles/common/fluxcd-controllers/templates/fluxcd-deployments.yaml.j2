@@ -19,11 +19,9 @@ spec:
         app: helm-controller
     spec:
       containers:
-      - args:
-        - --watch-all-namespaces
-        - --log-level=debug
-        - --log-encoding=console
-        - --enable-leader-election
+      - name: manager
+        command: ["/sbin/tini"]
+        args: ["--", "/bin/sh", "-c", "helm-controller --watch-all-namespaces --log-level=debug --log-encoding=console --enable-leader-election 2>&1 | tee -a /var/log/helm-controller.log"]
         env:
         - name: RUNTIME_NAMESPACE
           valueFrom:
@@ -35,7 +33,6 @@ spec:
           httpGet:
             path: /healthz
             port: healthz
-        name: manager
         ports:
         - containerPort: 8080
           name: http-prom
@@ -60,6 +57,8 @@ spec:
         volumeMounts:
         - mountPath: /tmp
           name: temp
+        - mountPath: /var/log
+          name: log-volume
       imagePullSecrets:
         - name: default-registry-key
       nodeSelector:
@@ -75,6 +74,10 @@ spec:
       volumes:
       - emptyDir: {}
         name: temp
+      - name: log-volume
+        hostPath:
+          path: /var/log/flux
+          type: Directory
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -99,13 +102,9 @@ spec:
         app: source-controller
     spec:
       containers:
-      - args:
-        - --watch-all-namespaces
-        - --log-level=debug
-        - --log-encoding=console
-        - --enable-leader-election
-        - --storage-path=/data
-        - --storage-adv-addr=source-controller.$(RUNTIME_NAMESPACE).svc.cluster.local.
+      - name: manager
+        command: ["/bin/sh"]
+        args: ["-c", "source-controller  --watch-all-namespaces --log-level=debug --log-encoding=console --enable-leader-election --storage-path=/data --storage-adv-addr=source-controller.$(RUNTIME_NAMESPACE).svc.cluster.local. 2>&1 | tee -a /var/log/source-controller.log"]
         env:
         - name: RUNTIME_NAMESPACE
           valueFrom:
@@ -119,7 +118,6 @@ spec:
           httpGet:
             path: /healthz
             port: healthz
-        name: manager
         ports:
         - containerPort: 9090
           name: http
@@ -149,6 +147,8 @@ spec:
           name: data
         - mountPath: /tmp
           name: tmp
+        - mountPath: /var/log
+          name: log-volume
       imagePullSecrets:
         - name: default-registry-key
       nodeSelector:
@@ -168,3 +168,7 @@ spec:
         name: data
       - emptyDir: {}
         name: tmp
+      - name: log-volume
+        hostPath:
+          path: /var/log/flux
+          type: Directory
