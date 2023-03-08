@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -12,6 +12,17 @@
   set_fact:
     config_permdir: "{{ platform_path + '/config/' + software_version }}"
     puppet_permdir: "{{ platform_path + '/puppet/' + software_version }}"
+
+- name: Get subcloud active controller
+  shell: |
+    source /etc/platform/openrc
+    system host-show $(cat /etc/hostname) --column hostname --format value
+  register: controller_name
+
+- name: Check if admin network parameters are defined
+  set_fact:
+    admin_network: true
+  when: (admin_subnet is defined and admin_gateway_address is defined)
 
 - name: Set network facts
   set_fact:
@@ -28,13 +39,29 @@
   set_fact:
     system_mode: "{{ current_system_mode.stdout }}"
 
+- name: Set admin network facts
+  set_fact:
+    admin_floating_address: "{{ admin_start_address }}"
+    admin_gateway_address: "{{ admin_gateway_address }}"
+  when: admin_network is defined
+
 - name: Set derived facts for subsequent tasks/roles
   set_fact:
     derived_network_params:
       'controller_0_address': "{{ controller_floating_address|ipmath(1) }}"
       'controller_1_address': "{{ controller_floating_address|ipmath(2) }}"
+      'controller_0_admin_address': "{{ admin_floating_address|ipmath(1)
+                                        if admin_floating_address is defined }}"
+      'controller_1_admin_address': "{{ admin_floating_address|ipmath(2)
+                                        if admin_floating_address is defined}}"
       'oam_start_address': "{{ external_oam_node_0_address if external_oam_node_0_address != 'derived'
                            else external_oam_floating_address | ipmath(1) }}"
+
+- name: Set subcloud floating address
+  set_fact:
+    sc_floating_address: "{{ admin_floating_address
+                           if admin_floating_address is defined
+                           else controller_floating_address }}"
 
 - name: Get existing docker no_proxy
   shell: >-
@@ -76,3 +103,56 @@
     awk '$8 == "mgmt" { print $6 }'
   register: controller_1_management_interface_result
   when: system_mode != 'simplex'
+
+- block:
+  - name: Get ifname of the existing admin network of controller-0
+    shell: >-
+      source /etc/platform/openrc; system interface-network-list controller-0 |
+      awk '$8 == "admin" { print $6 }'
+    register: controller_0_admin_network_if
+
+  - name: Fail if admin network interface of controller-0 is not assigned
+    fail:
+      msg: "admin network interfaces of controller-0 is not assigned"
+    when: controller_0_admin_network_if.stdout == ""
+
+  - name: Set admin_if_c0 fact
+    set_fact:
+      admin_if_c0: "{{ controller_0_admin_network_if.stdout_lines[0] }}"
+
+  - block:
+    - name: Get ifname of the existing admin network of controller-1
+      shell: >-
+        source /etc/platform/openrc; system interface-network-list controller-1 |
+        awk '$8 == "admin" { print $6 }'
+      register: controller_1_admin_network_if
+
+    - name: Fail if admin network interface of controller-1 is not assigned
+      fail:
+        msg: "admin network interfaces of controller-1 is not assigned"
+      when: controller_1_admin_network_if.stdout == ""
+
+    - name: Set admin_if_c1 fact
+      set_fact:
+        admin_if_c1: "{{ controller_1_admin_network_if.stdout_lines[0] }}"
+
+    when: system_mode != "simplex"
+
+  - name: Get existing admin floating address
+    shell: >-
+      source /etc/platform/openrc; system addrpool-list |
+      awk ' $4 == "admin" && $14 == "{{ admin_floating_address }}" '
+    register: check_existing_admin_floating_address
+
+  - name: Get existing admin gateway
+    shell: >-
+      source /etc/platform/openrc; system addrpool-list |
+      awk ' $4 == "admin" && $20 == "{{ admin_gateway_address }}" '
+    register: check_existing_admin_gateway
+
+  - name: Set admin gateway and floating address update required facts
+    set_fact:
+      admin_floating_update_required: "{{ false if check_existing_admin_floating_address.stdout else true }}"
+      admin_gateway_update_required: "{{ false if check_existing_admin_gateway.stdout else true }}"
+
+  when: admin_network is defined

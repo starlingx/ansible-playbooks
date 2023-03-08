@@ -25,8 +25,8 @@
     source /etc/platform/openrc; system addrpool-add admin
     {{ (admin_subnet | ipaddr(0)).split('/')[0]  }}
     {{ admin_subnet | ipaddr('prefix') }}
-    --floating-address {{ admin_floating_address }}
-    --gateway-address {{ admin_gateway_address }} |
+    --ranges {{ admin_floating_address }}-{{ admin_floating_address | ipmath(2) }}
+    --gateway-address {{ admin_gateway_address }}  |
     awk '/uuid/{ print$4 }'
   register: add_subcloud_admin_pool_uuid
 
@@ -49,18 +49,29 @@
     {{ admin_if_c1 }} admin
   when: system_mode != 'simplex'
 
-- name: Wait for ip address configured on the interface of controller-0
-  shell: ip address show "{{ admin_if_c0 }}" | grep -wc "{{ admin_floating_address }}"
-  register: check_c0_new_config
-  until: check_c0_new_config != "0"
-  retries: 30
+- name: Query config-out-of-date alarm
+  shell: |
+    source /etc/platform/openrc;
+    fm alarm-list --query alarm_id=250.001
+  register: alarm_count
+  retries: 5
   delay: 10
-  when: controller_name.stdout == "controller-0"
+  until: alarm_count.stdout != ""
 
-- name: Wait for ip address configured on the interface of controller-1
-  shell: ip address show "{{ admin_if_c1 }}" | grep -wc "{{ admin_floating_address }}"
-  register: check_c1_new_config
-  until: check_c1_new_config != "0"
-  retries: 30
-  delay: 10
-  when: controller_name.stdout == "controller-1"
+- name: Check manifest applied and alarm cleared
+  shell: |
+    source /etc/platform/openrc;
+    fm alarm-list --query alarm_id=250.001
+  register: alarm_count
+  retries: 10
+  delay: 30
+  until: alarm_count.stdout == ""
+  # set as false to allow for a better error message in the fail task below
+  failed_when: false
+
+- name: Failed when the manifest apply times out
+  fail:
+    msg: >-
+      Timed out while updating admin subnet. Check the puppet.log on the
+      subcloud controller for the reason.
+  when: alarm_count.stdout != ""

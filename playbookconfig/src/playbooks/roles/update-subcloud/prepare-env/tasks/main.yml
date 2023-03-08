@@ -103,5 +103,5 @@
 
 - name: Set admin gateway and floating address update required facts
   set_fact:
-    admin_floating_update_required: "{{ true if check_existing_admin_floating_address.stdout | bool else false }}"
-    admin_gateway_update_required: "{{ true if check_existing_admin_gateway.stdout | bool else false }}"
+    admin_floating_update_required: "{{ false if check_existing_admin_floating_address.stdout else true }}"
+    admin_gateway_update_required: "{{ false if check_existing_admin_gateway.stdout else true }}"
