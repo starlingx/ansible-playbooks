@@ -1,0 +1,66 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role updates the rootca certificate for the rehomed subcloud.
+
+- block:
+  - name: Copy certificate and key to subcloud
+    copy:
+      src: "/etc/kubernetes/pki/{{ item }}"
+      dest: "/tmp/{{ item }}"
+    loop:
+      - ca.crt
+      - ca.key
+
+  - name: Create PEM file
+    shell: cat /tmp/ca.crt /tmp/ca.key > /tmp/ca.pem
+
+  - name: Create rootca update strategy
+    shell: source /etc/platform/openrc; sw-manager kube-rootca-update-strategy create --cert-file /tmp/ca.pem
+    register: check_vim_strategy
+    failed_when: check_vim_strategy.stdout is not search('strategy already exists') and
+                 check_vim_strategy.stdout is not search('build')
+
+  - block:
+    - name: Delete existing strategy
+      shell: |
+        source /etc/platform/openrc
+        sw-manager {{ check_vim_strategy.stdout.split('type:')[1].replace('sw-', '') }}-strategy delete
+
+    - name: Try to create rootca update strategy for a second time
+      shell: source /etc/platform/openrc; sw-manager kube-rootca-update-strategy  create --cert-file /tmp/ca.pem
+    when: check_vim_strategy.stdout is search('strategy already exists')
+
+  - name: Check if strategy is ready to apply
+    shell: source /etc/platform/openrc; sw-manager kube-rootca-update-strategy show
+    register: check_rootca_strategy
+    until: check_rootca_strategy.stdout is search('ready-to-apply')
+    retries: 3
+    delay: 20
+
+  - name: Apply strategy
+    shell: source /etc/platform/openrc; sw-manager kube-rootca-update-strategy apply
+
+  - name: Check if strategy is applied
+    shell: source /etc/platform/openrc; sw-manager kube-rootca-update-strategy show
+    register: check_rootca_strategy
+    until: check_rootca_strategy.stdout is search('applied')
+    retries: 30
+    delay: 60
+
+  - name: Delete rootca strategy
+    shell: source /etc/platform/openrc; sw-manager kube-rootca-update-strategy delete
+
+  always:
+    - name: Delete tmp files
+      file:
+        path: "/tmp/{{ item }}"
+        state: absent
+      loop:
+        - ca.crt
+        - ca.key
+        - ca.pem
