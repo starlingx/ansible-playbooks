@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -21,11 +21,15 @@
       set_fact:
         sc_oam_ip: "{{ sc_oam_ip.stdout | ipwrap }}"
 
+    # It's necessary to create the staging dir with 775 permission
+    # so the system controller can push the backup files to the subcloud,
+    # since the files are in a folder only the root can access and synchronize
+    # only support passwordless sudo operations (limitation from rsync itself).
     - name: Create staging dir
       file:
         path: "{{ default_local_staging_dir }}"
         state: directory
-        mode: '0755'
+        mode: '0775'
 
     - name: Set backup_dir to local_staging_dir in subcloud overrides file
       lineinfile:
@@ -35,15 +39,16 @@
         backrefs: yes
 
     - name: Transfer platform backup to {{ inventory_hostname }}
-      command: >
-        sshpass -p {{ ansible_ssh_pass }}
-        rsync -a -e 'ssh -o StrictHostKeyChecking=no'
-        {{ ansible_ssh_user }}@{{ sc_oam_ip }}:{{ backup_dir }}/*
-        {{ default_local_staging_dir }}
+      synchronize:
+        mode: push
+        src: "{{ backup_dir }}/"
+        dest: "{{ default_local_staging_dir }}/"
+        rsync_opts: "--omit-dir-times,--no-perms"
       register: backup_transfer
+      until: backup_transfer.rc == 0
       retries: 3
       delay: 2
-      until: backup_transfer.rc == 0
+      become: false
       no_log: true
 
     when: not local

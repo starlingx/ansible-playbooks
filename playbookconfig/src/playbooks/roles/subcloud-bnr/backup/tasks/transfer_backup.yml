@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -14,7 +14,7 @@
     file:
       path: "{{ central_backup_dir }}"
       state: directory
-      mode: '0755'
+      mode: '0700'
       owner: root
       group: root
       recurse: yes
@@ -30,17 +30,22 @@
     set_fact:
       local_backup_file: "{{ (backup_files.files | sort(attribute='mtime') | last).path }}"
 
+  # This task only works without privilege escalation. Setting become to true
+  # makes the rsync on the remote host to be run with sudo, and since it's not
+  # possible to provide a password (limitation from rsync itself), the file transfer fails.
+  # Since the whole restore playbook is being run by root, the central_backup_dir
+  # can be accessed to save the file without setting become to true.
   - name: Transfer platform backup of {{ inventory_hostname }} to the system controller
-    command: >
-       sshpass -p {{ ansible_ssh_pass }}
-       rsync -a -e 'ssh -o StrictHostKeyChecking=no'
-       {{ ansible_ssh_user }}@{{ inventory_hostname }}:{{ local_backup_file }} {{ central_backup_dir }}
+    synchronize:
+      mode: pull
+      src: "{{ local_backup_file }}"
+      dest: "{{ central_backup_dir }}"
     register: backup_transfer
+    until: backup_transfer.rc == 0
     retries: 3
     delay: 2
-    until: backup_transfer.rc == 0
     no_log: true
-    connection: local
+    become: false
 
   - name: Remove previous backup upon successful subcloud backup (central storage)
     file:
