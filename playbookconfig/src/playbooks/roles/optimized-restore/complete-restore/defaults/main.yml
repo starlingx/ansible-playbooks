@@ -13,3 +13,6 @@ default_required_flags:
   - .task_affining_incomplete
   - .unlock_ready
   - "{{ remove_containerd_pods_flag|basename }}"
+
+system_online_retries: 30
+system_online_retry_delay: 10
