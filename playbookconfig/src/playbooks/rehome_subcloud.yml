@@ -19,6 +19,7 @@
     - { role: common/check-services-status, become: yes }
     - { role: rehome-subcloud/prepare-env, become: yes }
     - { role: rehome-subcloud/update-ca-cert, become: yes }
+    - { role: rehome-subcloud/update-k8s-root-ca, become: yes }
     - { role: rehome-subcloud/update-network-config, become: yes }
     - { role: common/update-sc-cert, become: yes }
     - { role: rehome-subcloud/update-keystone-data, become: yes }
