@@ -306,6 +306,23 @@
   with_items:
     - "{{ extension_permdir | regex_replace('^\\/', '') }}"
 
+- name: Check if armada folder is present in the backup tarball
+  shell: "tar -tf {{ restore_data_file }} | grep '{{ armada_permdir | regex_replace('^\\/', '') }}'"
+  args:
+    warn: false
+  failed_when: false
+  register: bkp_has_armada
+
+- name: Restore armada manifests
+  command: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
+  args:
+    warn: false
+  become_user: root
+  with_items:
+    - "{{ armada_permdir | regex_replace('^\\/', '') }}"
+  when: bkp_has_armada.rc is defined and
+        bkp_has_armada.rc == 0
+
 - name: Check if fluxcd folder is present in the backup tarball
   shell: "tar -tf {{ restore_data_file }} | grep '{{ fluxcd_permdir | regex_replace('^\\/', '') }}'"
   args:

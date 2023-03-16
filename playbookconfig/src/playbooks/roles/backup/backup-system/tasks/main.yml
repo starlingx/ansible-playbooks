@@ -122,7 +122,7 @@
       args:
         warn: false
 
-    - name: Backup postgres, template1, sysinv, barbican db data
+    - name: Backup postgres, template1, sysinv, barbican, helmv2 db data
       shell: >-
         sudo -u postgres pg_dump --format=plain --inserts --disable-triggers --data-only
         {{ item }} > {{ postgres_dir.path }}/{{ item }}.postgreSql.data
@@ -133,6 +133,7 @@
         - template1
         - sysinv
         - barbican
+        - helmv2
 
     - name: Backup fm db data
       shell: >-
@@ -338,6 +339,7 @@
         with_items:
           - "{{ mariadb_dir.path }}"
           - "{{ helm_overrides_sqldump_dir.path }}"
+          - "{{ armada_permdir }}/{{ openstack_app_name }}"
           - "{{ helm_charts_permdir }}/starlingx"
         register: size_output_openstack
 
@@ -590,6 +592,7 @@
 
     - name: Create a tgz archive for OpenStack backup
       shell: "tar -czf {{ openstack_backup_file_path }} $(ls -d \
+           {{ armada_permdir }}/{{ openstack_app_name }} \
            {{ helm_charts_permdir }}/starlingx \
            {{ mariadb_dir.path }} \
            {{ helm_overrides_sqldump_dir.path }} 2>/dev/null)"

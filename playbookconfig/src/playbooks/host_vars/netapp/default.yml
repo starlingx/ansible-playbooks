@@ -10,7 +10,7 @@
 # This is based on https://github.com/NetApp/trident/releases/download/v20.04.0/trident-installer-20.04.0.tar.gz
 trident_namespace: "trident"
 
-# The default port is 8000.
+# The default port is 8000, which conflicts with the Armada app which also listens on port 8000
 # Also, on an HTTPS enabled setup, the default port for HTTPS REST API is 8443 which conflicts
 # with the port used by the platform Horizon dashboard.
 # Choosing ports 8677 and 8678 to replace the defaults because they are unassigned according to:

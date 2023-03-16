@@ -1,13 +1,13 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2020 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # SUB-TASKS DESCRIPTION:
-#   Even though FluxCD states that cert-manager application has ns, crd, pods up & running,
-#   the app's webhooks are not ready to be used immediately.
-#   These tasks test and wait until cert-manager resources are ready to be created.
+#   Armada makes sure that cert-manager application has ns, crd, pods up & running
+#   but webhooks are not ready to be used immediately. These tasks
+#   test and wait until cert-manager resources are ready to be created.
 #
 
 # Confirm cert-manager-cainjector pods are up

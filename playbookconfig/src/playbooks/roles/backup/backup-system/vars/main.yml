@@ -21,6 +21,7 @@ backup_include_apps: []
 backup_include_dc_controller_apps: ["platform-integ-apps"]
 
 homedir: "{{ '/home' if os_release == 'centos' else '/var/home' }}"
+armada_permdir: "{{ platform_path }}/armada/{{ software_version }}"
 config_permdir: "{{ platform_path }}/config/{{ software_version }}"
 deploy_permdir: "{{ platform_path }}/deploy/{{ software_version }}"
 extension_permdir: "/opt/extension"
@@ -39,6 +40,7 @@ backup:
   targets:
     - "/etc"
     - "/var/lib/kubelet"
+    - "{{ armada_permdir }}"
     - "{{ config_permdir }}"
     - "{{ deploy_permdir }}"
     - "{{ extension_permdir }}"

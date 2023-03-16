@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2020-2022 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -25,7 +25,7 @@
   with_items: "{{ applications }}"
   when: mode != 'restore'
 
-# While FluxCD indicates pods are ready, some bugs were raised indicating
+# While Armada indicates pods are ready, some bugs were raised indicating
 # cert-manager webhook validation is not fully setup. Adding an indirect check
 # here to test a certificate issuer
 - name: Test cert-manager resource creation

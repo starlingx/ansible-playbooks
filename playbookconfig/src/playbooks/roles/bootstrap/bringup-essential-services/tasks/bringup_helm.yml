@@ -163,6 +163,6 @@
     name: lighttpd
     state: restarted
 
-- name: Do helm configurations
+- name: Launch containerized Armada using Helm v3
   import_role:
-    name: common/helm
+    name: common/armada-helm

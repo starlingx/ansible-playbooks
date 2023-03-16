@@ -66,16 +66,18 @@
 - block:
   - name: Set config path facts
     set_fact:
+      armada_permdir: "{{ platform_path }}/armada/{{ software_version }}"
       fluxcd_permdir: "{{ platform_path }}/fluxcd/{{ software_version }}"
       helm_charts_permdir: "{{ platform_path }}/helm_charts"
 
-  - name: Restore Helm charts, manifests and extension filesystem
+  - name: Restore Helm charts, armada manifests and extension filesystem
     command: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} {{ item }}
     args:
       warn: false
     become_user: root
     with_items:
       - "{{ helm_charts_permdir | regex_replace('^\\/', '') }}"
+      - "{{ armada_permdir | regex_replace('^\\/', '') }}"
       - "{{ fluxcd_permdir | regex_replace('^\\/', '') }}"
 
   - name: Set Helm Overrides backup directory

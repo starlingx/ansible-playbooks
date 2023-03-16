@@ -1,0 +1,94 @@
+# Overrides yaml file for armada chart
+images:
+  tags:
+    api: "registry.local:9001/{{ armada_img | regex_replace('^(?P<host>.+):(?P<port>\\d+)?/(?P<rest>.+)$', '\\g<host>/\\g<rest>') }}"
+    dep_check: 'registry.local:9001/quay.io/stackanetes/kubernetes-entrypoint:v0.3.1'
+    tiller: 'registry.local:9001/ghcr.io/helm/tiller:v2.16.9'
+labels:
+  # Configure sane node labels values that work with armada node selector.
+  # Helm v3 validation prevents null overrides.
+  job:
+    node_selector_key: armada
+    node_selector_value: enabled
+  test:
+    node_selector_key: armada
+    node_selector_value: enabled
+  node_selector_key: armada
+  node_selector_value: enabled
+pod:
+  mandatory_access_control:
+    type: none
+  tolerations:
+    api:
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+  replicas:
+    api: 1
+  # When updating armada, the old pod is terminated after the new pod is ready.
+  # This allows "helm install/upgrade" with --wait to work when replicas is 1.
+  lifecycle:
+    upgrades:
+      deployments:
+        rolling_update:
+          max_unavailable: 0
+  probes:
+    armada:
+      api:
+        liveness:
+          enabled: false
+          params:
+            initialDelaySeconds: 15
+            periodSeconds: 10
+        readiness:
+          enabled: false
+          params:
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      tiller:
+        liveness:
+          enabled: true
+          params:
+            failureThreshold: 2
+            initialDelaySeconds: 1
+            periodSeconds: 4
+            successThreshold: 1
+            timeoutSeconds: 1
+        readiness:
+          enabled: true
+          params:
+            failureThreshold: 3
+            initialDelaySeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+dependencies:
+  static:
+    api:
+      jobs: []
+      services: []
+    ks_endpoints:
+      jobs: []
+      services: []
+    ks_service:
+      services: []
+    ks_user:
+      services: []
+manifests:
+  job_ks_service: false
+  job_ks_endpoints: false
+  job_ks_user: false
+  secret_keystone: false
+conf:
+  tiller:
+    charts_url: {{ helm_charts_url }}
+    repo_names:
+      - {{ helm_repo_name_apps }}
+      - {{ helm_repo_name_platform }}
+    storage: sql
+    sql_dialect: postgres
+    sql_connection: {{ helm_sql_connection_address }}
+    sql_endpoint_ip: {{ helm_sql_endpoint_ip }}

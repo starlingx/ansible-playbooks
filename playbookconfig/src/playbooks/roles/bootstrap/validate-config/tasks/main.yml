@@ -804,10 +804,40 @@
   # of the kubernetes cluster. This would result in sysinv being unable to clean up
   # the deployed applications on its side
   - block:
+    - name: Find armada container
+      shell: "docker ps | grep armada | awk '{print $1}'"
+      register: armada_container
+
+    # Armada is unable to resolve tiller-deploy.kube-system.svc.cluster.
+    # local because it is running as a container on the host and only has
+    # access to the local resolv.conf for DNS servers. dnsmasq is not
+    # running prior to the unlock, so trying to install an application
+    # before the unlock will fail because it can't resolve the host that
+    # is only known to K8s coredns.
+
+    # If/when Armada runs as a Pod, it would then be able to resolve this
+    # address since it will be running in the K8s cluster. Therefore the
+    # k8s DNS service would not need to be temporarily added to the host
+    # resolv.conf.
+    - name: Update /etc/resolv.conf with coredns
+      command: "sed -i -e 's|nameserver {{ controller_floating_address }}|nameserver {{ (cluster_service_subnet |
+                ipaddr(10)).split('/')[0]}}|g' /etc/resolv.conf"
+      args:
+        warn: false
+
+    - name: Restart armada container to pick up resolv.conf changes
+      command: "docker restart {{ armada_container.stdout }}"
+      when: armada_container.stdout != ""
+
     - name: Purge old applications
       include: purge_application.yml application={{ item }}
       with_items: "{{ old_application_list }}"
 
+    - name: Revert /etc/resolv.conf from coredns
+      command: "sed -i -e 's|nameserver {{ (cluster_service_subnet |
+                ipaddr(10)).split('/')[0]}}|nameserver {{ controller_floating_address }}|g' /etc/resolv.conf"
+      args:
+        warn: false
     # we check the return code from sysinv to see that application-list ran successfully
     # in a non replay, or weird replay cases, sysinv could be not up at which point
     # there is no point in trying to purge applications

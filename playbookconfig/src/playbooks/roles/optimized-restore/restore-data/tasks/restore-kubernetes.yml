@@ -129,20 +129,22 @@
   # the pods may not be rescheduled off of a down
   # node. This ensures that the pods will be on controller-0 and will
   # become available.
-- name: Scale calico-kube-controllers & coredns deployments to 0
+- name: Scale calico-kube-controllers, armada-api & coredns deployments to 0
   command: >-
     kubectl --kubeconfig=/etc/kubernetes/admin.conf scale deployment
     -n {{ item.namespace }} {{ item.deployment }} --replicas=0
   with_items:
     - { namespace: kube-system, deployment: calico-kube-controllers }
+    - { namespace: armada, deployment: armada-api }
     - { namespace: kube-system, deployment: coredns }
 
-- name: Scale calico-kube-controllers deployment back to 1
+- name: Scale calico-kube-controllers and armada-api deployments back to 1
   command: >-
     kubectl --kubeconfig=/etc/kubernetes/admin.conf scale deployment
     -n {{ item.namespace }} {{ item.deployment }} --replicas=1
   with_items:
     - { namespace: kube-system, deployment: calico-kube-controllers }
+    - { namespace: armada, deployment: armada-api }
 
 - name: Scale coredns deployment back to original size
   command: >-
@@ -181,7 +183,7 @@
   with_items: "{{ kube_component_list }}"
   register: wait_for_kube_system_pods
 
-- name: Start wait for calico-kube-controllers & coredns deployments to reach Available state
+- name: Start wait for armada, calico-kube-controllers & coredns deployments to reach Available state
   # Check the deployment status rather than the pod status in case some pods are down on other nodes
   command: >-
     kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --namespace={{ item.namespace }}
@@ -190,6 +192,7 @@
   poll: 0
   with_items:
     - { namespace: kube-system, deployment: calico-kube-controllers }
+    - { namespace: armada, deployment: armada-api }
     - { namespace: kube-system, deployment: coredns }
   register: wait_for_deployments
 
@@ -207,7 +210,7 @@
     - "{{ wait_for_kube_system_pods.results }}"
     - "{{ wait_for_deployments.results }}"
 
-- name: Fail if any of the Kubernetes component or Networking pod are not ready by this time
+- name: Fail if any of the Kubernetes component, Networking or Armada pods are not ready by this time
   fail:
     msg: "Pod {{ item.item.item }} is still not ready."
   when: item.stdout is not search(" condition met")
