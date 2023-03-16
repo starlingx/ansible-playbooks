@@ -469,11 +469,3 @@ k8s_plugins:
 #         namespace: kube-system
 #         values-path: /home/sysinv/dex-overrides.yaml
 applications: []
-
-# FLUXCD CONTROLLERS
-# ==================
-# The FluxCD helm and source controllers have been added to the bootstrap process
-# in preparation for the application framework Armada deprecation feature.
-# This feature is not yet fully implemented, so this flag is added to control
-# whether or not the controller pods should be deployed during bootstrap.
-enable_fluxcd_controllers: true

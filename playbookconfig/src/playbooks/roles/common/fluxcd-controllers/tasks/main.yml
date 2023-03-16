@@ -68,4 +68,3 @@
       msg: "Pod {{ item.item.item }} is still not ready."
     when: item.stdout is not search(" condition met")
     with_items: "{{ wait_fluxcd_job_result.results }}"
-  when: enable_fluxcd_controllers
