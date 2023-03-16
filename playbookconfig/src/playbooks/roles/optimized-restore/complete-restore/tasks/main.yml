@@ -35,8 +35,12 @@
     state: touch
   loop: "{{ all_required_flags }}"
 
-# If the system is online, restore was most likely succesful
+# If the system is online, restore was most likely successful.
+# Network instability on management network can
+# cause system to not be online immediately.
 - name: Check if system is in online state
   shell: source /etc/platform/openrc; system host-show controller-0 --column availability --format value
   register: check_online
-  failed_when: check_online.stdout != 'online'
+  retries: "{{ system_online_retries }}"
+  delay: "{{ system_online_retry_delay }}"
+  until: check_online.stdout == "online"
