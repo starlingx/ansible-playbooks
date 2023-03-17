@@ -17,3 +17,8 @@ max_home_dir_usage: 2000
 # Flag file to indicate if ceph backend is present
 #
 ceph_backend_flag: "{{ platform_conf_path }}/.node_ceph_configured"
+
+# System must be healthy before starting backup
+ignore_health: false
+wait_for_healthy_retries: 30
+wait_for_healthy_retry_delay: 10

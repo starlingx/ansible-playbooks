@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2022 Wind River Systems, Inc.
+# Copyright (c) 2019-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -69,6 +69,34 @@
   stat:
     path: "{{ ceph_backend_flag }}"
   register: ceph_backend
+
+- name: Wait for system to be healthy before starting backup
+  shell: |-
+    source /etc/platform/openrc
+    system health-query
+  register: health_status
+  retries: "{{ wait_for_healthy_retries }}"
+  delay: "{{ wait_for_healthy_retry_delay }}"
+  until: >-
+    health_status.rc != 0 or (
+      (health_status.stdout.count('[Fail]') == 0) or (
+        health_status.stdout.count('[Fail]') == 1 and
+        no_mgmt_alarms in health_status.stdout
+      )
+    )
+  vars:
+    no_mgmt_alarms: "[0] of which are management affecting"
+  when: not ignore_health|bool
+
+- name: Query health status for reference
+  shell: |-
+    source /etc/platform/openrc
+    system health-query
+  register: final_health_status
+
+- name: Display health status
+  debug:
+    var: final_health_status
 
 - name: Create backup in progress flag file
   file:
