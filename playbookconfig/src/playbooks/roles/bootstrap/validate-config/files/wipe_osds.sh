@@ -28,6 +28,7 @@ function wipe_if_ceph_disk {
     local dev=$1
     local osd_guid=$2
     local journal_guid=$3
+    local is_multipath=$4
 
     part_no=1
     ceph_disk="false"
@@ -48,6 +49,13 @@ function wipe_if_ceph_disk {
                 bs=512 count=34 seek=${seek_end} 2>/dev/null
             parted -s ${dev} rm ${part_no}
             ceph_disk="true"
+            # without "set -e" need to check if
+            # the partitions were removed correctly
+            if parted ${dev} p | grep "ceph data"; then
+                echo "Ceph data partition could not be deleted! \
+                        Wipe osd disk manually and try again."
+                exit 1
+            fi
         elif [ "${guid}" == "$journal_guid" ]; then
             echo "Found Ceph journal partition #${part_no} ${part}, erasing!"
             dd if=/dev/zero of=${part} bs=1M count=100 2>/dev/null
@@ -56,6 +64,13 @@ function wipe_if_ceph_disk {
                 bs=1M count=100 seek=${seek_end} 2>/dev/null
             parted -s ${dev} rm ${part_no}
             ceph_disk="true"
+            # without "set -e" need to check if
+            # the partitions were removed correctly
+            if parted ${dev} p | grep "ceph journal"; then
+                echo "Ceph journal partition could not be deleted! \
+                        Wipe osd disk manually and try again."
+                exit 1
+            fi
         fi
 
         part_no=$((part_no + 1))
@@ -64,6 +79,13 @@ function wipe_if_ceph_disk {
     # Wipe the entire disk, including GPT signatures
     if [ "${ceph_disk}" == "true" ]; then
         echo "Wiping Ceph disk ${dev} signatures."
+        if [ ${is_multipath} == 1 ]; then
+            # when a partition are removed in
+            # multipath systems needs to update partitions
+            # uuid list to avoid errors when
+            # the ceph-disk prepare run
+            kpartx ${dev}
+        fi
         wipefs -a ${dev}
     fi
 
@@ -92,7 +114,7 @@ for f in /dev/disk/by-path/*; do
 
     set -e
 
-    wipe_if_ceph_disk $dev $CEPH_REGULAR_OSD_GUID $CEPH_REGULAR_JOURNAL_GUID
+    wipe_if_ceph_disk $dev $CEPH_REGULAR_OSD_GUID $CEPH_REGULAR_JOURNAL_GUID 0
 
     set +e
 done
@@ -115,10 +137,10 @@ for f in /dev/disk/by-id/wwn-*; do
 
     dev=$(find -L /dev/mapper -samefile $dm_path)
 
-    set -e
+    # The 'set -e' has caused issues with this script when dealing
+    # with multipath configurations. This is because the 'parted -s' 
+    # command may not return a 0 when multipath partitions are removed
+    wipe_if_ceph_disk $dev $CEPH_MPATH_OSD_GUID $CEPH_MPATH_JOURNAL_GUID 1
 
-    wipe_if_ceph_disk $dev $CEPH_MPATH_OSD_GUID $CEPH_MPATH_JOURNAL_GUID
-
-    set +e
 done
 
