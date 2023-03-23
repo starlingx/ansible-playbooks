@@ -18,9 +18,14 @@
                               else 'v' + kubernetes_version }}"
   when: kubernetes_long_version is not defined
 
+- name: Set kubernetes short version
+  set_fact:
+    kubernetes_short_version: "{{ kubernetes_long_version | replace('v','') }}"
+
 - block:
   - name: Get the list of kubernetes images
-    shell: "kubeadm --kubeconfig=/etc/kubernetes/admin.conf config images list
+    shell: "/usr/local/kubernetes/{{ kubernetes_short_version }}/stage1/usr/bin/kubeadm
+           --kubeconfig=/etc/kubernetes/admin.conf config images list
            --kubernetes-version {{ kubernetes_long_version }}"
     register: kubernetes_images_output
 
