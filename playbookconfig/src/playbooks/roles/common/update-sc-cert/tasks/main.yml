@@ -5,7 +5,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
-#   This role updates the certificates for https enabled admin endpoints on a subcloud
+#   This role updates the certificates for https enabled admin endpoints
+#   on a subcloud
 #
 
 - name: Get system current time before updating certs
@@ -33,7 +34,7 @@
 - name: Check admin-ep-cert.pem updated
   command: stat -c %Y "/etc/ssl/private/{{ sc_adminep_cert }}"
   register: adminep_cert_modify_time
-  until: adminep_cert_modify_time.stdout > start_time.stdout
+  until: adminep_cert_modify_time.stdout|int > (start_time.stdout|int + 1)
   retries: 12
   delay: 30
 
