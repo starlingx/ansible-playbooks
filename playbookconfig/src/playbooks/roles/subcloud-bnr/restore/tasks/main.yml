@@ -45,3 +45,10 @@
   until: service_status_result.stdout == "1"
   retries: 20
   delay: 30
+
+- name: Run system restore-complete
+  shell: source /etc/platform/openrc; system restore-complete
+  register: restore_complete_result
+  until: restore_complete_result.stdout == "Restore procedure completed"
+  retries: 15
+  delay: 10
