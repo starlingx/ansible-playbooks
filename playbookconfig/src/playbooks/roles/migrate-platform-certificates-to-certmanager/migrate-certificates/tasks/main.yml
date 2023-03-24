@@ -55,11 +55,52 @@
       retries: 3
       delay: 30
 
+    - name: Verify if 'system-local-ca' secret was created by a cert-manager cert that acts as its Root CA
+      shell: >-
+        kubectl get certificates -A
+        -o=custom-columns='SECRET:spec.secretName','NAME:metadata.name','NAMESPACE:metadata.namespace'
+        --no-headers=true |
+        awk '$1 == "system-local-ca"' |
+        awk '{ print "{secret: "$2", namespace: "$3", type: certificate}" }'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: cert_to_remove
+
+    - name: Delete the Root CA that owns the secret 'system-local-ca' if it exists
+      include_tasks: delete-kubernetes-objects.yml
+      when: cert_to_remove.stdout | length > 0
+      loop: "{{ cert_to_remove.stdout_lines | map('from_yaml') | list }}"
+
+    - name: Delete the 'system-local-ca' clusterIssuer and secret if they exist
+      include_tasks: delete-kubernetes-objects.yml
+      with_items:
+        - { secret: system-local-ca, namespace: cert-manager, type: clusterissuer }
+        - { secret: system-local-ca, namespace: cert-manager, type: secret }
+
     - name: Generate kubernetes yaml for cert-manager resources
       include_role:
         name: common/generate-platform-certificates-template
       vars:
         destination: "{{ cert_manager_spec_file }}"
+
+    - name: Select which certificates should be migrated to the new 'system-local-ca' issuer
+      shell: |
+        #Collecting certs previously issued by 'system-local-ca'
+        {(kubectl get certificates -A \
+        -o=custom-columns='SECRET:spec.secretName','NAMESPACE:metadata.namespace','ISSUER:spec.issuerRef.name' \
+        --no-headers=true |
+        awk '$3 == "system-local-ca"' |
+        awk '{ print "{secret: "$1", namespace: "$2", type: secret}" }' |
+        awk NF);
+
+        #Adding certs we will renew by default (if repeated, they will be filtered in renewal task)
+        (printf "{secret: system-openldap-local-certificate, namespace: deployment, type: secret}
+        {secret: system-registry-local-certificate, namespace: deployment, type: secret}
+        {secret: system-restapi-gui-certificate, namespace: deployment, type: secret}
+        {secret: oidc-auth-apps-certificate, namespace: kube-system, type: secret}\n")}
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: certs_to_renew
 
     - name: Apply kubernetes yaml to create cert-manager clusterissuer and certificates
       command: kubectl apply -f "{{ cert_manager_spec_file }}"
@@ -76,13 +117,9 @@
         state: absent
       become: yes
 
-    - name: Force certificate renewals
+    - name: Force certificate renewals by deleting their secrets
       include_tasks: delete-kubernetes-objects.yml
-      with_items:
-        - { secret: system-openldap-local-certificate, namespace: deployment, type: secret }
-        - { secret: system-registry-local-certificate, namespace: deployment, type: secret }
-        - { secret: system-restapi-gui-certificate, namespace: deployment, type: secret }
-        - { secret: oidc-auth-apps-certificate, namespace: kube-system, type: secret }
+      loop: "{{ certs_to_renew.stdout_lines | map('from_yaml') | unique | list }}"
 
     - name: Install certificates as system Trusted CA certificates
       include_role:
