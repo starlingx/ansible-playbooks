@@ -106,8 +106,6 @@
         - "{{ sriov_cni_img }}"
         - "{{ sriov_network_device_img }}"
       static_images:
-        - "{{ tiller_img }}"
-        - "{{ armada_img }}"
         - "{{ n3000_opae_img }}"
         - "{{ kubernetes_entrypoint_img }}"
         - "{{ pause_img }}"
