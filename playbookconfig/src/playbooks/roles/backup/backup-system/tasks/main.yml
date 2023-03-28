@@ -338,6 +338,7 @@
         with_items:
           - "{{ mariadb_dir.path }}"
           - "{{ helm_overrides_sqldump_dir.path }}"
+          - "{{ fluxcd_permdir }}/{{ openstack_app_name }}"
           - "{{ helm_charts_permdir }}/starlingx"
         register: size_output_openstack
 
@@ -590,6 +591,7 @@
 
     - name: Create a tgz archive for OpenStack backup
       shell: "tar -czf {{ openstack_backup_file_path }} $(ls -d \
+           {{ fluxcd_permdir }}/{{ openstack_app_name }} \
            {{ helm_charts_permdir }}/starlingx \
            {{ mariadb_dir.path }} \
            {{ helm_overrides_sqldump_dir.path }} 2>/dev/null)"
