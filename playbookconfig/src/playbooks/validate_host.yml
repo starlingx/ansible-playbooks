@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -31,7 +31,7 @@
   roles:
     - common/prepare-env
     - role: common/sync-patch-metadata
-      when: sync_patch_metadata
+      when: sync_patch_metadata and os_release == "debian"
       vars:
         ansible_become_pass: "{{ ansible_ssh_pass }}"
     - common/validate-target
