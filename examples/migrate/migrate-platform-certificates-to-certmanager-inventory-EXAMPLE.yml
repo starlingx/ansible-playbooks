@@ -71,7 +71,7 @@ all:
           dns_domain: xyz.com
           duration: 2160h      # 90d
           renewBefore: 360h    # 15d
-          subject_C: canada
+          subject_C: CA
           subject_ST: ontario
           subject_L: ottawa
           subject_O: myorganization

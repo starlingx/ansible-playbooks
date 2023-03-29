@@ -1,0 +1,23 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Restart kube-apiserver process.
+#
+
+- name: Get pid of current kube-apiserver process
+  command: pidof kube-apiserver
+  register: kube_apiserver_pid
+
+- name: Restart kube-apiserver
+  shell: crictl ps | awk '/kube-apiserver/{print$1}' | xargs crictl stop > /dev/null
+
+- name: Wait while kube-apiserver restarts
+  command: pidof kube-apiserver || true
+  register: new_kube_apiserver_pid
+  until: (new_kube_apiserver_pid.stdout | length > 0) and
+         new_kube_apiserver_pid.stdout != kube_apiserver_pid.stdout
+  retries: 20
+  delay: 30

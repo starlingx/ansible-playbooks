@@ -8,6 +8,9 @@
 # generate a certificate spec file which is going to be applied to
 # kubernetes at a later step
 #
+- name: Validate subject fields
+  include_tasks: validate-subject-fields.yaml
+
 - name: Get address pool information for system
   shell: |
     source /etc/platform/openrc; system addrpool-list --nowrap
@@ -63,7 +66,7 @@
   shell: |
     source /etc/platform/openrc
     system show | grep distributed_cloud_role | awk '{ print $4 }'
-  register: distributed_cloud_role
+  register: dc_role
 
 - name: Get cert-manager api version
   shell: |

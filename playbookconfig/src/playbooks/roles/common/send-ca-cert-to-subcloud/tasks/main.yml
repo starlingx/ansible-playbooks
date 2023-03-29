@@ -1,13 +1,45 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # These tasks provide the functionality to send root CA certificate
 # to subcloud and store it as a k8s secret.
 #
-- name: Retrieve system-local-ca from k8s secret (on System Controller)
+
+# If the playbook is called from bootstrap/install-platform-certificates
+# this value is already set, and we know it is bootstrap or upgrade.
+# If it isn't set, we expect it to be rehoming.
+- name: Set if it is an bootstrap/upgrade
+  set_fact:
+    ca_send_from_bootstrap: "{{ subcloud_local_ca_secret_type is defined }}"
+
+- block:
+  - name: Get 'system-local-ca' secret type for subcloud
+    shell: |
+      kubectl get secret system-local-ca -n cert-manager \
+      --ignore-not-found=true --no-headers=true | \
+      awk '{print $2}'
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+    register: ca_secret_type
+
+  - name: Set subcloud_local_ca_secret_type value. If inexistent, it will be 'opaque'
+    set_fact:
+      subcloud_local_ca_secret_type: "{{ ca_secret_type.stdout | lower | default('opaque', true) }}"
+
+  - name: Fail if secret exists but the type is neither TLS nor Opaque
+    fail:
+      msg: |
+        "Secret type of system-local-ca is not supported. \
+        Type: {{ subcloud_local_ca_secret_type }}."
+    when: subcloud_local_ca_secret_type != 'opaque' and
+          subcloud_local_ca_secret_type != 'kubernetes.io/tls'
+
+  when: subcloud_local_ca_secret_type is not defined or (subcloud_local_ca_secret_type | length == 0)
+
+- name: Retrieve system local CA cert from k8s secret (on System Controller)
   command: kubectl get secret system-local-ca -n cert-manager -o jsonpath='{.data.tls\.crt}'
   environment:
     KUBECONFIG: "/etc/kubernetes/admin.conf"
@@ -19,20 +51,142 @@
     msg: "Failed to retrieve system CA certificate from secret."
   when: cert_result.stdout == ''
 
-- name: Set system local CA cert
+- name: Set system root/local CA cert based on 'system-local-ca'
   set_fact:
     system_local_ca_cert: "{{ cert_result.stdout }}"
+    system_root_ca_cert: "{{ cert_result.stdout }}"
 
-- name: Generate kubernetes yaml for the secret resource
-  template:
-    src: system_local_ca_secret.yml.j2
-    dest: /tmp/system_local_ca_secret.yml
+- block:
+  - name: Retrieve system local CA key from k8s secret (on System Controller)
+    command: kubectl get secret system-local-ca -n cert-manager -o jsonpath='{.data.tls\.key}'
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+    register: key_result
+    connection: local
+
+  - name: Fail if the local CA key returned is empty
+    fail:
+      msg: "Failed to retrieve system CA certificate key from secret."
+    when: key_result.stdout == ''
+
+  - name: Set system local CA key
+    set_fact:
+      system_local_ca_key: "{{ key_result.stdout }}"
+
+  - name: Retrieve root CA from k8s secret (on System Controller)
+    command: kubectl get secret system-local-ca -n cert-manager -o jsonpath='{.data.ca\.crt}'
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+    register: ca_cert_result
+    connection: local
+
+  - name: Set root CA cert
+    set_fact:
+      system_root_ca_cert: "{{ ca_cert_result.stdout }}"
+    when: ca_cert_result.stdout | length > 0
+
+  - name: Set root CA cert equal local if there isn't one in the secret
+    set_fact:
+      system_root_ca_cert: "{{ system_local_ca_cert }}"
+    when: ca_cert_result.stdout | length == 0
+
+  when: subcloud_local_ca_secret_type == 'kubernetes.io/tls'
+
+- name: Create temporary kubernetes yaml file for the secret resource
+  tempfile:
+    state: file
+    prefix: system_local_ca_secret_
+    suffix: .yml
+    path: /tmp/
+  register: ca_secret_spec_file
+
+- block:
+  - name: Generate kubernetes yaml for the secret resource (for Opaque)
+    template:
+      src: system_local_ca_secret_opaque.yml.j2
+      dest: "{{ ca_secret_spec_file.path }}"
+      mode: '0640'
+    become: yes
+
+  - name: Delete old secret
+    include_role:
+      name: common/delete-kubernetes-resources
+    with_items:
+      - { name: system-local-ca, namespace: cert-manager, type: secret }
+
+  when: subcloud_local_ca_secret_type == 'opaque'
+
+- block:
+  - name: Initialize platform certificates to not be altered
+    set_fact:
+      install_oidc_auth_apps_certificate: false
+      install_system_open_ldap_certificate: false
+      install_system_registry_local_certificate: false
+      install_system_restapi_gui_certificate: false
+
+  - name: Generate kubernetes yaml for the secret resource (for TLS)
+    include_role:
+      name: common/generate-platform-certificates-template
+    vars:
+      destination: "{{ ca_secret_spec_file.path }}"
+
+  when: subcloud_local_ca_secret_type == 'kubernetes.io/tls'
 
 - name: Apply kubernetes yaml to create the secret (on subcloud)
-  command: kubectl apply -f /tmp/system_local_ca_secret.yml
+  command: kubectl apply -f "{{ ca_secret_spec_file.path }}"
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
   register: apply_result
   until: apply_result is not failed
   retries: 10
   delay: 30
+
+- name: Delete kubernetes yaml with certificate spec
+  file:
+    path: "{{ ca_secret_spec_file.path }}"
+    state: absent
+  become: yes
+
+# If not bootstrap/upgrade, install the root certificates
+- block:
+  - name: Install certificates (Subcloud)
+    include_role:
+      name: common/install-trusted-ca
+    with_items:
+      - { name: system_root_ca_cert, content: "{{ system_root_ca_cert }}" }
+    loop_control:
+      label: "{{ item.name }}"
+
+  - name: Restart kube-apiserver to pick the new certificates (Subcloud)
+    include_role:
+      name: common/restart-kube-apiserver
+
+  when: not ca_send_from_bootstrap
+
+- block:
+  - name: Install certificates (SystemController)
+    include_role:
+      name: common/install-trusted-ca
+    with_items:
+      - { name: system_root_ca_cert, content: "{{ system_root_ca_cert }}" }
+    loop_control:
+      label: "{{ item.name }}"
+
+  - name: Restart kube-apiserver to pick the new certificates (SystemController)
+    include_role:
+      name: common/restart-kube-apiserver
+
+  - name: Restart openldap server to trust the new certificates
+    shell: "sm-restart service open-ldap"
+    become: true
+
+  - name: Check openldap service is enabled after restart
+    shell: sm-query service open-ldap | grep -c enabled-active
+    become: true
+    register: service_status
+    until: service_status.stdout == '1'
+    retries: 10
+    delay: 10
+
+  when: not ca_send_from_bootstrap
+  connection: local

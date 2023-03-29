@@ -1,20 +1,43 @@
 ---
 #
-# Copyright (c) 2021-2022 Wind River Systems, Inc.
+# Copyright (c) 2021-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # These tasks provide the functionality to validate ICA duration and
 # install it as a platform Trusted CA
 #
+- name: Create root pem temporary file
+  tempfile:
+    state: file
+    prefix: root_
+    suffix: .pem
+    path: /tmp/
+  register: root_ca_file
+
+- name: Create ca pem temporary file
+  tempfile:
+    state: file
+    prefix: ca_
+    suffix: .pem
+    path: /tmp/
+  register: local_ca_file
+
 - name: Save {{ item.name }} certificate to a file
-  shell: echo "{{ item.content }}" | base64 -d > /tmp/ca.pem
+  copy:
+    dest: "{{ local_ca_file.path }}"
+    content: "{{ item.content | b64decode }}"
+    mode: 0640
 
 - block:
+  - name: Save system_root_ca_cert to a file
+    copy:
+      dest: "{{ root_ca_file.path }}"
+      content: "{{ system_root_ca_cert | b64decode }}"
+      mode: 0640
+
   - name: Check if system_local_ca_cert is signed by system_root_ca_cert or self-signed
-    shell: |
-      echo "{{ system_root_ca_cert }}" | base64 -d > /tmp/root.pem
-      openssl verify -verbose -CAfile /tmp/root.pem /tmp/ca.pem
+    command: openssl verify -verbose -CAfile {{ root_ca_file.path }} {{ local_ca_file.path }}
     register: ca_verification
     # failed_when as false in order to print a better error msg in the task below
     failed_when: false
@@ -30,7 +53,7 @@
 
 - name: Get CA information from certificate
   shell: |
-    cat /tmp/ca.pem | openssl x509 -text -noout | grep "CA:"
+    openssl x509 -in {{ local_ca_file.path }} -text -noout | grep "CA:"
   register: is_ca
 
 - name: Fail when certificate specified is not an actual CA certificate
@@ -44,7 +67,7 @@
 
 - name: Check that CA certificate remaining duration is longer than {{ ca_duration }} years
   shell: |
-      expiration_date=$(cat /tmp/ca.pem | openssl x509 -noout -enddate | cut -d'=' -f2)
+      expiration_date=$(cat {{ local_ca_file.path }} | openssl x509 -noout -enddate | cut -d'=' -f2)
       expiration_date_timestamp=$(date -d "${expiration_date}" +%s)
       date_5years_from_now_timestamp=$(date -d "+{{ ca_duration }} years" +%s)
       time_left_ica=$(expr $expiration_date_timestamp - $date_5years_from_now_timestamp)
@@ -62,8 +85,19 @@
 - name: Install {{ item.name }} certificate as a Trusted CA certificate
   shell: >-
     source /etc/platform/openrc &&
-    system certificate-install -m ssl_ca /tmp/ca.pem
+    system certificate-install -m ssl_ca {{ local_ca_file.path }}
   register: install_cert_output
   until: install_cert_output is not failed
   retries: 3
   delay: 60
+
+- name: Delete temporary .pem files
+  file:
+    path: "{{ file_item }}"
+    state: absent
+  with_items:
+    - "{{ local_ca_file.path }}"
+    - "{{ root_ca_file.path }}"
+  loop_control:
+    loop_var: file_item
+  become: yes
