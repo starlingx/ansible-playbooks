@@ -46,7 +46,15 @@
     prestage_reason: reinstall
   when: prestage_software_version == host_software_version
 
-- block:
+- name: Packages prestage specific preparation
+  block:
+    - name: Set prestage packages source
+      set_fact:
+        prestaging_repo: /var/www/pages/feed/rel-{{ prestage_software_version }}/ostree_repo
+  when: prestage_type == 'packages'
+
+- name: Images prestage specific preparation
+  block:
   - block:
     - name: Skip images prestaging for upgrade if images list is not specified
       debug:
@@ -123,7 +131,7 @@
     command: docker image prune -af
     become: yes
 
-  when: prestage_type == "images"
+  when: prestage_type == 'images'
 
 - name: Update cleanup directories list if the prestage is for upgrade
   set_fact:

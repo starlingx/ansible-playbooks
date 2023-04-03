@@ -19,7 +19,6 @@
   vars:
     prestage_type: "packages"
     platform_backup_dir: /opt/platform-backup
-    prestaging_repo: /var/www/pages/feed/rel-{{ host_software_version }}/ostree_repo
 
   roles:
     - prestage/prepare-env
