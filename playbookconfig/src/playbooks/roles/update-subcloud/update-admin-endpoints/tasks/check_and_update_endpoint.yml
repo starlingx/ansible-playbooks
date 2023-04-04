@@ -4,7 +4,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-#   These tasks validate and update admin endpoints
+#   These tasks validate and update subcloud endpoints
 #
 
 - name: "Get {{ service }} admin endpoint UUID"
@@ -16,14 +16,14 @@
 - name: "Check {{ service }} admin endpoint URL"
   shell: >-
     source /etc/platform/openrc; openstack endpoint list |
-    awk ' $12 == "admin" && $6 == "{{ service }}" ' |
-    grep "{{ parsed_admin_floating_address }}"
+    awk ' $12 == "admin" && $6 == "{{ service }}" &&
+    $0 ~ /"{{ parsed_sc_floating_address }}"/'
   register: Check_admin_endpoint_URL
 
 - name: "Correct {{ service }} admin endpoint"
   shell: >-
     source /etc/platform/openrc; openstack endpoint set
     --region {{ region_name.stdout }} --interface admin
-    --url https://{{ parsed_admin_floating_address }}:{{ port }}
-    --service {{ service }} --enable admin_endpoint_UUID.stdout
+    --url https://{{ parsed_sc_floating_address }}:{{ port }}
+    --service {{ service }} --enable "{{ admin_endpoint_UUID.stdout }}"
   when: Check_admin_endpoint_URL.stdout == ''

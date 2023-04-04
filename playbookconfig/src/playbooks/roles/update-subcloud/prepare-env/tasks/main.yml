@@ -13,9 +13,9 @@
     system host-show $(cat /etc/hostname) --column hostname --format value
   register: controller_name
 
-- name: Set subcloud admin floating address fact
+- name: Set subcloud floating address fact
   set_fact:
-    sc_floating_address: "{{ admin_floating_address }}"
+    sc_floating_address: "{{ sc_floating_address }}"
 
 - name: Retrieve software version number
   # lookup module does not work with /etc/build.info as it does not have ini
@@ -46,62 +46,45 @@
   set_fact:
     config_permdir: "{{ platform_path + '/config/' + software_version }}"
 
-- name: Check existing admin network
+- name: Get target subcloud network
   shell: >-
-    source /etc/platform/openrc; system network-list | grep admin
-  register: existing_admin_network
+    source /etc/platform/openrc; system addrpool-list |
+    grep "{{ sc_floating_address }}" | awk '{print $4}'
+  register: target_net_raw
 
-- name: Fail if admin network is not configured
-  fail:
-    msg: "admin network is not configured"
-  when: existing_admin_network == ""
+- name: Set the target network name variable
+  set_fact:
+    target_net: "{{ 'mgmt' if target_net_raw.stdout == 'management' else target_net_raw.stdout }}"
 
-- name: Get ifname of the existing admin network of controller-0
+- name: Get ifname of the existing subcloud network of controller-0
   shell: >-
     source /etc/platform/openrc; system interface-network-list controller-0 |
-    awk '$8 == "admin" { print $6 }'
-  register: controller_0_admin_network_if
+    awk '$8 == "{{ target_net }}" { print $6 }'
+  register: controller_0_sc_network_if
 
-- name: Fail if admin network interface of controller-0 is not assigned
+- name: Fail if subcloud network interface of controller-0 is not assigned
   fail:
-    msg: "admin network interfaces of controller-0 is not assigned"
-  when: controller_0_admin_network_if.stdout == ""
+    msg: "No interface is assigned to {{ target_net }} on controller-0"
+  when: controller_0_sc_network_if.stdout == ""
 
-- name: Set admin_if_c0 fact
+- name: Set sc_if_c0 fact
   set_fact:
-    admin_if_c0: "{{ controller_0_admin_network_if.stdout_lines[0] }}"
+    sc_if_c0: "{{ controller_0_sc_network_if.stdout_lines[0] }}"
 
 - block:
-  - name: Get ifname of the existing admin network of controller-1
+  - name: Get ifname of the existing subcloud network of controller-1
     shell: >-
       source /etc/platform/openrc; system interface-network-list controller-1 |
-      awk '$8 == "admin" { print $6 }'
-    register: controller_1_admin_network_if
+      awk '$8 == {{ target_net }} { print $6 }'
+    register: controller_1_sc_network_if
 
-  - name: Fail if admin network interface of controller-1 is not assigned
-    fail:
-      msg: "admin network interfaces of controller-1 is not assigned"
-    when: controller_1_admin_network_if.stdout == ""
-
-  - name: Set admin_if_c1 fact
+  - name: Set sc_if_c1 fact
     set_fact:
-      admin_if_c1: "{{ controller_1_admin_network_if.stdout_lines[0] }}"
+      sc_if_c1: "{{ controller_1_sc_network_if.stdout_lines[0] }}"
+
+  - name: Fail if subcloud network interface of controller-1 is not assigned
+    fail:
+      msg: "No interface is assigned to {{ target_net }} on controller-1"
+    when: controller_1_sc_network_if.stdout == ""
 
   when: system_mode != "simplex"
-
-- name: Get existing admin floating address
-  shell: >-
-    source /etc/platform/openrc; system addrpool-list |
-    awk ' $4 == "admin" && $14 == "{{ admin_floating_address }}" '
-  register: check_existing_admin_floating_address
-
-- name: Get existing admin gateway
-  shell: >-
-    source /etc/platform/openrc; system addrpool-list |
-    awk ' $4 == "admin" && $20 == "{{ admin_gateway_address }}" '
-  register: check_existing_admin_gateway
-
-- name: Set admin gateway and floating address update required facts
-  set_fact:
-    admin_floating_update_required: "{{ false if check_existing_admin_floating_address.stdout else true }}"
-    admin_gateway_update_required: "{{ false if check_existing_admin_gateway.stdout else true }}"

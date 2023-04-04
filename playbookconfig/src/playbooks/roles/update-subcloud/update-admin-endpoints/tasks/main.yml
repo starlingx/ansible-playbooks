@@ -4,15 +4,15 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-#   This role is to update the openstack admin endpoints to reflect the admin
-#   network reconfiguration change
+#   This role is to update the openstack admin endpoints to reflect the
+#   subcloud network reconfiguration change
 #
 
-- name: Wrap admin_floating_address in [] brackets if it's an ipv6 address
+- name: Wrap sc_floating_address in [] brackets if it's an ipv6 address
   set_fact:
-    parsed_admin_floating_address: "{{ admin_floating_address | ipwrap }}"
+    parsed_sc_floating_address: "{{ sc_floating_address | ipwrap }}"
 
-- name: Retrieve admin endpoint region name
+- name: Retrieve subcloud endpoint region name
   shell: >-
     source /etc/platform/openrc; system show |
     grep region_name | awk '{ print $4 }'
