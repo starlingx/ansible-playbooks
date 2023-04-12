@@ -365,6 +365,10 @@
 - name: Reload systemd
   command: systemctl daemon-reload
 
+- name: Verify systemctl running without timeout
+  import_role:
+    name: common/verify-systemctl-running
+
 - name: Create persistent certificate directory
   file:
     path: "{{ config_permdir }}/kubernetes/pki/"
@@ -480,6 +484,13 @@
            pod-security.kubernetes.io/audit=privileged
            pod-security.kubernetes.io/enforce=privileged
            pod-security.kubernetes.io/warn=privileged
+
+- name: Stop kubelet to mitigate systemd interactions
+  systemd:
+    name: kubelet
+    state: stopped
+  retries: 3
+  delay: 15
 
 - name: Mark Kubernetes config complete
   file:

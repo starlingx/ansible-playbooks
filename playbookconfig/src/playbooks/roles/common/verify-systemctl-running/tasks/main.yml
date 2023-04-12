@@ -1,0 +1,15 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Wait for systemd to be booted and no systemctl timeout
+  command: timeout 5 systemctl is-system-running
+  retries: 10
+  delay: 30
+  register: result
+  until: (result.rc != 124) and
+         ((result.stdout == "running") or (result.stdout == "degraded"))
+  failed_when: (result.rc == 124)

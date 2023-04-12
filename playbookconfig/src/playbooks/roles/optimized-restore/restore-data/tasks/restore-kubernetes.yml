@@ -65,6 +65,13 @@
   import_role:
     name: common/bringup-kubemaster
 
+- name: Start kubelet
+  systemd:
+    name: kubelet
+    state: started
+  retries: 3
+  delay: 15
+
 # Check if there is a default-registry-key for kube-system and create it when
 # there is not during platform-restore process
 - name: Get kube-system default registry key
