@@ -20,6 +20,9 @@
     - name: Persist keyring data (overwrite if exists)
       command: "cp -r {{ keyring_workdir }} {{ keyring_permdir }}"
 
+    - name: Change group ownership to entire {{ platform_path }}/.keyring/
+      command: "chgrp -R sys_protected {{ platform_path  }}/.keyring/"
+
     - name: Delete the temporary keyring work dir
       file:
         path: "{{ keyring_workdir }}"
