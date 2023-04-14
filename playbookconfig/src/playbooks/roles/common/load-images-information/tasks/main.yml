@@ -123,6 +123,18 @@
         - "{{ cert_manager_webhook_img }}"
         - "{{ cert_manager_ctl_img }}"
 
+  - name: Change security images if upgrading from 21.12
+    set_fact:
+      security_images:
+        - "{{ cert_manager_acmesolver_img_2112 }}"
+        - "{{ cert_manager_cainjector_img_2112 }}"
+        - "{{ cert_manager_controller_img_2112 }}"
+        - "{{ cert_manager_webhook_img_2112 }}"
+        - "{{ cert_manager_ctl_img }}"
+    when:
+      upgrade_metadata is defined and
+      upgrade_metadata.from_release == "21.12"
+
   - name: Append additional static images if provisioned
     set_fact:
       static_images: "{{ static_images }} + [ '{{item.value}}' ]"
