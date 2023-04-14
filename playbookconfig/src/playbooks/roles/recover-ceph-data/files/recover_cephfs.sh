@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -31,12 +31,18 @@ set -x
 # Check if the filesystem for the system RWX provisioner is present
 ceph fs ls | grep ${FS_NAME}
 if [ $? -ne 0 ]; then
-    # If we have existing metadata/data pools, use them
+    # Use existing metadata/data pools to recover cephfs
     ceph fs new ${FS_NAME} ${METADATA_POOL_NAME} ${DATA_POOL_NAME} --force
-    # Reset the filesystem and journal
+
+    # Recover MDS state from filesystem
     ceph fs reset ${FS_NAME} --yes-i-really-mean-it
+
+    # Try to recover from some common errors
     cephfs-journal-tool --rank=${FS_NAME}:0 event recover_dentries summary
     cephfs-journal-tool --rank=${FS_NAME}:0 journal reset
+    cephfs-table-tool ${FS_NAME}:0 reset session
+    cephfs-table-tool ${FS_NAME}:0 reset snap
+    cephfs-table-tool ${FS_NAME}:0 reset inode
 fi
 
 # Start the Ceph MDS
