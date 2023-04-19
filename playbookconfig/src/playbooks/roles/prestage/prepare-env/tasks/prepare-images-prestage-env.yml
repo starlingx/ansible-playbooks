@@ -1,0 +1,92 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   These tasks are used to prepare environment on the target host for
+#   images prestaging.
+#
+
+- block:
+  - name: Skip images prestaging if images list is not specified when the source is remote
+    debug:
+      msg: "Prestaging for is skipped as image list is not specified when source is remote."
+  - meta: end_play
+  when: prestage_source == 'remote' and image_list_file is undefined
+
+- name: Check available docker space
+  shell: df -h --block-size=G /var/lib/docker|tail -n +2|awk '{print $4}'
+  register: avail_space_check
+
+# Fail if the available docker space is below 16G
+- name: Fail if available docker space is below the minimum required
+  fail:
+    msg: "Available docker space is below the minimum required space for images prestage."
+  when: avail_space_check.stdout[:-1]|int < 16
+
+- block:
+  - name: Verify that the images list file exists if provided
+    stat:
+      path: "{{ image_list_file }}"
+    register: check_result
+    connection: local
+
+  - name: Fail if the specified image list doesn't exist
+    fail:
+      msg: "Images list file {{ image_list_file }} does not exist!"
+    when: not check_result.stat.exists
+
+  - name: Create a temp file
+    tempfile:
+      state: file
+      suffix: prestage
+    register: image_list_tempfile
+
+  - name: Copy the content of images list to the temp file on target
+    copy:
+      src: "{{ image_list_file }}"
+      dest: "{{ image_list_tempfile.path }}"
+
+  - name: Remove blank lines, comments, markers from images temp file
+    command: sed -i -e '/^$/d; /#/d; /\[/d' {{ image_list_tempfile.path }}
+    args:
+      warn: false
+
+  - name: Remove extra fields from images temp file
+    command: sed -i 's/,.*//' {{ image_list_tempfile.path }}
+    args:
+      warn: false
+
+  - name: Read in the images temp file content
+    slurp:
+      src: "{{ image_list_tempfile.path }}"
+    register: slurped_file
+
+  - name: Set image_list to the prepared file on the target
+    set_fact:
+      image_list: "{{ (slurped_file.content|b64decode|trim).split('\n') }}"
+
+  - name: Remove the images list temp file
+    file:
+      path: "{{ image_list_tempfile.path }}"
+      state: absent
+
+  - name: Fail if the images list is empty
+    fail:
+      msg: "File {{ image_list_file }} contains no image references."
+    when: image_list|length == 0 or image_list == ['']
+
+  when: image_list_file is defined
+
+- name: Prepare docker cache for prestaging
+  command: docker image prune -af
+  become: yes
+
+- debug:
+    msg: |
+      Prestaging type: {{ prestage_type }}
+      Prestaging source: {{ prestage_source }}
+      Images list file: {{ image_list_file|default('not provided') }}
+      Image list: {{ image_list }}

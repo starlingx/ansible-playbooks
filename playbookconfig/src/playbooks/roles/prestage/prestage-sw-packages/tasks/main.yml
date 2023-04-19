@@ -5,62 +5,67 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
-#   This role is used to copy prestaging repo from the system controller
-#   (prestage for upgrade) or local ostree repo (prestage for reinstall)
-#   to the subcloud prestage directory.
+#   This role is used to perform the copy of ostree_repo from the release feed
+#   (/www/pages/feed/rel-<release>/ostree_repo) to the prestage directory
+#   (/opt/platform-backup/<release>).
+#
+#   If the prestage request release is the same as the software version of
+#   the subcloud, the source ostree_repo will be locally, otherwise, it will
+#   be on the system controller.
+#
+#   This role is specifically for Debian releases.
+#
 
-- name: Set local prestaging repo path on the subcloud
+- name: Set target prestage repo path
   set_fact:
-    local_prestaging_repo: "{{ prestage_dir }}/ostree_repo"
+    prestage_ostree_repo: "{{ prestage_dir }}/ostree_repo"
 
-- name: Ensure local prestaging repo path exist
+- name: Ensure target prestage repo path exist
   file:
-    path: "{{ local_prestaging_repo }}"
+    path: "{{ prestage_ostree_repo }}"
     state: directory
     owner: root
     mode: 0755
     recurse: yes
 
-- block:
-  - name: Copy prestaging repo from local ostree repo
-    include_role:
-      name: prestage/prepare-ostree-repo
-    vars:
-      release_id: "{{ host_software_version }}"
-      repo_path: "{{ local_prestaging_repo }}"
-
-  when: prestage_reason == 'reinstall'
+- name: Copy prestaging repo from local ostree repo
+  command: rsync -ap --delete {{ ostree_repo_release_feed }}/ {{ prestage_ostree_repo }}/
+  when: prestage_source == 'local'
 
 - block:
-  - name: Temporarily change the ownership of the prestage dir on the subcloud
+  # It's necessary to temporarily change the owner to sysadmin so that
+  # the system controller can push the files to the subcloud, since the files
+  # are in the folders only the root can access but the synchronize only
+  # support passwordless sysadmin to execute ssh and rsync.
+  - name: Temporarily change the ownership of the prestage ostree repo on {{ inventory_hostname }}
     file:
-      path: "{{ platform_backup_dir }}"
+      path: "{{ prestage_ostree_repo }}"
       state: directory
       owner: sysadmin
       recurse: yes
 
-  - name: Copy prestaging repo from system controller to {{ inventory_hostname }}
-    command: >
-      sshpass -p {{ ansible_ssh_pass }}
-      rsync -ap --delete -e 'ssh -o StrictHostKeyChecking=no' {{ prestaging_repo }}
-      {{ ansible_ssh_user }}@{{ inventory_hostname }}:{{ prestage_dir }}
+  - name: Transfer prestaging repo from system controller to {{ inventory_hostname }}
+    synchronize:
+      mode: push
+      src: "{{ ostree_repo_release_feed }}/"
+      dest: "{{ prestage_ostree_repo }}/"
+      rsync_opts: "--delete"
     register: prestage_transfer
     retries: 3
     delay: 5
     until: prestage_transfer.rc == 0
-    no_log: true
-    connection: local
-    when: prestage_reason == 'upgrade'
 
-  - name: Generate ostree_repo directory checksum
-    shell: >-
-      cd {{ local_prestaging_repo }}/..
-      &&  find ostree_repo -type f -exec md5sum {} + | LC_ALL=C sort | md5sum | awk '{ print $1; }'
-      > .ostree_repo_checksum
-
-  - name: Restore the ownership of the prestage dir on the subcloud
+  - name: Restore the ownership of the prestage ostree repo on {{ inventory_hostname }}
     file:
-      path: "{{ platform_backup_dir }}"
+      path: "{{ prestage_ostree_repo }}"
       state: directory
       owner: root
       recurse: yes
+
+  when: prestage_source == 'remote'
+
+- name: Generate ostree_repo directory checksum
+  shell: >-
+    cd {{ prestage_dir }}
+    &&  find ostree_repo -type f -exec md5sum {} + | LC_ALL=C sort | md5sum | awk '{ print $1; }'
+    > .ostree_repo_checksum

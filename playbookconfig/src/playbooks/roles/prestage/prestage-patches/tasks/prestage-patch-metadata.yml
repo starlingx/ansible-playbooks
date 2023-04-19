@@ -1,0 +1,56 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   These tasks are used to prestage patch metadata.
+
+- name: Copy patch metadata locally on {{ inventory_hostname }}
+  shell: rsync -ap --delete {{ host_patch_metadata_dir }}/ {{ patches_prestage_dir }}/metadata/
+  when: prestage_source == 'local'
+
+- block:
+  # It's necessary to temporarily change the owner to sysadmin so that
+  # the system controller can push the files to the subcloud, since the files
+  # are in the folders only the root can access but the synchronize only
+  # support passwordless sysadmin to execute ssh and rsync.
+  - name: Temporarily change the ownership of the prestage patch metadata dir on {{ inventory_hostname }}
+    file:
+      path: "{{ patches_prestage_dir }}/metadata/"
+      state: directory
+      owner: sysadmin
+      recurse: yes
+
+  - name: Transfer patch metadata from the system controller
+    synchronize:
+      mode: push
+      src: "{{ host_patch_metadata_dir }}/"
+      dest: "{{ patches_prestage_dir }}/metadata/"
+      rsync_opts: "--delete"
+    register: patch_metadata_transfer
+    retries: 3
+    delay: 2
+    until: patch_metadata_transfer.rc == 0
+
+  - name: Restore the ownership of the prestage patch metadata dir on {{ inventory_hostname }}
+    file:
+      path: "{{ patches_prestage_dir }}/metadata/"
+      state: directory
+      owner: root
+      recurse: yes
+  when: prestage_source == 'remote'
+
+- name: Remove available patch metadata
+  file:
+    path: "{{ patches_prestage_dir }}/metadata/available"
+    state: absent
+
+- name: Delete those patch metadata files not belonging to the prestage software version
+  shell: >
+          grep -L "<sw_version>{{ prestage_software_version }}</sw_version>"
+          {{ item }} 2>/dev/null | xargs rm -f
+  loop:
+    - "{{ patches_prestage_dir }}/metadata/applied/*"
+    - "{{ patches_prestage_dir }}/metadata/committed/*"

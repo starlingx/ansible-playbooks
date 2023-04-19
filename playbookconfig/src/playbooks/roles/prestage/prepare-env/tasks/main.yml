@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -14,6 +14,13 @@
     msg: "Please specify software version for prestaging."
   when: software_version is not defined
 
+- name: Fail if software version is not supported for prestaging
+  fail:
+    msg: >-
+      The specified software version {{ software_version }} is not supported.
+      Minimum supported release versions for prestage: {{ minimum_supported_release_version_for_prestage }}
+  when: software_version is version(minimum_supported_release_version_for_prestage, "<")
+
 - name: Set prestage software version and cleanup directores fact
   set_fact:
     prestage_software_version: "{{ software_version }}"
@@ -21,9 +28,10 @@
 
 - name: Set prestage dir and subdirectory facts
   set_fact:
-    prestage_reason: upgrade
-    prestage_dir: "{{ platform_backup_dir }}"
-    packages_prestage_completed_flag: ".packages_prestage_completed"
+    prestage_source: remote
+    prestage_dir: "{{ platform_backup_dir }}/{{ prestage_software_version }}"
+    patches_prestage_dir: "{{ platform_backup_dir }}/{{ prestage_software_version }}/patches"
+    host_patch_metadata_dir: "/opt/patching/metadata"
 
 - name: Retrieve current software version of the host
   shell: source /etc/platform/openrc;
@@ -34,126 +42,24 @@
   set_fact:
     host_software_version: "{{ current_software_version.stdout }}"
 
-- name: Fail if specified software version is older than the one on the target
-  fail:
-    msg: >-
-      Invalid software version for prestaging. The host is running a newer
-      software version ({{ host_software_version}}) than the specified software version.
-  when: host_software_version is version(prestage_software_version, '>')
-
-- name: Update prestage reason
+- name: Change prestage_source to local
   set_fact:
-    prestage_reason: reinstall
+    prestage_source: local
   when: prestage_software_version == host_software_version
 
-- name: Packages prestage specific preparation
-  block:
-    - name: Set prestage packages source
-      set_fact:
-        prestaging_repo: /var/www/pages/feed/rel-{{ prestage_software_version }}/ostree_repo
+- name: Prepare prestaging packages
+  include_tasks: prepare-sw-packages-prestage-env.yml
   when: prestage_type == 'packages'
 
-- name: Images prestage specific preparation
-  block:
-  - block:
-    - name: Skip images prestaging for upgrade if images list is not specified
-      debug:
-        msg: "Prestaging for upgrade is skipped as image list is not specified."
-    - meta: end_play
-    when: prestage_reason == 'upgrade' and image_list_file is undefined
-
-  - name: Check available docker space
-    shell: df -h /var/lib/docker|tail -n +2|awk '{print $4}'
-    register: avail_space_check
-
-  # Fail if the available docker space is below 16G
-  - name: Fail if available docker space is below the minimum required
-    fail:
-      msg: "Available docker space is below the minimum required space for images prestage."
-    when: (avail_space_check.stdout[-1] != 'G' or
-           avail_space_check.stdout[:-1]|int < 16)
-
-  - block:
-    - name: Verify that the images list file exists if provided
-      stat:
-        path: "{{ image_list_file }}"
-      register: check_result
-      connection: local
-
-    - name: Fail if the specified image list doesn't exist
-      fail:
-        msg: "Images list file {{ image_list_file }} does not exist!"
-      when: not check_result.stat.exists
-
-    - name: Create a temp file
-      tempfile:
-        state: file
-        suffix: prestage
-      register: image_list_tempfile
-
-    - name: Copy the content of images list to the temp file on target
-      copy:
-        src: "{{ image_list_file }}"
-        dest: "{{ image_list_tempfile.path }}"
-
-    - name: Remove blank lines, comments, markers from images temp file
-      command: sed -i -e '/^$/d; /#/d; /\[/d' {{ image_list_tempfile.path }}
-      args:
-        warn: false
-
-    - name: Remove extra fields from images temp file
-      command: sed -i 's/,.*//' {{ image_list_tempfile.path }}
-      args:
-        warn: false
-
-    - name: Read in the images temp file content
-      slurp:
-        src: "{{ image_list_tempfile.path }}"
-      register: slurped_file
-
-    - name: Set image_list to the prepared file on the target
-      set_fact:
-        image_list: "{{ (slurped_file.content|b64decode|trim).split('\n') }}"
-
-    - name: Remove the images list temp file
-      file:
-        path: "{{ image_list_tempfile.path }}"
-        state: absent
-
-    - name: Fail if the images list is empty
-      fail:
-        msg: "File {{ image_list_file }} contains no image references."
-      when: image_list|length == 0 or image_list == ['']
-
-    when: image_list_file is defined
-
-  - name: Prepare docker cache for prestaging
-    command: docker image prune -af
-    become: yes
-
+- name: Prepare prestaging images
+  include_tasks: prepare-images-prestage-env.yml
   when: prestage_type == 'images'
 
-- name: Update cleanup directories list if the prestage is for upgrade
-  set_fact:
-    cleanup_dirs: "{{ cleanup_dirs + [host_software_version] }}"
-  when: prestage_reason == 'upgrade'
-
 - name: Prepare platform-backup directory for {{ prestage_type }} prestaging
-  include: cleanup_prestage_dir.yml
+  include_tasks: cleanup_prestage_dir.yml
   loop: "{{ cleanup_dirs | flatten(1) }}"
   loop_control:
     loop_var: input_dir
-
-- debug:
-    msg: |
-      Prestaging type: {{ prestage_type }}
-      Prestaging reason: {{ prestage_reason }}
-  when: prestage_type == 'packages'
-
-- debug:
-    msg: |
-      Prestaging type: {{ prestage_type }}
-      Prestaging reason: {{ prestage_reason }}
-      Images list file: {{ image_list_file|default('not provided') }}
-      Image list: {{ image_list }}
-  when: prestage_type == 'images'
+  args:
+    apply:
+      become: yes

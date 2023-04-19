@@ -4,8 +4,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# This playbook copies prestaging ostree repo from the system controller to
-# /opt/platform-backup/<release-number> for subcloud upgrade or reinstall.
+# This playbook copies prestage packages (Centos) or ostree repo (Debian)
+# from the release feed (Centos: /www/pages/feed/rel-<release>,
+# Debian: /var/www/pages/feed/rel-<release>) to the prestage directory
+# (/opt/platform-backup/<release>).
 # The playbook is meant to be integrated with the dcmanager to provide
 # subcloud prestaging functionality.
 #
@@ -16,10 +18,24 @@
 - hosts: all
   gather_facts: no
 
+  vars_files:
+    - vars/prestage/main.yml
+
   vars:
     prestage_type: "packages"
     platform_backup_dir: /opt/platform-backup
 
   roles:
-    - prestage/prepare-env
-    - { role: prestage/prestage-sw-packages, become: yes }
+    - role: prestage/prepare-env
+
+    - role: prestage/prestage-sw-packages
+      when: prestage_os_type == 'debian'
+      become: yes
+
+    - role: prestage/prestage-sw-packages-centos
+      when: prestage_os_type == 'centos'
+      become: yes
+
+    - role: prestage/prestage-patches
+      when: host_patches_exist
+      become: yes
