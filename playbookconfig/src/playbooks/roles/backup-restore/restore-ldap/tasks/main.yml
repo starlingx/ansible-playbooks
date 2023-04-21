@@ -116,7 +116,7 @@
     when:
       - os_release == "debian"
       - bkp_has_centos_ldap_config.rc == 0
-      - upgrade_metadata.from_release == "21.12"
+      - upgrade_metadata is defined and upgrade_metadata.from_release == "21.12"
 
   always:
     - name: Delete files from staging dir
