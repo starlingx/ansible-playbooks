@@ -105,6 +105,7 @@
         - "{{ multus_img }}"
         - "{{ sriov_cni_img }}"
         - "{{ sriov_network_device_img }}"
+        - "{{ intel_qat_plugin_img }}"
       static_images:
         - "{{ n3000_opae_img }}"
         - "{{ kubernetes_entrypoint_img }}"
@@ -114,6 +115,8 @@
         - "{{ default_backend_img }}"
         - "{{ flux_helm_controller_img }}"
         - "{{ flux_source_controller_img }}"
+        - "{{ intel_gpu_plugin_img }}"
+        - "{{ intel_gpu_initcontainer_img }}"
       storage_images:
         - "{{ snapshot_controller_img }}"
       security_images:
