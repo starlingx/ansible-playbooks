@@ -264,6 +264,38 @@
       kubernetes_version: "{{ upgrade_k8s_version }}"
     when: migrate_platform_data is defined and migrate_platform_data
 
+  - block:
+    - name: Extract kubeadm version from the backup tarball
+      # Match kube_cmd_versions VALUES from sysinv database table.
+      command: >-
+          zgrep -aE '^INSERT INTO .*kube_cmd_versions VALUES'
+          {{ restore_data_file }}
+      args:
+        warn: false
+      failed_when: false
+      register: kube_cmd_search
+
+    - name: Fetch the kubeadm version from the kube_cmd_versions table insert entry.
+      set_fact:
+        # Note: regex_search() returns a list containing capture groups.
+        # The first filter obtains the first grouped element and converts
+        # unicode string to string.
+        latest_k8s_version: "{{ kube_cmd_search.stdout_lines[0] \
+                            | regex_search(version_re, '\\1') \
+                            | first }}"
+      when: kube_cmd_search.rc == 0
+      vars:
+        # kubeadm_version is second last entry within VALUES tuple containing
+        # 6 CSV elements. Exclude the single quotes surrounding the version.
+        version_re: 'VALUES\s+\([^,]+,[^,]+,[^,]+,[^,]+,\s+''([^\s]+)'',[^,]+\);'
+
+    - name: Set kubernetes_version for upgrades.
+      set_fact:
+        kubernetes_version: "{{ latest_k8s_version }}"
+      when: latest_k8s_version is defined and latest_k8s_version|length > 0
+
+    when: migrate_platform_data is defined and migrate_platform_data
+
   - name: Set kubernetes_version for restores.
     set_fact:
       kubernetes_version: "{{ restore_k8s_version }}"
