@@ -114,6 +114,10 @@
     set_fact:
       in_sudo_permission: "{{ true if sudo_permission is defined and sudo_permission | bool else false }}"
 
+  - name: Set sys_protected flag fact upfront
+    set_fact:
+      in_sys_protected: "{{ true if sys_protected is defined and sys_protected | bool else false }}"
+
 - hosts: systemcontroller
   gather_facts: no
 

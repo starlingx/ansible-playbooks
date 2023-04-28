@@ -69,6 +69,11 @@
   become: yes
   when: in_sudo_permission
 
+- name: Add LDAP user to 'sys_protected' group
+  command: usermod -a -G sys_protected {{ in_user_id }}
+  become: yes
+  when: in_sys_protected
+
 - name: Retrieve LDAP user groups
   command: groups {{ in_user_id }}
   register: user_groups
