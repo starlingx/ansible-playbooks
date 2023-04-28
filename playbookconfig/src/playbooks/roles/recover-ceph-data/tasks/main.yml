@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2022 Wind River Systems, Inc.
+# Copyright (c) 2019-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -310,10 +310,18 @@
       script: recover_cephfs.sh
       register: cephfs_recovery_out
 
-    - name: Create ceph.client.guest.keyring to allow ceph mount again
-      command: touch /etc/ceph/ceph.client.guest.keyring
+    - name: Display cephfs recovery script stdout output
+      debug:
+        var: cephfs_recovery_out.stdout_lines
 
-    - debug: var=cephfs_recovery_out.stdout_lines
+    - name: Display cephfs recovery script stderr output
+      debug:
+        var: cephfs_recovery_out.stderr_lines
+
+    - name: Create ceph.client.guest.keyring to allow ceph mount again
+      file:
+        path: "/etc/ceph/ceph.client.guest.keyring"
+        state: touch
 
     - name: Restart ceph one more time to pick latest changes
       command: /etc/init.d/ceph restart
