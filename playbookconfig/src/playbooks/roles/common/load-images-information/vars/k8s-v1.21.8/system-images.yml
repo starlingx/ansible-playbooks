@@ -9,6 +9,9 @@ calico_flexvol_img: quay.io/calico/pod2daemon-flexvol:v3.19.1
 multus_img: ghcr.io/k8snetworkplumbingwg/multus-cni:v3.7.1
 sriov_cni_img: ghcr.io/k8snetworkplumbingwg/sriov-cni:v2.6.1
 sriov_network_device_img: ghcr.io/k8snetworkplumbingwg/sriov-network-device-plugin:v3.3.2
+intel_qat_plugin_img: docker.io/intel/intel-qat-plugin:0.26.0
+intel_gpu_plugin_img: docker.io/intel/intel-gpu-plugin:0.26.0
+intel_gpu_initcontainer_img: docker.io/intel/intel-gpu-initcontainer:0.26.0
 # Nginx images
 nginx_ingress_controller_img: k8s.gcr.io/ingress-nginx/controller:v1.1.1
 nginx_kube_webhook_certgen_img: k8s.gcr.io/ingress-nginx/kube-webhook-certgen:v1.1.1
