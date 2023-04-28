@@ -25,7 +25,7 @@
 - name: Fail if the specified software version is invalid
   fail:
     msg: "Specified software_version is invalid. Supported version: {{ supported_release_versions_for_backup|join(', ') }}"
-  when: software_version not in supported_release_versions_for_backup
+  when: software_version|string not in supported_release_versions_for_backup
 
 - name: Fail if storage location is not specified for backup removal on system controller
   fail:
