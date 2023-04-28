@@ -134,6 +134,27 @@
         - sysinv
         - barbican
 
+    - name: Count subcloud related alarms
+      command: >-
+        psql -d fm -t -c "select count(*) from alarm
+        where alarm_id like '280.%';"
+      become_user: postgres
+      register: subcloud_alarm_count
+
+    - name: Backup subcloud related alarms
+      block:
+      - name: Copy subcloud alarms from postgres database to /tmp/.subcloud_alarm.csv
+        command: >-
+          psql -d fm -c "copy (select * from alarm where alarm_id like '280.%')
+          to '/tmp/.subcloud_alarm.csv' with delimiter ';';"
+        become_user: postgres
+
+      - name: Move .subcloud_alarm.csv to postgres dir
+        command: >-
+          mv "/tmp/.subcloud_alarm.csv" {{ postgres_dir.path }}/.subcloud_alarm.csv
+        become: yes
+      when: subcloud_alarm_count.stdout | int > 0
+
     - name: Backup fm db data
       shell: >-
         sudo -u postgres pg_dump --format=plain --inserts --disable-triggers

@@ -31,4 +31,32 @@
     with_items: "{{ pgfiles_dc.results }}"
     when: item.stat.exists
 
+  - name: Extract .subcloud_alarm.csv if exist
+    command: >-
+      tar -C /tmp -xpf {{ platform_backup_fqpn }}
+      --wildcards '*/*\.subcloud_alarm.csv' --strip-components=4
+    failed_when: false
+
+  - name: Check if .subcloud_alarm.csv exists
+    stat:
+      path: "/tmp/.subcloud_alarm.csv"
+    register: subcloud_alarm_csv_file
+
+  - name: Restore subcloud alarms
+    block:
+      - name: Move alarms from .subcloud_alarm.csv to alarm table
+        command: >-
+          psql -d fm -c
+          "copy alarm from
+          '/tmp/.subcloud_alarm.csv' with delimiter ';'"
+        become_user: postgres
+
+      - name: Remove temporary .subcloud_alarm.csv file.
+        file:
+          path: "/tmp/.subcloud_alarm.csv"
+          state: absent
+        become: yes
+
+    when: subcloud_alarm_csv_file.stat.exists
+
   when: check_dc_controller.rc == 0
