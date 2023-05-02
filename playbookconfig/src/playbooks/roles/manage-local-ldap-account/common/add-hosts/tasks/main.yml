@@ -14,6 +14,7 @@
     ansible_ssh_common_args:
       '-o ProxyCommand="sshpass -p {{ ansible_password }} ssh -W [%h]:%p -q {{ ansible_user }}@{{ ansible_host }}"'
     in_sudo_permission: "{{ in_sudo_permission }}"
+    in_sys_protected: "{{ in_sys_protected }}"
     in_mode: "{{ in_mode }}"
     in_user_password: "{{ in_user_password if in_mode == 'create' else '' }}"
     in_user_role: "{{ in_user_role if in_mode == 'create' else '' }}"

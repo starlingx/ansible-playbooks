@@ -15,14 +15,14 @@
 # file. Then run the ansible-playbook command with --ask-vault-pass parameter:
 #
 # ansible-playbook --inventory inventory-secure --ask-vault-pass \
-# --extra-vars='user_id=JohnDoo' \
+# --extra-vars='user_id=JohnDoe' \
 # /usr/share/ansible/stx-ansible/playbooks/manage_local_ldap_account.yml
 #
 # If you wish to use different values for password_change_period and
 # password_warning_period parameters follow the sample below:
 #
 # ansible-playbook --inventory inventory-secure --ask-vault-pass \
-# --extra-vars='user_id=JohnDoo password_change_period=120 \
+# --extra-vars='user_id=JohnDoe password_change_period=120 \
 # password_warning_period=1' \
 # /usr/share/ansible/stx-ansible/playbooks/manage_local_ldap_account.yml
 #
@@ -30,7 +30,14 @@
 # variable to yes:
 #
 # ansible-playbook --inventory inventory-secure --ask-vault-pass \
-# --extra-vars='user_id=JohnDoo sudo_permission=yes' \
+# --extra-vars='user_id=JohnDoe sudo_permission=yes' \
+# /usr/share/ansible/stx-ansible/playbooks/manage_local_ldap_account.yml
+#
+# If you wish to add users to sys_protected group, set sys_protected
+# variable to yes:
+#
+# ansible-playbook --inventory inventory-secure --ask-vault-pass \
+# --extra-vars='user_id=JohnDoe sys_protected=yes' \
 # /usr/share/ansible/stx-ansible/playbooks/manage_local_ldap_account.yml
 #
 # If you wish to delete an existing user account (e.g. na-admin):

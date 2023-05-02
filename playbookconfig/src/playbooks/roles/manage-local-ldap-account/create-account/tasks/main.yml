@@ -18,9 +18,13 @@
     set_fact:
       sudo_param: "{{ '--sudo' if in_sudo_permission else '' }}"
 
+  - name: Set sys_protected_param if external variable sys_protected is true
+    set_fact:
+      sys_protected_param: "{{ '--secondgroup sys_protected' if in_sys_protected else '' }}"
+
   - name: Create LDAP user {{ in_user_id }}
     shell: >-
-      ldapusersetup -u {{ in_user_id }} {{ sudo_param }} --secondgroup sys_protected --passmax
+      ldapusersetup -u {{ in_user_id }} {{ sudo_param }} {{ sys_protected_param }} --passmax
       {{ password_change_period }} --passwarning {{ password_warning_period }}
     become: yes
 
