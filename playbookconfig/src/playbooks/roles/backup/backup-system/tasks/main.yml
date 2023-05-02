@@ -632,6 +632,20 @@
             Backup tar file(s) have been transferred to {{ host_backup_dir }} on Ansible control host.
       when: inventory_hostname != 'localhost'
 
+    - name: Find the backup tar files
+      find:
+        paths: "{{ backup_dir }}"
+        patterns: '*backup_*.tgz'
+      register: backup_files_perm_change
+
+    - name: change permission of backup tar files
+      file:
+        path: "{{ item.path }}"
+        owner: root
+        group: root
+        mode: 0640
+      with_items: "{{ backup_files_perm_change.files }}"
+
   always:
     - name: Remove the temp dir
       file:
