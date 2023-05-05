@@ -113,6 +113,7 @@
         - "{{ nginx_ingress_controller_img }}"
         - "{{ nginx_kube_webhook_certgen_img }}"
         - "{{ default_backend_img }}"
+        - "{{ nginx_opentelemetry_img }}"
         - "{{ flux_helm_controller_img }}"
         - "{{ flux_source_controller_img }}"
         - "{{ intel_gpu_plugin_img }}"
