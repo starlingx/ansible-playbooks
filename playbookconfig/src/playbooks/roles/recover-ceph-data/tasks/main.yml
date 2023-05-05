@@ -215,6 +215,31 @@
         ESTART: "{{ '' if ipv6_encap == False else '\\[' }}"
         EEND: "{{ '' if ipv6_encap == False else '\\]' }}"
 
+    # The one-liner sed command parses the ceph.conf ini file containing the monitor IP address
+    # as the example below:
+    #
+    # For IPv4 format:
+    # [mon.controller-0]
+    # host=controller-0
+    #   public_addr = 192.168.204.2:6789
+    #
+    # For IPv6 format:
+    # [mon.controller-0]
+    # host=controller-0
+    #   public_addr = [fd00::1]:6789
+    #
+    - name: Get monitor IP address from ceph.conf
+      command: >-
+        sed -nr
+        -e "/\\[mon.{{ mon_name }}\\]/ {:fd /^.*public_addr[ ]*=/ { s/[^=]*=[ ]*(.*):.*$/\\1/p; q}; n; /^\\[.*\\]$/ q; b fd}"
+        /etc/ceph/ceph.conf
+      register: result
+
+    # Using ipwrap filter to “wrap” in square brackets ipv6 addresses
+    - name: Set monitor IP to variable mon_ip
+      set_fact:
+        mon_ip: "{{ result.stdout | ipwrap }}"
+
     # On a partial restore ceph-osds are not wiped.
     # 'ceph-disk list' command returns the list of ceph osds
     # This task:
@@ -254,11 +279,37 @@
     - name: Restore store.db from mon-store
       shell: cp -ar /tmp/mon-store/store.db /var/lib/ceph/mon/ceph-{{ mon_name }}
 
+    # After restoring the ceph mon store.db, ceph mon process may not start successfully
+    # trying to connect to the default monitor 'mon.a'. To avoid this, the monmap must be
+    # edited to remove the default 'mon.a' and add the correct monitor name and address.
+    # For SX/STD will be added 'mon.controller-0' and for DX 'mon.controller'.
+    # The monmap is extracted, edited and then reinjected with the mon address fixed.
+    - name: Set monmap file location
+      set_fact:
+        monmap_filename: '/tmp/monmap'
+
+    - name: Extract monmap from Ceph monitor
+      command: ceph-mon --name mon.{{ mon_name }} --extract-monmap {{ monmap_filename }}
+
+    - name: Remove default mon.a from monmap file
+      command: monmaptool --rm a {{ monmap_filename }}
+
+    - name: Add controller monitor into monmap file
+      command: monmaptool --add {{ mon_name }} {{ mon_ip }} {{ monmap_filename }}
+
+    - name: Apply modified monmap file to Ceph monitor
+      command: ceph-mon --name mon.{{ mon_name }} --inject-monmap {{ monmap_filename }}
+
+    - name: Remove temporary monmap file
+      file:
+        path: "{{ monmap_filename }}"
+        state: absent
+
     - name: Bring up ceph Monitor
       command: /etc/init.d/ceph start mon
 
     - name: Wait for ceph monitor to be up
-      shell: ceph -s
+      shell: timeout 15 ceph -s
       retries: 5
       delay: 2
       register: result
