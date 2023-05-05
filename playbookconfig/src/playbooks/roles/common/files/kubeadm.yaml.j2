@@ -1,16 +1,16 @@
-apiVersion: kubeadm.k8s.io/v1beta2
+apiVersion: kubeadm.k8s.io/v1beta3
 kind: InitConfiguration
 localAPIEndpoint:
   advertiseAddress: {{ apiserver_advertise_address }}
 nodeRegistration:
-  criSocket: "/var/run/containerd/containerd.sock"
+  criSocket: unix:///var/run/containerd/containerd.sock
   # configure kubeadm to not apply the default
   # taint "node-role.kubernetes.io/master:NoSchedule" to control plane nodes
   taints: {{ kubelet_taints }}
   kubeletExtraArgs:
     {{kubelet_extra_args | to_nice_yaml(width=512) | indent(4, indentfirst=False)}}
 ---
-apiVersion: kubeadm.k8s.io/v1beta2
+apiVersion: kubeadm.k8s.io/v1beta3
 kind: ClusterConfiguration
 apiServer:
   certSANs:
