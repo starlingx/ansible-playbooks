@@ -456,7 +456,6 @@ enable_volume_snapshot_support: false
 k8s_plugins:
 #  intel-gpu-plugin: intelgpu=enabled
 #  intel-qat-plugin: intelqat=enabled
-#  intel-fpga-plugin: intelfpga=enabled
 
 # SYSTEM APPLICATIONS
 # ===================
