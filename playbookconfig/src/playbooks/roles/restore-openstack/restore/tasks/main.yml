@@ -161,7 +161,7 @@
   - name: Extract MariaDB data to backup directory
     command: >-
       tar -C {{ backup_dir }}/mariadb -xpf {{ target_backup_dir }}/{{ backup_filename }}
-      --transform='s,.*/,,' '*/*\.mariadb\.*'
+      --wildcards --transform='s,.*/,,' '*/*\.mariadb\.*'
     args:
       warn: false
 
