@@ -75,16 +75,16 @@
   - name: Get ifname of the existing subcloud network of controller-1
     shell: >-
       source /etc/platform/openrc; system interface-network-list controller-1 |
-      awk '$8 == {{ target_net }} { print $6 }'
+      awk '$8 == "{{ target_net }}" { print $6 }'
     register: controller_1_sc_network_if
-
-  - name: Set sc_if_c1 fact
-    set_fact:
-      sc_if_c1: "{{ controller_1_sc_network_if.stdout_lines[0] }}"
 
   - name: Fail if subcloud network interface of controller-1 is not assigned
     fail:
       msg: "No interface is assigned to {{ target_net }} on controller-1"
     when: controller_1_sc_network_if.stdout == ""
+
+  - name: Set sc_if_c1 fact
+    set_fact:
+      sc_if_c1: "{{ controller_1_sc_network_if.stdout_lines[0] }}"
 
   when: system_mode != "simplex"
