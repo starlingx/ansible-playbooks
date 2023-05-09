@@ -1,11 +1,10 @@
 ---
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 
+keystone_conf: /etc/keystone/keystone.conf
 platform_path: /opt/platform
 puppet_path: /opt/platform/puppet
-validate_keystone_passwords_script:
-  "{{ role_path }}/files/validate_keystone_passwords.sh"

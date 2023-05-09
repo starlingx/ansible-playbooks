@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2022 Wind River Systems, Inc.
+# Copyright (c) 2021-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -10,12 +10,21 @@
 #   restarts these services
 #
 
+- name: Gather facts of keystone.conf
+  stat:
+    path: "{{ keystone_conf }}"
+  register: keystone_conf_facts
+
 - name: Backup keystone config
-  command: "cp /etc/keystone/keystone.conf /tmp/keystone.conf"
+  copy:
+    src: "{{ keystone_conf }}"
+    dest: "/tmp/keystone.conf"
+    mode: preserve
+    remote_src: yes
 
 - name: Temporarily disable lockout in keystone
   lineinfile:
-    path: "/etc/keystone/keystone.conf"
+    path: "{{ keystone_conf }}"
     regexp: "^{{ item }}"
     state: absent
   loop:
@@ -32,7 +41,18 @@
   import_tasks: migrate_keystone_ids.yml
 
 - name: Restore keystone original config
-  command: "mv /tmp/keystone.conf /etc/keystone/keystone.conf"
+  copy:
+    src: "/tmp/keystone.conf"
+    dest: "{{ keystone_conf }}"
+    owner: "{{ keystone_conf_facts.stat.uid }}"
+    group: "{{ keystone_conf_facts.stat.gid }}"
+    mode: preserve
+    remote_src: yes
+
+- name: Remove backup keystone config
+  file:
+    path: "/tmp/keystone.conf"
+    state: absent
 
 - name: Restart keystone service post config update
   import_tasks: restart_keystone.yml
