@@ -104,6 +104,12 @@
       args:
         warn: false
 
+    # Conversion of provider value in Duplex Set-up and has no effect in AIO-SX
+    - name: Replace controller-0 to controller-1 in ldap configuration
+      command: >-
+        sed -i 's/controller-0/controller-1/'
+        {{ldap_schema_path}}/cn=config/olcDatabase={1}mdb.ldif
+
     - name: Restore ldap
       command: "slapadd -F {{ ldap_schema_path }} -l {{ staging_dir }}/ldap.db"
       register: slapadd_result
