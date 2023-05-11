@@ -714,6 +714,26 @@
       filename. Refer to the branding section of the documentation.
   when: find_result.matched > 0
 
+- name: Check if bootstrap registry filesystem exists
+  stat:
+    path: "{{ bootstrap_registry_filesystem_fqpn }}"
+  register: bootstrap_registry_filesystem_stat
+  when: bootstrap_registry_filesystem_fqpn is not none
+
+- block:
+    - name: Ensure bootstrap registry filesystem exists
+      fail:
+        msg: >-
+          Bootstrap registry filesystem did not exist: {{ bootstrap_registry_filesystem_fqpn }}
+      when: not bootstrap_registry_filesystem_stat.stat.exists
+
+    - name: Enable populating registry filesystem
+      set_fact:
+        bootstrap_registry_filesystem: true
+
+  when: bootstrap_registry_filesystem_stat is not skipped
+
+
 - name: Mark environment as Ansible bootstrap
   file:
     path: /var/run/.ansible_bootstrap

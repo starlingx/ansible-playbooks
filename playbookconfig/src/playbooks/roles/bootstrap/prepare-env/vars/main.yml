@@ -82,3 +82,7 @@ kubelet_configurations_defaults:
 
 # SSL certs configuration
 ca_cert_dir: "/etc/pki/ca-trust/source/anchors"
+
+# Registry filesystem
+bootstrap_registry_filesystem: false
+bootstrap_registry_filesystem_fqpn: null
