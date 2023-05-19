@@ -1,0 +1,24 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is used to prestage patches. If the prestage source is remote,
+#   the patches will be copied from system controller, otherwise, they will
+#   be copied from the subcloud itself.
+
+- name: Ensure patches metadata directory is set up
+  file:
+    path: "{{ patches_prestage_dir }}/metadata"
+    state: directory
+    owner: root
+    mode: 0755
+
+- name: Prestage patch packages and repodata
+  include_tasks: prestage-patch-sw-packages.yml
+  when: prestage_os_type == 'centos'
+
+- name: Prestage patch metadata
+  import_tasks: prestage-patch-metadata.yml

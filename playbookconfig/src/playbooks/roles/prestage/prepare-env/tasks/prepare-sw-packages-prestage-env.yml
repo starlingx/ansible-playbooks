@@ -1,0 +1,150 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   These tasks are used to prepare environment on the target host for
+#   packages/ostree_repo prestaging.
+#
+
+- block:
+  - name: Set prestage os type (for release lower than 22.12)
+    set_fact:
+      prestage_os_type: "centos"
+
+  - name: Set feed and patch directories to /www/pages/... (Centos and local source)
+    set_fact:
+      release_feed: "/www/pages/feed/rel-{{ prestage_software_version }}"
+      host_patch_repo: "/www/pages/updates/rel-{{ prestage_software_version }}"
+    when: prestage_source == 'local'
+
+  - name: Set feed and patch directories to /var/www/pages/... (Centos and remote source)
+    set_fact:
+      release_feed: "/var/www/pages/feed/rel-{{ prestage_software_version }}"
+      host_patch_repo: "/var/www/pages/updates/rel-{{ prestage_software_version }}"
+    when: prestage_source == 'remote'
+  when: prestage_software_version is version("22.12", '<')
+
+- name: Set the feed directory to /var/www/pages/feed (Debian)
+  set_fact:
+    prestage_os_type: "debian"
+    release_feed: "/var/www/pages/feed/rel-{{ prestage_software_version }}"
+  when: prestage_software_version is version("22.12", '>=')
+
+- name: Prepare prestage packages for Centos
+  block:
+  - name: Set the sources of software packages and repodata
+    set_fact:
+      packages_release_feed: "{{ release_feed }}/Packages"
+      repodata_release_feed: "{{ release_feed }}/repodata"
+
+  - block:
+    - name: Get the stats of local packages and repodata sources
+      stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ packages_release_feed }}"
+        - "{{ repodata_release_feed }}"
+      register: release_feed_stats_local
+
+    - name: Fail if local packages or repodata source(s) does not exist
+      fail:
+        msg: "Directory {{ local_source.item }} does not exist on {{ inventory_hostname }}."
+      when: not local_source.stat.exists
+      loop: "{{ release_feed_stats_local.results }}"
+      loop_control:
+        loop_var: local_source
+
+    - name: Check if {{ host_patch_repo }} exists on {{ inventory_hostname }}
+      stat:
+        path: "{{ host_patch_repo }}"
+      register: host_patch_dir_result
+
+    - name: Set flag to indicate if the host patches exist
+      set_fact:
+        host_patches_exist: "{{ host_patch_dir_result.stat.exists }}"
+      when: host_patch_dir_result is not skipped
+    when: prestage_source == 'local'
+
+  - block:
+    - name: Get the stats of remote packages and repodata sources
+      stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ packages_release_feed }}"
+        - "{{ repodata_release_feed }}"
+      register: release_feed_stats_remote
+      delegate_to: localhost
+
+    - name: Fail if remote packages or repodata source(s) does not exist
+      fail:
+        msg: "Directory {{ local_source.item }} does not exist on the system controller."
+      when: not remote_source.stat.exists
+      loop: "{{ release_feed_stats_remote.results }}"
+      loop_control:
+        loop_var: remote_source
+
+    - name: Check if {{ host_patch_repo }} exists on the system controller
+      stat:
+        path: "{{ host_patch_repo }}"
+      register: host_patch_dir_result
+      delegate_to: localhost
+
+    - name: Set flag to indicate if the host patches exist
+      set_fact:
+        host_patches_exist: "{{ host_patch_dir_result.stat.exists }}"
+      when: host_patch_dir_result is not skipped
+    when: prestage_source == 'remote'
+  when: prestage_os_type == 'centos'
+
+- name: Prepare prestage ostree_repo for Debian
+  block:
+  - name: Set the source of ostree_repo
+    set_fact:
+      ostree_repo_release_feed: "{{ release_feed }}/ostree_repo"
+
+  - block:
+    - name: Check if {{ host_patch_metadata_dir }} exists on {{ inventory_hostname }}
+      stat:
+        path: "{{ host_patch_metadata_dir }}"
+      register: host_patch_dir_result
+
+    - name: Set flag to indicate if the host patches exist
+      set_fact:
+        host_patches_exist: "{{ host_patch_dir_result.stat.exists }}"
+      when: host_patch_dir_result is not skipped
+    when: prestage_source == 'local'
+
+  - block:
+    - name: Get the stats of remote ostree_repo source
+      stat:
+        path: "{{ ostree_repo_release_feed }}"
+      register: ostree_repo_release_feed_remote
+      delegate_to: localhost
+
+    - name: Fail if remote ostree_repo source does not exist
+      fail:
+        msg: "Directory {{ ostree_repo_release_feed }} does not exist on the system controller."
+      when: not ostree_repo_release_feed_remote.stat.exists
+
+    - name: Check if {{ host_patch_metadata_dir }} exists on the system controller
+      stat:
+        path: "{{ host_patch_metadata_dir }}"
+      register: host_patch_dir_result
+      delegate_to: localhost
+
+    - name: Set flag to indicate if the host patches exist
+      set_fact:
+        host_patches_exist: "{{ host_patch_dir_result.stat.exists }}"
+      when: host_patch_dir_result is not skipped
+    when: prestage_source == 'remote'
+  when: prestage_os_type == 'debian'
+
+- debug:
+    msg: |
+      Prestaging type: {{ prestage_type }}
+      Prestaging source: {{ prestage_source }}
+      Prestaging os type: {{ prestage_os_type }}
+      Release feed directory (on target): {{ release_feed|default('N/A') }}

@@ -16,7 +16,8 @@
 
 - set_fact:
     supported_release_versions: "{{ supported_release_versions + [ install_release_version ] }}"
-  when: install_release_version is defined
+  when: (install_release_version is defined) and
+        (install_release_version not in supported_release_versions)
 
 - name: Gather facts if check_bootstrap_address is turned on
   setup:

@@ -1,0 +1,92 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is used to perform the copy of software packages and repodata
+#   from the release feed (/www/pages/feed/rel-<release>) to the prestage
+#   directory (/opt/platform-backup/<release>).
+#
+#   If the prestage request release is the same as the software version of
+#   the subcloud, the source will be the local release feed. Otherwise,
+#   the source will be the release feed on the system controller.
+#
+#   This role is specifically for Centos releases.
+#
+
+- name: Set Packages and repodata prestage directories
+  set_fact:
+    packages_prestage_dir: "{{ prestage_dir }}/Packages"
+    repodata_prestage_dir: "{{ prestage_dir }}/repodata"
+
+- name: Ensure Packages and repodata prestage directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    mode: 0755
+  with_items:
+    - "{{ packages_prestage_dir }}"
+    - "{{ repodata_prestage_dir }}"
+
+- block:
+  # Using shell command rsync is way faster than Ansible copy module for local copy
+  # of large number of files.
+  - name: Copy software packages from local release feed to prestage directory
+    command: rsync -ap --delete {{ release_feed }}/Packages/ {{ packages_prestage_dir }}/
+
+  - name: Copy repodata from local release feed to prestage directory
+    command: rsync -ap --delete {{ release_feed }}/repodata/ {{ repodata_prestage_dir }}/
+
+  when: prestage_source == 'local'
+
+- block:
+  # It's necessary to temporarily change the owner to sysadmin so that
+  # the system controller can push the files to the subcloud, since the files
+  # are in the folders only the root can access but the synchronize only
+  # support passwordless sysadmin to execute ssh and rsync.
+  - name: Temporarily change the ownership of packages and repodata prestage directories on {{ inventory_hostname }}
+    file:
+      path: "{{ item }}"
+      state: directory
+      owner: sysadmin
+      recurse: yes
+    with_items:
+      - "{{ packages_prestage_dir }}"
+      - "{{ repodata_prestage_dir }}"
+
+  - name: Transfer packages from the system controller
+    synchronize:
+      mode: push
+      src: "{{ release_feed }}/Packages/"
+      dest: "{{ packages_prestage_dir }}/"
+      rsync_opts: "--delete"
+    register: packages_transfer
+    retries: 3
+    delay: 2
+    until: packages_transfer.rc == 0
+
+  - name: Transfer repodata from the system controller
+    synchronize:
+      mode: push
+      src: "{{ release_feed }}/repodata/"
+      dest: "{{ repodata_prestage_dir }}/"
+      rsync_opts: "--delete"
+    register: repodata_transfer
+    retries: 3
+    delay: 2
+    until: repodata_transfer.rc == 0
+
+  - name: Restore the ownership of packages and repodata prestage directories on {{ inventory_hostname }}
+    file:
+      path: "{{ item }}"
+      state: directory
+      owner: root
+      recurse: yes
+    with_items:
+      - "{{ packages_prestage_dir }}"
+      - "{{ repodata_prestage_dir }}"
+
+  when: prestage_source == 'remote'
