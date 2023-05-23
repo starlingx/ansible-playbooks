@@ -149,21 +149,6 @@
     kubectl --kubeconfig=/etc/kubernetes/admin.conf scale deployment
     -n kube-system coredns --replicas={{ coredns_get_replicas.stdout }}
 
-# Because we restored etcd, all pods will marked as in a good state even though
-# we've just restored the system.  Deleting the pods and allowing them
-# to be recreated ensures they are actually in a good state.
-- name: Delete on pods on controller-0
-  command: >
-    kubectl delete pods
-    --kubeconfig=/etc/kubernetes/admin.conf
-    --all-namespaces
-    --field-selector spec.nodeName=controller-0
-
-# TODO(jkraitbe): Make into check
-- name: Wait for 30 seconds for resources to be initialized
-  wait_for:
-    timeout: 30
-
 - name: Override async parameters
   set_fact:
     async_timeout: 120
