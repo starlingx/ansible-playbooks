@@ -20,7 +20,9 @@
     shell: cat /tmp/ca.crt /tmp/ca.key > /tmp/ca.pem
 
   - name: Create rootca update strategy
-    shell: source /etc/platform/openrc; sw-manager kube-rootca-update-strategy create --cert-file /tmp/ca.pem
+    shell: |
+      source /etc/platform/openrc
+      sw-manager kube-rootca-update-strategy create --alarm-restrictions relaxed --cert-file /tmp/ca.pem
     register: check_vim_strategy
     failed_when: check_vim_strategy.stdout is not search('strategy already exists') and
                  check_vim_strategy.stdout is not search('build')
@@ -32,7 +34,9 @@
         sw-manager {{ check_vim_strategy.stdout.split('type:')[1].replace('sw-', '') }}-strategy delete
 
     - name: Try to create rootca update strategy for a second time
-      shell: source /etc/platform/openrc; sw-manager kube-rootca-update-strategy  create --cert-file /tmp/ca.pem
+      shell: |
+        source /etc/platform/openrc
+        sw-manager kube-rootca-update-strategy  create --alarm-restrictions relaxed --cert-file /tmp/ca.pem
     when: check_vim_strategy.stdout is search('strategy already exists')
 
   - name: Check if strategy is ready to apply
