@@ -118,38 +118,60 @@
       mv -f {{ target_backup_dir }}/{{ (search_result.stdout_lines[0] | basename) }}
       {{ target_backup_dir }}/{{ override_filename }}
 
+  - name: Merge restore overrides
+    block:
+      - name: Read overrides from backup
+        command:
+          cmd: "cat {{ target_backup_dir }}/{{ override_filename }}"
+        register: original_overrides
+
+      - name: Merge new restore overrides
+        set_fact:
+          merged_overrides: >
+            {{
+              original_overrides.stdout
+              | from_yaml
+              | combine(restore_overrides, recursive=recursive)
+              | to_nice_yaml
+            }}
+        vars:
+          recursive: "{{ restore_overrides_recursive|bool }}"
+
+      - name: Write merged restored overrides
+        copy:
+          content: "{{ merged_overrides }}"
+          dest: "{{ target_backup_dir }}/{{ override_filename }}"
+
+    when: restore_overrides
+
   - name: Load override data (local execution)
     include_vars: "{{ target_backup_dir }}/{{ override_filename }}"
     when: inventory_hostname == "localhost"
 
   - block:
-    - name: Create a temporary file
-      tempfile:
-        state: file
-      register: host_override_tmp_file
+      - name: Create a temporary file
+        tempfile:
+          state: file
+        register: host_override_tmp_file
+        delegate_to: localhost
+        become: no
 
-    - name: Fetch override file to temp file to Ansible control host
-      fetch:
-        src: "{{ target_backup_dir }}/{{ override_filename }}"
-        dest: "{{ host_override_tmp_file.path }}"
-        flat: yes
+      - name: Fetch override file to temp file to Ansible control host
+        fetch:
+          src: "{{ target_backup_dir }}/{{ override_filename }}"
+          dest: "{{ host_override_tmp_file.path }}"
+          flat: yes
 
-    - name: Load override data (remote execution)
-      include_vars: "{{ host_override_tmp_file.path }}"
+      - name: Load override data (remote execution)
+        include_vars: "{{ host_override_tmp_file.path }}"
 
-    - name: Remove override temp file on target
-      file:
-        path: "{{ host_override_tmp_file.path }}"
-        state: absent
-      delegate_to: "{{ inventory_hostname }}"
+      - name: Remove override temp file on Ansible control host
+        file:
+          path: "{{ host_override_tmp_file.path }}"
+          state: absent
+        delegate_to: localhost
+        become: no
 
-    - name: Remove override temp file on Ansible control host
-      file:
-        path: "{{ host_override_tmp_file.path }}"
-        state: absent
-      delegate_to: localhost
-      # In case the ansible user does not have sudo privilege on Ansible control machine
-      become: no
     when: inventory_hostname != "localhost"
 
   - name: Create {{ restore_in_progress_flag }} flag file
