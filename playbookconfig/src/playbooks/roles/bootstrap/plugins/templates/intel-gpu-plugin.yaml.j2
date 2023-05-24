@@ -1,18 +1,19 @@
 # Intel GPU  device plugin
 # Based on:
-# https://github.com/intel/intel-device-plugins-for-kubernetes/blob/master/deployments/gpu_plugin/gpu_plugin.yaml
+# https://github.com/intel/intel-device-plugins-for-kubernetes/blob/main/deployments/gpu_plugin/base/intel-gpu-plugin.yaml
 #
 # The following modifications have been made:
 #  - A nodeSelector of 'intelgpu' has been added to ensure the gpu device plugin
 #   pods only run on appropriately labelled nodes.
 #  - The daemonset is modified to tolerate all NoSchedule taints
-
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: intel-device-plugin
   namespace: kube-system
+imagePullSecrets:
+  - name: registry-local-secret
 
 ---
 apiVersion: apps/v1
@@ -32,17 +33,26 @@ spec:
         app: intel-gpu-plugin
     spec:
       nodeSelector:
+        kubernetes.io/arch: amd64
         intelgpu: enabled
-        {% if  system_mode  != "simplex" -%}
-        openstack-compute-node: enabled
-        {%- endif %}
-
       tolerations:
       - operator: Exists
         effect: NoSchedule
       serviceAccountName: intel-device-plugin
       imagePullSecrets:
-        - name: docker-registry-secret
+        - name: registry-local-secret
+      initContainers:
+      - name: intel-gpu-initcontainer
+        image: "{{ local_registry }}/{{ intel_gpu_initcontainer_img }}"
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          seLinuxOptions:
+            type: "container_device_plugin_init_t"
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        volumeMounts:
+        - mountPath: /etc/kubernetes/node-feature-discovery/source.d/
+          name: nfd-features
       containers:
       - name: intel-gpu-plugin
         env:
@@ -50,15 +60,24 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: spec.nodeName
-        image: "{{ docker_registry.url }}/starlingx/intel-gpu-plugin:stx.3.0-v0.11.0-103-g4f28657"
+          - name: HOST_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+        image: "{{ local_registry }}/{{ intel_gpu_plugin_img }}"
         imagePullPolicy: IfNotPresent
         securityContext:
+          seLinuxOptions:
+            type: "container_device_plugin_t"
           readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
         volumeMounts:
         - name: devfs
           mountPath: /dev
+          readOnly: true
         - name: sysfs
           mountPath: /sys
+          readOnly: true
         - name: kubeletsockets
           mountPath: /var/lib/kubelet/device-plugins
       volumes:
@@ -71,3 +90,7 @@ spec:
       - name: kubeletsockets
         hostPath:
           path: /var/lib/kubelet/device-plugins
+      - name: nfd-features
+        hostPath:
+          path: /etc/kubernetes/node-feature-discovery/source.d/
+          type: DirectoryOrCreate
