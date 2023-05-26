@@ -144,10 +144,16 @@
   systemd:
     name: lighttpd
     state: stopped
+  retries: 3
+  delay: 15
 
 - name: Disable lighttpd
   # Systemd module does not support disabled state. Resort to command
   command: systemctl disable lighttpd
+
+- name: Verify systemctl running without timeout
+  import_role:
+    name: common/verify-systemctl-running
 
 - name: Bind mount on {{ target_helm_bind_dir }}
   # Due to deficiency of mount module, resort to command for now
@@ -158,10 +164,27 @@
 - name: Enable lighttpd
   command: systemctl enable lighttpd
 
+- name: Verify systemctl running without timeout
+  import_role:
+    name: common/verify-systemctl-running
+
 - name: Restart lighttpd for Helm
   systemd:
     name: lighttpd
     state: restarted
+  retries: 3
+  delay: 15
+
+- name: Verify systemctl running without timeout
+  import_role:
+    name: common/verify-systemctl-running
+
+- name: Start kubelet
+  systemd:
+    name: kubelet
+    state: started
+  retries: 3
+  delay: 15
 
 - name: Do helm configurations
   import_role:
