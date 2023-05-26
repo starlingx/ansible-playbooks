@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -65,7 +65,7 @@
         shell:
           cmd: |
             ifdown -a --exclude=lo {{ ' '.join(interfaces) }}
-            ifup $(ls ifcfg-* | sed 's/ifcfg-//') --ignore-errors
+            ifup $(ls ifcfg-* | sed 's/ifcfg-//') --ignore-errors --force
           chdir: /etc/network/interfaces.d/
 
       when: not networking.changed

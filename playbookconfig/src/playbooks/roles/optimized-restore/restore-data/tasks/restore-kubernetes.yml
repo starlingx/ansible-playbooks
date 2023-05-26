@@ -14,7 +14,7 @@
 - name: Get cluster host floating IP
   shell: |-
     source /etc/platform/openrc
-    system addrpool-list | grep cluster-host-subnet | cut -d'|' -f8
+    system addrpool-list --nowrap | grep cluster-host-subnet | cut -d'|' -f8
   failed_when: not cluster_vip.stdout
   register: cluster_vip
 
@@ -26,7 +26,7 @@
 - name: Check if registry.central is present in sysinv
   shell: |-
     source /etc/platform/openrc
-    system addrpool-list | grep system-controller-oam-subnet | cut -d'|' -f8
+    system addrpool-list --nowrap | grep system-controller-oam-subnet | cut -d'|' -f8
   register: sc_oam_vip
 
 - name: Add host route to registry.central if present
