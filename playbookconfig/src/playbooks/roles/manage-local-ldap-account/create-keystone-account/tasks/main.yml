@@ -80,12 +80,17 @@
 
 - name: Set array of user groups to check
   set_fact:
-    user_group_array: ['users', 'sys_protected']
+    user_group_array: ['users']
 
 - name: Update array of user groups to include root group if sudo permission is granted
   set_fact:
     user_group_array: "{{ user_group_array }} + ['root']"
   when: in_sudo_permission
+
+- name: Update array of user groups to include sys_protected group if sys_protected permission is granted
+  set_fact:
+    user_group_array: "{{ user_group_array }} + ['sys_protected']"
+  when: in_sys_protected
 
 - name: Verify LDAP user groups
   fail:
