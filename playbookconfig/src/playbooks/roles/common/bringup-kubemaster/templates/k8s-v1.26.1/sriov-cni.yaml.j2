@@ -1,0 +1,77 @@
+# SRIOV-CNI Release v2
+# Based on:
+# https://raw.githubusercontent.com/k8snetworkplumbingwg/sriov-cni/v2.7.0/images/k8s-v1.16/
+#              sriov-cni-daemonset.yaml
+#
+# This file is licensed under Apache 2.0.  You can obtain a copy of the license at:
+# https://github.com/k8snetworkplumbingwg/sriov-cni/blob/v2.7.0/LICENSE
+#
+# The following modifications have been made:
+#
+# - The daemonset is modified to tolerate all NoSchedule taints
+# - The cnibin volume hostPath is made variable
+# - An updateStrategy was added to the DaemonSet spec to allow controlled template
+#   updates of pods with "kubectl apply".
+# - The image is set to a stable starlingX version
+# - The 'imagePullPolicy: Never' is omitted
+# - For k8s 1.19, the matchLabels are the same as the k8s 1.18 labels to
+#   allow a rolling update to succeed.
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kube-sriov-cni-ds-amd64
+  namespace: kube-system
+  labels:
+    tier: node
+    app: sriov-cni
+spec:
+  selector:
+    matchLabels:
+      tier: node
+      app: sriov-cni
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        name: sriov-cni
+        tier: node
+        app: sriov-cni
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      imagePullSecrets:
+        - name: registry-local-secret
+      containers:
+      - name: kube-sriov-cni
+        image: "{{ local_registry }}/{{ sriov_cni_img }}"
+        securityContext:
+          allowPrivilegeEscalation: false
+          privileged: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        resources:
+          requests:
+            memory: "50Mi"
+          limits:
+            memory: "50Mi"
+        volumeMounts:
+        - name: cnibin
+          mountPath: /host/opt/cni/bin
+      volumes:
+        - name: cnibin
+          hostPath:
+            path: {{ kubelet_cni_bin_dir }}
