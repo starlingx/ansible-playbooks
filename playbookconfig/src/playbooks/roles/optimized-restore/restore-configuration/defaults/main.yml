@@ -40,7 +40,6 @@ restore_items:
   - etc/ssl
   - etc/sysctl.d
   - etc/sysinv
-  - var/lib/kubelet
   - opt/patching
   - opt/platform
   - opt/extension
