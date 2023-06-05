@@ -174,7 +174,7 @@
 
 - name: Set taint configuration for non-AIO systems
   set_fact:
-    kubelet_taints: "[{key: 'node-role.kubernetes.io/master', effect: 'NoSchedule'}]"
+    kubelet_taints: "[{key: 'node-role.kubernetes.io/control-plane', effect: 'NoSchedule'}]"
   when: system_type != 'All-in-one'
 
 - name: Create Kube admin yaml
