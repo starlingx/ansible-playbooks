@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020 Wind River Systems, Inc.
+# Copyright (c) 2020-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -91,21 +91,27 @@
         trident_force_reinstall
 
 # Configure NetApp backends
-- name: Configure backends
-  include: configure-backend.yml
-  with_items: "{{ vault_netapp_backends | default(netapp_backends) }}"
+- name: Configure tbc secret
+  include_tasks: configure-trident-backend-config-secret.yml
+  with_items: "{{ tbc_secret }}"
+  loop_control:
+    loop_var: backend_secret
+
+- name: Configure tbc backends
+  include_tasks: configure-trident-backend-config.yml
+  with_items: "{{ netapp_backends }}"
   loop_control:
     loop_var: backend
 
 - name: Configure kubernetes storage classes
-  include: configure-storage-classes.yml
+  include_tasks: configure-storage-classes.yml
   with_items: "{{ netapp_k8s_storageclasses }}"
   loop_control:
     loop_var: storage_class
 
 - name: Configure kubernetes snapshot storage classes
-  include: configure-snapshot-storage-classes.yml
-  with_items: "{{ netapp_k8s_snapshotstorageclasses | default([]) }}"
+  include_tasks: configure-snapshot-storage-classes.yml
+  with_items: "{{ netapp_k8s_snapshotstorageclasses }}"
   loop_control:
     loop_var: snapshot_storage_class
 

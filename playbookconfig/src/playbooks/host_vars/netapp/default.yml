@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020 Wind River Systems, Inc.
+# Copyright (c) 2020-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -129,13 +129,26 @@ netapp_k8s_snapshotstorageclasses:
     driver: csi.trident.netapp.io
     deletionPolicy: Delete
 
-netapp_backends:
-  - version: 1
-    storageDriverName: "ontap-nas"     # should be the same as storageclass.parameters.backendType
-    backendName: "nas-backend"
-    managementLIF: "10.0.0.1"
-    dataLIF: "10.0.0.2"
-    svm: "svm_nfs"
-    username: "admin"
-    password: "secret"
-    # nfsMountOptions: "nfsvers=4"
+# The code below must be overrided in a local yaml file for installation to be successful.
+# It is kept here just for the purpose of serving as a template.
+#
+# netapp_backends:
+#   - metadata:
+#       name: backend-tbc
+#     spec:
+#       version: 1
+#       storageDriverName: "ontap-nas"
+#       backendName: "nas-backend"
+#       managementLIF: "10.0.0.1"
+#       dataLIF: "10.0.0.2"
+#       svm: "svm_nfs"
+#       credentials:
+#         name: backend-tbc-secret
+
+# tbc_secret:
+#   - metadata:
+#       name: backend-tbc-secret
+#     type: Opaque
+#     stringData:
+#       username: "admin"
+#       password: "secret"
