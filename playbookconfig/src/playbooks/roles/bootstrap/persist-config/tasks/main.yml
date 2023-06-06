@@ -30,6 +30,18 @@
     when: tmp_keyring.stat.exists
   when: save_password
 
+# Need to wait until keyring data is persisted before allowing the
+# subcloud to be aborted again, since the puppet bootstrap manifest
+# is only aplied at the initial play. If aborting before this, it
+# won't be possible to source the openrc credentials and the subcloud
+# would need to be reinstalled.
+- name: Remove unabortable flag for {{ inventory_hostname }}
+  file:
+    path: "{{ override_files_dir }}/.{{ inventory_hostname }}_deploy_not_abortable"
+    state: absent
+  when: distributed_cloud_role  == 'subcloud'
+  delegate_to: localhost
+
 - name: Ensure replicated config parent directories exist
   file:
     path: "{{ item.path }}"
