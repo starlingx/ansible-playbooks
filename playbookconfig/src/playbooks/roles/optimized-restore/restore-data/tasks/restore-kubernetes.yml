@@ -71,7 +71,7 @@
 
 - name: Restore var/lib/kublet from the backup
   command:
-    cmd: "tar --use-compress-program=pigz -xpf '{{ platform_backup_fqpn }}' var/lib/kubelet -C /"
+    cmd: "tar --use-compress-program=pigz -C / -xpf '{{ platform_backup_fqpn }}' var/lib/kubelet"
   args:
     warn: false
   when: kubelet_backup_found.rc == 0
@@ -170,32 +170,6 @@
   command: >-
     kubectl --kubeconfig=/etc/kubernetes/admin.conf scale deployment
     -n kube-system coredns --replicas={{ coredns_get_replicas.stdout }}
-
-- name: Delete all pods if var/lib/kubelet was not in the backup to recreate volumes
-  block:
-    # Because we restored etcd, all pods will marked as in a good state even though
-    # we've just restored the system.  Deleting the pods and allowing them
-    # to be recreated ensures they are actually in a good state.
-    - name: Delete all pods on controller-0
-      command: >
-        kubectl delete pods
-        --kubeconfig=/etc/kubernetes/admin.conf
-        --all-namespaces
-        --field-selector spec.nodeName=controller-0
-
-    - name: Wait for deleted pods to be recreated but not ready
-      command: >
-        kubectl get pods
-        --kubeconfig=/etc/kubernetes/admin.conf
-        --namespace=kube-system
-        --selector {{ item | quote}}
-      retries: 10
-      delay: 1
-      until: "'No resources found' not in pod_recreated.stdout"
-      loop: "{{ kube_component_list }}"
-      register: pod_recreated
-
-  when: kubelet_backup_found.rc != 0
 
 - name: Override async parameters
   set_fact:
