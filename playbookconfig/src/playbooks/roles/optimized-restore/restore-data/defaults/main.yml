@@ -7,3 +7,7 @@ docker_services:
 
 # Used to remove containerd corruption after first boot
 remove_containerd_pods_flag: /etc/platform/.remove_containerd_pods
+
+# If set, all images that were present in the local cache from registry.local
+# will be redownloaded during restore playbook.
+restore_original_images: true

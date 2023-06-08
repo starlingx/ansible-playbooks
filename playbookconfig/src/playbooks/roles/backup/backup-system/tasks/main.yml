@@ -109,6 +109,21 @@
         state: directory
       register: tempdir
 
+    - name: Create a list for cached local registry images
+      set_fact:
+        system_image_list_path: "{{ tempdir.path }}/system_image_list.txt"
+
+    - name: Save cached local registry images currently on the system to list
+      shell:
+        cmd: >
+          crictl image ls
+          | tail -n +2
+          | awk '/registry.local:9001/ {print $1":"$2}'
+          | sed 's$registry.local:9001/$$'
+          | uniq
+          | sort
+          > '{{ system_image_list_path }}'
+
     - name: Create postgres temp dir
       file:
         path: "{{ tempdir.path }}/postgres"
@@ -577,7 +592,8 @@
           postgres_dir.path,
           ldap_db_backup_,
           crushmap_file_,
-          ceph_conf_ctrl_0_
+          ceph_conf_ctrl_0_,
+          system_image_list_path,
         ]) | reject('equalto', '') | list }}"  # rejecting vars that might be empty
       vars:
         crushmap_file_: "{{ crushmap_file | default(\"\") }}"

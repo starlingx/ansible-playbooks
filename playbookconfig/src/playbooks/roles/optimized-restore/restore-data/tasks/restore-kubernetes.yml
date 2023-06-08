@@ -55,6 +55,32 @@
     name: containerd
     state: restarted
 
+
+- name: Add original system images to download list
+  block:
+    # During backup, a snapshot of all the images in containerd cache
+    # tagged for registry.local was taken.  We want to ensure that all those
+    # images are redownloaded before running unlock after this playbook.
+    # Image downloads for application re-applies shortly after
+    # the host unlock impose a significant performance cost.
+    - name: Attempt to read original image list from backup
+      command:
+        cmd: >
+          tar --wildcards --use-compress-program=pigz -O -xf
+          {{ platform_backup_fqpn | quote }} 'opt/platform-backup/*/system_image_list.txt'
+      args:
+        warn: false
+      failed_when: false
+      register: system_image_list
+
+    - name: Add original images to additional download list if found
+      set_fact:
+        additional_local_registry_images: >
+          {{ (additional_local_registry_images + system_image_list.stdout_lines) | unique }}
+      when: system_image_list.rc == 0
+
+  when: restore_original_images|bool
+
 # Running push-docker-images and bringup-kubemaster increases playbook time,
 # but it decreases unlock time by around the same amount.
 - name: Populate local image registry
