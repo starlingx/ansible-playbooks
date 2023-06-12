@@ -1,5 +1,5 @@
 ---
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -20,19 +20,7 @@
 #
 # The inventory file contains the password of system controller
 # Do not add any subclouds to the inventory file. The list of subclouds
-# will be dynamically added to the inventory by the playbook itself. To access,
-# the subclouds, the system controller for that subcloud will be used as a jump
-# host and the subcloud's ansible_ssh_common_args variable is set to allow
-# this. This ansible_ssh_common_args variable requires access to the
-# variables (for connecting to the system controller), which requires these
-# parameters to be explicitly supplied through the inventory or passed down
-# through the --extra-vars parameter. Specifying --ask-pass and --user will
-# NOT work in these instances.
-#
-# A special caveat of using the system controller as a jump host is that the
-# /etc/ssh/sshd_config file must have AllowTcpForwarding set to yes. This
-# playbook enables this option while the user account creation is progressing
-# and disables it when complete.
+# will be dynamically added to the inventory by the playbook itself.
 #
 # Example to add user 'na-admin' (mode=create is default):
 #   ansible-playbook --inventory inventory --extra-vars='user_id=na-admin' \
@@ -140,19 +128,6 @@
     ssh_internal_args: -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no
 
   tasks:
-    - name: Enable AllowTcpForwarding setting in ssh config
-      lineinfile:
-        regexp: ^[ \t]*AllowTcpForwarding([ \t]+.*)$
-        line: AllowTcpForwarding yes
-        dest: /etc/ssh/sshd_config
-        validate: sshd -t -f %s
-      notify:
-      - reload sshd
-      become: yes
-      when: ('systemcontroller' in group_names)
-
-    - meta: flush_handlers
-
     - name: Manage keystone user {{ in_user_id }}
       block:
       - include_role:
@@ -162,22 +137,3 @@
       - include_role:
           name: manage-local-ldap-account/delete-keystone-account
         when: in_mode == 'delete'
-
-      always:
-      - name: Disable AllowTcpForwarding setting in ssh config
-        lineinfile:
-          regexp: ^[ \t]*AllowTcpForwarding([ \t]+.*)$
-          line: AllowTcpForwarding no
-          dest: /etc/ssh/sshd_config
-          validate: sshd -t -f %s
-        notify:
-        - reload sshd
-        when: ('systemcontroller' in group_names)
-        become: yes
-
-  handlers:
-    - name: reload sshd
-      service:
-        name: sshd
-        state: reloaded
-      become: true

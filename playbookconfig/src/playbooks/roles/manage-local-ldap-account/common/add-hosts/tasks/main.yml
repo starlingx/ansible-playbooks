@@ -1,5 +1,5 @@
 ---
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -11,8 +11,6 @@
     groups: "subclouds"
     in_user_id: "{{ in_user_id }}"
     ssh_internal_args: "{{ ssh_internal_args }}"
-    ansible_ssh_common_args:
-      '-o ProxyCommand="sshpass -p {{ ansible_password }} ssh -W [%h]:%p -q {{ ansible_user }}@{{ ansible_host }}"'
     in_sudo_permission: "{{ in_sudo_permission }}"
     in_sys_protected: "{{ in_sys_protected }}"
     in_mode: "{{ in_mode }}"
