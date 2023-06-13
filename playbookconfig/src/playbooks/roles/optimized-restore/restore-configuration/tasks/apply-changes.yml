@@ -11,10 +11,15 @@
 - name: Update kernel parameters for iptables
   command: sysctl --system &>/dev/null
 
-- name: Update boot loader configuration
-  command: "{{ grub_mkconfig }} -o /boot/grub2/grub.cfg"
-  vars:
-    grub_mkconfig: "{{ 'grub2-mkconfig' if os_release == 'centos' else 'grub-mkconfig' }}"
+# The grub.cfg used during the first boot is /boot/grub2/grub.cfg.
+# After the first boot, the grub.cfg becomes /boot/efi/EFI/BOOT/grub.cfg.
+# Instead of using grub-install to change now, we copy the config
+# And use it from the temporary location for first boot.
+- name: Create temporary bootloader configuration
+  copy:
+    src: /boot/efi/EFI/BOOT/grub.cfg
+    dest: /boot/grub2/grub.cfg
+    remote_src: true
 
 - name: Create a symlink to PXE config files
   file:
