@@ -67,7 +67,7 @@
       command:
         cmd: >
           tar --wildcards --use-compress-program=pigz -O -xf
-          {{ platform_backup_fqpn | quote }} 'opt/platform-backup/*/system_image_list.txt'
+          {{ platform_backup_fqpn | quote }} 'opt/*/system_image_list.txt'
       args:
         warn: false
       failed_when: false
