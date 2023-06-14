@@ -10,72 +10,35 @@
 #   completing a typical bootstrapping, so that unlocking can
 #   be performed immediately after optimized restore is complete.
 
-# Bring up networking, meant to replicate state during bootstrapping
-- name: Restore networking
+- name: Remove network configuration files
+  file:
+    path: "{{ network_scripts_location }}"
+    state: absent
+
+- name: Restore network configuration files
+  command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite {{ network_scripts_location.lstrip('/') }}"
+
+- name: Bring up original networking
+  shell:
+    cmd: |
+      ifup $(ls ifcfg-* | sed 's/ifcfg-//') --ignore-errors --force
+    chdir: /etc/network/interfaces.d/
+  async: 60
+  poll: 5
+
+- name: Bring up temporary addresses
   block:
-    - name: Remove network configuration files
-      file:
-        path: "{{ network_scripts_location }}"
-        state: absent
+    - name: Lookup controller host addresses
+      shell: "grep -E '{{ '|'.join(temporary_address_names) }}' /etc/hosts | awk '{print $1}'"
+      register: host_addresses
 
-    - name: Restore network configuration files
-      command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite {{ network_scripts_location.lstrip('/') }}"
-
-    # Ideally, networking is restored by restarting networking service.
-    # But, this is not guaranteed to work on all systems depending on configuration.
-    - name: Restore original networking using service
-      systemd:
-        name: networking
-        state: restarted
-      register: networking
+    - name: Check if host address is up
+      shell: "ping {{ item }} -c1 -w5 | grep ' 0% packet loss'"
       failed_when: false
+      loop: "{{ host_addresses.stdout_lines }}"
+      register: checked_addresses
 
-    # If networking service could not be restarted do it this way instead.
-    # This restarts networking in a way that ignores failures that would have
-    # occurred while attempting to restart the service.
-    - block:
-      - name: Get IPv4 default gateways
-        shell: >
-          ip -4 route show default
-          | grep -oE 'dev [0-9a-z]+'
-          | awk '{print "--exclude=" $2}'
-        register: ipv4_route
-
-      # There can be multiple default routes
-      - name: Get IPv6 default gateways
-        shell: >
-          ip -6 route show default
-          | grep -oE 'dev [0-9a-z]+'
-          | awk '{print "--exclude=" $2}'
-        register: ipv6_route
-
-      - name: Extract gateway interfaces
-        set_fact:
-          interfaces: "{{
-              ipv4_route.stdout_lines + ipv6_route.stdout_lines
-              | map('trim') | reject('equalto', '')
-              | unique | list
-            }}"
-
-      # Ignore errors is used here to avoid any issues
-      # with networking interfaces that could not be produced
-      # during regular usage and testing.
-      # Interfaces will be brought up normally after unlocking.
-      - name: Bring up original networking
-        shell:
-          cmd: |
-            ifdown -a --exclude=lo {{ ' '.join(interfaces) }}
-            ifup $(ls ifcfg-* | sed 's/ifcfg-//') --ignore-errors --force
-          chdir: /etc/network/interfaces.d/
-
-      when: not networking.changed
-
-    - name: Bring up temporary addresses
-      block:
-      - name: Lookup controller host addresses
-        shell: "grep -E '{{ '|'.join(temporary_address_names) }}' /etc/hosts | awk '{print $1}'"
-        register: host_addresses
-
-      - name: Configure controller host address
-        command: "ip addr add {{ item }} dev lo scope host"
-        loop: "{{ host_addresses.stdout_lines }}"
+    - name: Configure missing controller host address
+      command: "ip addr add {{ item.item }} dev lo scope host"
+      when: item.rc != 0
+      loop: "{{ checked_addresses.results }}"
