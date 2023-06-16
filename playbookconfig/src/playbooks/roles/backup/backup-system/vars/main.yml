@@ -38,6 +38,8 @@ sysinv_permdir: "{{ platform_path }}/sysinv/{{ software_version }}"
 backup:
   targets:
     - "/etc"
+    - "/boot/1/kernel.env"
+    - "/boot/efi/EFI/BOOT/boot.env"
     - "/var/lib/kubelet"
     - "{{ config_permdir }}"
     - "{{ deploy_permdir }}"

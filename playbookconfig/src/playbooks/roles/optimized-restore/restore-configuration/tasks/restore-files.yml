@@ -15,6 +15,21 @@
   args:
     warn: false
 
+- name: Check if /boot is present in the backup
+  command:
+    cmd: "tar --use-compress-program=pigz -tf '{{ platform_backup_fqpn }}' boot/"
+  args:
+    warn: false
+  failed_when: false
+  register: boot_backup_found
+
+- name: Restore /boot from the backup
+  command:
+    cmd: "tar --use-compress-program=pigz -C / -xpf '{{ platform_backup_fqpn }}' boot/"
+  args:
+    warn: false
+  when: boot_backup_found.rc == 0
+
 - name: Check home dir for CentOS
   block:
 
