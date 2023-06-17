@@ -15,12 +15,12 @@
   roles:
     - common/prepare-env
     - common/validate-target
-    - { role: rehome-subcloud/validate-before-rehome, become: yes }
-    - { role: common/check-services-status, become: yes }
-    - { role: rehome-subcloud/prepare-env, become: yes }
-    - { role: rehome-subcloud/update-ca-cert, become: yes }
-    - { role: rehome-subcloud/update-k8s-root-ca, become: yes }
-    - { role: rehome-subcloud/update-network-config, become: yes }
-    - { role: common/update-sc-cert, become: yes }
+    - rehome-subcloud/validate-before-rehome
+    - common/check-services-status
+    - rehome-subcloud/prepare-env
+    - rehome-subcloud/update-ca-cert
+    - rehome-subcloud/update-k8s-root-ca
+    - rehome-subcloud/update-network-config
+    - common/update-sc-cert
     - { role: rehome-subcloud/update-keystone-data, become: yes }
-    - { role: common/check-services-status, become: yes }
+    - common/check-services-status

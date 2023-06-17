@@ -10,7 +10,7 @@
 
 - name: Check all services are enabled-active
   shell: >-
-    sm-dump | sed "1,/Services/d" | awk "{ print $2 }"
+    sm-dump | sed "1,/Services/d" | awk '{ print $3 }'
     | grep -v "enabled-active" | wc -l
   register: service_status_result
   until: service_status_result.stdout == "1"

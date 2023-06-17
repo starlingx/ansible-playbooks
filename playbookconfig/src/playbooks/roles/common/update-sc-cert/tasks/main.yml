@@ -13,6 +13,15 @@
   shell: START_TIME=$(date +%s); echo $START_TIME
   register: start_time
 
+# Update the certificate in the config directory to update the hieradata when
+# triggering the runtime manifest
+- name: Update DC admin endpoint root CA certificate in config permdir
+  copy:
+    dest: "{{ config_permdir }}/{{ dc_adminep_root_ca_cert }}"
+    content: "{{ dc_root_ca_cert | b64decode }}"
+    mode: 0400
+  become: yes
+
 - name: Get sc_adminep_ca_cert namespaces
   shell: >-
     kubectl --kubeconfig=/etc/kubernetes/admin.conf get namespaces |
@@ -67,6 +76,7 @@
 
 - name: Restart sysinv-conductor
   command: sm-restart service sysinv-conductor
+  become: yes
 
 - name: Check sysinv-conductor related services enabled
   shell: sm-query service '{{ item }}' | grep -c enabled-active

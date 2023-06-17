@@ -1,9 +1,10 @@
 ---
 #
-# Copyright (c) 2021-2022 Wind River Systems, Inc.
+# Copyright (c) 2021-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 
+dc_adminep_root_ca_cert: dc-adminep-root-ca.crt
 sc_adminep_ca_cert_ns: sc-cert
 sc_adminep_cert: admin-ep-cert.pem
