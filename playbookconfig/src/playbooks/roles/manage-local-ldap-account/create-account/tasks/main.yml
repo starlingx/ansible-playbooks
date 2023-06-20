@@ -3,16 +3,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Tasks to check LDAP user existence, to create LDAP users and set a new
-# initial password, and to create the home directory. If the system is
-# distributed cloud, it dynamically adds subclouds to the target host list.
+# Create LDAP user and set password.
+#
 
-- name: Check if LDAP user exists
-  shell: ldapsearch -x -LLL uid={{ in_user_id }}
-  register: in_user_id_check
-  become: yes
-
-- name: Create LDAP user only if it does not already exist
+- name: Create LDAP user
   block:
   - name: Set sudo_param if external variable sudo_permission is true
     set_fact:
@@ -30,7 +24,7 @@
 
   # In the following task, the string "LDAP Password" is found only in CentOS,
   # while the string "Current Password" is found only in Debian.
-  - name: Change LDAP user initial password and create home directory
+  - name: Change LDAP user initial password
     expect:
       command: ssh {{ ssh_internal_args }} {{ in_user_id }}@localhost
       responses:
@@ -48,7 +42,7 @@
 
   - name: Handle initial password change errors
     block:
-      - name: Delete ldap user
+      - name: Delete ldap user if initial password change was not successful
         shell: ldapdeleteuser {{ in_user_id }}
         become: yes
 
@@ -57,20 +51,3 @@
           msg: " {{ change_password.stdout }} \n\nFailed to change initial password, check the log above for more details."
 
     when: change_password.rc != 0
-  when: in_user_id_check.stdout == ""
-
-- name: Get distributed cloud role
-  include_role:
-    name: manage-local-ldap-account/common/get-distributed-role
-
-- name: Get online subclouds
-  include_role:
-    name: manage-local-ldap-account/common/get-online-subclouds
-
-- name: Populate inventory with subclouds
-  include_role:
-    name: manage-local-ldap-account/common/add-hosts
-  vars:
-    in_item: "{{ item }}"
-  loop: "{{ subcloud_list }}"
-  when: is_dc | bool
