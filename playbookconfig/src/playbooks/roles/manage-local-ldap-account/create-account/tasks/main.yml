@@ -40,8 +40,23 @@
         New password: "{{ in_user_password }}"
         new password: "{{ in_user_password }}"
         "\\~\\$": exit
-    # do not show passwords in the logs
-    no_log: true
+    # This task does not log sensitive information.
+    # Setting this to no_log: false to allow better logging and debugging
+    no_log: false
+    register: change_password
+    failed_when: false
+
+  - name: Handle initial password change errors
+    block:
+      - name: Delete ldap user
+        shell: ldapdeleteuser {{ in_user_id }}
+        become: yes
+
+      - name: Fail if initial password change was not successful
+        fail:
+          msg: " {{ change_password.stdout }} \n\nFailed to change initial password, check the log above for more details."
+
+    when: change_password.rc != 0
   when: in_user_id_check.stdout == ""
 
 - name: Get distributed cloud role
