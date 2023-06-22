@@ -77,7 +77,8 @@
       command: >-
         psql -d sysinv -c
         "copy certificate from
-        '/tmp/db.csv' with delimiter ';'"
+        '/tmp/db.csv' with delimiter ';'
+        WHERE expiry_date > NOW();"
 
     - name: Re-sync system table row count after insert ssl_ca certificates
       command: >-
