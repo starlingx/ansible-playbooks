@@ -52,3 +52,8 @@
       command: "ip addr add {{ item.item }} dev lo scope host"
       when: item.rc != 0
       loop: "{{ checked_addresses.results }}"
+
+- name: Start dnsmasq for internal FQDN
+  command: dnsmasq
+  args:
+    warn: false
