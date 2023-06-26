@@ -1,0 +1,7 @@
+---
+# Restore overrides are used to override the file in backup.
+# This can allow you to do things like changing registry credentials at restore time.
+restore_overrides: null
+
+# Strategy for merging overrides
+restore_overrides_recursive: false
