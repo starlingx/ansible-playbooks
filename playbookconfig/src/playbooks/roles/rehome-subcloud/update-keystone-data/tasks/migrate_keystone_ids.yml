@@ -78,5 +78,5 @@
     - "cert-alarm"
   register: service_status
   until: service_status.stdout == '1'
-  retries: 10
-  delay: 10
+  retries: 20
+  delay: 15

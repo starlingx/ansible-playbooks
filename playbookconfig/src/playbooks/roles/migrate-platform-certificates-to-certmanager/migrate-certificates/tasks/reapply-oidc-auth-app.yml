@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2022 Wind River Systems, Inc.
+# Copyright (c) 2021-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -8,12 +8,21 @@
 # certificate and reapply the app to apply the new configuration.
 #
 
+- name: Retrieve current software version of the host
+  shell: source /etc/build.info; echo $SW_VERSION
+  register: current_software_version
+
+- name: Set host_software_version fact
+  set_fact:
+    host_software_version: "{{ current_software_version.stdout }}"
+
 # Secret system-local-ca-oidc-secret is a copy of system-local-ca
 # we need it because this secret needs to be in the same namespace as oidc-auth-apps
 - name: Delete system-local-ca-oidc-secret before recreating it
-  include_tasks: delete-kubernetes-objects.yml
+  include_role:
+    name: common/delete-kubernetes-resources
   with_items:
-    - { secret: system-local-ca-oidc-secret, namespace: kube-system, type: secret }
+    - { name: system-local-ca-oidc-secret, namespace: kube-system, type: secret }
 
 - name: Create new dex-client secret based of system-local-ca
   shell: >-
@@ -35,24 +44,43 @@
         issuer_root_ca: /home/dex-ca.pem
         issuer_root_ca_secret: system-local-ca-oidc-secret
 
-- name: Merge new volume and volumeMounts overrides with existing ones
-  vars:
-    new_overrides: |
-      volumes:
-      - name: https-tls
-        secret:
-          defaultMode: 420
-          secretName: oidc-auth-apps-certificate
-      volumeMounts:
-      - mountPath: /etc/dex/tls/
-        name: https-tls
-  script: merge_certificate_mounts.py "{{ new_overrides }}"
-  become_user: postgres
-  become: yes
-  register: yaml_merge_out
+- block:
+  - name: Merge new volume and volumeMounts overrides with existing ones
+    vars:
+      new_overrides: |
+        volumes:
+        - name: https-tls
+          secret:
+            defaultMode: 420
+            secretName: oidc-auth-apps-certificate
+        volumeMounts:
+        - mountPath: /etc/dex/tls/
+          name: https-tls
+    script: merge_certificate_mounts.py "{{ new_overrides }}"
+    become_user: postgres
+    become: yes
+    register: yaml_merge_out
 
-- name: Create override file for dex helm chart
-  shell: echo "{{ yaml_merge_out.stdout }}" > /tmp/dex-override.yaml
+  - name: Create override file for dex helm chart
+    shell: echo "{{ yaml_merge_out.stdout }}" > /tmp/dex-override.yaml
+
+  when: host_software_version is version("21.12", '>')
+
+- name: Create override file for oidc-auth-apps-certificate (legacy version)
+  copy:
+    dest: "/tmp/dex-override.yaml"
+    content: |
+      certs:
+        web:
+          secret:
+            tlsName: oidc-auth-apps-certificate
+            caName: oidc-auth-apps-certificate
+        grpc:
+          secret:
+            serverTlsName: oidc-auth-apps-certificate
+            clientTlsName: oidc-auth-apps-certificate
+            caName: oidc-auth-apps-certificate
+  when: host_software_version is version("21.12", '==')
 
 - name: Create override file for secret-observer helm chart
   copy:
@@ -115,3 +143,34 @@
   until: wait_oidc_ep is not failed
   retries: 3
   delay: 90
+  when: host_software_version is version("21.12", '>')
+
+- name: Wait for oidc-auth-apps pods to become active (legacy version)
+  command: >-
+    kubectl wait -n kube-system --for=condition=Ready pods --selector app=dex --timeout=90s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: wait_oidc_ep
+  until: wait_oidc_ep is not failed
+  retries: 3
+  delay: 90
+  when: host_software_version is version("21.12", '==')
+
+- name: Check if kube-apiserver parameters are applied
+  shell: |
+    ps -ef | grep kube-apiserver | grep oidc | grep -v grep | \
+    awk '{ if ($0 != "") print "true"; exit}'
+  register: api_process_oidc_output
+
+- name: Warn the user if the kube-apiserver doesn't have oidc parameters applied
+  fail:
+    msg: |
+      [WARNING]: oidc parameters are not applied to the kube-apiserver.
+      This may cause oidc-auth-apps to not work propperly.
+      Execute:
+          "system service-parameter-list | grep oidc | grep kube_apiserver"
+      to check if the parameters are set correctly, then:
+          "system service-parameter-apply kubernetes"
+      to apply them if they are.
+  when: not (api_process_oidc_output.stdout | bool)
+  ignore_errors: true

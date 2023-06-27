@@ -53,7 +53,7 @@
     shell: source /etc/platform/openrc; sw-manager kube-rootca-update-strategy show
     register: check_rootca_strategy
     until: check_rootca_strategy.stdout is search('applied')
-    retries: 30
+    retries: 50
     delay: 60
 
   - name: Delete rootca strategy

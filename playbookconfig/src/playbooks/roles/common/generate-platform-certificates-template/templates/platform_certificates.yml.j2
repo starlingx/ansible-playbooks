@@ -13,7 +13,7 @@ type: kubernetes.io/tls
 ---
 apiVersion: v1
 items:
-- apiVersion: "{{ cert_manager_api_version.stdout | default('cert-manager.io/v1') }}"
+- apiVersion: "{{ cert_manager_api_version.stdout | default(default.cert_manager_api_version, true) }}"
   kind: ClusterIssuer
   metadata:
     creationTimestamp: null
@@ -24,7 +24,7 @@ items:
   status: {}
 {% if install_system_restapi_gui_certificate | bool %}
 {% set short_certificate_name = 'system-restapi-gui' %}
-- apiVersion: "{{ cert_manager_api_version.stdout | default('cert-manager.io/v1') }}"
+- apiVersion: "{{ cert_manager_api_version.stdout | default(default.cert_manager_api_version, true) }}"
   kind: Certificate
   metadata:
     creationTimestamp: null
@@ -33,8 +33,8 @@ items:
   spec:
     commonName: "{{ system_platform_certificate.subject_CN | default(oam_ip.stdout) }}"
     dnsNames:
-    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain }}"
-    duration: "{{ system_platform_certificate.duration }}"
+    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain) }}"
+    duration: "{{ system_platform_certificate.duration | default(default.duration) }}"
     ipAddresses:
     - "{{ oam_ip.stdout }}"
     issuerRef:
@@ -47,7 +47,7 @@ items:
 {% endif %}
 {% if install_system_registry_local_certificate | bool %}
 {% set short_certificate_name = 'system-registry-local' %}
-- apiVersion: "{{ cert_manager_api_version.stdout | default('cert-manager.io/v1') }}"
+- apiVersion: "{{ cert_manager_api_version.stdout | default(default.cert_manager_api_version, true) }}"
   kind: Certificate
   metadata:
     creationTimestamp: null
@@ -56,12 +56,12 @@ items:
   spec:
     commonName: "{{ system_platform_certificate.subject_CN | default(oam_ip.stdout) }}"
     dnsNames:
-    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain }}"
+    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain) }}"
     - registry.local
-{% if distributed_cloud_role.stdout == 'systemcontroller' %}
+{% if dc_role.stdout == 'systemcontroller' %}
     - registry.central
 {% endif %}
-    duration: "{{ system_platform_certificate.duration }}"
+    duration: "{{ system_platform_certificate.duration | default(default.duration) }}"
     ipAddresses:
     - "{{ oam_ip.stdout }}"
     - "{{ management_floating_ip.stdout }}"
@@ -75,7 +75,7 @@ items:
 {% endif %}
 {% if install_oidc_auth_apps_certificate | bool %}
 {% set short_certificate_name = 'system-oidc-dex' %}
-- apiVersion: "{{ cert_manager_api_version.stdout | default('cert-manager.io/v1') }}"
+- apiVersion: "{{ cert_manager_api_version.stdout | default(default.cert_manager_api_version, true) }}"
   kind: Certificate
   metadata:
     creationTimestamp: null
@@ -84,8 +84,8 @@ items:
   spec:
     commonName: "{{ system_platform_certificate.subject_CN | default(oam_ip.stdout) }}"
     dnsNames:
-    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain }}"
-    duration: "{{ system_platform_certificate.duration }}"
+    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain) }}"
+    duration: "{{ system_platform_certificate.duration | default(default.duration) }}"
     ipAddresses:
     - "{{ oam_ip.stdout }}"
     # Add kubernetes cluster ip to make sure certificate has issuer ip in san list
@@ -103,7 +103,7 @@ items:
 {% endif %}
 {% if install_system_open_ldap_certificate | bool %}
 {% set short_certificate_name = 'system-openldap' %}
-- apiVersion: "{{ cert_manager_api_version.stdout | default('cert-manager.io/v1') }}"
+- apiVersion: "{{ cert_manager_api_version.stdout | default(default.cert_manager_api_version, true) }}"
   kind: Certificate
   metadata:
     creationTimestamp: null
@@ -112,11 +112,11 @@ items:
   spec:
     commonName: "{{ system_platform_certificate.subject_CN | default(short_certificate_name) }}"
     dnsNames:
-    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain }}"
+    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain) }}"
     - controller
     - controller-0
     - controller-1
-    duration: "{{ system_platform_certificate.duration }}"
+    duration: "{{ system_platform_certificate.duration | default(default.duration) }}"
     ipAddresses:
     - "{{ management_floating_ip.stdout }}"
     - "{{ management_c0_ip.stdout }}"

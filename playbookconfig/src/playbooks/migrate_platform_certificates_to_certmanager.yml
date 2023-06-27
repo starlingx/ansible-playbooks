@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2022 Wind River Systems, Inc.
+# Copyright (c) 2021-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -77,13 +77,30 @@
 - hosts: localhost
   gather_facts: no
   tasks:
-    - name: Install certificates as system Trusted CA certificates
-      include_role:
-        name: common/install-trusted-ca
-      with_items:
-        - { name: system_local_ca_cert, content: "{{ system_local_ca_cert }}" }
-        - { name: system_root_ca_cert, content: "{{ system_root_ca_cert }}" }
-      loop_control:
-        label: "{{ item.name }}"
+    - block:
+      - name: Install certificates as system Trusted CA certificates
+        include_role:
+          name: common/install-trusted-ca
+        with_items:
+          - { name: system_local_ca_cert, content: "{{ system_local_ca_cert }}" }
+          - { name: system_root_ca_cert, content: "{{ system_root_ca_cert }}" }
+        loop_control:
+          label: "{{ item.name }}"
+
+      - name: Restart kube-apiserver to pick the new certificates
+        include_role:
+          name: common/restart-kube-apiserver
+
+      - name: Restart openldap server to use the new certificates
+        shell: "sm-restart service open-ldap"
+        become: true
+
+      - name: Check openldap service is enabled after restart
+        shell: sm-query service open-ldap | grep -c enabled-active
+        become: true
+        register: service_status
+        until: service_status.stdout == '1'
+        retries: 10
+        delay: 10
 
       when: mode == 'update'
