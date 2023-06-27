@@ -92,4 +92,5 @@
     path: "{{ item.path }}"
     state: absent
   with_items: "{{ prestage_release_subdirs.files }}"
-  when: item.path.split('/')[-1] is version(minimum_supported_release_version_for_prestage, "<")
+  when: item.path.split('/')[-1] is regex("^[1-9]\d.[0-9]\d$") and
+        item.path.split('/')[-1] is version(minimum_supported_release_version_for_prestage, "<")
