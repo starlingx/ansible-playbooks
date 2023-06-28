@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2020 Wind River Systems, Inc.
+# Copyright (c) 2020-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -58,11 +58,14 @@ def push_from_filesystem(image):
             # as opae container runs via docker.
             # TODO: run opae with containerd.
             if not ('n3000-opae' in image):
-                if client.images(image):
-                    client.remove_image(image)
-                else:
-                    print("WARNING: Image %s was not deleted because it "
-                          "was not present into the local docker filesystem" % image)
+                try:
+                    if client.images(image):
+                        client.remove_image(image)
+                    else:
+                        print("WARNING: Image %s was not deleted because it "
+                              "was not present in the local docker filesystem" % image)
+                except Exception as e:
+                    print("WARNING: Image %s was not deleted, due to %s" % (image, str(e)))
             return image, True
         except docker.errors.APIError as e:
             print(err_msg + str(e))
