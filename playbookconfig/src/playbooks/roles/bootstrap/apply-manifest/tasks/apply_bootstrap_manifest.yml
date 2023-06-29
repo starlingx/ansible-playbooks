@@ -200,6 +200,19 @@
       - "platform::drbd::pgsql::params::lv_size: {{ pgsql_size }}"
       - "platform::drbd::platform::params::lv_size: {{ platform_size }}"
     when: root_disk_size|int >= minimum_small_root_disk_size
+
+  - name: Add L4 service ports value to bootstrap runtime hieradata
+    vars:
+      script_content: |
+        import sysinv.common.platform_firewall as pf
+        file = "{{ hieradata_workdir }}/runtime.yaml"
+        with open(file, "a") as f:
+          for key in pf.SYSTEM_CONFIG:
+            f.write(f"{key}: {pf.SYSTEM_CONFIG[key]}\n")
+    shell: "{{ script_content }}"
+    args:
+      executable: /usr/bin/python
+
   when: mode == 'bootstrap'
 
 - block:
