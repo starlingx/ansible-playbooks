@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020 Wind River Systems, Inc.
+# Copyright (c) 2020-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -83,7 +83,7 @@
 - name: Install trident services
   command: tridentctl -n {{ trident_namespace }} install --use-custom-yaml {{ trident_install_extra_params }}
   args:
-    chdir: "{{ trident_setup_dir }}"
+    chdir: "{{ trident_setup_dir }}/setup"
   environment:
     KUBECONFIG: "/etc/kubernetes/admin.conf"
   when: (tridentctl_rest_response.rc is defined and
