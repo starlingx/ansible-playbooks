@@ -643,11 +643,15 @@
 
     - block:
       - name: Transfer platform backup tar file to the local machine
-        fetch:
+        synchronize:
+          mode: pull
           src: "{{ platform_backup_file_path }}"
           dest: "{{ host_backup_dir }}/"
-          flat: yes
-        no_log: true
+        register: backup_transfer
+        until: backup_transfer.rc == 0
+        retries: 3
+        delay: 2
+        become: false
 
       - name: Transfer openstack backup tar files to the local machine if it exists
         fetch:
