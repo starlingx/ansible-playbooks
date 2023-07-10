@@ -1,0 +1,18 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role performs certificate recovery for subclouds when offline for
+#   a long period of time
+#
+- name: Recover K8s Root CA certificates (K8s Root CA, ETCD CA, FrontProxy CA)
+  import_tasks: recover-k8s-root-cas.yml
+
+- name: Renew K8s leaf certificates
+  import_tasks: recover-k8s-leaf-certificates.yml
+
+- name: Recover dc admin endpoint Root CA, subcloud ICA and leaf certificates
+  import_tasks: recover-dc-admin-ep-certificate-chain.yml

@@ -1,0 +1,238 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   These tasks create a new ICA for the subcloud and update both the
+#   dc-adminep-root-ca and the new ICA in the subcloud to
+#   create a new valid chain
+#
+- block:
+  - name: Retrieve DC admin endpoint Root CA from k8s secret
+    command: >-
+      kubectl get secret dc-adminep-root-ca-certificate
+      -n dc-cert -o jsonpath='{.data.ca\.crt}'
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+    register: dc_root_ca_cert_result
+    connection: local
+
+  - name: Get software version
+    shell: source /etc/platform/platform.conf; echo $sw_version
+    register: sw_version_result
+
+  - name: Set location of dc-adminep-root-ca.crt certificate on subcloud
+    set_fact:
+      dc_adminep_root_ca_location: >-
+        /opt/platform/config/{{ sw_version_result.stdout }}/dc-adminep-root-ca.crt
+
+  - name: Verify if dc-adminep-root-ca.crt certificate is expired on subcloud
+    command: openssl x509 -in {{ dc_adminep_root_ca_location }} -checkend 0
+    become: yes
+    register: adminep_root_ca_info
+    failed_when: false
+
+  - name: Get dc-adminep-root-ca.crt certificate from subcloud
+    shell: cat {{ dc_adminep_root_ca_location }} | base64 -w0
+    become: yes
+    register: adminep_root_ca_from_subcloud
+
+  - name: Copy dc-adminep-root-ca.crt from system controller to subcloud
+    copy:
+      content: "{{ dc_root_ca_cert_result.stdout | b64decode }}"
+      dest: "{{ dc_adminep_root_ca_location }}"
+    become: yes
+    when: |
+      adminep_root_ca_info.rc != 0 or
+      dc_root_ca_cert_result.stdout != adminep_root_ca_from_subcloud.stdout
+
+  - name: Create tmp file name for current dc-adminep ICA certificate on subcloud
+    tempfile:
+      state: file
+      prefix: tmp_subcloud_ica_subcloud_
+      suffix: .pem
+      path: /tmp/
+    register: tmp_subcloud_ica_subcloud
+
+  - name: Retrieve current dc-adminep ICA cert from k8s secret on subcloud
+    command: >-
+      kubectl get secret sc-adminep-ca-certificate -n sc-cert -o jsonpath='{.data.tls\.crt}'
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+    register: current_subcloud_ica_cert_result
+    retries: 3
+    delay: 5
+    until: current_subcloud_ica_cert_result is not failed
+
+  - name: Save current dc-adminep ICA cert to file
+    copy:
+      content: "{{ current_subcloud_ica_cert_result.stdout | b64decode }}"
+      dest: "{{ tmp_subcloud_ica_subcloud.path }}"
+
+  - name: Verify dc-admin-ep certificate chain is correct on subcloud
+    command: >-
+      openssl verify -CAfile
+      {{ dc_adminep_root_ca_location }} {{ tmp_subcloud_ica_subcloud.path }}
+    register: ca_verification
+    failed_when: false
+    become: yes
+
+  - name: Recover the invalid certificate chain for dc-admin-ep certificates on subcloud
+    block:
+    - name: Verify if subcloud ICA certificate exists
+      command: kubectl -n dc-cert get secret {{ name }}-adminep-ca-certificate
+      register: subcloud_ica_cert_exists
+      failed_when: false
+      environment:
+        KUBECONFIG: "/etc/kubernetes/admin.conf"
+      connection: local
+
+    - name: Create dc-admin-ep ICA certificate for subcloud if missing
+      block:
+      - name: Create tmp file name for subcloud ICA certificate template
+        tempfile:
+          state: file
+          prefix: tmp_subcloud_cert_template_
+          suffix: .j2
+          path: /tmp/
+        register: tmp_subcloud_ica_template
+        connection: local
+
+      - name: Save certificate template to file {{ tmp_subcloud_ica_template.path }}
+        vars:
+          template_content: |
+            apiVersion: cert-manager.io/v1
+            kind: Certificate
+            metadata:
+              creationTimestamp: null
+              name: {{ name }}-adminep-ca-certificate
+              namespace: dc-cert
+            spec:
+              isCA: true
+              commonName: {{ name }}
+              duration: 8760h0m0s # 1 year
+              issuerRef:
+                kind: Issuer
+                name: dc-adminep-root-ca-issuer
+              renewBefore: 720h0m0s # 30 days
+              secretName: {{ name }}-adminep-ca-certificate
+        copy:
+          dest: "{{ tmp_subcloud_ica_template.path }}"
+          content: "{{ template_content }}"
+          mode: 0640
+        connection: local
+
+      - name: Apply ICA certificate for subcloud in k8s in system controller
+        shell: |
+          kubectl apply -f "{{ tmp_subcloud_ica_template.path }}"
+          kubectl -n dc-cert delete secret {{ name }}-adminep-ca-certificate
+        environment:
+          KUBECONFIG: "/etc/kubernetes/admin.conf"
+        register: apply_cert_result
+        connection: local
+        retries: 5
+        delay: 5
+        until: apply_cert_result is not failed
+
+      when: subcloud_ica_cert_exists.rc != 0
+
+    - name: Retrieve subcloud ICA certificate data from from k8s secret
+      command: >-
+        kubectl get secret {{ name }}-adminep-ca-certificate
+        -n dc-cert -o jsonpath='{.data.tls\.crt}'
+      environment:
+        KUBECONFIG: "/etc/kubernetes/admin.conf"
+      register: subcloud_ica_cert_result
+      connection: local
+      retries: 5
+      delay: 5
+      until: subcloud_ica_cert_result is not failed
+
+    - name: Retrieve subcloud ICA certificate key from from k8s secret
+      command: >-
+        kubectl get secret {{ name }}-adminep-ca-certificate
+        -n dc-cert -o jsonpath='{.data.tls\.key}'
+      environment:
+        KUBECONFIG: "/etc/kubernetes/admin.conf"
+      register: subcloud_ica_key_result
+      connection: local
+      retries: 5
+      delay: 5
+      until: subcloud_ica_key_result is not failed
+
+    - name: Create tmp file name for the ICA certificate
+      tempfile:
+        state: file
+        prefix: tmp_subcloud_cert_crt
+        suffix: .crt
+        path: /tmp/
+      register: tmp_subcloud_ica_crt
+
+    - name: Create tmp file name for the ICA key
+      tempfile:
+        state: file
+        prefix: tmp_subcloud_cert_key
+        suffix: .key
+        path: /tmp/
+      register: tmp_subcloud_ica_key
+
+    - name: Save the ICA certificate to file
+      copy:
+        content: "{{ subcloud_ica_cert_result.stdout | b64decode }}"
+        dest: "{{ tmp_subcloud_ica_crt.path }}"
+
+    - name: Save the ICA key to file
+      copy:
+        content: "{{ subcloud_ica_key_result.stdout | b64decode }}"
+        dest: "{{ tmp_subcloud_ica_key.path }}"
+
+    - name: Update ICA and certificate chain on subcloud
+      shell: |
+        kubectl -n sc-cert delete secret sc-adminep-ca-certificate --ignore-not-found=true
+        kubectl -n sc-cert create secret tls sc-adminep-ca-certificate \
+        --cert "{{ tmp_subcloud_ica_crt.path }}" --key "{{ tmp_subcloud_ica_key.path }}"
+        kubectl -n sc-cert delete secret sc-adminep-certificate --ignore-not-found=true
+      environment:
+        KUBECONFIG: "/etc/kubernetes/admin.conf"
+      register: subcloud_ica_update_result
+      retries: 5
+      delay: 5
+      until: subcloud_ica_update_result is not failed
+
+    - name: Wait until management affecting alarms clear up
+      shell: source /etc/platform/openrc; fm alarm-list --mgmt_affecting | grep -c True
+      register: mgmt_affecting_present
+      failed_when: |
+        mgmt_affecting_present.stdout | int != 0 or mgmt_affecting_present.stderr | length > 0
+      # Up to 10 mins to have some buffer, but usually takes ~ 3 mins.
+      retries: 30
+      delay: 20
+      until:
+        - mgmt_affecting_present.stdout | int == 0
+        - mgmt_affecting_present.stderr | length == 0
+
+    - name: Set fact to mark that DC admin endpoint certificate chain recovery was performed
+      set_fact:
+        subcloud_dc_admin_ep_cert_chain_recovered: true
+
+    when: ca_verification.rc != 0
+
+  always:
+    - block:
+      - name: Delete temporary file on systemcontroller
+        file:
+          path: "{{ tmp_subcloud_ica_template.path }}"
+          state: absent
+        connection: local
+      when: tmp_subcloud_ica_template.path is defined
+
+    - name: Delete temporary files on subcloud
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ tmp_subcloud_ica_crt.path if tmp_subcloud_ica_crt.path is defined }}"
+        - "{{ tmp_subcloud_ica_key.path if tmp_subcloud_ica_key.path is defined }}"
+        - "{{ tmp_subcloud_ica_subcloud.path if tmp_subcloud_ica_subcloud.path is defined }}"
