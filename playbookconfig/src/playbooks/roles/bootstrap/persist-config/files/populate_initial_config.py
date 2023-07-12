@@ -1039,11 +1039,42 @@ def populate_platform_config(client):
         print("Service parameter system platform completed.")
 
 
+def populate_user_dns_host_records(client):
+    # Remove any previous user DNS entry that have been created in the
+    # previous run.
+    parameters = client.sysinv.service_parameter.list()
+    for parameter in parameters:
+        if parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DNS_HOST_RECORD:
+            client.sysinv.service_parameter.delete(parameter.uuid)
+
+    parameters = {}
+    for user_dns_host_name, host_record in CONF.items(section="USER_DNS_HOST_RECORDS"):
+        parameters[user_dns_host_name] = host_record
+    if parameters:
+        values = {
+            'service': sysinv_constants.SERVICE_TYPE_DNS,
+            'section':
+                sysinv_constants.SERVICE_PARAM_SECTION_DNS_HOST_RECORD,
+            'personality': None,
+            'resource': None,
+            'parameters': parameters
+        }
+
+        print("Populating/Updating user dns host-records...")
+        client.sysinv.service_parameter.create(**values)
+
+        print("Populating/Updating user dns host-records completed.")
+
+
 def populate_service_parameter_config(client):
     if not INITIAL_POPULATION and not RECONFIGURE_SERVICE:
         return
     populate_platform_config(client)
     populate_docker_kube_config(client)
+    if CONF.has_section("USER_DNS_HOST_RECORDS"):
+        populate_user_dns_host_records(client)
+    else:
+        print("Skipping Populating/Updating user dns host-records...")
 
 
 def get_management_mac_address():

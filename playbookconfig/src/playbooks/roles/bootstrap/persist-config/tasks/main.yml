@@ -371,6 +371,23 @@
     path: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
     line: "{{ sysinv_k8s_vars }}"
 
+- block:
+  - name: Add section [USER_DNS_HOST_RECORDS]
+    set_fact:
+      sysinv_user_dns_host_records: "[USER_DNS_HOST_RECORDS]\n"
+
+  - name: Populate user dns host records section
+    set_fact:
+      sysinv_user_dns_host_records: "{{ sysinv_user_dns_host_records }}{{ item
+      }}={{ user_dns_host_records[item] }}\n"
+    loop: "{{ user_dns_host_records.keys() }}"
+
+  - name: Append user dns host records to config ini
+    lineinfile:
+      path: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
+      line: "{{ sysinv_user_dns_host_records }}"
+  when: user_dns_host_records
+
 - include: update_sysinv_database.yml
   when: save_config_to_db
 

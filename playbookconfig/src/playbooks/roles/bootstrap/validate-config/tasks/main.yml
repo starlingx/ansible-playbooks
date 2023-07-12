@@ -676,6 +676,23 @@
 - import_role:
     role: common/validate-image-archives
 
+# Validate user dns host records if defined
+- block:
+  - name: Fetch the user dns host records for validation
+    set_fact:
+      host_records_values: "{{ host_records_values | default([]) +
+      user_dns_host_records[host_record].split(',') | map('regex_replace', '^\\s*|\\s*$', '') | list }}"
+    loop: "{{ user_dns_host_records.keys() }}"
+    loop_control:
+      loop_var: host_record
+
+  - name: Check for valid IP address and DNS name
+    loop: "{{ host_records_values }}"
+    loop_control:
+      loop_var: host_records_value
+    include: validate_address.yml input_address={{ host_records_value }}
+  when: user_dns_host_records
+
 # System applications validation
 - name: Validate applications
   include: validate_application.yml application={{ item }}
