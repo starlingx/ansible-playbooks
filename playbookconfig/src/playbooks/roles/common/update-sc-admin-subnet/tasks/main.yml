@@ -10,8 +10,8 @@
 
 - name: Get previous subcloud admin network address pool uuid
   shell: >-
-    source /etc/platform/openrc;
-    system addrpool-list | awk '/admin/{ print$2 }'
+    source /etc/platform/openrc; system network-list |
+    awk '$8 == "admin" { print $12 }'
   register: subcloud_admin_pool_uuid
 
 - name: Delete previous subcloud admin network address pool

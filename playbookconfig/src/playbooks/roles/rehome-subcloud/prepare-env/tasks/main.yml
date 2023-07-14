@@ -138,16 +138,22 @@
 
     when: system_mode != "simplex"
 
+  - name: Get existing admin address pool
+    shell: >-
+      source /etc/platform/openrc; system network-list |
+      awk '$8 == "admin" { print $12 }'
+    register: admin_address_pool_uuid
+
   - name: Get existing admin floating address
     shell: >-
       source /etc/platform/openrc; system addrpool-list |
-      awk ' $4 == "admin" && $14 == "{{ admin_floating_address }}" '
+      awk ' $2 == "{{ admin_address_pool_uuid.stdout }}" && $14 == "{{ admin_floating_address }}" '
     register: check_existing_admin_floating_address
 
   - name: Get existing admin gateway
     shell: >-
       source /etc/platform/openrc; system addrpool-list |
-      awk ' $4 == "admin" && $20 == "{{ admin_gateway_address }}" '
+      awk ' $2 == "{{ admin_address_pool_uuid.stdout }}" && $20 == "{{ admin_gateway_address }}" '
     register: check_existing_admin_gateway
 
   - name: Set admin gateway and floating address update required facts

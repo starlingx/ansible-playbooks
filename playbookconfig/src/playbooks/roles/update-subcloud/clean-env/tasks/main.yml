@@ -8,48 +8,24 @@
 #   in the post network reconfiguration
 #
 
-- block:
-  - name: Check admin address pool uuid
-    shell: >-
-      source /etc/platform/openrc; system addrpool-list |
-      awk '$4 == "admin" { print $2 }'
-    register: admin_addrpool_uuid
+- name: Delete the admin address pool if the target network is mgmt
+  shell: >-
+    source /etc/platform/openrc; system addrpool-delete
+    {{ admin_addrpool }}
+  when: admin_addrpool and target_net == mgmt_net
 
-  - name: Delete admin address pool if is configured
-    shell: >-
-      source /etc/platform/openrc; system addrpool-delete
-      {{ admin_addrpool_uuid.stdout }}
-    when: admin_addrpool_uuid.stdout != ""
-
-  - name: Check admin host route
-    shell: >-
-      source /etc/platform/openrc; system host-route-list controller-0 |
-      awk '$4 == "admin0" { print $2 }'
-    register: admin_route_uuid
-
-  - name: Delete admin host route if is configured
-    shell: >-
-      source /etc/platform/openrc; system host-route-delete
-      {{ admin_route_uuid.stdout }}
-    when: admin_route_uuid.stdout != ""
-
-  # TODO(nicodemos) This should be removed after sysinv/puppet handle removing
-  # the admin-ip service if admin network and interface doesn't exist
-  - name: Unmanage admin-ip service
-    command: sm-unmanage service admin-ip
-    become: yes
-  when: target_net == 'mgmt'
+- name: Delete old routes on controller-0
+  shell: >-
+    source /etc/platform/openrc; system host-route-delete
+    {{ item }}
+  with_items: "{{ existing_routes_c0.stdout_lines }}"
+  when: existing_routes_c0.stdout_lines | length > 0
 
 - block:
-  - name: Check mgmt host route
-    shell: >-
-      source /etc/platform/openrc; system host-route-list controller-0 |
-      awk '$4 == "mgmt0" { print $2 }'
-    register: mgmt_route_uuid
-
-  - name: Delete mgmt host route if is configured
+  - name: Delete old routes on controller-1
     shell: >-
       source /etc/platform/openrc; system host-route-delete
-      {{ mgmt_route_uuid.stdout }}
-    when: mgmt_route_uuid.stdout != ""
-  when: target_net == 'admin'
+      {{ item }}
+    with_items: "{{ existing_routes_c1.stdout_lines }}"
+    when: existing_routes_c1.stdout_lines | length > 0
+  when: system_mode != "simplex"
