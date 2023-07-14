@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -94,10 +94,17 @@
     connection: local
     when: optimized_bnr_supported
 
+  # In the old CentOS releases, the user images will be backed up only if
+  # the backup_user_local_registry is specified in the overrides or in extra-vars.
+  # In the new Debian releases, the backup_user_local_registry was replaced by
+  # backup_user_images. Therefore, we set both for backward compatibility.
   - name: Set backup_user_images flag in overrides file
     lineinfile:
       path: "{{ subcloud_overrides }}"
-      line: "backup_user_images: true"
+      line: "{{ item }}"
+    with_items:
+      - "backup_user_images: true"
+      - "backup_user_local_registry: true"
     connection: local
     when: not optimized_bnr_supported
 
