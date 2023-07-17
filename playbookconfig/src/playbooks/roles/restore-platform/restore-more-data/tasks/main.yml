@@ -264,6 +264,13 @@
     group: root
     mode: 0755
 
+- name: Check if ldap LDIF configuration file exists in the backup archive
+  shell: "tar -tf {{ restore_data_file }} | grep -E 'etc/.*ldap/schema/cn=config.ldif'"
+  args:
+    warn: false
+  failed_when: false
+  register: bkp_has_ldap_config_ldif
+
 - name: Restore LDAP configuration
   block:
     - name: Restore ldap data
@@ -274,6 +281,8 @@
 
     - name: Start openldap service
       shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap start"
+
+  when: bkp_has_ldap_config_ldif.rc == 0
 
 # In order to determine the home dir pattern of the backed up data
 # we only check var/home and use that to know how to extract.
