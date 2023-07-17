@@ -68,7 +68,7 @@
     - name: Find images archive and md5 files
       find:
         paths: "{{ images_cleanup_dir }}"
-        patterns: "*.tar.gz,*.tar.gz.md5"
+        patterns: "*.tar.gz,*.tar.gz.md5,*.tgz"
       register: find_result
 
     - name: Clean up {{ input_dir }} images archive and md5 files

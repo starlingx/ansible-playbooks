@@ -1,0 +1,50 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role generates an archive of the local registry filesystem.
+#
+- name: Set archive file
+  set_fact:
+    registry_archive_fqpn: "{{ registry_archive_fqpn|default('local_registry_filesystem.tgz') }}"
+
+- block:
+  - name: Check if pigz utility is available
+    command: which pigz
+    register: result
+    failed_when: false
+
+  - name: Set compress method to gzip if pigz is unavailable
+    set_fact:
+      compress_program: 'gzip'
+    when: result.rc != 0
+
+  - block:
+    - name: Check the number of platform cores
+      shell: |
+        source /etc/platform/openrc
+        system host-cpu-list $(hostname) --nowrap | grep " Platform " | wc -l
+      register: num_platform_cores
+
+    - name: Set compress method based on the number of platform cores
+      set_fact:
+        compress_program: "{{ 'pigz' if num_platform_cores.stdout | int >= 4 else 'gzip' }}"
+    when: result.rc == 0
+
+  when: compress_program is not defined
+
+- name: Create a tgz archive of the local registry filesystem
+  shell: >-
+    tar --use-compress-program={{ compress_program }}
+    -cf {{ registry_archive_fqpn }}
+    $(ls -d /var/lib/docker-distribution 2> /dev/null)
+  args:
+    warn: false
+  # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it",
+  # which makes tar return 1
+  register: img_tar_cmd
+  failed_when: img_tar_cmd.rc >= 2 or img_tar_cmd.rc < 0
+  become: yes

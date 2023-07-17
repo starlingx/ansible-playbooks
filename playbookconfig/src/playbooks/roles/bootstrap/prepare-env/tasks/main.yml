@@ -714,25 +714,38 @@
       filename. Refer to the branding section of the documentation.
   when: find_result.matched > 0
 
-- name: Check if bootstrap registry filesystem exists
-  stat:
-    path: "{{ bootstrap_registry_filesystem_fqpn }}"
-  register: bootstrap_registry_filesystem_stat
+- block:
+  - name: Check the stat of the specified bootstrap registry filesystem
+    stat:
+      path: "{{ bootstrap_registry_filesystem_fqpn }}"
+    register: bootstrap_registry_filesystem_stat
+
+  - name: Ensure that the specified bootstrap registry filesystem exists
+    fail:
+      msg: >-
+        Bootstrap registry filesystem did not exist: {{ bootstrap_registry_filesystem_fqpn }}
+      when: not bootstrap_registry_filesystem_stat.stat.exists
   when: bootstrap_registry_filesystem_fqpn is not none
 
 - block:
-    - name: Ensure bootstrap registry filesystem exists
-      fail:
-        msg: >-
-          Bootstrap registry filesystem did not exist: {{ bootstrap_registry_filesystem_fqpn }}
-      when: not bootstrap_registry_filesystem_stat.stat.exists
+  # If bootstrap_registry_filesystem_fqpn value is not already specified via
+  # extra vars (-e), point it to the registry filesystem archive in prestage
+  # directory if exists.
+  - name: Check if the prestaged registry filesystem exists
+    stat:
+      path: "{{ images_archive_dir }}/local_registry_filesystem.tgz"
+    register: prestage_registry_filesystem
 
-    - name: Enable populating registry filesystem
-      set_fact:
-        bootstrap_registry_filesystem: true
+  - name: Set bootstrap_registry_filesystem_fqpn fact to the prestaged registry filesystem
+    set_fact:
+      bootstrap_registry_filesystem_fqpn: "{{ prestage_registry_filesystem.stat.path }}"
+    when: prestage_registry_filesystem.stat.exists
+  when: bootstrap_registry_filesystem_fqpn is none
 
-  when: bootstrap_registry_filesystem_stat is not skipped
-
+- name: Enable populating registry filesystem
+  set_fact:
+    bootstrap_registry_filesystem: true
+  when: bootstrap_registry_filesystem_fqpn
 
 - name: Mark environment as Ansible bootstrap
   file:

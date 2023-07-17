@@ -5,97 +5,22 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
-#   This role is used to download the images in the specified images list,
-#   generate image bundles and store them in the prestage directory.
+#   This role generates container images archive file(s). The archive
+#   format is dependent on the prestage_os_type.
 #
+#   If the subcloud is running Debian, a snapshot of the entire local registry
+#   filesystem is archived for more speedy restore over bootstrap/upgrade later
+#   on.
+#
+#   If the subcloud is running CentOS, the images archive files are created
+#   using docker save. Loading images from these archive files using docker
+#   load takes longer as bootstrap in CentOS cannot handle registry filesystem
+#   archive.
+#
+- name: Archive container images (Debian)
+  include_tasks: gen_images_archive_debian.yml
+  when: prestage_os_type == 'debian'
 
-# The following task will create a registries dictionary
-
-- name: Create a tempfile for subsequent tasks
-  tempfile:
-    state: file
-    suffix: prestage
-  register: image_list_tempfile
-
-- block:
-  # The following task will generate the docker_registries dictionary used for images download
-  - name: Retrieve the configured docker registries
-    import_tasks: get_docker_registries.yml
-
-  - block:
-    - name: Get list of images (without version tags) from the local registry
-      shell: >
-        source /etc/platform/openrc;
-        system registry-image-list| tail -n +4|head -n -1|awk '{print $2}'
-      register: result
-
-    - name: Build registry images list with tags
-      include: get_image_tags.yml
-      loop: "{{ result.stdout_lines | flatten(1) }}"
-      loop_control:
-        loop_var: img
-
-    - name: Set facts related to prestaging of local registry images
-      set_fact:
-        image_list: "{{ registry_images }}"
-        local_download: 'yes'
-        download_retries: 0
-        retry_delay: 0
-    when: not image_list
-
-  - name: Set images output file for subsequent tasks
-    set_fact:
-      images_output_file: "{{ image_list_tempfile.path }}"
-
-  - name: Log in the docker registries that are authenticated
-    docker_login:
-      registry: "{{ item.value.url }}"
-      username: "{{ item.value.username }}"
-      password: "{{ item.value.password }}"
-    register: login_result
-    retries: 10
-    delay: 5
-    until: login_result is succeeded
-    loop: "{{ docker_registries|dict2items }}"
-    when: item.value.username is defined
-    no_log: true
-
-  - name: Download container images for prestage
-    script: >
-      roles/common/push-docker-images/files/download_images.py
-      "{{ image_list | unique | join(',') }}"
-      "{{ images_output_file }}"
-    register: download_images_output
-    retries: "{{ download_retries | default(10) }}"
-    delay: "{{ retry_delay | default(5) }}"
-    until: (download_images_output.rc == 0 or "HARD FAIL" in download_images_output.stdout)
-    failed_when: download_images_output.rc != 0
-    environment:
-      REGISTRIES: "{{ docker_registries | to_json }}"
-      LOCAL_DOWNLOAD: "{{ local_download|default('no') }}"
-
-  - debug: var=download_images_output.stdout_lines
-
-  - name: Log out of the authenticated registries
-    docker_login:
-      registry: "{{ item.value.url }}"
-      state: absent
-    loop: "{{ docker_registries|dict2items }}"
-    when: item.value.username is defined
-    no_log: true
-
-  - name: Generate image bundles
-    script: gen-image-bundles.sh "{{ prestage_dir }}" "{{ images_output_file }}" "{{ bundle_size }}"
-    register: gen_image_bundles_output
-
-  - debug: var=gen_image_bundles_output.stdout_lines
-
-  always:
-    - name: Clear docker cache
-      command: docker image prune -af
-      failed_when: false
-
-    - name: Remove tempfile
-      file:
-        path: "{{ image_list_tempfile.path }}"
-        state: absent
+- name: Archive container images (CentOS)
+  include_tasks: gen_images_archive_centos.yml
+  when: prestage_os_type == 'centos'

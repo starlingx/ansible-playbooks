@@ -10,10 +10,6 @@
 #
 
 - block:
-  - name: Set prestage os type (for release lower than 22.12)
-    set_fact:
-      prestage_os_type: "centos"
-
   - name: Set feed and patch directories to /www/pages/... (Centos and local source)
     set_fact:
       release_feed: "/www/pages/feed/rel-{{ prestage_software_version }}"
@@ -25,13 +21,12 @@
       release_feed: "/var/www/pages/feed/rel-{{ prestage_software_version }}"
       host_patch_repo: "/var/www/pages/updates/rel-{{ prestage_software_version }}"
     when: prestage_source == 'remote'
-  when: prestage_software_version is version("22.12", '<')
+  when: prestage_os_type == 'centos'
 
 - name: Set the feed directory to /var/www/pages/feed (Debian)
   set_fact:
-    prestage_os_type: "debian"
     release_feed: "/var/www/pages/feed/rel-{{ prestage_software_version }}"
-  when: prestage_software_version is version("22.12", '>=')
+  when: prestage_os_type == 'debian'
 
 - name: Prepare prestage packages for Centos
   block:

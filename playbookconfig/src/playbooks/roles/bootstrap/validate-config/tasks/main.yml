@@ -681,7 +681,7 @@
   - name: Check if images archive(s) exists
     find:
       paths: "{{ images_archive_dir }}"
-      patterns: "*.tar,*.tar.gz"
+      patterns: "container-image*.tar.gz"
       recurse: no
     register: images_archive_find_output
 
