@@ -20,10 +20,27 @@
   command: mount /var/lib/docker
 
 - name: Restore image registry data to /var/lib/docker-distribution
-  shell: pigz -dc {{ registry_backup_fqpn }} | tar -C / --overwrite -xpf - var/lib/docker-distribution
+  command: >
+    tar --use-compress-program=pigz
+        -xpf {{ registry_backup_fqpn }}
+        -C / --overwrite var/lib/docker-distribution
   args:
     warn: false
   when: restore_registry_filesystem
+
+# The following task is executed when the backup does not contain image registry filesystem archive
+# but the prestage directory (/opt/platform-backup/<sw-version>) does.
+- name: Restore prestaged image registry data to /var/lib/docker-distribution if exists
+  command: >
+    tar --use-compress-program=pigz
+        -xpf {{ prestage_registry_filesystem.stat.path }}
+        -C / --overwrite var/lib/docker-distribution
+  args:
+    warn: false
+  when:
+    - not restore_registry_filesystem
+    - prestage_registry_filesystem is defined
+    - prestage_registry_filesystem.stat.exists
 
 - name: Disable local registry authentication
   command: "sed -i '/auth:/,$d' /etc/docker-distribution/registry/config.yml"
@@ -35,6 +52,10 @@
     enabled: true
   loop: "{{ docker_services }}"
 
+# Images prestage on Debian does not generate images bundle. If the following task is executed, the
+# prestage must have come from the local install bundle.
+#
+# TODO(tngo): This task will be removed post StarlingX 9.0
 - name: Load images from archives if configured
   include: roles/bootstrap/bringup-essential-services/tasks/load_images_from_archive.yml input_archive={{ item.path }}
   with_items: "{{ images_archive_files }}"

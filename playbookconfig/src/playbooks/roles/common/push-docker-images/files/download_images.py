@@ -155,8 +155,8 @@ def get_image_list_with_auth_info(images):
 
 
 def download_and_push_an_image(img):
-    # This function is to pull image from public/private
-    # registry and push to local registry.
+    # This function is used to pull an image from public/private
+    # registry and push it to the local registry.
     local_img = convert_img_for_local_lookup(img)
     target_img = get_img_tag_with_registry(img)
     err_msg = " Image download failed: %s " % target_img
@@ -211,8 +211,10 @@ def download_and_push_an_image(img):
 
 
 def download_a_local_image(img):
-    # This function downloads the specified image from the local registry,
-    # retag the image for prestaging and remove the old tag.
+    # This function is used to pull the specified image from the local
+    # registry for image prestage on CentOS.
+    #
+    # NOTE: This function will be removed post StarlingX 9.0
     err_msg = " Image retrieval failed: %s " % img
 
     local_img = LOCAL_REGISTRY_URL + img
@@ -234,7 +236,12 @@ def download_a_local_image(img):
 
 
 def download_an_image(img_tuple):
-
+    # This function is used to download an image from the public/private
+    # registry for image prestage on CentOS. It first checks if the image
+    # is already available in the local registry and pulls it from there.
+    # Otherwise, it pulls the image from the specified source.
+    #
+    # NOTE: This function will be removed post StarlingX 9.0.
     prestage_img, target_img, registry_auth = img_tuple
     local_img = convert_img_for_local_lookup(prestage_img)
 
@@ -259,6 +266,42 @@ def download_an_image(img_tuple):
             if target_img != prestage_img:
                 client.tag(target_img, prestage_img)
                 client.remove_image(target_img)
+            return target_img, True
+        except Exception as e:
+            return handle_docker_exception(e, err_msg, target_img)
+
+
+def download_and_push_an_image_for_prestage(img_tuple):
+    # This function is used to download an image from the public/private
+    # registry and push it to the local registry for image prestage on
+    # Debian. It first checks if the image already exists in the local
+    # registry before pulling it from the specified source.
+
+    prestage_img, target_img, registry_auth = img_tuple
+    local_img = convert_img_for_local_lookup(prestage_img)
+
+    client = docker.APIClient()
+    local_auth = get_local_registry_auth()
+    try:
+        err_msg = " Image download failed: %s " % target_img
+
+        client.inspect_distribution(local_img, auth_config=local_auth)
+        print("Image {} found on local registry".format(target_img))
+        return target_img, True
+    except docker.errors.APIError as e:
+        print(str(e))
+        print("Image {} not found on local registry, attempt to download...".format(target_img))
+        try:
+            client.pull(target_img, auth_config=registry_auth)
+            print("Image download succeeded: %s" % target_img)
+            client.tag(target_img, local_img)
+            client.push(local_img, auth_config=local_auth)
+            print("Image push succeeded: %s" % local_img)
+            # Clean up docker cache
+            if client.images(target_img):
+                client.remove_image(target_img)
+            if client.images(local_img):
+                client.remove_image(local_img)
             return target_img, True
         except Exception as e:
             return handle_docker_exception(e, err_msg, target_img)
@@ -303,14 +346,26 @@ if __name__ == '__main__':
     success_msg = ""
     image_outfile = None
     local_download = False
+    prestage_download = False
 
     start = time.time()
 
     if len(sys.argv) == 2:
-        # Download images and push to the local registry
         success_msg = "All images downloaded and pushed to the local registry"
-        failed_downloads = map_function(image_list, download_and_push_an_image)
+        if os.getenv('PRESTAGE_DOWNLOAD') is not None:
+            prestage_download = os.environ['PRESTAGE_DOWNLOAD']
+
+        if not prestage_download:
+            failed_downloads = map_function(image_list, download_and_push_an_image)
+        else:
+            # The specified images may also contain the url prefix.
+            # Remove them before processing.
+            images_with_auth = get_image_list_with_auth_info(image_list)
+            image_list = [img_tuple[0] for img_tuple in images_with_auth]
+            failed_downloads = map_function(images_with_auth, download_and_push_an_image_for_prestage)
     else:
+        # TODO(tngo): Remove the following logic and related functions post StarlingX 9.0
+
         # Name of the output file to write the list of images to
         image_outfile = sys.argv[2]
         if not os.path.exists(image_outfile):
@@ -324,7 +379,7 @@ if __name__ == '__main__':
             failed_downloads = map_function(image_list, download_a_local_image, True)
         else:
             # The specified images may also contain the url prefix.
-            # Remove them before processing
+            # Remove them before processing.
             images_with_auth = get_image_list_with_auth_info(image_list)
             image_list = [img_tuple[0] for img_tuple in images_with_auth]
 

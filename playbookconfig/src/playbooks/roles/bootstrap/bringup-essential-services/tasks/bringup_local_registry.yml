@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2022 Wind River Systems, Inc.
+# Copyright (c) 2019-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -54,7 +54,8 @@
       warn: false
 
   - name: Check if {{ server_cert_pem }} exists
-    stat: path="{{ server_cert_pem }}"
+    stat:
+      path: "{{ server_cert_pem }}"
     register: server_cert_pem_stat
 
   - name: Copy {{ server_cert_pem }} to shared filesystem for mate

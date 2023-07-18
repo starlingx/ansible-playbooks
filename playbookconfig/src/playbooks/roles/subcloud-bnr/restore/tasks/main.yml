@@ -33,7 +33,7 @@
 # subcloud is actually rebooted by maintenance before executing the next task. The 3 minute
 # timeout should be enough as mainteance will force reboot if it does not take place within
 # 2 minutes.
-- name: Waiting up to {{ shutdown_timeout }} seconds for ssh port to become unavailable for {{ inventory_hostname }}
+- name: Wait up to {{ shutdown_timeout }} seconds for ssh port to become unavailable for {{ inventory_hostname }}
   local_action:
     module: wait_for
       port={{ ansible_port }}
@@ -42,7 +42,7 @@
       timeout={{ shutdown_timeout }}
       state=stopped
 
-- name: Waiting up to {{ unlock_timeout }} seconds for ssh port to become available for {{ inventory_hostname }}
+- name: Wait up to {{ unlock_timeout }} seconds for ssh port to become available for {{ inventory_hostname }}
   local_action:
     module: wait_for
       port={{ ansible_port }}

@@ -26,6 +26,10 @@
     prestage_software_version: "{{ software_version }}"
     cleanup_dirs: "{{ cleanup_dirs|default([]) + [software_version] }}"
 
+- name: Set prestage_os_type
+  set_fact:
+    prestage_os_type: "{{ 'debian' if prestage_software_version is version('22.12', '>=') else 'centos' }}"
+
 - name: Set prestage dir and subdirectory facts
   set_fact:
     prestage_source: remote
