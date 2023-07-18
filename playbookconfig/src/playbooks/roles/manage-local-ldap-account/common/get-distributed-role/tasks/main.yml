@@ -1,9 +1,10 @@
 ---
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# The file has tasks to get/set some flags related to distributed cloud.
+# Set flags related to distributed cloud.
+#
 
 - name: Get distributed_cloud role
   shell: |
@@ -11,6 +12,10 @@
     system show | grep distributed_cloud_role | awk '{ print $4 }'
   register: distributed_cloud_role
 
-- name: Set if system is a DC
+- name: Check if system is a DC systemcontroller
   set_fact:
-    is_dc: "{{ true if  distributed_cloud_role.stdout == 'systemcontroller' else false }}"
+    is_dc_systemcontroller: "{{ true if distributed_cloud_role.stdout == 'systemcontroller' else false }}"
+
+- name: Check if system is a DC subcloud
+  set_fact:
+    is_dc_subcloud: "{{ true if distributed_cloud_role.stdout == 'subcloud' else false }}"

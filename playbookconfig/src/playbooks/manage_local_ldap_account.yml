@@ -3,31 +3,32 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Create a new LDAP user with keystone account and sudo access. The playbook
-# uses the openrc-template.j2 file as a template for the keystone account
-# openrc file.
+# Create new LDAP and Keystone users with same username. In DC environments,
+# should be executed in the central cloud to allow the propagation of created
+# Keystone user to the subclouds.
 #
-# Users will be prompted for the following parameters:
-# - user_id                 : id for the new account
+# The operator will be prompted for the following parameters:
 # - user_password           : password for the new account.
-# The parameters below use a default value if they are not defined:
-# - mode                    : controls if the user should be created or deleted.
-#                             The valid values are 'create' and 'delete'.
-#                             (default: 'create')
-# - password_change_period  : number of days before needing to change password
-#                             (default: 90)
-# - password_warning_period : number of days to warn about changing the password
-#                             (default: 2)
-# - sudo_permission         : give sudo capabilities to new user to execute
-#                             commands with root privileges (default: no)
-# - user_role               : role for the new user as 'admin'/'member'/'reader'
-#                             (default: 'admin')
-# - sys_protected           : is used to add the new user to the group
-#                              "sys_protected". (default: no)
 #
-# The inventory file contains the password of system controller
-# Do not add any subclouds to the inventory file. The list of subclouds
-# will be dynamically added to the inventory by the playbook itself.
+# The parameters below should be provided, otherwise the playbook either fails
+# or uses the default value.
+# - user_id                 : the username to be used. Should always be
+#                             provided.
+# - mode                    : controls if the users should be created or
+#                             deleted. The valid values are 'create' and
+#                             'delete' (default: 'create').
+# - password_change_period  : number of days before needing to change LDAP
+#                             password (default: 90).
+# - password_warning_period : number of days to warn about changing the LDAP
+#                             password (default: 2).
+# - sudo_permission         : give sudo capabilities to new LDAP user to execute
+#                             commands with root privileges (default: no).
+# - user_role               : role for the new Keystone user as
+#                             'admin'/'member'/'reader' (default: 'admin').
+# - sys_protected           : is used to add the new LDAP user to the group
+#                             "sys_protected" (default: no).
+#
+# The inventory file contains the system controller IP, user and password.
 #
 # Example to add user 'na-admin' (mode=create is default):
 #   ansible-playbook --inventory inventory --extra-vars='user_id=na-admin' \
@@ -45,12 +46,10 @@
 - hosts: systemcontroller
   gather_facts: no
 
-  vars_prompt:
-  - name: user_id
-    prompt: "What is the name of the user account?"
-    private: no
+  vars:
+    ssh_internal_args: -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no
 
-  pre_tasks:
+  tasks:
 
   - set_fact:
       in_user_id: "{{ user_id if user_id is defined else ''}}"
@@ -111,6 +110,48 @@
       msg: "The sys_protected must be 'yes' or 'no'."
     when: "in_sys_protected not in [true, false]"
 
+  - name: Get distributed cloud role
+    import_role:
+      name: manage-local-ldap-account/common/get-distributed-role
+
+  # This playbook should not run on subclouds because the Keystone user would not propagate to other clouds.
+  - name: Fail if running on subcloud
+    fail:
+      msg: "This playbook should run on the central cloud, not in subclouds."
+    when: is_dc_subcloud
+
+  - name: Get LDAP user data
+    command: ldapsearch -x -LLL uid={{ in_user_id }}
+    register: ldap_user_output_reg
+
+  - name: Store info about LDAP user existence
+    set_fact:
+      ldap_user_exists: "{{ true if ldap_user_output_reg.stdout != '' else false }}"
+
+  - name: Validate that informed LDAP user doesn't exist when mode is create
+    fail:
+      msg: "The LDAP user {{ in_user_id }} already exists.
+            Run this playbook with mode=delete to remove it first."
+    when: in_mode == 'create' and ldap_user_exists
+
+  - name: Get Keystone user data
+    shell: source /etc/platform/openrc; openstack user list | grep -w {{ in_user_id }} | wc -l
+    register: openstack_user_output_reg
+
+  - name: Store info about Keystone user existence
+    set_fact:
+      openstack_user_exists: "{{ true if openstack_user_output_reg.stdout != '0' else false }}"
+
+  - name: Validate that informed Keystone user doesn't exist when mode is create
+    fail:
+      msg: "The Keystone user {{ in_user_id }} already exists.
+            Run this playbook with mode=delete to remove it first."
+    when: in_mode == 'create' and openstack_user_exists
+
+  - name: Set os_param_region_name if system is a DC systemcontroller
+    set_fact:
+      os_param_region_name: "{{ '--os-region-name SystemController' if is_dc_systemcontroller == true else '' }}"
+
   - block:
     - pause:
         prompt: "What is the password for the user account?"
@@ -126,35 +167,28 @@
       when: "in_user_password is not defined or in_user_password ==''"
     when: in_mode == 'create'
 
+  - name: Create LDAP and Keystone user {{ in_user_id }}
+    block:
 
-- hosts: systemcontroller
-  gather_facts: no
-
-  vars:
-    ssh_internal_args: -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no
-
-  tasks:
     - include_role:
         name: manage-local-ldap-account/create-account
-      when: in_mode == 'create'
 
     - include_role:
-        name: manage-local-ldap-account/delete-account
-      when: in_mode == 'delete'
+        name: manage-local-ldap-account/create-keystone-account
 
-- hosts: all
-  gather_facts: no
+    when: in_mode == 'create'
 
-  vars:
-    ssh_internal_args: -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no
+  - name: Delete LDAP and Keystone user {{ in_user_id }}
+    block:
 
-  tasks:
-    - name: Manage keystone user {{ in_user_id }}
-      block:
-      - include_role:
-          name: manage-local-ldap-account/create-keystone-account
-        when: in_mode == 'create'
+    - name: Delete LDAP user {{ in_user_id }} if it exists
+      command: ldapdeleteuser {{ in_user_id }}
+      become: yes
+      when: ldap_user_exists
 
-      - include_role:
-          name: manage-local-ldap-account/delete-keystone-account
-        when: in_mode == 'delete'
+    - name: Delete the Keystone user {{ in_user_id }} if it exists
+      shell: >-
+        source /etc/platform/openrc; openstack {{ os_param_region_name }} user delete {{ in_user_id }}
+      when: openstack_user_exists
+
+    when: in_mode == 'delete'
