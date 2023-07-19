@@ -260,8 +260,33 @@
 
   when: mode == 'restore'
 
+- block:
+  - name: Set unabortable flag for {{ inventory_hostname }}
+    file:
+      path: "{{ override_files_dir }}/.{{ inventory_hostname }}_deploy_not_abortable"
+      mode: 0644
+      group: root
+      state: touch
+
+  # To make sure an abort request was not issued right before creating
+  # the unabortable flag, we add a small wait time to make sure kubeadm
+  # is not going to be aborted.
+  - name: Wait 1 second before starting non abortable tasks
+    pause:
+      seconds: 1
+
+  when: distributed_cloud_role  == 'subcloud'
+  delegate_to: localhost
+
 - name: Initializing Kubernetes master
   command: kubeadm init --ignore-preflight-errors=DirAvailable--var-lib-etcd --config=/etc/kubernetes/kubeadm.yaml
+
+- name: Remove unabortable flag for {{ inventory_hostname }}
+  file:
+    path: "{{ override_files_dir }}/.{{ inventory_hostname }}_deploy_not_abortable"
+    state: absent
+  when: distributed_cloud_role  == 'subcloud'
+  delegate_to: localhost
 
 - name: Update kube admin.conf file mode and owner
   file:

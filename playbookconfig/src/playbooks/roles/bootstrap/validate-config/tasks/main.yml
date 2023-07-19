@@ -926,6 +926,16 @@
 
 # bootstrap_config ini file generation
 - block:
+  # A previous config workdir can exist if the playbook failed or
+  # was aborted before moving the contents and deleting the directory
+  # on the persist-config role. If the config ini file still exists
+  # before generating a new one, duplicate keys can appear, resulting
+  # in failure during "Saving config in sysinv database".
+  - name: Delete previous config workdir if exists
+    file:
+      path: "{{ config_workdir }}"
+      state: absent
+
   - name: Create config workdir
     file:
       path: "{{ config_workdir }}"

@@ -7,6 +7,15 @@
 # ROLE DESCRIPTION:
 #   This role is to apply the puppet manifest.
 
+- name: Set unabortable flag for {{ inventory_hostname }}
+  file:
+      path: "{{ override_files_dir }}/.{{ inventory_hostname }}_deploy_not_abortable"
+      mode: 0644
+      group: root
+      state: touch
+  when: distributed_cloud_role  == 'subcloud'
+  delegate_to: localhost
+
 - name: Apply bootstrap manifest (only in the initial play)
   include_tasks: apply_bootstrap_manifest.yml
   when: not replayed
