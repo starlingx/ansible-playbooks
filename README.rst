@@ -1,43 +1,43 @@
 =====================
 stx-ansible-playbooks
 =====================
-
-StarlingX Bootstrap and Deployment Playbooks
+StarlingX Bootstrap and Deployment Ansible [1]_ Playbooks
 
 Execution environment
 =====================
-
 - Unix like OS (recent Linux based distributions, MacOS, Cygwin)
-- Python 2.7
+- Python 3.8 and later
 
 Additional Required Packages
 ============================
-The playbooks in this repo have been verified with the following versions of Ansible
-and StarlingX playbooks dependencies:
+In addition to the pakages listed in `requirements.txt` and `test-requirements.txt`,
+the following packages are required to run the playbooks remotely:
 
-- sshpass 1.06
-- python2-ptyprocess 0.5
-- python2-pexpect 4.6
-- python2-netaddr 0.7
-- ``ansible`` 2.7.5
+- python3-pexpect
+- python3-ptyprocess
+- sshpass
 
 Supported StarlingX Releases
 ============================
-The playbooks in this repo are compatible with the following StarlingX releases:
-
-- 20.01
+The playbooks are compatible with StarlingX R8.0 and later.
 
 Executing StarlingX Playbooks
 =============================
 
-Executing Bootstrap Playbook
-----------------------------
-Please refer to ``StarlingX Deployment Guides``, section **Configuration controller-0**
-of the respective system configuration for instructions on how to set up and execute
-the bootstrap playbook from another host.
+Bootstrap Playbook
+------------------
+For instructions on how to set up and execute the bootstrap playbook from
+another host, please refer to the StarlingX Documentation [2]_, at
+``Installation Guides``, section **Configure controller-0** of the respective
+system deployment type.
+
+Developer Notes
+===============
+This repository is not intended to be developed standalone, but rather as part
+of the StarlingX Source System, which is defined by the StarlingX manifest [3]_.
 
 References
 ==========
-.. [1] https://docs.ansible.com/ansible/2.7/installation_guide/index.html
-.. [2] https://docs.starlingx.io/deployment_guides/index.html
-
+.. [1] https://docs.ansible.com/ansible/latest/installation_guide
+.. [2] https://docs.starlingx.io
+.. [3] https://opendev.org/starlingx/manifest.git
