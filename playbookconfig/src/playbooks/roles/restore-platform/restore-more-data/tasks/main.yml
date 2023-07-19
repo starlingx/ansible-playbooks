@@ -509,6 +509,19 @@
     become_user: postgres
     when: wipe_ceph_osds|bool and ceph_backend.rc == 0
 
+  - name: Get current resolv.conf permissions
+    stat:
+      path: /etc/resolv.conf
+    register: resolv_conf_stat
+
+  #  Make sure /etc/resolv.conf have the correct permissions
+  #  before restart services
+  - name: Update resolv.conf permissions
+    file:
+      path: /etc/resolv.conf
+      mode: '0644'
+    when: resolv_conf_stat.stat.mode != "0644"
+
   - name: Restart services
     systemd:
       name: "{{ item }}"
