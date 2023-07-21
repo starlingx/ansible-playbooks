@@ -12,6 +12,9 @@
   command: >-
     tar -C / -xpf {{ platform_backup_fqpn }} --overwrite
     {{ ' '.join(restore_items) }}
+    {% for v in restore_exclude_items %}
+    --exclude {{ v | quote }}
+    {% endfor %}
   args:
     warn: false
 
