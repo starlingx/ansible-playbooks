@@ -44,6 +44,10 @@ restore_items:
   - opt/platform
   - opt/extension
 
+restore_exclude_items:
+  - etc/ssl/certs/ssl-cert-snakeoil.pem
+  - etc/ssl/private/ssl-cert-snakeoil.key
+
 pxelinux_config_permdir: "/opt/platform/config/{{ software_version }}/pxelinux.cfg"
 
 # Used to restore networking configuration
