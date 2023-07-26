@@ -76,7 +76,7 @@
 
 # Ensures ICA is also installed in system controller
 # even when target_list contains only subclouds
-# Moved this tasks to be the very last because 'system certificate-install'
+# Moved this tasks to be the very last because 'system ca-certificate-install'
 # creates a temporary management affecting alarm. In order to avoid waiting
 # for it to clear, running it as a last step. No side effects of doing this.
 - hosts: localhost

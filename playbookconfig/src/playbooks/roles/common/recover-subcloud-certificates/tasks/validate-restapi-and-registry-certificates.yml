@@ -205,9 +205,9 @@
       {% elif registry_cert_expiration.rc != 0 %}
       Docker Registry certificate is expired.
       {% endif %}
-      Manual action required! On the subcloud, please update the expired certificates with
-      `system certificate-install` and then run 'dcmanager subcloud delete' and
-      'dcmanager subcloud add' again to restart the procedure.
+      Manual action required! On the subcloud, please update the expired certificates
+      and then run 'dcmanager subcloud delete' and 'dcmanager subcloud add' again to
+      restart the procedure.
   when: restapi_cert_expiration.rc is defined and
         restapi_cert_expiration.rc != 0 or
         registry_cert_expiration.rc != 0

@@ -104,7 +104,7 @@
     - name: Install system_root_ca_cert certificate as a Trusted CA certificate
       shell: >-
         source /etc/platform/openrc &&
-        system certificate-install -m ssl_ca "{{ root_ca_file.path }}"
+        system ca-certificate-install "{{ root_ca_file.path }}"
       register: install_cert_output
       until: install_cert_output is not failed
       retries: 3
