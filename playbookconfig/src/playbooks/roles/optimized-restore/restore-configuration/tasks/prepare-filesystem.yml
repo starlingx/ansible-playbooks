@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -18,3 +18,10 @@
 
 - name: Create device image bind mount
   command: "mount -o bind -t ext4 /opt/platform/device_images /var/www/pages/device_images"
+
+- name: Add users to sys_protected group
+  command: usermod -aG sys_protected {{ item | quote }}
+  loop:
+    - sysinv
+    - www
+  when: migrate_platform_data is defined and migrate_platform_data

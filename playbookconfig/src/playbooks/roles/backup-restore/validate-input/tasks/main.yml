@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -30,22 +30,35 @@
         (wipe_ceph_osds != 'false')
 
 - block:
-  - name: Fail if backup_filename is not defined or set
-    fail:
-      msg: "Mandatory configuration parameter backup_filename is not defined or set."
-    when: backup_filename is not defined or backup_filename is none
+  - name: Non-upgrade path
+    block:
+      - name: Fail if backup_filename is not defined or set
+        fail:
+          msg: "Mandatory configuration parameter backup_filename is not defined or set."
+        when: backup_filename is not defined or backup_filename is none
 
-  - name: Fail if the backup file is off-box and initial_backup_dir is not specified
-    fail:
-      msg: "Parameter initial_backup_dir must be specified if the backup tar file is off box."
-    when: (initial_backup_dir is not defined or initial_backup_dir is none) and
-          (on_box_data|bool == false)
+      - name: Fail if the backup file is off-box and initial_backup_dir is not specified
+        fail:
+          msg: "Parameter initial_backup_dir must be specified if the backup tar file is off box."
+        when: (initial_backup_dir is not defined or initial_backup_dir is none) and
+              (on_box_data|bool == false)
 
-  - name: Set the initial_backup_dir to /opt/platform-backup if not specified and backup file is on the host
-    set_fact:
-      initial_backup_dir: /opt/platform-backup
-    when: (initial_backup_dir is not defined or initial_backup_dir is none) and
-          (on_box_data|bool == true)
+      - name: Set the initial_backup_dir to /opt/platform-backup if not specified and backup file is on the host
+        set_fact:
+          initial_backup_dir: /opt/platform-backup
+        when: (initial_backup_dir is not defined or initial_backup_dir is none) and
+              (on_box_data|bool == true)
+
+    when: restore_data_file is not defined
+
+  - name: Upgrade path
+    block:
+      - name: Determine backup path for upgrade
+        set_fact:
+          initial_backup_dir: "{{ restore_data_file | dirname }}"
+          backup_filename: "{{ restore_data_file | basename }}"
+
+    when: restore_data_file is defined
 
   - name: Check if backup file exists
     stat:

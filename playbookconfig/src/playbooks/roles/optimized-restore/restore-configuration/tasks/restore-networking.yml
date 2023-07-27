@@ -12,28 +12,38 @@
 
 - name: Remove network configuration files
   file:
-    path: "{{ network_scripts_location }}"
+    path: "{{ network_scripts }}"
     state: absent
 
-- name: Restore network configuration files
-  command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite {{ network_scripts_location.lstrip('/') }}"
+- block:
+    - name: Restore network configuration files from Debian
+      command: >
+        tar -C / --overwrite
+        -xpf {{ platform_backup_fqpn | quote }} {{ network_scripts.lstrip('/') | quote }}
+      args:
+        warn: false
 
-- name: Bring up original networking
-  shell:
-    cmd: |
-      ifup $(ls ifcfg-* | sed 's/ifcfg-//') --ignore-errors --force
-    chdir: /etc/network/interfaces.d/
-  async: 60
-  poll: 5
+    - name: Bring up original networking
+      shell:
+        cmd: |
+          ifup $(ls ifcfg-* | sed 's/ifcfg-//') --ignore-errors --force
+        chdir: /etc/network/interfaces.d/
+      async: 60
+      poll: 5
+
+  when: previous_software_version != '21.12'
 
 - name: Bring up temporary addresses
   block:
     - name: Lookup controller host addresses
-      shell: "grep -E '{{ '|'.join(temporary_address_names) }}' /etc/hosts | awk '{print $1}'"
+      shell: >
+        grep -E '[^\\w]({{ '|'.join(temporary_address_names) }})($|[^\\w])' /etc/hosts
+        | awk '{print $1}'
+        | uniq
       register: host_addresses
 
     - name: Check if host address is up
-      shell: "ping {{ item }} -c1 -w5 | grep ' 0% packet loss'"
+      shell: "ping {{ item }} -c1 -w2 | grep ' 0% packet loss'"
       failed_when: false
       loop: "{{ host_addresses.stdout_lines }}"
       register: checked_addresses

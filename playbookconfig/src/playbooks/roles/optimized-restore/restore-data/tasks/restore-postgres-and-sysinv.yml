@@ -9,6 +9,12 @@
 #   in postgres, so that is restored first.  After flock services
 #   are restarted to pick up changes.
 
+- name: Shutdown mtcAgent
+  command: /usr/lib/ocf/resource.d/platform/mtcAgent stop
+  environment:
+    OCF_ROOT: "/usr/lib/ocf"
+    OCF_RESKEY_state: "active"
+
 - name: Stop flock services
   systemd:
     name: "{{ item }}"
@@ -27,6 +33,34 @@
 - name: Restore Postgres
   import_role:
     name: backup-restore/restore-postgres
+
+- name: Upgrade path
+  block:
+    - name: Migrate databases and platform data
+      command: "upgrade_controller_simplex {{ restore_data_file }}"
+      register: migration_output
+
+    - debug:
+        var: migration_output.stdout_lines
+
+    # Shell required for wildcard
+    - name: Migrate remaining config data
+      shell: "mv {{ src }} {{ dest }}"
+      failed_when: false
+      vars:
+        src: "/opt/platform/config/{{ previous_software_version }}/{*,.*}"
+        dest: "/opt/platform/config/{{ software_version }}"
+
+    - name: Update postgresql pg_hba.conf with IPv6 address if system is IPv6
+      command: "{{ item }}"
+      args:
+        warn: false
+      with_items:
+        - "sed --follow-symlinks -i -e 's|0.0.0.0/0|::0/0|g' /etc/postgresql/pg_hba.conf"
+        - "sed --follow-symlinks -i -e 's|0.0.0.0/32|::0/128|g' /etc/postgresql/pg_hba.conf"
+      when: ipv6_addressing is defined and ipv6_addressing != False
+
+  when: migrate_platform_data is defined and migrate_platform_data
 
 # restore-more-data/tasks/main.yml#459
 # Set all the hosts including controller-0 to locked/disabled/offline state.

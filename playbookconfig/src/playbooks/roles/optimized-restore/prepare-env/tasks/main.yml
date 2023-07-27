@@ -1,11 +1,21 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
 #   Prepare environment for optimized restore.
+
+- name: Set restore file parameter
+  set_fact:
+    restore_data_file: "{{ target_backup_dir }}/{{ backup_filename }}"
+  when: not (migrate_platform_data is defined and migrate_platform_data)
+
+- name: Set restore file parameter
+  set_fact:
+    platform_backup_fqpn: "{{ restore_data_file }}"
+  when: migrate_platform_data is defined and migrate_platform_data
 
 - name: Set image backup filename
   block:
@@ -20,3 +30,27 @@
       when: restore_registry_filesystem
 
   when: not registry_backup_filename|default(none)
+
+- name: Prepare for upgrade
+  block:
+    - name: Set upgrade facts
+      set_fact:
+        previous_software_version: "{{ upgrade_metadata.from_release }}"
+        kubernetes_version: "{{ upgrade_k8s_version }}"
+
+  when: migrate_platform_data is defined and migrate_platform_data
+
+- name: Non-upgrade path
+  block:
+    - name: Set previous software version for non-upgrade
+      set_fact:
+        previous_software_version: "{{ software_version }}"
+
+  when: not (migrate_platform_data is defined and migrate_platform_data)
+
+- name: Check if optimized upgrade is supported for software versions
+  fail:
+    msg: "Optimized upgrade is not supported from {{ previous_software_version }} to {{ software_version }}"
+  when: >
+    migrate_platform_data is defined and migrate_platform_data and
+    not (previous_software_version == '21.12' and software_version == '22.12')

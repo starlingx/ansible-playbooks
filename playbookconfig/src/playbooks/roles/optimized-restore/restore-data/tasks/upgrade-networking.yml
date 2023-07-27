@@ -1,0 +1,54 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   Create networking during a upgrade.
+
+- name: Upgrade networking
+  block:
+    - name: Create temp puppet dir
+      tempfile:
+        state: directory
+      register: tmp_net_dir
+
+    - name: Create interfaces directory
+      file:
+        path: "{{ network_scripts }}"
+        state: directory
+
+    - name: Create empty routes file
+      file:
+        path: "{{ network_routes }}"
+        state: file
+
+    - name: Create network runtime manifest
+      copy:
+        dest: "{{ tmp_net_dir.path }}/network_runtime.yml"
+        content: "classes: platform::network::runtime"
+
+    - name: Get controller IP
+      command: >
+        grep -Rm1 'platform::params::controller_0_ipaddress'
+        {{ puppet_permdir }}/hieradata
+      register: controller_ip
+
+    - name: Apply network runtime manifest
+      shell: >-
+        puppet-manifest-apply.sh
+        {{ puppet_permdir }}/hieradata
+        {{ controller_ip.stdout.rsplit(': ')[-1] }}
+        worker
+        runtime
+        {{ tmp_net_dir.path }}/network_runtime.yml
+
+  always:
+    - name: Cleanup temp puppet dir
+      file:
+        path: "{{ tmp_net_dir.path }}"
+        state: absent
+      when: tmp_net_dir is defined
+
+  when: previous_software_version == '21.12'

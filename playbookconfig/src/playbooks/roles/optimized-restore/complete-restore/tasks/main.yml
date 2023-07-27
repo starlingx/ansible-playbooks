@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -9,16 +9,32 @@
 #   Applying any missing changes or creating any missing flags
 #   that are not created during optimized restore.
 
+- set_fact:
+    _remove_items:
+      - "{{ ansible_remote_tmp|default('') }}"
+      - "{{ override_files_dir }}/{{ override_filename }}"
+      - "{{ target_backup_dir }}/{{ override_filename }}"
+
+- set_fact:
+    _restore_remove_items:
+      - "{{ platform_backup_fqpn }}"
+      - "{{ registry_backup_fqpn|default('') }}"
+  when: initial_backup_dir != target_backup_dir
+
+- set_fact:
+    _upgrade_remove_items:
+      - "{{ temp_upgrade_platform_dir }}"
+  when: migrate_platform_data is defined and migrate_platform_data
+
 - name: Remove temporary files and directories used during restore
   file:
     path: "{{ item }}"
     state: absent
-  loop:
-    - "{{ ansible_remote_tmp }}"
-    - "{{ override_files_dir }}/{{ override_filename }}"
-    - "{{ target_backup_dir }}/{{ override_filename }}"
-    - "{{ target_backup_dir }}/{{ backup_filename }}"
-    - "{{ target_backup_dir }}/{{ registry_backup_filename|default(backup_filename) }}"
+  loop: >
+    {{
+      _remove_items + _restore_remove_items|default([]) + _upgrade_remove_items|default([])
+      | reject('equalto', '')
+    }}
 
 - name: Combine required flags
   set_fact:

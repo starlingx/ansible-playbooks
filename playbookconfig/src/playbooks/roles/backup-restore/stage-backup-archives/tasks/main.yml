@@ -34,7 +34,7 @@
         state: link
       when: registry_backup_filename is defined
 
-  when: on_box_data|bool == true
+  when: on_box_data|bool == true and initial_backup_dir != target_backup_dir
 
 - name: Set image platform backup fqpn
   set_fact:

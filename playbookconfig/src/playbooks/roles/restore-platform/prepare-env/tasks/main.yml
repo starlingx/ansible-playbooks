@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2022 Wind River Systems, Inc.
+# Copyright (c) 2019-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -17,7 +17,7 @@
 
 - block:
   - name: Look for override backup file in the backup tarball
-    shell: "tar -tf {{ initial_backup_dir }}/{{ backup_filename }} | grep '_override_backup.yml'"
+    shell: "tar --use-compress-program=pigz -tf {{ initial_backup_dir }}/{{ backup_filename }} | grep '_override_backup.yml'"
     args:
       warn: false
     failed_when: false
@@ -93,7 +93,8 @@
 
   - name: Extract override file from backup tarball
     command: >
-      tar -C {{ target_backup_dir }} -xf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+      tar --use-compress-program=pigz -C {{ target_backup_dir }}
+      -xf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
       {{ search_result.stdout_lines[0] }}
     register: extract_result
     failed_when: false
@@ -196,3 +197,4 @@
     archive_banner_permdir: "opt/platform/config/{{ software_version }}/banner/etc"
     archive_deploy_permdir: "opt/platform/deploy/{{ software_version }}"
     archive_helm_permdir: "opt/platform/helm/{{ software_version }}"
+  when: migrate_platform_data is not defined or not migrate_platform_data

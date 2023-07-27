@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -26,3 +26,11 @@
     src: "{{ pxelinux_config_permdir }}"
     dest: /var/pxeboot/pxelinux.cfg
     state: link
+    force: true
+
+- name: Upgrade path
+  block:
+    - name: Add default security feature to kernel parameters
+      command: /usr/local/bin/puppet-update-grub-env.py --add-kernelparams '{{ default_security_feature }}'
+
+  when: migrate_platform_data is defined and migrate_platform_data

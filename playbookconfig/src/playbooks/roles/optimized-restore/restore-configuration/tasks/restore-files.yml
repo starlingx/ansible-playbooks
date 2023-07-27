@@ -1,12 +1,23 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # SUB-TASKS DESCRIPTION:
 #   Restore file from platform_backup.tgz.
 #   Mainly /etc, /opt/platform/, and /home.
+
+- block:
+    - set_fact:
+        restore_exclude_items: "{{ restore_exclude_items + upgrade_exclude_items }}"
+
+    - name: Get current MACs sshd config
+      command: grep '^MACs' /etc/ssh/sshd_config
+      register: debian_sshd_macs
+      when: previous_software_version == '21.12'
+
+  when: migrate_platform_data is defined and migrate_platform_data
 
 - name: Restore configuration files
   command: >-
@@ -35,34 +46,80 @@
 
 - name: Check home dir for CentOS
   block:
-
     - name: Check if home was backed up
-      shell: "tar -tf {{ platform_backup_fqpn }} | grep -E '^home\\/'"
+      shell: "tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep -E '^home\\/'"
       args:
         warn: false
+      failed_when: false
       register: home_dir_result
 
     - name: Restore home directory
-      command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite home/"
+      command: "tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }} --overwrite home/"
       args:
         warn: false
       when: home_dir_result.rc == 0
 
-  when: os_release == "centos"
+  when: previous_software_version == '21.12'
 
 - name: Check home dir for Debian
   block:
-
     - name: Check if home was backed up
-      shell: "tar -tf {{ platform_backup_fqpn }} | grep 'var/home/'"
+      shell: "tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep 'var/home/'"
       args:
         warn: false
+      failed_when: false
       register: home_dir_result
 
     - name: Restore home directory
-      command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite var/home/"
+      command: "tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }} --overwrite var/home/"
       args:
         warn: false
       when: home_dir_result.rc == 0
 
-  when: os_release == "debian"
+  when: previous_software_version != '21.12'
+
+- name: Migrate files and directories during upgrade
+  block:
+    - name: Migrate files to latest release
+      replace:
+        path: "{{ item.path }}"
+        after: "{{ item.after }}"
+        before: "{{ item.before|default('$') }}"
+        regexp: "{{ item.regexp|default(previous_software_version) }}"
+        replace: "{{ item.replace|default(software_version) }}"
+      register: migrate_file
+      failed_when: migrate_file.msg == ''
+      loop:
+        - path: /etc/mtc.ini
+          after: "keyring_directory *="
+        - path: /etc/etcd/etcd.conf
+          after: "ETCD_DATA_DIR="
+        - path: /etc/etcd/etcd.yml
+          after: "data-dir:"
+        - path: /etc/lighttpd/lighttpd.conf
+          after: "server.chroot +="
+          regexp: '"/www"'
+          replace: '"/var/www"'
+
+    - name: Migrate directories to latest release
+      command: "mv {{ src | quote }} {{ dest | quote }}"
+      loop:
+        - /opt/platform/.keyring
+      vars:
+        src: "{{ item }}/{{ previous_software_version }}"
+        dest: "{{ item }}/{{ software_version }}"
+
+    # Shell required for wildcard
+    - name: Fix host key permissions
+      shell: chmod 600 /etc/ssh/ssh_host_*_key
+      args:
+        warn: false
+
+    - name: Replace MACs from CentOS with Debian
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^MACs"
+        line: "{{ debian_sshd_macs.stdout_lines[0] }}"
+      when: previous_software_version == '21.12'
+
+  when: migrate_platform_data is defined and migrate_platform_data
