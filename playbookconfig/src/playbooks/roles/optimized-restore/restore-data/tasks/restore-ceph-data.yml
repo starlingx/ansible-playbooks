@@ -69,7 +69,7 @@
       # - For systems with storage nodes we get ceph-mon data from storage-0
       #   ceph-mon that is already up and will not be reinstalled.
       - name: Check if setup has storage nodes
-        shell: source /etc/platform/openrc; system host-list --format value --column personality
+        command: bash -c 'source /etc/platform/openrc; system host-list --nowrap --format value --column personality'
         register: node_personalities
         failed_when: false
 
