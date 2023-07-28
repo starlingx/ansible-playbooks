@@ -64,7 +64,7 @@
     - name: Restore previous backup upon failure
       command: mv {{ previous_backup_dir }} {{ central_backup_dir }}
       connection: local
-      when: previous_backup is defined
+      when: previous_backup_dir is defined
 
     - name: Force fail post rescue of transfer task failure
       fail:
