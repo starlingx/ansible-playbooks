@@ -97,7 +97,14 @@
 
 - name: Restore var/lib/kublet from the backup
   command:
-    cmd: "tar --use-compress-program=pigz -C / -xpf '{{ platform_backup_fqpn }}' var/lib/kubelet"
+    # In the case where the backed-up CPU manager policy is 'static', the
+    # state preserved in "var/lib/kubelet/cpu_manager_state" conflicts with
+    # the default 'none' policy and causes kubelet to error out in the next
+    # step. Excluding this file here is safe as it gets regenerated with
+    # intended values after subsequent unlock after the restore playbook.
+    cmd: "tar --use-compress-program=pigz -C / -xpf \
+         '{{ platform_backup_fqpn }}' var/lib/kubelet \
+         --exclude var/lib/kubelet/cpu_manager_state"
   args:
     warn: false
   when: kubelet_backup_found.rc == 0
