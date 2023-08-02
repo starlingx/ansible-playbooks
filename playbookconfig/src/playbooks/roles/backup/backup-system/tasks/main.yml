@@ -109,20 +109,12 @@
         state: directory
       register: tempdir
 
-    - name: Create a list for cached local registry images
+    - name: Create a list of images found in local registry
       set_fact:
-        system_image_list_path: "{{ tempdir.path }}/system_image_list.txt"
+        system_image_list_path: "{{ tempdir.path }}/system_image_list.yaml"
 
-    - name: Save cached local registry images currently on the system to list
-      shell:
-        cmd: >
-          crictl image ls
-          | tail -n +2
-          | awk '/registry.local:9001/ {print $1":"$2}'
-          | sed 's$registry.local:9001/$$'
-          | uniq
-          | sort
-          > '{{ system_image_list_path }}'
+    - name: Save local registry images currently on the system to list
+      command: /usr/bin/sysinv-utils local-registry-list {{ system_image_list_path }} --all-apps
 
     - name: Create postgres temp dir
       file:

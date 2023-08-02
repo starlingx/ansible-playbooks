@@ -96,6 +96,11 @@
     download_images_list: "{{ download_images_list|default([]) + trident_images + storage_images }}"
   when: mode == 'trident_install'
 
+- name: Append restore images for redownload if found
+  set_fact:
+    download_images_list: "{{ download_images_list + backed_up_local_registry_images }}"
+  when: backed_up_local_registry_images is defined
+
 # Pruning empty strings from the list as some images may not be relevant to a given k8s version
 # e.g. calico_flexvol_img for k8s 1.24.4
 - name: Prune any empty string from download images list

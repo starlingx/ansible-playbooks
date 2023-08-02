@@ -55,11 +55,10 @@
     name: containerd
     state: restarted
 
-
 - name: Add original system images to download list
   block:
-    # During backup, a snapshot of all the images in containerd cache
-    # tagged for registry.local was taken.  We want to ensure that all those
+    # During backup, a snapshot of all the images in registry local
+    # was taken.  We want to ensure that all those
     # images are redownloaded before running unlock after this playbook.
     # Image downloads for application re-applies shortly after
     # the host unlock impose a significant performance cost.
@@ -67,7 +66,7 @@
       command:
         cmd: >
           tar --wildcards --use-compress-program=pigz -O -xf
-          {{ platform_backup_fqpn | quote }} 'opt/*/system_image_list.txt'
+          {{ platform_backup_fqpn | quote }} 'opt/*/system_image_list.yaml'
       args:
         warn: false
       failed_when: false
@@ -75,8 +74,12 @@
 
     - name: Add original images to additional download list if found
       set_fact:
-        additional_local_registry_images: >
-          {{ (additional_local_registry_images + system_image_list.stdout_lines) | unique }}
+        backed_up_local_registry_images: "{{ (system_image_list.stdout | from_yaml).images }}"
+      when: system_image_list.rc == 0
+
+    - name: Display additional images for download
+      debug:
+        var: backed_up_local_registry_images
       when: system_image_list.rc == 0
 
   when: restore_original_images|bool
