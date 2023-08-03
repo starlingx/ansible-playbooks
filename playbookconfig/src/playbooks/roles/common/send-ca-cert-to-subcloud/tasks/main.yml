@@ -147,9 +147,10 @@
     state: absent
   become: yes
 
-# If not bootstrap/upgrade, install the root certificates
+# If not bootstrap/upgrade, install the 'system-local-ca' certificate
+# as a trusted CA in subcloud
 - block:
-  - name: Install certificates (Subcloud)
+  - name: Install new CA certificate (Subcloud)
     include_role:
       name: common/install-trusted-ca
     with_items:
@@ -157,30 +158,38 @@
     loop_control:
       label: "{{ item.name }}"
 
-  - name: Restart kube-apiserver to pick the new certificates (Subcloud)
+  - name: Check if raised alarm was cleared
+    shell: |
+      source /etc/platform/openrc;
+      fm alarm-list --query alarm_id=250.001
+    register: alarm_subcloud
+    retries: 6
+    delay: 15
+    until: alarm_subcloud.stdout == ""
+    # set as false to allow for a better error message in the fail task below
+    failed_when: false
+
+  - name: Failed when the manifest apply times out
+    fail:
+      msg: >-
+        Timed out applying puppet runtime manifest. Check puppet logs
+        for more information.
+    when: alarm_subcloud.stdout != ""
+
+  - name: Restart kube-apiserver to pick the new certificate (Subcloud)
     include_role:
       name: common/restart-kube-apiserver
 
   when: not ca_send_from_bootstrap
 
+# Sometimes the secret change causes a loss of openldap connection
+# this is a workaround for it.
 - block:
-  - name: Install certificates (SystemController)
-    include_role:
-      name: common/install-trusted-ca
-    with_items:
-      - { name: system_root_ca_cert, content: "{{ system_root_ca_cert }}" }
-    loop_control:
-      label: "{{ item.name }}"
-
-  - name: Restart kube-apiserver to pick the new certificates (SystemController)
-    include_role:
-      name: common/restart-kube-apiserver
-
-  - name: Restart openldap server to trust the new certificates
+  - name: Restart openldap server (in SystemController)
     shell: "sm-restart service open-ldap"
     become: true
 
-  - name: Check openldap service is enabled after restart
+  - name: Check if openldap service is enabled after restart
     shell: sm-query service open-ldap | grep -c enabled-active
     become: true
     register: service_status
