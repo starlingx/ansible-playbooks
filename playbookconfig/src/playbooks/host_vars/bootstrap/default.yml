@@ -82,6 +82,50 @@ management_dynamic_address_allocation: true
 # Cluster-host network address allocation (true = dynamic, false = static)
 cluster_host_dynamic_address_allocation: true
 
+# CUSTOMIZED BANNERS
+# ==================
+#
+# It is possible to customize the pre-login message (issue) and post-login
+# Message of the Day (MOTD) across the entire Cloud Platform cluster during
+# system bootstrap by configuring the "banner" variable.
+#
+# The issue message can be configured for both SSH and console
+# welcome screens, while the MOTD can have customized header and/or footer
+# messages. All of these messages should be formatted as a multiline string
+# entry. For each category, it is possible to define either one or both
+# parameters, or leave them undefined. If parameters are left undefined,
+# default values will be applied for each message.
+#
+# MOTD complete message is generated from the following sources in the order
+# presented:
+# * /etc/motd.head (it is created from defined MOTD head message)
+# * /etc/sysinv/motd.system
+# * /etc/platform/motd.license
+# * /etc/motd.tail (it is created from defined MOTD tail message)
+#
+# banner: {}
+#
+# e.g.
+# banner:
+#   issue:
+#     network: |
+#       ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+#       ::::::::::::::::::::: EXAMPLE SSH WELCOME MESSAGE ::::::::::::::::::::
+#       ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+#     console: |
+#       ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+#       ::::::::::::::::::: EXAMPLE CONSOLE WELCOME MESSAGE ::::::::::::::::::
+#       ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+#   motd:
+#     head: |
+#       ----------------------------------------------------------------------
+#       ---------------------- EXAMPLE MOTD HEAD MESSAGE ---------------------
+#       ----------------------------------------------------------------------
+#     tail: |
+#       ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#       ++++++++++++++++++++++ EXAMPLE MOTD TAIL MESSAGE +++++++++++++++++++++
+#       ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
 # DOCKER PROXIES
 # ==============
 #
