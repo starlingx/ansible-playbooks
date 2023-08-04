@@ -639,6 +639,18 @@
       shell: source /etc/platform/openrc; system application-remove platform-integ-apps
       when: wipe_ceph_osds|bool
 
+    - block:
+      - name: Recover Ceph PVCs when OSDs are wiped
+        script: recover_ceph_pvcs.sh
+        register: recover_ceph_pvcs_output
+        environment:
+          KUBECONFIG: /etc/kubernetes/admin.conf
+
+      - name: Result of recovering Ceph PVCs
+        debug: var=recover_ceph_pvcs_output.stdout_lines
+
+      when: wipe_ceph_osds|bool
+
     when: check_online.stdout == "online" and ceph_backend.rc == 0
 
   - name: Apply kube-apiserver parameters
