@@ -44,7 +44,6 @@
     until: backup_transfer.rc == 0
     retries: 3
     delay: 2
-    no_log: true
     become: false
 
   - name: Remove previous backup upon successful subcloud backup (central storage)
