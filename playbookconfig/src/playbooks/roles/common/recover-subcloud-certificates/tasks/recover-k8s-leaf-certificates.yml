@@ -1,0 +1,85 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   These tasks recover the kubernetes leaf certificates after expiry
+#   and verify the k8s cluster is healthy afterwards
+#
+- name: Verify k8s leaf certificates expiration
+  shell: |
+    K8_OUT=$(kubeadm certs check-expiration --config /etc/kubernetes/kubeadm.yaml)
+    if [ "$?" -eq "0" ]; then
+        echo "$K8_OUT" | grep invalid
+        # if no matches for 'invalid', it means no k8s leaf certificate is expired
+        # proceed to check the kubelet certificate
+        if [ "$?" -ne "0" ]; then
+            # checkend will return 0 if valid and 1 for invalid
+            openssl x509 -in /var/lib/kubelet/pki/kubelet-client-current.pem -checkend 0
+            exit $?
+        else
+            exit 1
+        fi
+    fi
+  register: k8s_certs_expiration
+  failed_when: false
+  become: yes
+
+- name: Recover K8s cluster after certificate expiration
+  block:
+  - name: Recover k8s controller plane leaf certificates
+    command: bash -x /usr/bin/kube-cert-rotation.sh
+    register: kube_cert_rotation_out
+    become: yes
+    retries: 5
+    delay: 10
+    until: kube_cert_rotation_out is not failed
+
+  - name: Recover kubelet certificates
+    command: bash -x /usr/bin/kube-expired-kubelet-cert-recovery.sh
+    register: kubelet_cert_rotation_out
+    become: yes
+    retries: 5
+    delay: 10
+    until: kubelet_cert_rotation_out is not failed
+
+  - name: Wait till kubectl starts replying
+    command: kubectl get nodes
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+    register: k8s_get_nodes
+    # Waits up to 2 minutes, but in a freshly installed system, it takes ~ 20secs
+    retries: 12
+    delay: 10
+    until: k8s_get_nodes is not failed
+
+  - name: Trigger a restart of every pod (deployment,statefulset,daemonset rollout)
+    shell: >-
+      kubectl get deployment,statefulset,daemonset -A --no-headers |
+      awk '{ print  " rollout restart " $2 " -n " $1}' | xargs -n5 kubectl
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+
+  - name: Wait pods to restart (become READY)
+    shell: >-
+      kubectl get pods -l '!job-name' -A --no-headers \
+      -o 'custom-columns=NAME:.metadata.name,READY:.status.containerStatuses[*].ready' \
+      | grep -cv true
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+    register: pods_starting
+    failed_when: pods_starting.stdout | int != 0
+    # Waits for up to one hour. This is the same value used in k8s-rootca-update
+    # A large number is used because the recovery time depends on the number of pods running.
+    # In a freshly installed system, without additional pods, it takes ~ 1min 10secs
+    retries: 360
+    delay: 10
+    until: pods_starting.stdout | int == 0
+
+  - name: Set fact to mark that K8s leaf certificates recovery was performed
+    set_fact:
+      subcloud_k8s_leaf_certs_recovered: true
+
+  when: k8s_certs_expiration.rc != 0

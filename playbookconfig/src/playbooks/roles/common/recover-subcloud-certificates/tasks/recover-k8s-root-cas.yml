@@ -1,0 +1,55 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   These tasks recover the K8s Root CA certificates (K8s Root CA, ETCD CA, FrontProxy CA)
+#
+- name: Verify if Kubernetes Root CA is expired
+  community.crypto.x509_certificate_info:
+    path: /etc/kubernetes/pki/ca.crt
+  register: k8s_root_ca_info
+  become: yes
+
+- name: Verify if ETCD Root CA is expired
+  community.crypto.x509_certificate_info:
+    path: /etc/etcd/ca.crt
+  register: etcd_root_ca_info
+  become: yes
+
+- name: Verify if FrontProxy Root CA is expired
+  community.crypto.x509_certificate_info:
+    path: /etc/kubernetes/pki/front-proxy-ca.crt
+  register: frontproxy_ca_info
+  become: yes
+
+- name: Copy K8s Root CA cert and key from systemcontroller to the subcloud
+  include_tasks: copy-file-from-local-to-remote.yml
+  loop:
+    - { path: /etc/kubernetes/pki/ca.crt }
+    - { path: /etc/kubernetes/pki/ca.key }
+  when: k8s_root_ca_info.expired
+
+- name: Copy ETCD Root CA cert and key from systemcontroller to the subcloud
+  include_tasks: copy-file-from-local-to-remote.yml
+  loop:
+    - { path: /etc/etcd/ca.crt, perms: '0755' }
+    - { path: /etc/etcd/ca.key }
+  when: etcd_root_ca_info.expired
+
+- name: Copy FrontProxy Root CA cert and key from systemcontroller to the subcloud
+  include_tasks: copy-file-from-local-to-remote.yml
+  loop:
+    - { path: /etc/kubernetes/pki/front-proxy-ca.crt }
+    - { path: /etc/kubernetes/pki/front-proxy-ca.key }
+  when: frontproxy_ca_info.expired
+
+- name: Set fact to mark that K8s Root CAs recovery was performed
+  set_fact:
+    subcloud_k8s_root_ca_recovered: true
+  when:
+    - k8s_root_ca_info.expired
+    - etcd_root_ca_info.expired
+    - frontproxy_ca_info.expired
