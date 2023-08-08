@@ -40,6 +40,7 @@ REGISTRY_PATTERNS = ['.io', 'docker.elastic.co']
 
 image_outfile = None
 registries = json.loads(os.environ['REGISTRIES'])
+add_docker_prefix = False
 
 
 def get_local_registry_auth():
@@ -67,22 +68,21 @@ def convert_img_for_local_lookup(img):
     # i.e.
     # Invalid format:
     #   registry.local:9001/privateregistry.io:5000/kube-proxy:v1.16.0
-
     if img.find('/') > 0:
         registry_url = img[:img.find('/')]
         if ':' in registry_url:
-            img_name = img[img.find('/'):]
-            new_img = registry_url.split(':')[0] + img_name
+            # e.g. registry.central:9001/myimage:latest
+            new_img = img.split('/', 1)[1]
         else:
             if not any(pattern in registry_url for pattern in REGISTRY_PATTERNS):
-                # Default to docker.io
                 # e.g. fluxcd/helm-controller
-                new_img = "docker.io/" + img
+                new_img = "docker.io/" + img if add_docker_prefix else img
             else:
+                # e.g. k8s.gcr.io/kube-apiserver:v1.24.4
                 new_img = img
     else:
-        # e.g. rabbitmq:3.8.11-management, default to docker.io
-        new_img = "docker.io/" + img
+        # e.g. rabbitmq:3.8.11-management
+        new_img = "docker.io/" + img if add_docker_prefix else img
 
     return LOCAL_REGISTRY_URL + new_img
 
@@ -210,11 +210,10 @@ def download_and_push_an_image(img):
             return handle_docker_exception(e, err_msg, target_img)
 
 
+# TODO(tngo): Remove this function post StarlingX 9.0
 def download_a_local_image(img):
     # This function is used to pull the specified image from the local
     # registry for image prestage on CentOS.
-    #
-    # NOTE: This function will be removed post StarlingX 9.0
     err_msg = " Image retrieval failed: %s " % img
 
     local_img = LOCAL_REGISTRY_URL + img
@@ -235,13 +234,13 @@ def download_a_local_image(img):
         return handle_docker_exception(e, err_msg, img)
 
 
+# TODO(tngo): Remove this function post StarlingX 9.0
 def download_an_image(img_tuple):
     # This function is used to download an image from the public/private
     # registry for image prestage on CentOS. It first checks if the image
     # is already available in the local registry and pulls it from there.
     # Otherwise, it pulls the image from the specified source.
-    #
-    # NOTE: This function will be removed post StarlingX 9.0.
+
     prestage_img, target_img, registry_auth = img_tuple
     local_img = convert_img_for_local_lookup(prestage_img)
 
@@ -307,6 +306,7 @@ def download_and_push_an_image_for_prestage(img_tuple):
             return handle_docker_exception(e, err_msg, target_img)
 
 
+# TODO(tngo): Remove this function post StarlingX 9.0
 def generate_image_outfile(images, outfile):
     # This function writes the list of images in docker cache that can
     # be used for prestaging to the given file.
@@ -349,6 +349,9 @@ if __name__ == '__main__':
     prestage_download = False
 
     start = time.time()
+
+    if os.getenv('ADD_DOCKER_PREFIX') is not None:
+        add_docker_prefix = (os.environ['ADD_DOCKER_PREFIX'] == 'True')
 
     if len(sys.argv) == 2:
         success_msg = "All images downloaded and pushed to the local registry"

@@ -69,11 +69,6 @@
     when: (item.secure is defined and not item.secure)
     no_log: true
 
-  - name: Load images from archives if configured
-    include: load_images_from_archive.yml input_archive={{ item.path }}
-    with_items: "{{ images_archive_files }}"
-    when: images_archive_exists
-
   - name: Configure local docker registry
     import_tasks: configure_local_registry.yml
 

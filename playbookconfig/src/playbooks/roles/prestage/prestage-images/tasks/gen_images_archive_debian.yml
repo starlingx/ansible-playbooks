@@ -41,7 +41,7 @@
     failed_when: download_images_output.rc != 0
     environment:
       REGISTRIES: "{{ docker_registries | to_json }}"
-      CONTAINERD_PULL: no
+      PRESTAGE_DOWNLOAD: yes
 
   - debug: var=download_images_output.stdout_lines
 

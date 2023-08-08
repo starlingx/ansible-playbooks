@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2021-2022 Wind River Systems, Inc.
+# Copyright (c) 2021-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -10,6 +10,8 @@
 import docker
 import eventlet
 import keyring
+import os
+import subprocess
 import sys
 import time
 
@@ -19,6 +21,7 @@ from eventlet import greenpool  # noqa: E402
 
 MAX_PUSH_THREAD = 5
 REGISTRY_PATTERNS = ['.io', 'docker.elastic.co']
+add_docker_prefix = False
 
 
 def get_local_registry_auth():
@@ -58,19 +61,20 @@ def push_an_image(img):
     if img.find('/') > 0:
         registry_url = img[:img.find('/')]
         if ':' in registry_url:
-            img_name = img[img.find('/'):]
-            new_img = registry_url.split(':')[0] + img_name
+            # e.g. registry.central:9001/myimage:latest
+            new_img = img.split('/', 1)[1]
         else:
             if not any(pattern in registry_url for pattern in REGISTRY_PATTERNS):
-                # Default to docker.io
                 # e.g. fluxcd/helm-controller
-                new_img = "docker.io/" + img
+                new_img = "docker.io/" + img if add_docker_prefix else img
             else:
+                # e.g. k8s.gcr.io/kube-apiserver:v1.24.4
                 new_img = img
     else:
-        # e.g. rabbitmq:3.8.11-management, default to docker.io
-        new_img = "docker.io/" + img
+        # e.g. rabbitmq:3.8.11-management
+        new_img = "docker.io/" + img if add_docker_prefix else img
 
+    print("Image name used for local lookup is {}".format(new_img))
     target_img = img
     local_img = 'registry.local:9001/' + new_img
     err_msg = " Image push failed: %s" % target_img
@@ -79,7 +83,7 @@ def push_an_image(img):
     auth = get_local_registry_auth()
     try:
         client.inspect_distribution(local_img, auth_config=auth)
-        print("Image {} found on local registry".format(target_img))
+        print("Imported image {} found on local registry".format(target_img))
         # When it gets here, it's a playbook replay
         return target_img, True
     except docker.errors.APIError:
@@ -88,6 +92,10 @@ def push_an_image(img):
             client.tag(target_img, local_img)
             client.push(local_img, auth_config=auth)
             print("Image push succeeded: %s" % local_img)
+            auth_str = '{0}:{1}'.format(auth['username'], auth['password'])
+            subprocess.check_call(["crictl", "pull", "--creds", auth_str,
+                                   local_img])
+            print("Image %s download succeeded by containerd" % target_img)
             # Clean up docker images except for n3000-opae
             # as opae container runs via docker.
             # TODO: run opae with containerd.
@@ -125,6 +133,9 @@ if __name__ == '__main__':
         if sys.argv[1] != 'physical':
             MAX_PUSH_THREAD = 1
             print("Subcloud is virtual. MAX_PUSH_THREAD is set to %d" % MAX_PUSH_THREAD)
+
+    if os.getenv('ADD_DOCKER_PREFIX') is not None:
+        add_docker_prefix = (os.environ['ADD_DOCKER_PREFIX'] == 'True')
 
     image_list = get_list_of_imported_images()
     if not image_list:

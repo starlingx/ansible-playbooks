@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -51,12 +51,3 @@
     state: restarted
     enabled: true
   loop: "{{ docker_services }}"
-
-# Images prestage on Debian does not generate images bundle. If the following task is executed, the
-# prestage must have come from the local install bundle.
-#
-# TODO(tngo): This task will be removed post StarlingX 9.0
-- name: Load images from archives if configured
-  include: roles/bootstrap/bringup-essential-services/tasks/load_images_from_archive.yml input_archive={{ item.path }}
-  with_items: "{{ images_archive_files }}"
-  when: images_archive_exists
