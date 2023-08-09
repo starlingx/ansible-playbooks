@@ -49,7 +49,6 @@
       retries: 3
       delay: 2
       become: false
-      no_log: true
 
     when: not local
 
