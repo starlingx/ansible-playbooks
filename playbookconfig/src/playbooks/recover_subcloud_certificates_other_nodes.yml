@@ -1,0 +1,80 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This is an auxiliary playbook used for the subcloud rehoming procedure
+# to recover expired certificates in subclouds standby and worker nodes
+#
+
+- hosts: all
+  gather_facts: no
+
+  tasks:
+    - name: Power on controller-1
+      shell: source /etc/platform/openrc; system host-power-on controller-1
+      register: poweron_result
+      failed_when: false
+
+    - name: Ask for manual power on if network power on fails
+      debug:
+        msg: Failed to start controller-1 over the network. Manual intervention required.
+      when: '"rc" in poweron_result and poweron_result.rc != 0'
+
+    - name: Wait for controller-1 to be running. Power on manually if necessary
+      shell: "ping controller-1 -c1 -w5 | grep ' 0% packet loss'"
+      register: c1_ping
+      # Wait up to 10 minutes for controller-1 to power on
+      retries: 40
+      delay: 15
+      until: c1_ping is not failed
+
+    - block:
+      - name: Wait password to synchronize between controllers
+        command: >-
+          ansible all -i "controller-1," -m command -a "pwd"
+          -e "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}"
+        register: ssh_output
+        failed_when: ssh_output.rc != 0
+        no_log: true
+        # May wait up to 15 mins, which is the interval at which AgentManager periodic task
+        # will synchronize passwords
+        retries: 10
+        delay: 100
+        until: ssh_output.rc == 0
+      rescue:
+        - name: Fail if password fail to sync to controller-1 ( ssh fails )
+          fail:
+            msg: >-
+              Controller-1 is not using the same password as controller-0.
+              Please change it manually and try again.
+
+    - name: Add standby controller to hosts standby controller group
+      add_host:
+        name: "controller-1"
+        groups: standby_group
+
+    - name: Add computes nodes to hosts compute_group
+      add_host:
+        name: "{{item}}"
+        groups: compute_group
+      loop: "{{ hosts.split() }}"
+
+- hosts: standby_group
+
+  tasks:
+    - name: Wait for sm to be available before proceeding
+      command: sm-dump
+      register: sm_dump_output
+      retries: 24
+      delay: 10
+      until: '"/var/run/sm/sm.db not available" not in sm_dump_output.stdout'
+
+    - name: Recover controller-1 certificates
+      import_role:
+        name: common/recover-subcloud-certificates
+
+- hosts: compute_group
+  roles:
+    - common/recover-subcloud-certificates

@@ -8,45 +8,44 @@
 #   These tasks recover the kubernetes leaf certificates after expiry
 #   and verify the k8s cluster is healthy afterwards
 #
-- name: Verify k8s leaf certificates expiration
-  shell: |
-    K8_OUT=$(kubeadm certs check-expiration --config /etc/kubernetes/kubeadm.yaml)
-    if [ "$?" -eq "0" ]; then
-        echo "$K8_OUT" | grep invalid
-        # if no matches for 'invalid', it means no k8s leaf certificate is expired
-        # proceed to check the kubelet certificate
-        if [ "$?" -ne "0" ]; then
-            # checkend will return 0 if valid and 1 for invalid
-            openssl x509 -in /var/lib/kubelet/pki/kubelet-client-current.pem -checkend 0
-            exit $?
-        else
-            exit 1
-        fi
-    fi
-  register: k8s_certs_expiration
-  failed_when: false
-  become: yes
-
-- name: Recover K8s cluster after certificate expiration
+- name: Recover k8s control plane leaf certificate on controller nodes
   block:
-  - name: Recover k8s controller plane leaf certificates
+  - name: Verify k8s leaf certificates expiration
+    shell: |
+      K8_OUT=$(kubeadm certs check-expiration --config /etc/kubernetes/kubeadm.yaml)
+      if [ "$?" -eq "0" ]; then
+          echo "$K8_OUT"
+          EXPIRED_K8S_CERTS=$(echo "$K8_OUT" | grep invalid)
+          if [ "$EXPIRED_K8S_CERTS" -ne "0" ]; then
+              exit 0
+          else
+              exit 1
+          fi
+      else
+          exit 1
+      fi
+    register: k8s_certs_expiration
+    failed_when: false
+    become: yes
+
+  - name: Recover k8s control plane leaf certificates
     command: bash -x /usr/bin/kube-cert-rotation.sh
     register: kube_cert_rotation_out
     become: yes
     retries: 5
     delay: 10
     until: kube_cert_rotation_out is not failed
+    when: k8s_certs_expiration.rc != 0
 
-  - name: Recover kubelet certificates
-    command: bash -x /usr/bin/kube-expired-kubelet-cert-recovery.sh
-    register: kubelet_cert_rotation_out
-    become: yes
-    retries: 5
-    delay: 10
-    until: kubelet_cert_rotation_out is not failed
+  when: is_controller
 
+- name: Renew kubelet leaf certificates
+  import_tasks: recover-kubelet-certificates.yml
+
+- name: Restart K8s cluster after recovery on the active controller
+  block:
   - name: Wait till kubectl starts replying
-    command: kubectl get nodes
+    shell: kubectl get node $(hostname)
     environment:
       KUBECONFIG: "/etc/kubernetes/admin.conf"
     register: k8s_get_nodes
@@ -55,17 +54,35 @@
     delay: 10
     until: k8s_get_nodes is not failed
 
-  - name: Trigger a restart of every pod (deployment,statefulset,daemonset rollout)
-    shell: >-
-      kubectl get deployment,statefulset,daemonset -A --no-headers |
-      awk '{ print  " rollout restart " $2 " -n " $1}' | xargs -n5 kubectl
+  - name: Trigger restart of networking pods first to avoid pod scheduling issues
+    shell: |
+      kubectl -n kube-system delete pods -l app=multus --wait=false
+      kubectl -n kube-system delete pods -l k8s-app=kube-proxy --wait=false
     environment:
       KUBECONFIG: "/etc/kubernetes/admin.conf"
 
-  - name: Wait pods to restart (become READY)
+  # todo (rjosemat) replace this with a dynamic wait instead
+  - name: Pause for 10 seconds to wait k8s to start rolling out pods
+    pause:
+      seconds: 10
+
+  - name: Trigger a restart of every pod (deployment,statefulset,daemonset rollout)
     shell: >-
-      kubectl get pods -l '!job-name' -A --no-headers \
-      -o 'custom-columns=NAME:.metadata.name,READY:.status.containerStatuses[*].ready' \
+      kubectl get deployment,statefulset,daemonset -A --no-headers |
+      awk '{ print  " rollout restart " $2 " -n " $1}' | xargs -n5 kubectl;
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+
+    # Waits for pods to become READY for the current controller.
+    # Calico-node is excluded because it only becomes READY when both kubelet nodes are recovered,
+    # it waits for the BGP peer of the other calico node in controller-1 to be available.
+  - name: Wait pods to restart (become READY) on controller
+    shell: >-
+      kubectl get po -l '!job-name' -A --no-headers -o
+      'custom-columns=NAME:.metadata.name,
+      READY:.status.containerStatuses[*].ready,NODE:.spec.nodeName'
+      | grep -v calico-node
+      | grep $(hostname)
       | grep -cv true
     environment:
       KUBECONFIG: "/etc/kubernetes/admin.conf"
@@ -82,4 +99,6 @@
     set_fact:
       subcloud_k8s_leaf_certs_recovered: true
 
-  when: k8s_certs_expiration.rc != 0
+  when:
+    - is_controller
+    - k8s_certs_expiration.rc != 0 or kubelet_certs_expiration.rc != 0

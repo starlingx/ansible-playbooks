@@ -16,10 +16,13 @@
   become: yes
 
 - name: Verify if Docker Registry certificate is expired
-  shell: openssl x509 -in /etc/ssl/private/registry-cert.crt -checkend 0
+  command: openssl x509 -in /etc/ssl/private/registry-cert.crt -checkend 0
   register: registry_cert_expiration
   failed_when: false
   become: yes
+  retries: 10
+  delay: 6
+  until: registry_cert_expiration.rc == 0
 
 - name: Verify if HTTPS is enabled
   shell: |
@@ -34,9 +37,12 @@
       failed_when: not restapi_cert.stat.exists
 
     - name: Verify if Rest API certificate is expired
-      shell: openssl x509 -in /etc/ssl/private/server-cert.pem -checkend 0
+      command: openssl x509 -in /etc/ssl/private/server-cert.pem -checkend 0
       register: restapi_cert_expiration
       failed_when: false
+      retries: 10
+      delay: 6
+
   become: yes
   when: https_enabled.stdout == "True"
 

@@ -1,0 +1,139 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   These tasks recover the kubelet leaf certificates after expiry
+#   and restart kubelet afterwards
+#
+- block:
+  - name: Verify kubelet leaf certificates expiration
+    shell: openssl x509 -in /var/lib/kubelet/pki/kubelet-client-current.pem -checkend 0
+    register: kubelet_certs_expiration
+    failed_when: false
+    become: yes
+
+  - name: Recover kubelet node after certificate expiration
+    block:
+    - name: Create tmp file name for kubelet client csr config file
+      tempfile:
+        state: file
+        suffix: tmp_kubelet_conf_csr
+        path: /tmp/
+      register: tmp_kubelet_conf_csr
+      become: yes
+
+    - name: Create tmp file name for kubelet client csr file
+      tempfile:
+        state: file
+        suffix: tmp_kubelet_csr
+        path: /tmp/
+      register: tmp_kubelet_csr
+      become: yes
+
+    - name: Create tmp file name for kubelet client certificate
+      tempfile:
+        state: file
+        suffix: tmp_kubelet_cert
+        path: /tmp/
+      register: tmp_kubelet_cert
+      become: yes
+
+    - name: Create tmp file name for kubelet client key
+      tempfile:
+        state: file
+        suffix: tmp_kubelet_key
+        path: /tmp/
+      become: yes
+      register: tmp_kubelet_key
+
+    - name: Get hostname
+      command: hostname
+      register: hostname_results
+
+    - name: Save certificate signing request to {{ tmp_kubelet_conf_csr.path }}
+      vars:
+        csr_content: |
+          [req]
+          prompt = no
+          x509_extensions = v3_req
+          distinguished_name = dn
+          [dn]
+          O = system:nodes
+          CN = system:node:{{ hostname_results.stdout }}
+          [v3_req]
+          basicConstraints = critical, CA:FALSE
+          keyUsage = critical, Digital Signature, Key Encipherment
+          extendedKeyUsage = TLS Web Client Authentication
+      copy:
+        dest: "{{ tmp_kubelet_conf_csr.path }}"
+        content: "{{ csr_content }}"
+      become: yes
+
+    - name: Recover kubelet certificates
+      shell: |
+        KUBELET_CONF=/etc/kubernetes/kubelet.conf
+        KUBELET_CERT_PATH=/var/lib/kubelet/pki/kubelet-client-$(date "+%F-%H-%M-%S").pem
+
+        openssl genrsa -out {{ tmp_kubelet_key.path }} 2048
+        openssl req -new -key {{ tmp_kubelet_key.path }} -out {{ tmp_kubelet_csr.path }} \
+        -config {{ tmp_kubelet_conf_csr.path }}
+        openssl x509 -req -in {{ tmp_kubelet_csr.path }} -CA /etc/kubernetes/pki/ca.crt \
+        -CAkey /etc/kubernetes/pki/ca.key -CAcreateserial -out {{ tmp_kubelet_cert.path }} \
+        -days 365 -extensions v3_req -extfile {{ tmp_kubelet_conf_csr.path }}
+
+        cat {{ tmp_kubelet_key.path }}  {{ tmp_kubelet_cert.path }}  > $KUBELET_CERT_PATH
+
+        # overrides existing link pointing to newly generated certificate
+        rm -f /var/lib/kubelet/pki/kubelet-client-current.pem
+        ln -s $KUBELET_CERT_PATH /var/lib/kubelet/pki/kubelet-client-current.pem
+        # delete kubelet ca and server certificates so they get regenerated in kubelet restart
+        rm -f /var/lib/kubelet/pki/kubelet.crt
+        rm -f /var/lib/kubelet/pki/kubelet.key
+      register: kubelet_cert_rotation_out
+      become: yes
+      retries: 3
+      delay: 5
+      until: kubelet_cert_rotation_out is not failed
+
+    - set_fact:
+        cluster_name: >-
+          {{ "kubernetes" if hostname_results.stdout == "controller-0" else "default-cluster" }}
+
+    - name: Set cluster configuration for kubelet node
+      command: >-
+        kubectl config set-cluster {{ cluster_name }}
+        --certificate-authority /etc/kubernetes/pki/ca.crt --embed-certs
+      environment:
+        KUBECONFIG: "/etc/kubernetes/kubelet.conf"
+      register: set_cluster_results
+      become: yes
+      retries: 3
+      delay: 5
+      until: set_cluster_results is not failed
+
+    - name: Restart kubelet
+      systemd:
+        name: kubelet
+        state: restarted
+      become: yes
+
+    - name: Set fact to mark that K8s leaf certificates recovery was performed
+      set_fact:
+        subcloud_kubelet_leaf_certs_recovered: true
+
+    when: kubelet_certs_expiration.rc != 0
+
+  always:
+    - name: Delete temporary files on subcloud
+      file:
+        path: "{{ item }}"
+        state: absent
+      become: yes
+      loop:
+        - "{{ tmp_kubelet_conf_csr.path if tmp_kubelet_conf_csr.path is defined }}"
+        - "{{ tmp_kubelet_csr.path if tmp_kubelet_csr.path is defined }}"
+        - "{{ tmp_kubelet_cert.path if tmp_kubelet_cert.path is defined }}"
+        - "{{ tmp_kubelet_key.path if tmp_kubelet_key.path is defined }}"
