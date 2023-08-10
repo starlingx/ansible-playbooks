@@ -95,6 +95,7 @@
   loop: "{{ input_registries|dict2items }}"
   loop_control:
     loop_var: registry
+  no_log: true
 
 - name: Set docker_registries to the output registries from the above conversion
   set_fact:

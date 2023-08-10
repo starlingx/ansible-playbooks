@@ -100,12 +100,7 @@
 # e.g. calico_flexvol_img for k8s 1.24.4
 - name: Prune any empty string from download images list
   set_fact:
-    download_images_list: "{{ download_images_list | select() }}"
-
-- set_fact:
-    download_images: "{{ download_images_list | join(',') }}"
-
-- debug: var=download_images_list
+    download_images_list: "{{ download_images_list | select() | unique }}"
 
 - name: Set registries information
   set_fact:
@@ -188,13 +183,21 @@
     download_images_task_name: "Download images and push to local registry"
 
 - block:
+  # Save the original add_docker_prefix flag as it will be updated
+  # during 'Load images from archives' step based on the type of
+  # image bundle (platform or custom).
+  - name: Save the original add_docker_prefix setting
+    set_fact:
+      add_docker_prefix_orig: "{{ add_docker_prefix|default('no') }}"
+
   - name: Retrieve system virtual info
     command: facter virtual
     register: virtual_type
 
-  - name: Push imported images to local registry
-    script: push_imported_images_to_local_registry.py {{ virtual_type.stdout|lower }}
-    register: push_imported_images_output
+  - name: Load images from archives if configured
+    include: load_images_from_archive.yml input_archive={{ item.path }}
+    with_items: "{{ images_archive_files }}"
+    when: images_archive_exists
 
   - set_fact:
       download_images_task_name: "Download any missing images and push to local registry"
@@ -204,7 +207,16 @@
     register: alarm_result
     failed_when: false
 
-  - debug: var=push_imported_images_output.stdout_lines
+  - name: Remove imported images from download_images_list
+    set_fact:
+      download_images_list: "{{ download_images_list | difference(imported_images_list) }}"
+    when: imported_images_list is defined
+
+  - name: Restore the original add_docker_prefix setting
+    set_fact:
+      add_docker_prefix: "{{ add_docker_prefix_orig }}"
+
+  - debug: var=imported_images_list
 
   rescue:
   - name: Raise alarm with push_docker failed
@@ -214,22 +226,30 @@
 
   - name: Force fail when error occurs
     fail:
-      msg: "An error occurred while push docker images to local registry."
+      msg: "An error occurred while loading images from archive to local registry."
 
   when: images_archive_exists | default(false)
 
-- name: "{{ download_images_task_name }}"
-  script: download_images.py {{ download_images }}
-  register: download_images_output
-  retries: 10
-  delay: 5
-  until: (download_images_output.rc == 0 or "HARD FAIL" in download_images_output.stdout)
-  failed_when: download_images_output.rc != 0
-  environment:
-    REGISTRIES: "{{ registries | to_json }}"
+- debug: var=download_images_list
 
-- debug:
-    msg: "{{ download_images_output.stdout_lines }}"
+- block:
+  - set_fact:
+      download_images: "{{ download_images_list | join(',') }}"
+
+  - name: "{{ download_images_task_name }}"
+    script: download_images.py {{ download_images }}
+    register: download_images_output
+    retries: 10
+    delay: 5
+    until: (download_images_output.rc == 0 or "HARD FAIL" in download_images_output.stdout)
+    failed_when: download_images_output.rc != 0
+    environment:
+      REGISTRIES: "{{ registries | to_json }}"
+      ADD_DOCKER_PREFIX: "{{ add_docker_prefix }}"
+
+  - debug:
+      msg: "{{ download_images_output.stdout_lines }}"
+  when: download_images_list|length > 0
 
 # Disable the log to not expose registry password
 - name: Log out of k8s, gcr, quay, ghcr, registryk8s, icr docker registries if credentials exist

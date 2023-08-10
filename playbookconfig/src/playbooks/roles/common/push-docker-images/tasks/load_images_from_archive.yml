@@ -1,0 +1,68 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Import container images from specified archive
+#
+
+- name: "Load image from archive {{ input_archive }}"
+  # Due to docker_image module deficiency, resort to shell
+  shell: docker load < {{ input_archive }}
+  register: images_import
+  failed_when: false
+
+- debug: var=images_import
+
+- name: Pause a few seconds for docker to clean up its temp directory
+  pause:
+    seconds: 10
+  when: images_import.rc == 0
+
+- block:
+  - debug:
+      msg: "WARNING: Failed to import images from {{ input_archive }}"
+
+  - name: Clear docker cache and fall back to downloading images
+    command: docker image prune -af
+
+  - set_fact:
+      images_archive_exists: false
+  when: images_import.rc != 0
+
+- block:
+  - name: Set add_docker_prefix flag
+    set_fact:
+      add_docker_prefix:
+        "{{ 'yes' if (input_archive|basename).startswith('container-image') and
+                     (input_archive|basename).endswith('.tar.gz')
+                  else 'no' }}"
+
+  - name: Push imported images to local registry
+    script: push_imported_images_to_local_registry.py {{ virtual_type.stdout|lower }}
+    register: push_imported_images_output
+    environment:
+      ADD_DOCKER_PREFIX: "{{ add_docker_prefix }}"
+
+  - debug: var=push_imported_images_output.stdout_lines
+
+  - name: Get imported images
+    set_fact:
+      imported_images:
+        "{{ push_imported_images_output.stdout_lines|select('search', 'Image name used for local lookup is') }}"
+
+  - name: Update imported_images_list
+    set_fact:
+      # Each item of the imported_images list would look something like
+      # 'Image name used for local lookup is quay.io/calico/kube-controllers:v3.24.0'
+      imported_images_list: "{{ imported_images_list|default([]) + [img_name.split(' ')[7]] }}"
+    loop: "{{ imported_images }}"
+    loop_control:
+      loop_var: img_name
+
+  always:
+    - name: "Clear docker cache after pushing imported images for {{ input_archive }}"
+      command: docker image prune -af
+  when: images_import.rc == 0
