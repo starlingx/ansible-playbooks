@@ -14,6 +14,10 @@
     docker_http_proxy: "{{ docker_http_proxy|default('') }}"
     docker_https_proxy: "{{ docker_https_proxy|default('') }}"
 
+- name: Set default value for add_docker_prefix if it is undefined
+  set_fact:
+    add_docker_prefix: "{{ add_docker_prefix|default('no') }}"
+
 - name: Get docker registries if not in bootstap or restore mode
   include: get_docker_registry.yml registry={{ item }}
   with_items:
@@ -193,7 +197,7 @@
   # image bundle (platform or custom).
   - name: Save the original add_docker_prefix setting
     set_fact:
-      add_docker_prefix_orig: "{{ add_docker_prefix|default('no') }}"
+      add_docker_prefix_orig: "{{ add_docker_prefix }}"
 
   - name: Retrieve system virtual info
     command: facter virtual
