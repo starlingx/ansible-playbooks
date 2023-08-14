@@ -115,4 +115,7 @@
       name: postgresql
       state: restarted
 
-  when: migrate_platform_data is undefined or not migrate_platform_data
+  when: >
+    (mode == 'restore' and restore_mode|default(none) == 'optimized') or
+    migrate_platform_data is undefined or
+    not migrate_platform_data

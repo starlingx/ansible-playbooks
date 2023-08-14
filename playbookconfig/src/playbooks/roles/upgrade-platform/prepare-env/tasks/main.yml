@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020 Wind River Systems, Inc.
+# Copyright (c) 2020-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -27,20 +27,23 @@
       msg: "Host {{ ansible_host }} has been unlocked. Cannot perform restore."
     when: initial_config_done.stat.exists
 
-  - name: Check if restore is in progress
-    stat:
-      path: "{{ restore_in_progress_flag }}"
-    register: restore_in_progress
+  - block:
+      - name: Check if restore is in progress
+        stat:
+          path: "{{ restore_in_progress_flag }}"
+        register: restore_in_progress
 
-  - name: Fail if restore is already in progress
-    fail:
-      msg: " Restore is already in progress!"
-    when: restore_in_progress.stat.exists
+      - name: Fail if restore is already in progress
+        fail:
+          msg: " Restore is already in progress!"
+        when: restore_in_progress.stat.exists
 
-  - name: Create {{ restore_in_progress_flag }} flag file
-    file:
-      path: "{{ restore_in_progress_flag }}"
-      state: touch
+      - name: Create {{ restore_in_progress_flag }} flag file
+        file:
+          path: "{{ restore_in_progress_flag }}"
+          state: touch
+
+    when: restore_mode|default(none) != "optimized"
 
   become: yes
   become_user: root
@@ -148,7 +151,7 @@
     temp_upgrade_platform_dir: "{{ upgrade_tempdir.path }}"
 
 - name: Look for override backup file in the backup tarball
-  shell: "tar -tf {{ restore_data_file }} | grep '_override_backup.yml'"
+  shell: "tar --use-compress-program=pigz -tf {{ restore_data_file }} | grep '_override_backup.yml'"
   args:
     warn: false
   failed_when: false
@@ -163,6 +166,7 @@
 - name: Extract override file from backup tarball
   shell: >-
     tar -C {{ temp_upgrade_platform_dir }} -xf {{ restore_data_file }} --transform='s,.*/,,'
+    --use-compress-program=pigz
     {{ search_result.stdout_lines[0] }}
   args:
     warn: false
@@ -194,6 +198,7 @@
 - name: Extract the upgrade metadata
   command: >-
     tar -C {{ temp_upgrade_platform_dir }} -xf {{ restore_data_file }}
+    --use-compress-program=pigz
     --wildcards
     --transform 's,.*/,,'
     '*metadata'
@@ -216,6 +221,7 @@
 - name: Extract kubeadm.yaml file
   command: >
     tar -C {{ temp_upgrade_platform_dir }} -xf {{ restore_data_file }}
+    --use-compress-program=pigz
     --wildcards
     --transform 's,.*/,,'
     etc/kubernetes/kubeadm.yaml

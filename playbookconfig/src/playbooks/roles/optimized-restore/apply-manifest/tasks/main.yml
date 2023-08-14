@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Intel, Inc.
+# Copyright (c) 2022-2023 Intel, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -19,9 +19,11 @@
     state: directory
 
 - name: Restore puppet hieradata to working directory
-  command: "tar -C {{ hieradata_workdir }} -xpf {{ platform_backup_fqpn }} \
-            --overwrite --transform='s,.*/,,' \
-            opt/platform/puppet/{{ software_version }}/hieradata"
+  command: >
+    tar --use-compress-program=pigz -C {{ hieradata_workdir | quote }}
+    -xpf {{ platform_backup_fqpn | quote }}
+    --overwrite --transform='s,.*/,,'
+    'opt/platform/puppet/{{ previous_software_version }}/hieradata'
   args:
     warn: false
 
@@ -43,6 +45,15 @@
     mode: 0755
     recurse: yes
   when: os_release == 'debian'
+
+- name: Migrate static hieradata to new version
+  command: >
+    sed -i 's/{{ upgrade_metadata.from_release }}/{{ upgrade_metadata.to_release }}/g'
+    {{ hieradata_workdir }}/static.yaml
+  args:
+    warn: false
+  when: migrate_platform_data is defined and migrate_platform_data
+
 
 - name: Applying puppet restore manifest
   command: >-

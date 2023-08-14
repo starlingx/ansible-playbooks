@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -82,7 +82,9 @@
         var: backed_up_local_registry_images
       when: system_image_list.rc == 0
 
-  when: restore_original_images|bool
+  when: >
+    restore_original_images|bool and
+    not (migrate_platform_data is defined and migrate_platform_data)
 
 # Running push-docker-images and bringup-kubemaster increases playbook time,
 # but it decreases unlock time by around the same amount.
@@ -155,6 +157,9 @@
   environment:
     KUBECONFIG: "/etc/kubernetes/admin.conf"
   when: get_deployment_default_registry_key.stdout == ""
+
+- name: Restore helm service
+  import_tasks: restore-helm.yml
 
 - name: Set Kubernetes components list
   set_fact:
@@ -244,7 +249,7 @@
   # The retry length should be x2 the length of the async_timeout
   # eg async_retries = async_timeout * 2 / delay
   retries: "{{ async_retries }}"
-  delay: 6
+  delay: "{{ async_timeout * 2 // async_retries }}"
   failed_when: false
   with_items:
     - "{{ wait_for_kube_system_pods.results }}"

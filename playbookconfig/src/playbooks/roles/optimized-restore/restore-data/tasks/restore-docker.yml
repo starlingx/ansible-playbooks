@@ -13,12 +13,6 @@
     state: stopped
   loop: "{{ docker_services }}"
 
-- name: Unmount docker-lv
-  command: umount /var/lib/docker
-
-- name: Mount docker-lv
-  command: mount /var/lib/docker
-
 - name: Restore image registry data to /var/lib/docker-distribution
   command: >
     tar --use-compress-program=pigz
