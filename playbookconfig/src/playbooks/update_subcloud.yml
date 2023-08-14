@@ -24,7 +24,7 @@
     - update-subcloud/prepare-env
     - update-subcloud/clean-env
     - update-subcloud/update-network
-    - update-subcloud/update-admin-endpoints
+    - common/update-sc-admin-endpoints
     - { role: common/update-sc-cert, become: yes }
     - { role: update-subcloud/restart-services, become: yes }
     - common/check-services-status
