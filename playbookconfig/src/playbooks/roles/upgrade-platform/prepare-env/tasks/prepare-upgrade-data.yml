@@ -1,0 +1,60 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   Perform preprocessing operations on the backup to reduce the size.
+#   Allowing upgrade operation to be completed faster.
+
+- set_fact:
+    mini_restore_data_file: "{{ restore_data_file | dirname }}/mini_{{ restore_data_file | basename }}"
+    patching_restore_data_file: "{{ restore_data_file | dirname }}/patch_{{ restore_data_file | basename }}"
+    upgrade_data_workdir: "{{ staging_dir }}/upgrade_workdir"
+
+# Creating new smaller backups from restore_data_file is much faster than
+# decompressing, deleting, then recompressing restore_data_file.
+# mini_restore_data_file is expected to be between 4-30MB.
+# patching_restore_data_file is expected to be under 1MB.
+- block:
+    - name: Create upgrade workdir
+      file:
+        path: "{{ upgrade_data_workdir }}"
+        state: directory
+
+    - name: Extract usable parts of backup
+      command: >
+        tar --use-compress-program=pigz
+        -C {{ upgrade_data_workdir | quote }}
+        -xf {{ restore_data_file | quote }}
+        {% for v in upgrade_data_exclude_items %}
+        --exclude {{ v | quote }}
+        {% endfor %}
+
+    - name: Create mini backup
+      command: >
+        tar --use-compress-program=pigz
+        --transform 's,^{{ upgrade_data_workdir.strip('/') }}/,,'
+        -cf {{ mini_restore_data_file | quote }}
+        --exclude '{{ upgrade_data_workdir }}/opt/patching/**'
+        {{ upgrade_data_workdir | quote }}
+
+    - name: Create patching backup
+      command: >
+        tar --use-compress-program=pigz
+        --transform 's,^{{ upgrade_data_workdir.strip('/') }}/,,'
+        -acf {{ patching_restore_data_file | quote }}
+        '{{ upgrade_data_workdir }}/opt/patching'
+
+    - name: Update backup name facts
+      set_fact:
+        restore_data_file: "{{ mini_restore_data_file }}"
+
+  always:
+    - name: Remove upgrade workdir
+      file:
+        path: "{{ upgrade_data_workdir }}"
+        state: absent
+
+  become: true

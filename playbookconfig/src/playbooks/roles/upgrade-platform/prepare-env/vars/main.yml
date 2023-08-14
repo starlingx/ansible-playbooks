@@ -2,3 +2,12 @@
 default_upgrade_data_dir: /opt/platform-backup
 temp_upgrade_platform_path: /tmp/ansible_upgrade_platform
 override_filename: upgrade_platform_overrides.yml
+
+upgrade_data_exclude_items:
+  - etc/selinux/**
+  - etc/systemd/**
+  - etc/udev/**
+  - etc/rc.d/**
+  - www/**
+  - opt/patching/packages/**/*.rpm
+  - opt/platform/helm/**/*.pyc

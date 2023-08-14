@@ -24,6 +24,8 @@
 - set_fact:
     _upgrade_remove_items:
       - "{{ temp_upgrade_platform_dir }}"
+      - "{{ mini_restore_data_file }}"
+      - "{{ patching_restore_data_file }}"
   when: migrate_platform_data is defined and migrate_platform_data
 
 - name: Remove temporary files and directories used during restore

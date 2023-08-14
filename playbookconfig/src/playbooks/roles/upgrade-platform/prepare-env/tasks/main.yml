@@ -135,6 +135,13 @@
 
   when: upgrade_images_data_file is defined and upgrade_images_data_file is not none
 
+# TODO(jkraitbe): Remove post StarlingX 9.0
+- name: Prepare upgrade data
+  import_tasks:
+    file: prepare-upgrade-data.yml
+  # Since we haven't read the upgrade data yet we don't know previous software version.
+  when: software_version == '22.12'
+
 - name: Ensure temporary data path is present
   file:
     path: "{{ temp_upgrade_platform_path }}"

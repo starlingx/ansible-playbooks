@@ -29,6 +29,14 @@
   args:
     warn: false
 
+- name: Restore patching data
+  command: >-
+    tar -C / -xpf {{ patching_restore_data_file }} --overwrite
+    opt/patching
+  args:
+    warn: false
+  when: patching_restore_data_file is defined
+
 - name: Check if /boot is present in the backup
   command:
     cmd: "tar --use-compress-program=pigz -tf '{{ platform_backup_fqpn }}' boot/"
