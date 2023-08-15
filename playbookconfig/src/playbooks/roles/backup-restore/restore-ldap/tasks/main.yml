@@ -114,6 +114,8 @@
       command: >-
         sed -i 's/controller-0/controller-1/'
         {{ldap_schema_path}}/cn=config/olcDatabase={1}mdb.ldif
+      args:
+        warn: false
 
     - name: Restore ldap
       command: "slapadd -F {{ ldap_schema_path }} -l {{ staging_dir }}/ldap.db"

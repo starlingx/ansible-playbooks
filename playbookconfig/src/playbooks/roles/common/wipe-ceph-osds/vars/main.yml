@@ -1,0 +1,5 @@
+---
+# Changing this value will only impact restore.
+# If set to true, OSDs will be wiped during a restore.
+# OSDs are always wiped during bootstrap.
+wipe_ceph_osds: false

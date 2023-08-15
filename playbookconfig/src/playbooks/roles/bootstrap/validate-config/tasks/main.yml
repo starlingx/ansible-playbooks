@@ -673,68 +673,8 @@
     msg: "additional_local_registry_images must be a list"
   when: additional_local_registry_images | type_debug != 'list'
 
-# Docker images archive source validation
-- block:
-  - set_fact:
-      images_archive_md5_file: "{{ images_archive_dir }}/container-image.tar.gz.md5"
-
-  - name: Check if images archive(s) exists
-    find:
-      paths: "{{ images_archive_dir }}"
-      patterns: "*.tar.gz"
-      recurse: no
-    register: images_archive_find_output
-
-  - debug: var=images_archive_find_output.files
-  - set_fact:
-      num_of_archive_files_on_disk: "{{ images_archive_find_output.files|length }}"
-
-  - block:
-    - name: Check if images archive md5 exists
-      stat:
-        path: "{{ images_archive_md5_file }}"
-      register: images_archive_md5
-
-    - block:
-      - name: Get number of archive files in md5 file
-        shell: cat {{ images_archive_md5_file }} | wc -l
-        register: file_count
-
-      - name: Print warning if md5 file content is invalid
-        debug:
-          msg: >-
-               WARNING: Number of archive files listed in {{ images_archive_md5_file }}
-               does not match with the number of image archive files on disk. Fall
-               back to downloading images...
-        when: file_count.stdout != num_of_archive_files_on_disk
-
-      - block:
-        - name: Verify container images archive file checksum
-          command: md5sum -c {{ images_archive_md5_file }}
-          args:
-            chdir: "{{ images_archive_dir }}"
-          register: checksum_result
-          failed_when: false
-
-        - debug: var=checksum_result
-
-        - name: Print warning if images archive checksum failed
-          debug:
-            msg: >-
-                 WARNING: Images archive checksum failed. Fall back to downloading
-                 images...
-          when: checksum_result.rc != 0
-
-        - name: Turn on images archive flag if file checksum is successfully validated
-          set_fact:
-            images_archive_exists: true
-            images_archive_files: "{{ images_archive_find_output.files }}"
-          when: checksum_result.rc == 0
-        when: file_count.stdout == num_of_archive_files_on_disk
-
-      when: images_archive_md5.stat.exists
-
-    when: num_of_archive_files_on_disk|int > 0
+- import_role:
+    role: common/validate-image-archives
 
 # System applications validation
 - name: Validate applications
@@ -902,27 +842,8 @@
         (item.readOnly | type_debug != 'bool')
   loop: "{{ apiserver_extra_volumes + controllermanager_extra_volumes + scheduler_extra_volumes }}"
 
-# Wipe ceph osds
-# Note that due to Ansible mishandling of boolean values via extra-vars we are
-# adding supplementary validation here.
-# See: https://github.com/ansible/ansible/issues/17193
-- name: Check for Ceph data wipe flag
-  fail:
-    msg: "wipe_ceph_osds is misconfigured. Valid value is either 'true' or 'false'"
-  when: (mode == "restore") and (not wipe_ceph_osds | type_debug == 'bool') and
-        (wipe_ceph_osds != 'true') and
-        (wipe_ceph_osds != 'false')
-
-- block:
-  - name: Wipe ceph osds
-    script: wipe_osds.sh
-    register: results
-
-  - name: Result of wiping ceph osds
-    debug: var=results.stdout_lines
-
-  when: (mode == "bootstrap") or
-        (mode == "restore" and wipe_ceph_osds|bool)
+- import_role:
+    name: common/wipe-ceph-osds
 
 # bootstrap_config ini file generation
 - block:

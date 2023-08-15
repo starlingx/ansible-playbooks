@@ -38,6 +38,8 @@
 
 - name: Disable local registry authentication
   command: "sed -i '/auth:/,$d' /etc/docker-distribution/registry/config.yml"
+  args:
+    warn: false
 
 - name: Restart docker services
   systemd:
@@ -45,3 +47,7 @@
     state: restarted
     enabled: true
   loop: "{{ docker_services }}"
+
+# Docker images archive source validation
+- import_role:
+    name: common/validate-image-archives

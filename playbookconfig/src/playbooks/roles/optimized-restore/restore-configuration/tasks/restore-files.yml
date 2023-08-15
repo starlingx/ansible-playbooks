@@ -21,7 +21,7 @@
 
 - name: Restore configuration files
   command: >-
-    tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }} --overwrite
+    tar --use-compress-program=pigz -C / -xvpf {{ platform_backup_fqpn }} --overwrite
     {{ ' '.join(restore_items) }}
     {% for v in restore_exclude_items %}
     --exclude {{ v | quote }}
@@ -85,6 +85,10 @@
       when: home_dir_result.rc == 0
 
   when: previous_software_version != '21.12'
+
+- import_role:
+    name: roles/bootstrap/prepare-env
+    tasks_from: restore_prep_tasks.yml
 
 - name: Migrate files and directories during upgrade
   block:

@@ -20,6 +20,7 @@ restore_items:
   - etc/haproxy
   - etc/hosts
   - etc/keystone
+  - etc/kubernetes
   - etc/lighttpd
   - etc/mtc
   - etc/mtc.conf
@@ -51,6 +52,7 @@ restore_exclude_items:
 upgrade_exclude_items:
   - etc/group
   - etc/group-
+  - etc/kubernetes
   - etc/passwd
   - etc/passwd-
   - etc/postgresql
