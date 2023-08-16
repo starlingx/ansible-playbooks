@@ -80,7 +80,10 @@
             executable: /usr/bin/python
           no_log: true
       when: os_release == "debian"
-    when: bkp_has_centos_ldap_config.rc == 0
+    when:
+      - upgrade_in_progress
+      - previous_software_version == "21.12"
+      - bkp_has_centos_ldap_config.rc == 0
 
   - block:
       - name: Check if Debian ldap configuration is included in the backup
@@ -96,7 +99,7 @@
         args:
           warn: false
         when: bkp_has_debian_ldap_config.rc == 0
-    when: bkp_has_centos_ldap_config.rc != 0
+    when: not upgrade_in_progress or bkp_has_centos_ldap_config.rc != 0
 
   - block:
     - name: Extract ldap.db to staging directory
