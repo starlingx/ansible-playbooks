@@ -16,11 +16,6 @@
 
 - debug: var=images_import
 
-- name: Pause a few seconds for docker to clean up its temp directory
-  pause:
-    seconds: 10
-  when: images_import.rc == 0
-
 - block:
   - debug:
       msg: "WARNING: Failed to import images from {{ input_archive }}"
