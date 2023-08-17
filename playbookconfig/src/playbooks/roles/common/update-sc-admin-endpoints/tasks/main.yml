@@ -16,7 +16,7 @@
   shell: >-
     source /etc/platform/openrc; system show |
     grep region_name | awk '{ print $4 }'
-  register: region_name
+  register: sc_region_name
 
 - name: Create service endpoint list
   set_fact:
@@ -28,6 +28,7 @@
       - { port: "18003", service: "fm" }
       - { port: "9312", service: "barbican" }
       - { port: "8220/v1.0", service: "dcdbsync" }
+      - { port: "5498", service: "usm" }
 
 - name: Check and update admin endpoints
   include_tasks: check_and_update_endpoint.yml

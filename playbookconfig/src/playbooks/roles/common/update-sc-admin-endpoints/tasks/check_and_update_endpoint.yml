@@ -16,14 +16,14 @@
 - name: "Check {{ service }} admin endpoint URL"
   shell: >-
     source /etc/platform/openrc; openstack endpoint list |
-    awk ' $12 == "admin" && $6 == "{{ service }}" &&
-    $0 ~ /"{{ parsed_sc_floating_address }}"/'
+    grep "admin" | grep "{{ service }}" | grep "{{ sc_floating_address }}" |
+    awk '{print $0}'
   register: Check_admin_endpoint_URL
 
 - name: "Correct {{ service }} admin endpoint"
   shell: >-
     source /etc/platform/openrc; openstack endpoint set
-    --region {{ region_name.stdout }} --interface admin
+    --region "{{ sc_region_name.stdout }}" --interface admin
     --url https://{{ parsed_sc_floating_address }}:{{ port }}
-    --service {{ service }} --enable "{{ admin_endpoint_UUID.stdout }}"
+    --service "{{ service }}" --enable "{{ admin_endpoint_UUID.stdout }}"
   when: Check_admin_endpoint_URL.stdout == ''
