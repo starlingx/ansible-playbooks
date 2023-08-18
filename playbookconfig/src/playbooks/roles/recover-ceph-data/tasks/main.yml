@@ -357,6 +357,14 @@
         timeout: "{{ ceph_wait_time }}"
       when: restore_system_mode != 'simplex'
 
+    - name: Create ceph.client.guest.keyring to allow ceph mount again
+      file:
+        path: "/etc/ceph/ceph.client.guest.keyring"
+        state: touch
+
+    - name: Restart ceph one more time to pick latest changes
+      command: /etc/init.d/ceph restart
+
     - name: Check and recover CephFs filesystem
       script: recover_cephfs.sh
       register: cephfs_recovery_out
@@ -368,14 +376,6 @@
     - name: Display cephfs recovery script stderr output
       debug:
         var: cephfs_recovery_out.stderr_lines
-
-    - name: Create ceph.client.guest.keyring to allow ceph mount again
-      file:
-        path: "/etc/ceph/ceph.client.guest.keyring"
-        state: touch
-
-    - name: Restart ceph one more time to pick latest changes
-      command: /etc/init.d/ceph restart
 
     - name: Remove Ceph option to start with a single monitor on a Standard deployment
       ini_file:
