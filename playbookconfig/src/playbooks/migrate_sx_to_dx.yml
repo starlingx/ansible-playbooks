@@ -46,10 +46,17 @@
         system interface-network-list controller-0 --nowrap | awk '$8 == "cluster-host" { print $6 }'
       register: cluster_host_if
 
+    - name: Get subcloud admin network name
+      shell: >-
+        source /etc/platform/openrc; system network-list |
+        awk '$8 == "admin" { print $6 }'
+      register: subcloud_admin_network_name
+
     - name: Query admin interface configuration
       shell: |
         source /etc/platform/openrc
-        system interface-network-list controller-0 --nowrap | awk '$8 == "admin" { print $6 }'
+        system interface-network-list controller-0 --nowrap |
+        awk '$8 == "{{ subcloud_admin_network_name.stdout }}" { print $6 }'
       register: admin_if
 
     - name: Validate network interface configuration
