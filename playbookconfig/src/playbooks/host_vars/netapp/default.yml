@@ -45,14 +45,13 @@ trident_clean_folder: true
 
 # Images that need to be pulled to the local registry
 trident_images:
-  - docker.io/netapp/trident:22.07.0
-  - docker.io/netapp/trident-autosupport:22.07
-  - k8s.gcr.io/sig-storage/csi-provisioner:v3.2.1
-  - k8s.gcr.io/sig-storage/csi-attacher:v3.5.0
-  - k8s.gcr.io/sig-storage/csi-resizer:v1.5.0
-  - k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.5.1
-  - k8s.gcr.io/sig-storage/csi-snapshotter:v3.0.3
-  - k8s.gcr.io/sig-storage/csi-snapshotter:v6.0.1
+  - docker.io/netapp/trident:23.04.0
+  - docker.io/netapp/trident-autosupport:23.04
+  - k8s.gcr.io/sig-storage/csi-provisioner:v3.4.1
+  - k8s.gcr.io/sig-storage/csi-attacher:v4.2.0
+  - k8s.gcr.io/sig-storage/csi-resizer:v1.7.0
+  - k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.7.0
+  - k8s.gcr.io/sig-storage/csi-snapshotter:v6.2.1
 
 # OVERRIDE FILES DIRECTORY
 # ========================

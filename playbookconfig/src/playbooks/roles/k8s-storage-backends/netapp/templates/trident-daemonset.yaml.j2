@@ -27,7 +27,7 @@ spec:
           privileged: true
           allowPrivilegeEscalation: true
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/docker.io/netapp/trident:22.07.0
+        image: {{ local_registry }}/docker.io/netapp/trident:23.04.0
         command:
         - /trident_orchestrator
         args:
@@ -99,7 +99,7 @@ spec:
           readOnly: true
       - name: driver-registrar
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.5.1
+        image: {{ local_registry }}/k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.7.0
         args:
         - "--v=2"
         - "--csi-address=$(ADDRESS)"
