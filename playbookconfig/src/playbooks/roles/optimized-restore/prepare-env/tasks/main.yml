@@ -47,10 +47,3 @@
         previous_software_version: "{{ software_version }}"
 
   when: not (migrate_platform_data is defined and migrate_platform_data)
-
-- name: Check if optimized upgrade is supported for software versions
-  fail:
-    msg: "Optimized upgrade is not supported from {{ previous_software_version }} to {{ software_version }}"
-  when: >
-    migrate_platform_data is defined and migrate_platform_data and
-    not (previous_software_version == '21.12' and software_version == '22.12')
