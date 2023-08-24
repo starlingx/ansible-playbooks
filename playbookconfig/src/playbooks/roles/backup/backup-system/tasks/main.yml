@@ -294,6 +294,11 @@
       vars:
         _exclude_dirs: "{{ exclude_dirs | default(\"\") }}"
 
+    - name: Exclude patches
+      set_fact:
+        exclude_targets: "{{ exclude_targets + [exclude_patches_glob] }}"
+      when: exclude_patches|bool
+
     # Now Postgres data and MariaDB data are stored in staging dir, we can estimate
     # the disk size requirement for the backup archive.
     - name: Check the size (in KiB) of directories that will be backed up for platform

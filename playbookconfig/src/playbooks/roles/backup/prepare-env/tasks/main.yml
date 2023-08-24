@@ -61,6 +61,11 @@
   set_fact:
     system_mode: "{{ check_system_mode.stdout.split('=')[1] }}"
 
+- name: Exclude patches on AIO-SX
+  set_fact:
+    exclude_patches: "{{ system_mode == 'simplex' and system_type == 'All-in-one' }}"
+  when: exclude_patches is not defined
+
 - name: Set dc-vault config path fact
   set_fact:
     dc_vault_permdir: "/opt/dc-vault"

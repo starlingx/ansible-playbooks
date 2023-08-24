@@ -72,6 +72,8 @@ backup:
     - "{{ homedir }}/*/.kube/**"
     - "{{ homedir }}/*/.kube"
 
+exclude_patches_glob: /opt/patching/**
+
 # Image filesystem backup configurations
 backup_registry_filesystem: false
 
