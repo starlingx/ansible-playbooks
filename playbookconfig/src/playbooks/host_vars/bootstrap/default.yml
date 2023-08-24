@@ -37,7 +37,7 @@ dns_servers:
 # Unless specified, the external_oam_node_0_address and external_oam_node_1_address
 # are derived from the external_oam_floating address as follows:
 #   external_oam_node_0_address: next address after external_oam_floating_address
-#   external_oam_node_0_address: next address after external_oam_node_0_address
+#   external_oam_node_1_address: next address after external_oam_node_0_address
 #   e.g. external_oam_floating_address (provided/default): 10.10.10.2
 #        external_oam_node_0_address (derived): 10.10.10.3
 #        external_oam_node_1_address (derived): 10.10.10.4
