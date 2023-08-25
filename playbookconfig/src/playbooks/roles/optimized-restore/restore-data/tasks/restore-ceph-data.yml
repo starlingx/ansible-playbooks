@@ -41,7 +41,7 @@
         line: "system_mode={{ system_mode }}"
 
     - name: Look for the flag indicating that Ceph is configured
-      shell: "tar -tf {{ platform_backup_fqpn }} |  grep 'etc/platform/.node_ceph_configured'"
+      shell: "tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |  grep 'etc/platform/.node_ceph_configured'"
       args:
         warn: false
       failed_when: false
@@ -51,7 +51,7 @@
       block:
 
       - name: Restore Ceph configuration files
-        command: "tar -C / -xpf {{ platform_backup_fqpn }} --overwrite etc/ceph"
+        command: "tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }} --overwrite etc/ceph"
 
       - name: Set Ceph variables
         set_fact:
@@ -83,12 +83,13 @@
         become: yes
 
       - name: Get {{ ceph_crushmap_file }} file path
-        shell: tar -tf {{ platform_backup_fqpn }} | grep {{ ceph_crushmap_file }}
+        shell: tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep {{ ceph_crushmap_file }}
         register: ceph_crushmap_backup_path_tgz
 
       - name: Restore {{ ceph_crushmap_file }} file
         command: >-
-          tar -C {{ ceph_temp_dir }} -xpf {{ platform_backup_fqpn }} {{ ceph_crushmap_backup_path_tgz.stdout_lines[0] }}
+          tar --use-compress-program=pigz -C {{ ceph_temp_dir }}
+          -xpf {{ platform_backup_fqpn }} {{ ceph_crushmap_backup_path_tgz.stdout_lines[0] }}
         args:
           warn: false
 

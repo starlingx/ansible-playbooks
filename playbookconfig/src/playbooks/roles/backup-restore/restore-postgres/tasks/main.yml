@@ -22,7 +22,7 @@
 
   - name: Extract postgres db to staging directory
     command: >-
-      tar -C {{ staging_dir }}/postgres -xpf {{ platform_backup_fqpn }}
+      tar --use-compress-program=pigz -C {{ staging_dir }}/postgres -xpf {{ platform_backup_fqpn }}
       --wildcards --transform='s,.*/,,' '*/*\.postgreSql\.*'
     args:
       warn: false

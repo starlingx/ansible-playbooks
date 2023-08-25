@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -31,8 +31,8 @@
 
 - name: Extract etcd database backup to temporary folder
   command: >-
-    tar -C {{ etcd_tmp_dir }} -xpf {{ platform_backup_fqpn }} --wildcards
-    --transform='s,.*/,,' '*/etcd-snapshot.db'
+    tar --use-compress-program=pigz -C {{ etcd_tmp_dir }} -xpf {{ platform_backup_fqpn }}
+    --wildcards --transform='s,.*/,,' '*/etcd-snapshot.db'
   args:
     warn: false
 

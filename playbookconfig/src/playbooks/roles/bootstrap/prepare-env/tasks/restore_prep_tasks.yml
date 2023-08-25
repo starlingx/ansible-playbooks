@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2022 Wind River Systems, Inc.
+# Copyright (c) 2019-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -19,7 +19,7 @@
       sysinv_config_permdir: "{{ platform_path + '/sysinv/' + software_version }}"
 
   - name: Check if branding folder is present in the backup tarball
-    shell: "tar -tf {{ restore_data_file }} | grep '{{ archive_branding_permdir }}'"
+    shell: "tar --use-compress-program=pigz -tf {{ restore_data_file }} | grep '{{ archive_branding_permdir }}'"
     args:
       warn: false
     failed_when: false
@@ -29,7 +29,7 @@
   # permission, this will fixed on another task tracked under the same storyboard
   - name: Restore branding tar file
     command: >-
-      tar -C /opt/branding -xpf {{ restore_data_file }} --transform='s,.*/,,'
+      tar --use-compress-program=pigz -C /opt/branding -xpf {{ restore_data_file }} --transform='s,.*/,,'
       {{ archive_branding_permdir }}
     args:
       warn: false
@@ -42,7 +42,7 @@
       state: absent
 
   - name: Look for banner directory in the backup tarball
-    shell: "tar -tf {{ restore_data_file }} | grep -F 'banner/etc'"
+    shell: "tar --use-compress-program=pigz -tf {{ restore_data_file }} | grep -F 'banner/etc'"
     args:
       warn: false
     failed_when: false
@@ -56,7 +56,7 @@
 
     - name: Restore banner files if they exist in the backup tarball
       command: >-
-        tar -C /opt/banner -xpf {{ restore_data_file }} --transform='s,.*/,,'
+        tar --use-compress-program=pigz -C /opt/banner -xpf {{ restore_data_file }} --transform='s,.*/,,'
         {{ archive_banner_permdir }}
       args:
         warn: false
@@ -92,7 +92,7 @@
 
   - name: Extract ssl_ca certificate from backup archive
     command: >-
-      tar -xvf '{{ restore_data_file }}'
+      tar --use-compress-program=pigz -xvf '{{ restore_data_file }}'
       -C '{{ temp_ssl_ca_dir }}'
       -p --transform='s,.*/,,'
       '{{ archive_config_permdir }}/{{ temp_ssl_ca_file }}'
@@ -113,7 +113,7 @@
 
   - name: Extract enabled kubernetes plugin configuration from the backup archive
     command: >-
-      tar -C {{ temp_k8s_plugins_dir }} -xpf {{ restore_data_file }}
+      tar --use-compress-program=pigz -C {{ temp_k8s_plugins_dir }} -xpf {{ restore_data_file }}
       --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/enabled_kube_plugins'
     args:
       warn: false
@@ -131,7 +131,7 @@
     when: plugins_from_bk.stat.exists == True
 
   - name: Register the content of etc/hostname from backup archive
-    shell: tar -O -xf {{ restore_data_file }} etc/hostname
+    shell: tar --use-compress-program=pigz -O -xf {{ restore_data_file }} etc/hostname
     register: bck_taken_from
 
   - name: Set the host from where the backup was taken

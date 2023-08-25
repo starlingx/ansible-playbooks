@@ -21,7 +21,7 @@
 
 - name: Restore configuration files
   command: >-
-    tar -C / -xpf {{ platform_backup_fqpn }} --overwrite
+    tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }} --overwrite
     {{ ' '.join(restore_items) }}
     {% for v in restore_exclude_items %}
     --exclude {{ v | quote }}
@@ -31,7 +31,7 @@
 
 - name: Restore patching data
   command: >-
-    tar -C / -xpf {{ patching_restore_data_file }} --overwrite
+    tar --use-compress-program=pigz -C / -xpf {{ patching_restore_data_file }} --overwrite
     opt/patching
   args:
     warn: false

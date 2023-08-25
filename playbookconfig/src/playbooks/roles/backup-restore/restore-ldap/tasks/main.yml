@@ -12,14 +12,14 @@
     ldap_schema_path: "{{ '/etc/openldap/schema' if os_release == 'centos' else '/etc/ldap/schema' }}"
 
 - name: Check if CentOS openldap configuration is included in the backup
-  shell: "tar -tf {{ platform_backup_fqpn }} | grep -E 'etc\\/openldap\\/.*'"
+  shell: "tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep -E 'etc\\/openldap\\/.*'"
   args:
     warn: false
   failed_when: false
   register: bkp_has_centos_ldap_config
 
 - name: Check if ldap database is included in the backup
-  shell: "tar -tf {{ platform_backup_fqpn }} | grep -E '*/ldap.db'"
+  shell: "tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep -E '*/ldap.db'"
   args:
     warn: false
   failed_when: false
@@ -28,7 +28,8 @@
 - block:
   - block:
     - name: Restore openldap configuration
-      command: tar -C / -xpf {{ platform_backup_fqpn }} --wildcards --overwrite etc/openldap/*
+      command: tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }}
+       --wildcards --overwrite etc/openldap/*
       args:
         warn: false
 
@@ -83,14 +84,15 @@
 
   - block:
       - name: Check if Debian ldap configuration is included in the backup
-        shell: "tar -tf {{ platform_backup_fqpn }} | grep -E 'etc\\/ldap\\/.*'"
+        shell: "tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep -E 'etc\\/ldap\\/.*'"
         args:
           warn: false
         failed_when: false
         register: bkp_has_debian_ldap_config
 
       - name: Restore ldap configuration
-        command: tar -C / -xpf {{ platform_backup_fqpn }} --wildcards --overwrite etc/ldap/*
+        command: tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }}
+         --wildcards --overwrite etc/ldap/*
         args:
           warn: false
         when: bkp_has_debian_ldap_config.rc == 0
@@ -99,7 +101,7 @@
   - block:
     - name: Extract ldap.db to staging directory
       command: >-
-        tar -C {{ staging_dir }} -xpf {{ platform_backup_fqpn }} --wildcards
+        tar --use-compress-program=pigz -C {{ staging_dir }} -xpf {{ platform_backup_fqpn }} --wildcards
         --transform='s,.*/,,' '*/ldap.db'
       args:
         warn: false

@@ -33,7 +33,7 @@
 
   - name: Extract .subcloud_alarm.csv if exist
     command: >-
-      tar -C /tmp -xpf {{ platform_backup_fqpn }}
+      tar --use-compress-program=pigz -C /tmp -xpf {{ platform_backup_fqpn }}
       --wildcards '*/*\.subcloud_alarm.csv' --strip-components=4
     failed_when: false
 

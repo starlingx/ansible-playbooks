@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2022 Wind River Systems, Inc.
+# Copyright (c) 2021-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -214,7 +214,7 @@
 
 - block:
   - name: Restore kubernetes certificates
-    shell: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
+    shell: tar --use-compress-program=pigz -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
     args:
       warn: false
     with_items:
@@ -235,7 +235,7 @@
     when: (system_mode == 'duplex') and (backup_taken_from == 'controller-1')
 
   - name: Restore encryption provider config
-    shell: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
+    shell: tar --use-compress-program=pigz -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
     args:
       warn: false
     with_items:

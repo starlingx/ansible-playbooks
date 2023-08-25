@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -37,7 +37,7 @@
     warn: false
 
 - name: Restore Helm charts
-  command: tar -C / --overwrite -xpf {{ platform_backup_fqpn }} {{ item }}
+  command: tar --use-compress-program=pigz -C / --overwrite -xpf {{ platform_backup_fqpn }} {{ item }}
   args:
     warn: false
   with_items:

@@ -17,8 +17,8 @@
 
 - block:
     - name: Restore network configuration files from Debian
-      command: >
-        tar -C / --overwrite
+      command: >-
+        tar --use-compress-program=pigz -C / --overwrite
         -xpf {{ platform_backup_fqpn | quote }} {{ network_scripts.lstrip('/') | quote }}
       args:
         warn: false
