@@ -1,0 +1,17 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to configure the low latency kernel for an AIO system
+#
+
+- name: Configure lowlatency kernel
+  shell: >-
+    source /etc/platform/openrc;
+    system host-kernel-modify controller-0 {{ kernel | quote }}
+  when:
+    - system_type == 'All-in-one'
+    - kernel == 'lowlatency'

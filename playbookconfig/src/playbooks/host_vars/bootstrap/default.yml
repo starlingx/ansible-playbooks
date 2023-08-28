@@ -529,3 +529,7 @@ applications: []
 # Flag to indicate if docker.io prefix should be prepended to a image which does not contain
 # any registry configured in sysinv e.g. fluxcd/helm-controller, ubuntu, starlingx/n3000-opae
 add_docker_prefix: no
+
+# Kernel Configurations ( only applies to AIO systems)
+# Support for the following kernels: 'standard' (default) or 'lowlatency'
+kernel: standard
