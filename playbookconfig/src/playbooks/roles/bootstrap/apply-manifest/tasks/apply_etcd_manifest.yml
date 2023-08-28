@@ -41,7 +41,7 @@
   command: >
     /usr/local/bin/puppet-manifest-apply.sh
     {{ hieradata_workdir }}
-    {{ prev_controller_0_address }}
+    controller-0
     controller runtime /tmp/etcd.yml
   register: etcd_manifest
   environment:

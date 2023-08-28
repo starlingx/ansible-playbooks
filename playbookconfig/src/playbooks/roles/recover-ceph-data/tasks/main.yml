@@ -109,7 +109,7 @@
         command: >
           /usr/local/bin/puppet-manifest-apply.sh
           {{ puppet_permdir }}/hieradata/
-          {{ derived_network_params.controller_0_address }}
+          controller-0
           controller runtime /tmp/ceph-mon.yml
           controller ansible_bootstrap > {{ ceph_mon_manifest_apply_log }}
         register: ceph_mon_manifest

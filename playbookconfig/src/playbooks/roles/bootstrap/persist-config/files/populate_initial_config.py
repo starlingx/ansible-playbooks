@@ -1260,7 +1260,6 @@ def populate_controller_config(client):
     values = {
         'personality': sysinv_constants.CONTROLLER,
         'hostname': CONF.get('BOOTSTRAP_CONFIG', 'CONTROLLER_HOSTNAME'),
-        'mgmt_ip': CONF.get('BOOTSTRAP_CONFIG', 'CONTROLLER_0_ADDRESS'),
         'mgmt_mac': mgmt_mac,
         'administrative': sysinv_constants.ADMIN_LOCKED,
         'operational': sysinv_constants.OPERATIONAL_DISABLED,
