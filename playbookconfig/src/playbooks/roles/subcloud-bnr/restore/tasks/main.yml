@@ -27,38 +27,8 @@
     name: common/host-unlock
   vars:
     target_host: 'controller-0'
-
-# On some hardware, the actual reboot after system host-unlock response is received may take
-# longer than 60s. Wait up to 3 minutes for ssh port to become unavailable to ensure that the
-# subcloud is actually rebooted by maintenance before executing the next task. The 3 minute
-# timeout should be enough as mainteance will force reboot if it does not take place within
-# 2 minutes.
-- name: Wait up to {{ shutdown_timeout }} seconds for ssh port to become unavailable for {{ inventory_hostname }}
-  local_action:
-    module: wait_for
-      port={{ ansible_port }}
-      host={{ ansible_host }}
-      delay=5
-      timeout={{ shutdown_timeout }}
-      state=stopped
-
-- name: Wait up to {{ unlock_timeout }} seconds for ssh port to become available for {{ inventory_hostname }}
-  local_action:
-    module: wait_for
-      port={{ ansible_port }}
-      host={{ ansible_host }}
-      delay=60
-      timeout={{ unlock_timeout }}
-      state=started
-
-- name: Wait till all services are enabled-active
-  shell: >-
-    sm-dump | sed "1,/Services/d" | awk '{ print $3 }'
-    | grep -v "enabled-active" | wc -l
-  register: service_status_result
-  until: service_status_result.stdout == "1"
-  retries: 20
-  delay: 30
+    wait_for_unlock: true
+    distributed_cloud_role: 'subcloud'
 
 - name: Run system restore-complete
   shell: source /etc/platform/openrc; system restore-complete
