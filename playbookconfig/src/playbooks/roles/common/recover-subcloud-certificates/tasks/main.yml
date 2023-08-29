@@ -16,3 +16,6 @@
 
 - name: Recover dc admin endpoint Root CA, subcloud ICA and leaf certificates
   import_tasks: recover-dc-admin-ep-certificate-chain.yml
+
+- name: Validate rest-api / docker registry certificates
+  import_tasks: validate-restapi-and-registry-certificates.yml
