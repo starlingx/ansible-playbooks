@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020-2021 Wind River Systems, Inc.
+# Copyright (c) 2020-2021,2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -124,8 +124,39 @@
       state: touch
     when: image_list|length == 0
 
+  rescue:
+  - name: Set failure message with error
+    set_fact:
+      failure_msg: >
+        Failed task: {{ ansible_failed_task.name }}.
+        Failed with error : {{ ansible_failed_result.msg }}
+    when: ansible_failed_task is defined and ansible_failed_result is defined
+    failed_when: false
+
+  - name: Display failed task
+    debug:
+      msg: "{{ failure_msg }}"
+    when: failure_msg is defined and failure_msg != ''
+
+  # In certain edge cases, errors may occur in
+  # 'Set failure message with error' when using
+  # ansible_failed_task and ansible_failed_result.
+  # In such specific cases, we will simply raise a message pointing
+  # to the failed playbook.
+  - name: Fail the playbook with message
+    fail:
+      msg: >-
+        {% if failure_msg is defined and failure_msg != '' %}
+        failure_msg: {{ failure_msg }}
+        {% else %}
+        failure_msg: Failed in export-user-local-registry-images.yml at backup system procedure.
+        {% endif %}
+
   always:
+  # Error ignored to prevent reporting the incorrect error.
+  # If this task fails, it's a consequence, not the root cause.
   - name: Remove the temporary file from remote
     file:
       path: "{{ tempfile_on_remote.path }}"
       state: absent
+    failed_when: false

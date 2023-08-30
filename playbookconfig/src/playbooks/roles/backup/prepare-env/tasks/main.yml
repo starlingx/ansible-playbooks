@@ -21,89 +21,113 @@
 
   - name: Fail if backup is already in progress for less than 20 minutes
     fail:
-      msg: >-
-        A backup has already been started less than 20 minutes ago.
+      msg: >
+        failure_msg: A backup has already been started less than 20 minutes ago.
         Wait to start a new backup or manually remove the backup flag in {{ backup_in_progress_flag }}
     when: (unix_timestamp.stdout | float - backup_in_progress.stat.ctime) < 1200
   when: backup_in_progress.stat.exists
 
-- name: Check if it is the active controller
-  shell: source /etc/platform/openrc; system host-show $(cat /etc/hostname) --column capabilities --format value
-         | grep -i "Controller-Active"
-  register: active_ctlr
+- block:
+  - name: Check if it is the active controller
+    shell: source /etc/platform/openrc; system host-show $(cat /etc/hostname) --column capabilities --format value
+          | grep -i "Controller-Active"
+    register: active_ctlr
 
-- name: Fail if it is not an active controller
-  fail:
-    msg: "Backup can only be done on the active controller."
-  when: active_ctlr.rc != 0
+  - name: Fail if it is not an active controller
+    fail:
+      msg: "Backup can only be done on the active controller."
+    when: active_ctlr.rc != 0
 
-- name: Check disk usage of /home directory
-  shell: "du -sh -m  {{ homedir }}  | awk '{print $1}'"
-  register: home_dir_usage
+  - name: Check disk usage of /home directory
+    shell: "du -sh -m  {{ homedir }}  | awk '{print $1}'"
+    register: home_dir_usage
 
-- name: Fail if disk usage of /home directory is over {{ max_home_dir_usage }}MB
-  fail:
-    msg: >-
-      Directory /home contains more than {{ max_home_dir_usage }}MB of data.
-      Please cleanup /home directory and try backup again.
-  when: home_dir_usage.stdout|int > max_home_dir_usage
+  - name: Fail if disk usage of /home directory is over {{ max_home_dir_usage }}MB
+    fail:
+      msg: >-
+        Directory /home contains more than {{ max_home_dir_usage }}MB of data.
+        Please cleanup /home directory and try backup again.
+    when: home_dir_usage.stdout|int > max_home_dir_usage
 
-- name: Search for system_mode in /etc/platform/platform.conf
-  shell: grep system_mode {{ platform_conf_path }}/platform.conf
-  register: check_system_mode
+  - name: Search for system_mode in /etc/platform/platform.conf
+    shell: grep system_mode {{ platform_conf_path }}/platform.conf
+    register: check_system_mode
 
-- name: Fail if system_mode is not set in /etc/platform/platform.conf
-  fail:
-    msg: "system_mode is not set in /etc/platform/platform.conf"
-  when: check_system_mode.rc != 0
+  - name: Fail if system_mode is not set in /etc/platform/platform.conf
+    fail:
+      msg: "system_mode is not set in /etc/platform/platform.conf"
+    when: check_system_mode.rc != 0
 
-- name: set system_mode
-  set_fact:
-    system_mode: "{{ check_system_mode.stdout.split('=')[1] }}"
+  - name: set system_mode
+    set_fact:
+      system_mode: "{{ check_system_mode.stdout.split('=')[1] }}"
 
-- name: Exclude patches on AIO-SX
-  set_fact:
-    exclude_patches: "{{ system_mode == 'simplex' and system_type == 'All-in-one' }}"
-  when: exclude_patches is not defined
+  - name: Exclude patches on AIO-SX
+    set_fact:
+      exclude_patches: "{{ system_mode == 'simplex' and system_type == 'All-in-one' }}"
+    when: exclude_patches is not defined
 
-- name: Set dc-vault config path fact
-  set_fact:
-    dc_vault_permdir: "/opt/dc-vault"
+  - name: Set dc-vault config path fact
+    set_fact:
+      dc_vault_permdir: "/opt/dc-vault"
 
-- name: Check if ceph is configured
-  stat:
-    path: "{{ ceph_backend_flag }}"
-  register: ceph_backend
+  - name: Check if ceph is configured
+    stat:
+      path: "{{ ceph_backend_flag }}"
+    register: ceph_backend
 
-- name: Wait for system to be healthy before starting backup
-  shell: |-
-    source /etc/platform/openrc
-    system health-query
-  register: health_status
-  retries: "{{ wait_for_healthy_retries }}"
-  delay: "{{ wait_for_healthy_retry_delay }}"
-  until: >-
-    health_status.rc != 0 or (
-      (health_status.stdout.count('[Fail]') == 0) or (
-        health_status.stdout.count('[Fail]') == 1 and
-        no_mgmt_alarms in health_status.stdout
+  - name: Wait for system to be healthy before starting backup
+    shell: |-
+      source /etc/platform/openrc
+      system health-query
+    register: health_status
+    retries: "{{ wait_for_healthy_retries }}"
+    delay: "{{ wait_for_healthy_retry_delay }}"
+    until: >-
+      health_status.rc != 0 or (
+        (health_status.stdout.count('[Fail]') == 0) or (
+          health_status.stdout.count('[Fail]') == 1 and
+          no_mgmt_alarms in health_status.stdout
+        )
       )
-    )
-  vars:
-    no_mgmt_alarms: "[0] of which are management affecting"
-  when: not ignore_health|bool
+    vars:
+      no_mgmt_alarms: "[0] of which are management affecting"
+    when: not ignore_health|bool
 
-- name: Query health status for reference
-  shell: |-
-    source /etc/platform/openrc
-    system health-query
-  register: final_health_status
+  - name: Query health status for reference
+    shell: |-
+      source /etc/platform/openrc
+      system health-query
+    register: final_health_status
 
-- name: Display health status
-  debug:
-    var: final_health_status
+  - name: Display health status
+    debug:
+      var: final_health_status
 
-- name: Create backup in progress flag file
-  file:
-    path: "{{ backup_in_progress_flag }}"
-    state: touch
+  - name: Create backup in progress flag file
+    file:
+      path: "{{ backup_in_progress_flag }}"
+      state: touch
+
+  rescue:
+    # rescue block designed to catch various playbook errors
+    # and propagate them to the parent playbook.
+    - name: Set failure message playbook errors
+      set_fact:
+        failure_msg: >
+          Failed task: {{ ansible_failed_task.name }}.
+          Failed with error : {{ ansible_failed_result.msg }}
+      when: ansible_failed_task is defined and ansible_failed_result is defined
+
+    - name: Display failure message
+      debug:
+        msg: "{{ failure_msg }}"
+
+    - name: Force fail if this playbook or nested playbook failed
+      fail:
+        msg: >
+          {% if failure_msg is defined and failure_msg != '' %}
+          failure_msg: {{ failure_msg }}
+          {% else %}
+          failure_msg: Failed to prepare environment for backup system.
+          {% endif %}

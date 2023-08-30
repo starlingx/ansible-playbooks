@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -92,12 +92,44 @@
       connection: "{{ target_connection }}"
       when: previous_backup_dir is defined
 
+    # Task to catch issues in this playbook.
+    # Two possible situations:
+    # 1. Failures in this playbook, but not in the nested playbooks.
+    # In this case, the task 'Set failure message for platform backup failure'
+    # won't be executed.
+    # 2. Errors in the nested playbooks. In this case, all tasks in the rescue
+    # block will be executed, and the output will be a combination of
+    # 'ansible_failed_task/result' and 'platform_backup_output.stdout_lines'.
+    - name: Set local failed task result message
+      set_fact:
+        failure_msg: >
+          Failed task: {{ ansible_failed_task.name }}
+          failed with error : {{ ansible_failed_result.msg }}
+      when: ansible_failed_task is defined and ansible_failed_result is defined
+
+    # Specific catch for playbook backup call.
+    # Extracting all output lines from the playbook execution that
+    # contain the keyword 'failure_msg'.
+    - name: Set failure message for platform backup failure
+      set_fact:
+        failure_msg: >
+          {{ failure_msg }}
+          {{ platform_backup_output.stdout_lines
+          | select('search', 'failure_msg') | list | join('\n') }}
+      when: platform_backup_output is defined and platform_backup_output.failed
+
     - name: Force fail post rescue of backup task failure
       fail:
-        msg: "Failed to perform backup of {{ inventory_hostname }}"
+        msg: >
+          Failed to perform backup of {{ inventory_hostname }}
+          {{ failure_msg }}
+      when: failure_msg is defined
 
   always:
+    # Error ignored to prevent reporting the incorrect error.
+    # If this task fails, it's a consequence, not the root cause.
     - name: Remove subcloud overrides file on {{ inventory_hostname }}
       file:
         path: "{{ subcloud_overrides }}"
         state: absent
+      failed_when: false

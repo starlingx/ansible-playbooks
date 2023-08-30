@@ -72,13 +72,15 @@
     - name: Fail if some application won't allow backup to proceed because semantic check failed.
       fail:
         msg: >
-          Semantic check failed for backup action from application
-          {{ backup_semantic_check_notification_result.stderr }}.
+          Semantic check failed for backup action from application.
+          {{ backup_semantic_check_notification_result.msg }}
       when: backup_semantic_check_notification_result.rc == 1
 
     - name: Fail if there is some other/internal error when sending lifecycle hook.
       fail:
-        msg: "Failed to run backup-semantic-check action."
+        msg: >
+          Failed to run backup-semantic-check action.
+          {{ backup_semantic_check_notification_result.msg }}
       when: backup_semantic_check_notification_result.rc == 2
 
     - name: Send application lifecycle notifications for pre-backup action
@@ -89,8 +91,8 @@
     - name: Fail if some application cannot handle the pre-backup action
       fail:
         msg: >
-          Pre-backup action for application
-          {{ pre_backup_notification_result.stderr }}.
+          Failed pre-backup action for application
+          [{{ pre_backup_notification_result.msg }}]
       when: pre_backup_notification_result.rc != 0
 
     - name: Generate backup_in_progress alarm
@@ -98,9 +100,13 @@
       register: alarm_result
       failed_when: false
 
+    # Extracting all output lines from the script execution that
+    # contain the keyword 'Exception'.
     - name: Fail if alarm script throws an exception
       fail:
-        msg: "Failed to generate backup-in-progress alarm."
+        msg: >
+          Failed to generate backup-in-progress alarm.
+          [{{ alarm_result.stderr_lines | select('search', 'Exception') | join('\n') }}]
       when: alarm_result.rc != 0
 
     - name: Create temp dir
@@ -355,9 +361,9 @@
 
     - name: Fail if there is not enough free space in the archive dir to create platform backup
       fail:
-        msg: >-
-           Not enough free space in {{ backup_dir }}. It has {{ available_disk_size }}KiB.
-           It needs at least {{ total_platform_size_estimation }}KiB.
+        msg:
+          Not enough free space in {{ backup_dir }}. It has {{ available_disk_size }}KiB.
+          It needs at least {{ total_platform_size_estimation }}KiB.
       when: available_disk_size|int < total_platform_size_estimation|int
 
     - name: Estimate remaining space after reserving space for platform backup
@@ -385,10 +391,10 @@
 
       - name: Fail if there is not enough free space in the archive dir to create openstack backup
         fail:
-          msg: >-
-             Not enough free space in {{ backup_dir }}.
-             Free space available is estimated to {{ remaining_disk_size_estimation }}KiB.
-             It needs at least {{ total_openstack_size_estimation }}KiB.
+          msg:
+            Not enough free space in {{ backup_dir }}.
+            Free space available is estimated to {{ remaining_disk_size_estimation }}KiB.
+            It needs at least {{ total_openstack_size_estimation }}KiB.
         when: remaining_disk_size_estimation|int < total_openstack_size_estimation|int
 
       - name: Estimate remaining space after reserving space for openstack backup
@@ -499,8 +505,9 @@
       failed_when: false
 
     - name: Fail if there is some other/internal error when sending lifecycle hook.
-      fail:
-        msg: "Failed to run post-etcd-backup action [{{ post_etcd_backup_notification_result.rc }}]"
+      set_fact:
+        failure_msg: >
+          "Failed to run post-etcd-backup action [{{ post_etcd_backup_notification_result.rc }}]"
       when: post_etcd_backup_notification_result.rc != 0
 
     - name: Create temp dir for override backup file
@@ -590,7 +597,7 @@
           crushmap_file_,
           ceph_conf_ctrl_0_,
           system_image_list_path,
-        ]) | reject('equalto', '') | list }}"  # rejecting vars that might be empty
+          ]) | reject('equalto', '') | list }}"  # rejecting vars that might be empty
       vars:
         crushmap_file_: "{{ crushmap_file | default(\"\") }}"
         ceph_conf_ctrl_0_: "{{ ceph_conf_ctrl_0 | default(\"\") }}"
@@ -707,7 +714,26 @@
   rescue:
     - name: Notify applications that backup failed.
       command: /usr/bin/sysinv-utils notify post-backup-action failure
+      failed_when: false
+
+    - name: Set failure message playbook errors
+      set_fact:
+        failure_msg: >
+          Failed task: {{ ansible_failed_task.name }}.
+          Failed with error : {{ ansible_failed_result.msg }}
+      when: ansible_failed_task is defined and ansible_failed_result is defined
+      ignore_errors: true
+
+    - name: Display failure message
+      debug:
+        msg: "{{ failure_msg }}"
+      when: failure_msg is defined and failure_msg != ''
 
     - name: Force fail if this playbook or nested playbook failed
       fail:
-        msg: "Unable to backup the system. Please check ansible logs for the last failed task."
+        msg: >
+          {% if failure_msg is defined and failure_msg != '' %}
+          failure_msg: {{ failure_msg }}
+          {% else %}
+          failure_msg: Unable to backup the system. Please check ansible logs for the last failed task.
+          {% endif %}
