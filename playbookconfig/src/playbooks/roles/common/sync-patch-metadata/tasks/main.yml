@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -87,17 +87,15 @@
     become: yes
 
   - name: Synchronize patching dir from system controller to subcloud
-    command: >
-      sshpass -p {{ ansible_ssh_pass }}
-      rsync -avp --delete -e 'ssh -o StrictHostKeyChecking=no -o Port={{ ansible_port }}'
-      {{ patching_dir }}/
-      {{ ansible_ssh_user }}@{{ ansible_host | ipwrap }}:{{ patching_dir }};
+    synchronize:
+      mode: push
+      src: "{{ patching_dir }}/"
+      dest: "{{ patching_dir }}/"
+      rsync_opts: "--delete"
     register: patching_transfer
     retries: 2
     delay: 5
     until: patching_transfer.rc == 0
-    no_log: false
-    connection: local
 
   - name: Restore root ownership to subcloud {{ patching_dir }}
     file:
@@ -106,6 +104,25 @@
       owner: root
       recurse: yes
     become: yes
+
+  - name: Delete patch metadata files not belonging to the current software version
+          ({{ sw_version.stdout }})
+    shell: >
+      grep -L "<sw_version>{{ sw_version.stdout }}</sw_version>" {{ item }}
+      | xargs -I {} sh -c 'echo "$1"; rm -f "$1"' sh {}
+    loop:
+      - "{{ patching_dir }}/metadata/applied/*"
+      - "{{ patching_dir }}/metadata/available/*"
+      - "{{ patching_dir }}/metadata/committed/*"
+    register: deleted_metadata_files
+    become: yes
+
+  - name: Print deleted patch metadata files
+    debug:
+      msg: "{{ deleted_metadata_files.results | map(attribute='stdout_lines')
+            | flatten | join('\n') }}"
+    when: deleted_metadata_files.results | map(attribute='stdout_lines')
+          | flatten | length > 0
 
   # Restart the patch controller and agent to pickup the changes
   - name: Restart the patch controller and agent
