@@ -32,6 +32,10 @@
   when: mode is regex("^upgrade_") or
         mode == 'trident_install'
 
+- name: Retrieve configured docker registries during upgrades
+  import_tasks:
+    file: get_docker_registries.yml
+  when: upgrade_in_progress|default(false)
 
 # Disable the log to not expose registry password
 - name: Get registry credentials if registry type is AWS ECR

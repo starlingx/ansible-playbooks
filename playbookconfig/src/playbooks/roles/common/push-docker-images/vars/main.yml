@@ -1,2 +1,17 @@
 ---
 local_registry: registry.local:9001
+
+# Used to infer values for missing registries
+infer_registry_url: docker.io
+
+possible_missing_registries:
+  - icr.io
+  - registry.k8s.io
+
+registry_to_service:
+  icr.io: icr-registry
+  registry.k8s.io: registryk8s-registry
+
+registry_to_fact:
+  icr.io: icr_registry
+  registry.k8s.io: registryk8s_registry
