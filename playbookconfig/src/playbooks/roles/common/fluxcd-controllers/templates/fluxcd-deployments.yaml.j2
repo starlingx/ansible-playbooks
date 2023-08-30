@@ -20,8 +20,8 @@ spec:
     spec:
       containers:
       - name: manager
-        command: ["/sbin/tini"]
-        args: ["--", "/bin/sh", "-c", "helm-controller --watch-all-namespaces --log-level=debug --log-encoding=console --enable-leader-election 2>&1 | tee -a /var/log/helm-controller.log"]
+        command: ["/bin/sh"]
+        args: ["-c", "helm-controller --watch-all-namespaces --log-level=debug --log-encoding=console --enable-leader-election 2>&1 | tee -a /var/log/helm-controller.log"]
         env:
         - name: RUNTIME_NAMESPACE
           valueFrom:
@@ -53,7 +53,13 @@ spec:
             memory: 64Mi
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
           readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
         volumeMounts:
         - mountPath: /tmp
           name: temp
@@ -141,7 +147,13 @@ spec:
             memory: 64Mi
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
           readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
         volumeMounts:
         - mountPath: /data
           name: data
