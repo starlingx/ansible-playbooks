@@ -65,6 +65,11 @@
       state: directory
       mode: '0755'
 
+  - name: Check content of {{ backup_dir }} before proceeding
+    find:
+      paths: "{{ backup_dir }}"
+    register: existing_files_before_backup
+
   - name: Run {{ inventory_hostname }} backup playbook
     command: |
       ansible-playbook /usr/share/ansible/stx-ansible/playbooks/backup.yml -e "@{{ subcloud_overrides }}"
@@ -81,11 +86,41 @@
     when: previous_backup_dir is defined and local
 
   rescue:
-    - name: Remove empty/incomplete backup directory
+    - block:
+      - name: Get backup files in {{ backup_dir }}
+        find:
+          paths: "{{ backup_dir }}"
+          patterns: "{{ platform_backup_filename_prefix }}*"
+        register: backup_files
+
+      - name: Filter out existing files
+        set_fact:
+          filter_list: "{{ existing_files_before_backup.files | map(attribute='path') | list }}"
+
+      - name: Filter out existing files
+        set_fact:
+          filtered_files: "{{ backup_files.files | rejectattr('path', 'in', filter_list) | list }}"
+
+      - block:
+        - name: Get latest backup file
+          set_fact:
+            local_backup_file: "{{ (filtered_files | sort(attribute='mtime') | last).path }}"
+
+        - name: Remove incomplete backup file if existent
+          file:
+            path: "{{ local_backup_file }}"
+            state: absent
+          connection: "{{ target_connection }}"
+
+        when: filtered_files | length > 0
+      when: existing_files_before_backup.matched > 0
+
+    - name: Remove {{ backup_dir }} directory
       file:
-        path: "{{ working_dir }}"
+        path: "{{ backup_dir }}"
         state: absent
       connection: "{{ target_connection }}"
+      when: existing_files_before_backup.matched == 0
 
     - name: Restore previous backup upon failure
       command: mv {{ previous_backup_dir }} {{ working_dir }}
