@@ -51,15 +51,28 @@ restore_exclude_items:
   - etc/ssl/private/ssl-cert-snakeoil.key
 
 upgrade_exclude_items:
-  - etc/group
-  - etc/group-
-  - etc/kubernetes
-  - etc/passwd
-  - etc/passwd-
-  - etc/postgresql
-  - etc/shadow
-  - etc/shadow-
-  - etc/ssl/certs
+  '21.12':
+    - etc/group
+    - etc/group-
+    - etc/kubernetes
+    - etc/passwd
+    - etc/passwd-
+    - etc/postgresql
+    - etc/shadow
+    - etc/shadow-
+    - etc/ssl/certs
+  '22.12':
+    - etc/default
+    - etc/group
+    - etc/group-
+    - etc/kubernetes
+    - etc/passwd
+    - etc/passwd-
+    - etc/postgresql
+    - etc/shadow
+    - etc/shadow-
+    # This was already restored during apply-manifest
+    - opt/platform/puppet
 
 pxelinux_config_permdir: "/opt/platform/config/{{ software_version }}/pxelinux.cfg"
 

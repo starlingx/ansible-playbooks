@@ -42,11 +42,9 @@
       become: yes
     - role: optimized-restore/restore-data
       become: yes
-    - role: optimized-restore/complete-restore
-      become: yes
     - role: common/install-platform-certificates
       become: yes
-    - role: restore-user-images/restore-local-registry-images
+    - role: optimized-restore/complete-restore
       become: yes
     - role: common/host-unlock
       vars:

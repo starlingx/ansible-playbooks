@@ -24,4 +24,10 @@
   import_tasks: restore-ceph-data.yml
 
 - name: Upgrade networking
-  import_tasks: upgrade-networking.yml
+  include_tasks: upgrade-networking.yml
+  when: previous_software_version == '21.12'
+
+- name: Restore local user images when upgrading from CentOS
+  include_role:
+    name: restore-user-images/restore-local-registry-images
+  when: previous_software_version == '21.12'

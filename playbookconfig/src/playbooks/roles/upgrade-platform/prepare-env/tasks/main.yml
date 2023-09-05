@@ -135,14 +135,13 @@
 
   when: upgrade_images_data_file is defined and upgrade_images_data_file is not none
 
-# TODO(jkraitbe): Remove post StarlingX 9.0
+# TODO(jkraitbe): Consider also using during optimized restore
 - name: Prepare upgrade data
   import_tasks:
     file: prepare-upgrade-data.yml
   # Since we haven't read the upgrade data yet we don't know previous software version.
   when:
     - upgrade_mode == 'optimized'
-    - software_version == '22.12'
 
 - name: Ensure temporary data path is present
   file:

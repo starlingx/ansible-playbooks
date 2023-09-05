@@ -10,7 +10,7 @@
 
 - block:
     - set_fact:
-        restore_exclude_items: "{{ restore_exclude_items + upgrade_exclude_items }}"
+        restore_exclude_items: "{{ restore_exclude_items + upgrade_exclude_items.get(previous_software_version, []) }}"
 
     - name: Get current MACs sshd config
       command: grep '^MACs' /etc/ssh/sshd_config
@@ -50,7 +50,37 @@
     cmd: "tar --use-compress-program=pigz -C / -xpf '{{ platform_backup_fqpn }}' boot/"
   args:
     warn: false
-  when: boot_backup_found.rc == 0
+  when:
+    - boot_backup_found.rc == 0
+    - not upgrade_in_progress
+
+- name: Migrate /boot from upgrade data
+  block:
+    - name: Save original kernel.env content
+      command: cat /boot/1/kernel.env
+      register: original_kernel_result
+
+    - name: Restore /boot from the backup
+      command:
+        cmd: >-
+          tar --use-compress-program=pigz -C / -xpf '{{ platform_backup_fqpn }}' --overwrite
+          boot/1/kernel.env
+          boot/efi/EFI/BOOT/boot.env
+      args:
+        warn: false
+
+    - name: Update migrated kernel content
+      replace:
+        path: /boot/1/kernel.env
+        regexp: "{{ item }}"
+        replace: "{{ original_kernel_result.stdout | regex_search(item, multiline=true) }}"
+      loop:
+        - "^kernel=.*$"
+        - "^kernel_rollback=.*$"
+
+  when:
+    - boot_backup_found.rc == 0
+    - upgrade_in_progress
 
 - name: Check home dir for CentOS
   block:
@@ -106,6 +136,7 @@
         replace: "{{ item.replace|default(software_version) }}"
       register: migrate_file
       failed_when: migrate_file.msg == ''
+      when: previous_software_version in item.previous_software_version|default([previous_software_version])
       loop:
         - path: /etc/mtc.ini
           after: "keyring_directory *="
@@ -117,6 +148,7 @@
           after: "server.chroot +="
           regexp: '"/www"'
           replace: '"/var/www"'
+          previous_software_version: ['21.12']
 
     - name: Migrate directories to latest release
       command: "mv {{ src | quote }} {{ dest | quote }}"
