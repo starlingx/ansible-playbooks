@@ -21,7 +21,7 @@ spec:
       containers:
       - name: manager
         command: ["/bin/sh"]
-        args: ["-c", "helm-controller --watch-all-namespaces --log-level=debug --log-encoding=console --enable-leader-election 2>&1 | tee -a /var/log/helm-controller.log"]
+        args: ["-c", "helm-controller --watch-all-namespaces --log-level=debug --log-encoding=console --graceful-shutdown-timeout=10s --enable-leader-election 2>&1 | tee -a /var/log/helm-controller.log"]
         env:
         - name: RUNTIME_NAMESPACE
           valueFrom:
@@ -76,7 +76,7 @@ spec:
         - key: "node-role.kubernetes.io/control-plane"
           operator: "Exists"
           effect: "NoSchedule"
-      terminationGracePeriodSeconds: 600
+      terminationGracePeriodSeconds: 10
       volumes:
       - emptyDir: {}
         name: temp
