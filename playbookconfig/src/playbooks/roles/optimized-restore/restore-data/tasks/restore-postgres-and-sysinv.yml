@@ -60,7 +60,7 @@
         - "sed --follow-symlinks -i -e 's|0.0.0.0/32|::0/128|g' /etc/postgresql/pg_hba.conf"
       when: ipv6_addressing is defined and ipv6_addressing != False
 
-  when: migrate_platform_data is defined and migrate_platform_data
+  when: upgrade_in_progress
 
 # restore-more-data/tasks/main.yml#459
 # Set all the hosts including controller-0 to locked/disabled/offline state.

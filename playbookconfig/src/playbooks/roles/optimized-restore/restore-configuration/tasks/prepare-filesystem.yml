@@ -24,4 +24,4 @@
   loop:
     - sysinv
     - www
-  when: migrate_platform_data is defined and migrate_platform_data
+  when: upgrade_in_progress

@@ -99,7 +99,7 @@
   - name: Replace platform config file
     command: mv -f {{ staging_dir }}/platform.conf {{ platform_conf_path}}/platform.conf
 
-  when: migrate_platform_data is not defined or not migrate_platform_data
+  when: not upgrade_in_progress
 
 # For subcloud, the DC root CA certificate needs to be restored from backup
 # into /opt/platform/config directory and it will be installed to controllers
@@ -245,7 +245,7 @@
     --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/pxelinux.cfg/*-*-*'
   args:
     warn: false
-  when: migrate_platform_data is not defined or not migrate_platform_data
+  when: not upgrade_in_progress
 
 - name: Stop openldap service
   shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap stop"
@@ -476,7 +476,7 @@
     - debug:
         var: migration_output.stdout_lines
 
-    when: migrate_platform_data is defined and migrate_platform_data
+    when: upgrade_in_progress
 
   # Set all the hosts including controller-0 to locked/disabled/offline state.
   # After the services are restarted, mtce will update controller-0 to

@@ -84,7 +84,7 @@
 
   when: >
     restore_original_images|bool and
-    not (migrate_platform_data is defined and migrate_platform_data)
+    not upgrade_in_progress
 
 # Running push-docker-images and bringup-kubemaster increases playbook time,
 # but it decreases unlock time by around the same amount.

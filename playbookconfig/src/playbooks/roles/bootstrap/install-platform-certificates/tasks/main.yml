@@ -54,9 +54,7 @@
 
     when: system_local_ca_exists.stdout | bool
 
-  when: mode == 'restore' and
-        migrate_platform_data is defined and
-        migrate_platform_data
+  when: upgrade_in_progress
   connection: local
 
 # Else retrieve from kubernetes root CA
@@ -95,13 +93,9 @@
   - name: Set subcloud_local_ca_secret_type value
     set_fact:
       subcloud_local_ca_secret_type: "{{ subcloud_local_ca_secret_type.stdout | lower }}"
-      subcloud_local_ca_should_be_altered: "{{ mode == 'bootstrap' or
-                                               (mode == 'restore' and
-                                                migrate_platform_data is defined and
-                                                migrate_platform_data) }}"
+      subcloud_local_ca_should_be_altered: "{{ (mode == 'bootstrap') or upgrade_in_progress }}"
 
   when: distributed_cloud_role == 'subcloud'
-
 
 - block:
   - name: Initialize platform certificates to not be altered

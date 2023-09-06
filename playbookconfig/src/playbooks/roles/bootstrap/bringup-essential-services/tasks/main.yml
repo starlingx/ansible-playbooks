@@ -199,11 +199,6 @@
 
     when: mode == 'restore'
 
-  - name: Upgrade k8s networking
-    import_role:
-      name: common/upgrade-k8s-networking
-    when: migrate_platform_data is defined and migrate_platform_data
-
   - name: Wait for {{ pods_wait_time }} seconds to ensure kube-system pods are all started
     wait_for:
       timeout: "{{ pods_wait_time }}"

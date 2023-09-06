@@ -33,4 +33,4 @@
     - name: Add default security feature to kernel parameters
       command: /usr/local/bin/puppet-update-grub-env.py --add-kernelparams '{{ default_security_feature }}'
 
-  when: migrate_platform_data is defined and migrate_platform_data
+  when: upgrade_in_progress

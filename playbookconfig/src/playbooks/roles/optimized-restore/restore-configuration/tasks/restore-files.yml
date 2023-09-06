@@ -17,7 +17,7 @@
       register: debian_sshd_macs
       when: previous_software_version == '21.12'
 
-  when: migrate_platform_data is defined and migrate_platform_data
+  when: upgrade_in_progress
 
 - name: Restore configuration files
   command: >-
@@ -130,4 +130,4 @@
         line: "{{ debian_sshd_macs.stdout_lines[0] }}"
       when: previous_software_version == '21.12'
 
-  when: migrate_platform_data is defined and migrate_platform_data
+  when: upgrade_in_progress

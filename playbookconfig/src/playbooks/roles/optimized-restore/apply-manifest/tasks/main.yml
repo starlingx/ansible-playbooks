@@ -52,7 +52,7 @@
     {{ hieradata_workdir }}/static.yaml
   args:
     warn: false
-  when: migrate_platform_data is defined and migrate_platform_data
+  when: upgrade_in_progress
 
 
 - name: Applying puppet restore manifest

@@ -10,12 +10,12 @@
 - name: Set restore file parameter
   set_fact:
     restore_data_file: "{{ target_backup_dir }}/{{ backup_filename }}"
-  when: not (migrate_platform_data is defined and migrate_platform_data)
+  when: not upgrade_in_progress
 
 - name: Set restore file parameter
   set_fact:
     platform_backup_fqpn: "{{ restore_data_file }}"
-  when: migrate_platform_data is defined and migrate_platform_data
+  when: upgrade_in_progress
 
 - name: Set image backup filename
   block:
@@ -38,7 +38,7 @@
         previous_software_version: "{{ upgrade_metadata.from_release }}"
         kubernetes_version: "{{ upgrade_k8s_version }}"
 
-  when: migrate_platform_data is defined and migrate_platform_data
+  when: upgrade_in_progress
 
 - name: Non-upgrade path
   block:
@@ -46,4 +46,4 @@
       set_fact:
         previous_software_version: "{{ software_version }}"
 
-  when: not (migrate_platform_data is defined and migrate_platform_data)
+  when: not upgrade_in_progress

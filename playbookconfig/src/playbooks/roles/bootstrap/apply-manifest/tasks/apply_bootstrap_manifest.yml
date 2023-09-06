@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2022 Wind River Systems, Inc.
+# Copyright (c) 2019-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -65,14 +65,6 @@
       --transform='s,.*/,,' '{{ archive_puppet_permdir }}/*.yaml'
     args:
       warn: false
-
-  - name: Migrate static hieradata to new version
-    command: >
-      sed -i 's/{{ upgrade_metadata.from_release }}/{{ upgrade_metadata.to_release }}/g'
-      {{ hieradata_workdir }}/static.yaml
-    args:
-      warn: false
-    when: migrate_platform_data is defined and migrate_platform_data
 
   - name: Restore etcd certificates.
     shell: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}

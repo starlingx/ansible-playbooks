@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -114,8 +114,3 @@
     systemd:
       name: postgresql
       state: restarted
-
-  when: >
-    (mode == 'restore' and restore_mode|default(none) == 'optimized') or
-    migrate_platform_data is undefined or
-    not migrate_platform_data

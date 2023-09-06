@@ -120,9 +120,10 @@
   - name: Update slapd configuration
     include_tasks: update-slapd-configuration.yml
     when:
+      - upgrade_in_progress
       - os_release == "debian"
       - bkp_has_centos_ldap_config.rc == 0
-      - upgrade_metadata is defined and upgrade_metadata.from_release == "21.12"
+      - previous_software_version == "21.12"
 
   always:
     - name: Delete files from staging dir
