@@ -41,27 +41,18 @@
           - "{{ controller_1_cluster_host }}\tcontroller-1-infra"
 
       - block:
-        - name: Populate /etc/hosts with user dns host-records
-          script: parse_user_dns_host_record.py "{{ user_dns_host_records }}"
-          register: result
-          ignore_errors: yes
+        - name: Check if dnsmasq is running
+          command: pgrep -f dnsmasq
+          register: is_dnsmasq_running
+          failed_when: false
 
-        - name: Fail if script failed or error occurred
-          fail:
-            msg: >
-              {% if result.rc != 0 %}
-                Error during parsing user dns host-records, failed with return code
-                {{ result.rc }}.
-              {% elif "An error occurred" in result.stdout %}
-                User dns host-records parsing encountered null value, please update the
-                dns host-records with valid inputs. Error output: {{ result.stderr }}
-              {% endif %}
-          when: result.rc != 0 or "An error occurred" in result.stdout
-
-        - name: Write user dns host-records to /etc/hosts
+        - name: Write user host-records to /etc/hosts if dnsmasq is not running
           lineinfile:
             path: /etc/hosts
-            line: "{{ result.stdout }}"
+            line: "{{ item }}"
+          with_items: "{{ user_dns_host_records_lines }}"
+          when: is_dnsmasq_running.stdout == ""
+
         when: user_dns_host_records
 
       - block:

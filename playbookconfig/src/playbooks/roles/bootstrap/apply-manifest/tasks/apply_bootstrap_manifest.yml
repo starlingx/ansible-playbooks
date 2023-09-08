@@ -200,6 +200,13 @@
       - "platform::drbd::platform::params::lv_size: {{ platform_size }}"
     when: root_disk_size|int >= minimum_small_root_disk_size
 
+  - name: Write dns host records to runtime hieradata
+    lineinfile:
+      path: "{{ hieradata_workdir }}/runtime.yaml"
+      regexp: "^platform::config::hosts::host_records: "
+      line: "platform::config::hosts::host_records: {{ user_dns_host_records_lines }}"
+    when: user_dns_host_records
+
   - name: Add L4 service ports value to bootstrap runtime hieradata
     vars:
       script_content: |
