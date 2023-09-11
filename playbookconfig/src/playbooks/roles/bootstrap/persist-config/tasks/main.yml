@@ -118,6 +118,41 @@
 
 # Banner customization is not part of one_time_config_task.yml as the user may
 # choose to change their banner look and feel and replay.
+# Create issue and motd files if defined by user
+- block:
+  - name: Create banner directory
+    file:
+      path: "{{ banner_root }}"
+      state: directory
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: Create issue console file if defined by user
+    copy:
+      content: "{{ banner.issue.console }}"
+      dest: "{{ banner_root }}issue"
+    when: banner.issue.console is defined
+
+  - name: Create issue network file if defined by user
+    copy:
+      content: "{{ banner.issue.network }}"
+      dest: "{{ banner_root }}issue.net"
+    when: banner.issue.network is defined
+
+  - name: Create motd head file if defined by user
+    copy:
+      content: "{{ banner.motd.head }}"
+      dest: "{{ banner_root }}motd.head"
+    when: banner.motd.head is defined
+
+  - name: Create motd tail file if defined by user
+    copy:
+      content: "{{ banner.motd.tail }}"
+      dest: "{{ banner_root }}motd.tail"
+    when: banner.motd.tail is defined
+  when: banner is defined
+
 - name: Check if custom banner exists
   stat:
     path: /opt/banner

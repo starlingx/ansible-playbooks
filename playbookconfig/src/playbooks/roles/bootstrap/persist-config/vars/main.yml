@@ -10,3 +10,4 @@ source_device_image_bind_dir: /opt/platform/device_images
 target_device_image_bind_dir: /var/www/pages/device_images
 etcd_certs_dir: "{{ config_permdir + '/etcd' }}"
 sysinv_k8s_vars: ""
+banner_root: "/opt/banner/"
