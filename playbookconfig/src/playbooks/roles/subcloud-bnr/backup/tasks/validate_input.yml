@@ -105,6 +105,7 @@
     with_items:
       - "backup_user_images: true"
       - "backup_user_local_registry: true"
+      - "docker_local_registry_backup_filename_prefix: {{ default_user_images_backup_prefix }}"
     connection: local
     when: not optimized_bnr_supported
 
