@@ -628,18 +628,30 @@
 
       when: not wipe_ceph_osds|bool
 
-    # The applicaiton platform-integ-apps is being removed when the flag
-    # wipe_ceph_osds is set to true because this application needs to be
-    # reapplied, but helm will not reapply the charts if the version is not bumped.
-    #
-    # The application is removed here to be applied after host is unlocked and
-    # ceph is correctly configured after a wipe. This app is automatically
-    # applied by conductor when there is ceph backend configured.
-    - name: Remove platform-integ-apps
-      shell: source /etc/platform/openrc; system application-remove platform-integ-apps
-      when: wipe_ceph_osds|bool
-
     - block:
+      # The application platform-integ-apps is being removed when the flag
+      # wipe_ceph_osds is set to true because this application needs to be
+      # reapplied, but helm will not reapply the charts if the version is not bumped.
+      #
+      # The application is removed here to be applied after host is unlocked and
+      # ceph is correctly configured after a wipe. This app is automatically
+      # applied by conductor when there is ceph backend configured.
+      - name: Remove platform-integ-apps
+        shell: source /etc/platform/openrc; system application-remove platform-integ-apps
+
+      # When controller unlock occurs there is a chance platform-integ-apps
+      # has not yet been completely removed. This causes the running removal to abort
+      # and sets the state from removing to remove-failed. This removal is necessary
+      # to ensure that the platform-integ-apps will be reapplied after the unlock.
+      - name: Check if platform-integ-apps is in uploaded state
+        shell: |
+          source /etc/platform/openrc
+          system application-show platform-integ-apps --column status --format value
+        register: check_uploaded
+        retries: "{{ application_check_retries }}"
+        delay: "{{ application_check_retry_delay }}"
+        until: check_uploaded.stdout == "uploaded"
+
       - name: Recover Ceph PVCs when OSDs are wiped
         script: recover_ceph_pvcs.sh
         register: recover_ceph_pvcs_output

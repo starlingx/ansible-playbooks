@@ -62,3 +62,19 @@
   retries: "{{ system_online_retries }}"
   delay: "{{ system_online_retry_delay }}"
   until: check_online.stdout == "online"
+
+# When controller unlock occurs there is a chance platform-integ-apps
+# has not yet been completely removed. This causes the running removal to abort
+# and sets the state from removing to remove-failed. This removal is necessary
+# to ensure that the platform-integ-apps will be reapplied after the unlock.
+# This new task will be executed only if the wipe_ceph_osds is set to true.
+
+- name: Check if platform-integ-apps is in uploaded state
+  shell: |
+    source /etc/platform/openrc
+    system application-show platform-integ-apps --column status --format value
+  register: check_uploaded
+  retries: "{{ application_check_retries }}"
+  delay: "{{ application_check_retry_delay }}"
+  until: check_uploaded.stdout == "uploaded"
+  when: wipe_ceph_osds|bool and ceph_backend.rc == 0
