@@ -21,7 +21,7 @@
 
   when: distributed_cloud_role is undefined
 
-# In upgrades, retrieve data from 'system-local-ca' if it exists
+# If subcloud or in upgrades, retrieve data from 'system-local-ca' if it exists
 - block:
   - name: Check if 'system-local-ca' secret exists
     shell: |
@@ -54,7 +54,7 @@
 
     when: system_local_ca_exists.stdout | bool
 
-  when: upgrade_in_progress
+  when: distributed_cloud_role == 'subcloud' or upgrade_in_progress
   connection: local
 
 # Else retrieve from kubernetes root CA
@@ -78,23 +78,11 @@
   connection: local
   when: ca_data_obtained is not defined
 
-# If subcloud, we need to know the secret type. Also in restore mode the ca
-# cert must be restored from backup, so we are only changing it otherwise.
-- block:
-  - name: Get 'system-local-ca' secret type for subcloud
-    shell: |
-      kubectl get secret system-local-ca -n cert-manager \
-      --ignore-not-found=true --no-headers=true | \
-      awk '{print $2}'
-    environment:
-      KUBECONFIG: "/etc/kubernetes/admin.conf"
-    register: subcloud_local_ca_secret_type
-
-  - name: Set subcloud_local_ca_secret_type value
-    set_fact:
-      subcloud_local_ca_secret_type: "{{ subcloud_local_ca_secret_type.stdout | lower }}"
-      subcloud_local_ca_should_be_altered: "{{ (mode == 'bootstrap') or upgrade_in_progress }}"
-
+# For subclouds, in normal restore the ca cert must be restored from backup,
+# so we are only recreating it in upgrades.
+- name: Define whether 'system-local-ca' secret should be created in the subcloud
+  set_fact:
+    subcloud_local_ca_should_be_altered: "{{ mode == 'bootstrap' or upgrade_in_progress }}"
   when: distributed_cloud_role == 'subcloud'
 
 - block:
@@ -126,7 +114,13 @@
     vars:
       destination: /tmp/platform_certificates.yaml
 
-  - name: Apply kubernetes yaml to create cert-manager clusterissuer and certificates
+  - name: Delete old secret 'system-local-ca' secret
+    include_role:
+      name: common/delete-kubernetes-resources
+    with_items:
+      - { name: system-local-ca, namespace: cert-manager, type: secret }
+
+  - name: Apply kubernetes yaml to create cert-manager resources
     command: kubectl apply -f /tmp/platform_certificates.yaml
     environment:
       KUBECONFIG: /etc/kubernetes/admin.conf
@@ -136,14 +130,4 @@
     delay: 30
 
   when: distributed_cloud_role != 'subcloud' or
-        (subcloud_local_ca_should_be_altered and
-        subcloud_local_ca_secret_type == 'kubernetes.io/tls')
-
-# If the subcloud's secret is not tls (opaque or doesn't exist yet)
-# we send the systemcontroller's. Else, we do nothing.
-- name: Send root CA certificate to subcloud
-  include_role:
-    name: common/send-ca-cert-to-subcloud
-  when: distributed_cloud_role == 'subcloud' and
-        subcloud_local_ca_should_be_altered and
-        subcloud_local_ca_secret_type != 'kubernetes.io/tls'
+        subcloud_local_ca_should_be_altered
