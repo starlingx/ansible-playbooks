@@ -43,22 +43,6 @@ spec:
       automountServiceAccountToken: false
       imagePullSecrets:
         - name: registry-local-secret
-      initContainers:
-      - name: intel-qat-initcontainer
-        env:
-          - name: NODE_NAME
-            valueFrom:
-              fieldRef:
-                fieldPath: spec.nodeName
-        image: "{{ local_registry }}/{{ intel_qat_initcontainer_img }}"
-        securityContext:
-          readOnlyRootFilesystem: true
-          privileged: true
-        volumeMounts:
-        - name: sysfs
-          mountPath: /sys
-        - name: qat-config
-          mountPath: /qat-init/conf
       containers:
       - name: intel-qat-plugin
         env:
@@ -84,8 +68,6 @@ spec:
           mountPath: /sys/bus/pci
         - name: kubeletsockets
           mountPath: /var/lib/kubelet/device-plugins
-        - name: qat-config
-          mountPath: /qat-init/conf
       volumes:
       - name: devdir
         hostPath:
@@ -99,11 +81,3 @@ spec:
       - name: kubeletsockets
         hostPath:
           path: /var/lib/kubelet/device-plugins
-      - name: sysfs
-        hostPath:
-          path: /sys
-      - name: qat-config
-        configMap:
-          name: qat-config
-          optional: true
-          defaultMode: 0440
