@@ -493,13 +493,13 @@ enable_volume_snapshot_support: false
 # plugins are disabled.
 #
 # "k8s_plugins" is a list of selected vendor device plugins to be
-# available as part of the bootstrap. When a device plugin is enabled,
+# enabled as part of the bootstrap. When a device plugin is enabled,
 # its pods will be deployed when the plugin label (e.g. intelgpu=enabled)
 # is assigned to the hosts in the cluster as part of system bring-up.
 
 k8s_plugins:
-#   - intelgpu
-#   - intelqat
+#  intel-gpu-plugin: intelgpu=enabled
+#  intel-qat-plugin: intelqat=enabled
 
 # SYSTEM APPLICATIONS
 # ===================
