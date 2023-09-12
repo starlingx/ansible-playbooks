@@ -143,6 +143,7 @@
         security_images: "{{ security_images + security_images_upgrade }}"
 
     when:
+      - upgrade_in_progress is defined
       - upgrade_in_progress
       - previous_software_version == '22.12'
 
@@ -150,6 +151,7 @@
     set_fact:
       static_images: "{{ static_images + [armada_img_2112] }}"
     when:
+      - upgrade_in_progress is defined
       - upgrade_in_progress
       - previous_software_version == '21.12'
 
