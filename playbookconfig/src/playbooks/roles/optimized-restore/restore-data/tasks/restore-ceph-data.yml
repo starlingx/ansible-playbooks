@@ -159,7 +159,7 @@
 
       when: not wipe_ceph_osds|bool and ceph_backend.rc == 0
 
-    # The applicaiton platform-integ-apps is being removed when the flag
+    # The application platform-integ-apps is being removed when the flag
     # wipe_ceph_osds is set to true because this application needs to be
     # reapplied, but helm will not reapply the charts if the version is not bumped.
     #
@@ -168,4 +168,16 @@
     # applied by conductor when there is ceph backend configured.
     - name: Remove platform-integ-apps application when asked to wipe ceph osd disks
       shell: source /etc/platform/openrc; system application-remove platform-integ-apps
+      when: wipe_ceph_osds|bool and ceph_backend.rc == 0
+
+    - block:
+      - name: Recover Ceph PVCs when OSDs are wiped
+        script: roles/restore-platform/restore-more-data/files/recover_ceph_pvcs.sh
+        register: recover_ceph_pvcs_output
+        environment:
+          KUBECONFIG: /etc/kubernetes/admin.conf
+
+      - name: Result of recovering Ceph PVCs
+        debug: var=recover_ceph_pvcs_output.stdout_lines
+
       when: wipe_ceph_osds|bool and ceph_backend.rc == 0
