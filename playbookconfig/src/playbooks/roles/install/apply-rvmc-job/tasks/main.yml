@@ -14,7 +14,12 @@
     rvmc_image: "{{ rvmc_image | default('docker.io/starlingx/rvmc') }}"
     rvmc_config_file: "{{ rvmc_config_dir }}/rvmc-config.yaml"
     pod_schedule_time: "{{ pod_schedule_time | default(60) }}"
-    job_wait_time: "{{ job_wait_time | default(300) }}"
+    # To accommodate retries in the rvmc scripts, we've configured
+    # the job_wait_time to be 15 minutes. If the rvmc script doesn't
+    # exit within that time frame, we'll continue waiting for another
+    # 15 minutes, allowing the rvmc script a maximum execution time of
+    # half an hour.
+    job_wait_time: "{{ job_wait_time | default(900) }}"
     rvmc_namespace: "rvmc"
     credential_failure: false
     failure_msg: ""
@@ -38,57 +43,15 @@
 - name: Activate Redfish Virtual Media Controller
   command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ rvmc_resource_file }}"
 
-- name: Get the pod name that created by Redfish Virtual Media Controller batch job
-  command: >-
-    kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }} get pods -l job-name={{ rvmc_name }}
-    --output=jsonpath='{.items[*].metadata.name}'
-  failed_when: pod_name.stdout == ""
-  register: pod_name
-
-- block:
-  - set_fact:
-      rvmc_pod_name: "{{ pod_name.stdout_lines[0] }}"
-
-  - block:
-    - name: Wait for {{ pod_schedule_time }} seconds for {{ rvmc_pod_name }} to be ready
-      command: >-
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf wait -n {{ rvmc_namespace }}
-        --for=condition=Ready pod/{{ rvmc_pod_name }}
-        --timeout={{ pod_schedule_time }}s
-
-    # The above check is not reliable. Sometimes the pod completed its job but k8s
-    # did not detect its Ready condition. Either the pod never changed to Ready
-    # condition or k8s might have missed the detection of condition transition to
-    # Ready. The following rescue block is meant to double confirm that the pod
-    # indeed failed before failing the playbook.
-    rescue:
-      - name: Check pod status for completed state
-        shell: >-
-          kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }}
-          get pod --field-selector=status.phase=Succeeded |
-          grep {{ rvmc_pod_name }}
-        failed_when: false
-        register: wait_for_pod
-
-  - block:
-    - name: Save Redfish Virtual Media Controller logs if {{ rvmc_pod_name }} is not ready
-      command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }} logs {{ rvmc_pod_name }}"
-      register: pod_logs
-
-    - debug:
-        msg: "{{ pod_logs.stdout }}"
-
-    - name: Fail if {{ rvmc_pod_name }} is not ready
-      fail: msg="Redfish Virtual Media Controller failed to start the install"
-
-    when: wait_for_pod is defined and wait_for_pod.rc != 0
-
 - name: Wait for {{ job_wait_time }} seconds for Redfish Virtual Media Controller to complete or fail
   script: roles/install/files/k8s-job-state-check.sh {{ rvmc_name }} {{ rvmc_namespace }} {{ job_wait_time }}
   register: wait_for_rvmc
   until: wait_for_rvmc.rc == 0
-  # Continue waiting for another period of time if the script returns timeout,
-  # which means the job is still running.
+  # If the script returns a "timeout" status, indicating that the job is still
+  # running, continue waiting for an additional period of time.
+  # The k8s-job-state-check.sh script returns a non-zero status code only
+  # in the event of a job timeout. If the job fails or is not found,
+  # the install playbook will initiate a retry by re-running this entire role.
   retries: 1
   failed_when: false
 
@@ -97,7 +60,7 @@
     msg: "{{ wait_for_rvmc.stdout }}"
 
 - block:
-  - name: Store Redfish Virtual Media Controller log after the job is completed or failed
+  - name: Get Redfish Virtual Media Controller logs after the job is completed or failed
     command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ rvmc_namespace }} logs job/{{ rvmc_name }}"
     register: rvmc_job_logs
 
