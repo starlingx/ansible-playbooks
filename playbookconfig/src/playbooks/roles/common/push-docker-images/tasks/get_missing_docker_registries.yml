@@ -1,0 +1,74 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Infer missing docker registries.
+#   Optionally persist missing registries as service-parameters.
+
+- name: Set input registries for conversion
+  set_fact:
+    missing_registries: { }
+    input_registries: "{{ registries['docker_registries'] }}"
+    persist_missing_registries: "{{ persist_missing_registries | default(true) | bool }}"
+  no_log: true
+
+- name: Set default registry value to docker.io registry value
+  set_fact:
+    default_registry_val: "{{ input_registries[infer_registry_url] }}"
+    default_url_prefix: "{{ input_registries[infer_registry_url]['url'] | replace(infer_registry_url, '') }}"
+  no_log: true
+
+- name: Prepare values for missing registries
+  set_fact:
+    missing_registries: >
+      {{
+        missing_registries
+          | combine({item: default_registry_val | combine({'url': default_url_prefix + item})})
+      }}
+  when: item not in input_registries or input_registries[item].url is not defined
+  loop: "{{ possible_missing_registries }}"
+  no_log: true
+
+- name: Include missing registries as facts
+  set_fact:
+    "{{ registry_to_fact[item[0]] }}": "{{ item[1] }}"
+    registries: "{{ registries | combine({'docker_registries': {item[0]: item[1]}}, recursive=true) }}"
+  loop: "{{ missing_registries.items() }}"
+  no_log: true
+
+- block:
+    - name: Create Barbican secrets for missing registries
+      shell: >
+        source /etc/platform/openrc; openstack secret store -n {{ registry_to_service[item[0]] }}-secret
+        -p 'username:{{ item[1].username }} password:{{ item[1].password }}'
+        -c 'Secret href' -f value
+      register: missing_registry_secrets
+      loop: "{{ missing_registries.items() }}"
+      when: item[1].password is defined
+      no_log: true
+
+    - name: Set missing registries auth-secrets
+      set_fact:
+        missing_registries: >
+          {{
+            missing_registries
+              | combine({item.item[0]: {
+                  'username': omit, 'password': omit, 'auth-secret': item.stdout.rsplit('/', 1)[-1]}
+              }, recursive=true)
+          }}
+      loop: "{{ missing_registry_secrets.results }}"
+      when: item.skipped is not defined
+      no_log: true
+
+    - name: Add new registries as service-parameters
+      shell: >
+        source /etc/platform/openrc
+        {% for k, v in item[1].items() %}
+        && system service-parameter-add docker {{ registry_to_service[item[0]] }} '{{ k }}={{ v }}'
+        {% endfor %}
+      loop: "{{ missing_registries.items() }}"
+
+  when: persist_missing_registries | bool

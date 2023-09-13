@@ -34,3 +34,8 @@
       - { name: 'registry.k8s.io', value: "{{ registryk8s_registry }}" }
       - { name: 'icr.io', value: "{{ icr_registry }}" }
     no_log: true
+
+  - name: Infer missing registries values during upgrades
+    import_tasks:
+      file: get_missing_docker_registries.yml
+    when: upgrade_in_progress|default(false)
