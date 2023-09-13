@@ -18,8 +18,14 @@
   failed_when: not cluster_vip.stdout
   register: cluster_vip
 
-- name: Configure controller host addresses
-  command: "ip addr add {{ cluster_vip.stdout_lines[0] }} dev lo scope host"
+- name: Check if cluster host floating IP is up
+  shell: "ping {{ cluster_vip.stdout_lines[0].strip() }} -c1 -w2 | grep ' 0% packet loss'"
+  failed_when: false
+  register: cluster_vip_up
+
+- name: Configure cluster host floating IP addresses
+  command: "ip addr add {{ cluster_vip.stdout_lines[0].strip() }} dev lo scope host"
+  when: cluster_vip_up.rc != 0
 
 # We may need to update /etc/hosts because registry.central will not be
 # available on system controllers or subclouds because dnsmasq is not brought up.
