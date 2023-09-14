@@ -70,11 +70,16 @@
     # Have to use a small python script, Ansible regex_search filter does not accept the
     # keystone regex pattern.
     vars:
+      _regex: "\""
+      _replace: "\\\""
       script_content: |
         import re
         prx = "{{ password_regex }}"
+        pw = "{{ password | regex_replace(_regex, _replace) }}"
         prx = prx.strip('"')
-        if not re.match(prx, "{{ password }}"):
+        if '"' in pw or "'" in pw:
+          raise Exception()
+        if not re.match(prx, pw):
           raise Exception()
     shell: "{{ script_content }}"
     args:
@@ -84,7 +89,7 @@
 
   - name: Fail if provided admin password does not meet required complexity
     fail:
-      msg: "{{ password_regex_desc }}"
+      msg: "{{ password_regex_desc }}, excluding ' (single quote) and \" (double quote)"
     when: password_validation_result.rc != 0
 
   - name: Store admin password
