@@ -20,22 +20,29 @@
     # The following block is executed locally
     - block:
       - name: Start rvmc job
-        include_role:
+        import_role:
           name: install/apply-rvmc-job
 
-      - name: Wait for {{ job_retry_delay }} seconds to retry the rvmc job
-        wait_for:
-          timeout: "{{ job_retry_delay }}"
-        when: wait_for_rvmc.stdout in ['failed', 'not found'] and not credential_failure
+      # In this job retry block, we only initiate retries for job failures or
+      # when a job is not found. The retry mechanism for job timeouts is already
+      # built into the apply-rvmc-job role.
+      - name: Job retry
+        block:
+        - name: Wait for {{ job_retry_delay }} seconds to retry the rvmc job
+          wait_for:
+            timeout: "{{ job_retry_delay }}"
+          when: wait_for_rvmc.stdout in ['failed', 'not found'] and not credential_failure
 
-      # Do not add this and above task to a block although both of them are
-      # the same condition. There's an open issue about "The when conditional
-      # over a block containing an include_role is applied to all role tasks
-      # despite no 'apply'" (https://github.com/ansible/ansible/issues/74382)
-      - name: Retry rvmc job
-        include_role:
-          name: install/apply-rvmc-job
-        when: wait_for_rvmc.stdout in ['failed', 'not found'] and not credential_failure
+        - name: Retry rvmc job
+          include_role:
+            name: install/apply-rvmc-job
+          # Avoid moving the condition out of the task, even though both tasks
+          # within the retry block share the same condition. There's an open issue
+          # regarding the application of the "when" conditional over a block
+          # containing an include_role, which affects all role tasks regardless of
+          # the 'apply' status.
+          # (Issue link: https://github.com/ansible/ansible/issues/74382)
+          when: wait_for_rvmc.stdout in ['failed', 'not found'] and not credential_failure
 
       - name: Fail if Redfish Virtual Media Controller job returns an error
         fail:
