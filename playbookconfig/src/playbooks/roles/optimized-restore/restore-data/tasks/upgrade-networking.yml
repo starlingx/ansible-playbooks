@@ -35,7 +35,12 @@
         {{ puppet_permdir }}/hieradata
       register: controller_ip
 
-    - name: Apply network runtime manifest
+    - name: Create network upgrade bootstrap marker
+      file:
+        path: "/var/run/.network_upgrade_bootstrap"
+        state: touch
+
+    - name: Apply network runtime manifest to populate /etc/network/
       shell: >-
         puppet-manifest-apply.sh
         {{ puppet_permdir }}/hieradata
@@ -50,5 +55,10 @@
         path: "{{ tmp_net_dir.path }}"
         state: absent
       when: tmp_net_dir is defined
+
+    - name: Remove network upgrade bootstrap marker
+      file:
+        path: "/var/run/.network_upgrade_bootstrap"
+        state: absent
 
   when: previous_software_version == '21.12'
