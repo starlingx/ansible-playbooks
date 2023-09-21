@@ -855,6 +855,75 @@
     msg: "k8s_root_ca_key file not found. ({{ k8s_root_ca_key }})"
   when: k8s_root_ca_key and (not k8s_root_ca_key is file)
 
+- block:
+  - name: Verify user provided data for system-local-ca
+    block:
+    - name: Check if the user provided file paths for RCA, ICA cert and ICA key
+      set_fact:
+        local_ca_rca_crt_provided: "{{ system_root_ca_cert | length > 0 }}"
+        local_ca_ica_crt_provided: "{{ system_local_ca_cert | length > 0 }}"
+        local_ca_ica_key_provided: "{{ system_local_ca_key | length > 0 }}"
+
+    - name: If one is provided, fail if user don't provided all the 3 fields
+      fail:
+        msg: >-
+          "To set the local issuer, system_root_ca_cert, system_local_ca_cert and
+          system_local_ca_key must be provided."
+      when:
+        - local_ca_rca_crt_provided or local_ca_ica_crt_provided or local_ca_ica_key_provided
+        - not (local_ca_rca_crt_provided and local_ca_ica_crt_provided and local_ca_ica_key_provided)
+
+    - name: Check the existence of system_root_ca_cert file
+      fail:
+        msg: "system_root_ca_cert file not found. ({{ system_root_ca_cert }})"
+      when: (system_root_ca_cert | length > 0) and not (system_root_ca_cert is file)
+
+    - name: Check the existence of system_local_ca_cert file
+      fail:
+        msg: "system_local_ca_cert file not found. ({{ system_local_ca_cert }})"
+      when: (system_local_ca_cert | length > 0) and not (system_local_ca_cert is file)
+
+    - name: Check the existence of system_local_ca_key file
+      fail:
+        msg: "system_local_ca_key file not found. ({{ system_local_ca_key }})"
+      when: (system_local_ca_key | length > 0) and not (system_local_ca_key is file)
+
+    - name: Encode the user provided files cert/key files
+      block:
+        - name: Encode system_root_ca_cert
+          shell: cat "{{ system_root_ca_cert }}" | base64 -w0
+          register: root_ca_cert_output
+
+        - name: Encode system_local_ca_cert
+          shell: cat "{{ system_local_ca_cert }}" | base64 -w0
+          register: local_ca_cert_output
+
+        - name: Encode system_local_ca_key
+          shell: cat "{{ system_local_ca_key }}" | base64 -w0
+          register: local_ca_key_output
+
+        - name: Keep the file paths for the CA certs/key as variables
+          set_fact:
+            system_root_ca_cert_file: "{{ system_root_ca_cert }}"
+            system_local_ca_cert_file: "{{ system_local_ca_cert }}"
+            system_local_ca_key_file: "{{ system_local_ca_key }}"
+
+        # TODO (mdecastr): Generalize cert verification for trusted CAs and include in here
+        - set_fact:
+            system_root_ca_cert: "{{ root_ca_cert_output.stdout }}"
+            system_local_ca_cert: "{{ local_ca_cert_output.stdout }}"
+            system_local_ca_key: "{{ local_ca_key_output.stdout }}"
+            system_local_ca_overrides: true
+      when: system_local_ca_cert | length > 0
+    when: mode != 'restore'
+
+  - name: Verify user provided SANs for platform certificates
+    include_role:
+      name: common/validate-cert-subject-fields
+    when: system_platform_certificate is defined
+
+  when: create_platform_certificates
+
 - name: Check for ssl_ca_cert file
   fail:
     msg: "ssl_ca_cert file not found. ({{ ssl_ca_cert }})"

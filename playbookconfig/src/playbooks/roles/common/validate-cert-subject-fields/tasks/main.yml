@@ -1,0 +1,34 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Validate X509 certificate subject fields
+#
+
+- name: Validadate cert subject fields
+  block:
+  - name: Check provided values for unknow subject fields.
+    fail:
+      msg: |
+        "Usupported certificate subject field: {{ item }}.
+        Acceptable fields are {{ valid_subject_fieds|join(', ') }}."
+    when: not item in valid_subject_fieds
+    loop: "{{ system_platform_certificate.keys() | list }}"
+
+  - name: Check provided values for none and set as string
+    set_fact:
+      system_platform_certificate:
+        "{{ system_platform_certificate | combine({ item: '' }, recursive=true) }}"
+    with_items:
+      "{{ system_platform_certificate.keys() | list }}"
+    when: system_platform_certificate[item] is none
+
+  - name: Validate subject_C (Country Name)
+    fail:
+      msg: "[ERROR]: subject_C should use an ISO-3166 two-letter code if defined."
+    when: system_platform_certificate.subject_C is defined and
+          system_platform_certificate.subject_C | length != 2
+
+  when: system_platform_certificate is defined

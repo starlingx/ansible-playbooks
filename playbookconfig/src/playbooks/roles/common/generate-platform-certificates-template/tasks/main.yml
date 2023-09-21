@@ -9,7 +9,8 @@
 # kubernetes at a later step
 #
 - name: Validate subject fields
-  include_tasks: validate-subject-fields.yaml
+  include_role:
+    name: common/validate-cert-subject-fields
 
 - name: Get address pool information for system
   shell: |

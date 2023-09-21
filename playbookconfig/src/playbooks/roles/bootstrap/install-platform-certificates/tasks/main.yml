@@ -21,6 +21,11 @@
 
   when: distributed_cloud_role is undefined
 
+# TODO (mdecastr): Clear the code moved to this task once the feature is done
+- name: Retrieve local CA data
+  include_tasks: retrieve-system-local-ca-data.yml
+  when: create_platform_certificates
+
 # If subcloud or in upgrades, retrieve data from 'system-local-ca' if it exists
 - block:
   - name: Check if 'system-local-ca' secret exists
@@ -45,16 +50,18 @@
         KUBECONFIG: "/etc/kubernetes/admin.conf"
       register: key_result
 
-    - name: Set local CA cert/key
+    - name: Set system-local-ca data
       set_fact:
         system_root_ca_cert: "{{ cert_result.stdout }}"
         system_local_ca_cert: "{{ cert_result.stdout }}"
         system_local_ca_key: "{{ key_result.stdout }}"
-        ca_data_obtained: true
+        system_local_ca_data_obtained: true
 
     when: system_local_ca_exists.stdout | bool
 
-  when: distributed_cloud_role == 'subcloud' or upgrade_in_progress
+  when:
+    - distributed_cloud_role == 'subcloud' or upgrade_in_progress
+    - not system_local_ca_data_obtained
   connection: local
 
 # Else retrieve from kubernetes root CA
@@ -69,14 +76,14 @@
     register: kubernetes_root_ca_key
     become: true
 
-  - name: Set Root CA and local CA based on kubernetes Root CA
+  - name: Set system-local-ca data based on kubernetes Root CA
     set_fact:
       system_root_ca_cert: "{{ kubernetes_root_ca_crt.stdout }}"
       system_local_ca_cert: "{{ kubernetes_root_ca_crt.stdout }}"
       system_local_ca_key: "{{ kubernetes_root_ca_key.stdout }}"
 
   connection: local
-  when: ca_data_obtained is not defined
+  when: not system_local_ca_data_obtained
 
 # For subclouds, in normal restore the ca cert must be restored from backup,
 # so we are only recreating it in upgrades.
