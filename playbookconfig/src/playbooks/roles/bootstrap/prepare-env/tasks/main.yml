@@ -259,11 +259,6 @@
       kubernetes_version: "{{ fresh_install_k8s_version }}"
     when: not upgrade_in_progress
 
-  - name: Set kubernetes_version for upgrades.
-    set_fact:
-      kubernetes_version: "{{ upgrade_k8s_version }}"
-    when: upgrade_in_progress
-
   - block:
     - name: Extract kubeadm version from the backup tarball
       # Match kube_cmd_versions VALUES from sysinv database table.
