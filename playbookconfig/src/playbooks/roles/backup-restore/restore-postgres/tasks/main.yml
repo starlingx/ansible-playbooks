@@ -7,10 +7,10 @@
 # SUB-TASK DESCRIPTION:
 #   The tasks below restore the postgres database schema and data.
 
-- set_fact:
-    postgres_staging_dir: "{{ staging_dir }}/postgres"
-
 - block:
+  - set_fact:
+      postgres_staging_dir: "{{ staging_dir }}/postgres"
+
   - name: Create staging directory for postgres data
     file:
       path: "{{ postgres_staging_dir }}"
@@ -114,3 +114,5 @@
     systemd:
       name: postgresql
       state: restarted
+
+  when: not upgrade_in_progress or (previous_software_version != "22.06")

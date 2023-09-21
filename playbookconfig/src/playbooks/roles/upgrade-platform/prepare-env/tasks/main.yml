@@ -140,7 +140,9 @@
   import_tasks:
     file: prepare-upgrade-data.yml
   # Since we haven't read the upgrade data yet we don't know previous software version.
-  when: software_version == '22.12'
+  when:
+    - upgrade_mode == 'optimized'
+    - software_version == '22.12'
 
 - name: Ensure temporary data path is present
   file:
@@ -240,6 +242,28 @@
 - name: Set upgrade_k8s_version to use the correct k8s version on upgrade
   set_fact:
     upgrade_k8s_version: "{{ backup_k8s_version.stdout | regex_replace('^.*: v', '') }}"
+
+- name: Set more upgrade facts
+  set_fact:
+    previous_software_version: "{{ upgrade_metadata.from_release }}"
+
+- name: Check if optimized upgrade is supported for software versions
+  fail:
+    msg: |
+      Optimized upgrade does not support {{ previous_software_version }} upgrade.
+      Please rerun the playbook using: -e "upgrade_mode=old"
+  when:
+    - upgrade_mode == 'optimized'
+    - previous_software_version in ['22.06']
+
+- name: Check if legacy upgrade is supported for software versions
+  fail:
+    msg: |
+      Optimized upgrade does not support {{ previous_software_version }} upgrade.
+      Please rerun the playbook using: -e "upgrade_mode=optimized"
+  when:
+    - upgrade_mode != 'optimized'
+    - previous_software_version not in ['22.06']
 
 - name: Set archive parameters for bootstrap
   set_fact:

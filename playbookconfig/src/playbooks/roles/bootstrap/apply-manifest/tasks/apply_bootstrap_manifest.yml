@@ -66,6 +66,19 @@
     args:
       warn: false
 
+  - name: Migrate static hieradata to new version
+    command: >
+      sed -i
+      '/{{ item }}/ s/{{ upgrade_metadata.from_release }}/{{ upgrade_metadata.to_release }}/g'
+      {{ hieradata_workdir }}/static.yaml
+    args:
+      warn: false
+    loop:
+      - "platform::client::credentials::params::keyring_directory: "
+      - "platform::client::credentials::params::keyring_file: "
+      - "platform::params::software_version: "
+    when: upgrade_in_progress|default(false)|bool
+
   - name: Restore etcd certificates.
     shell: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
     args:

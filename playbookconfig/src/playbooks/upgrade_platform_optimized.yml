@@ -1,0 +1,53 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- hosts: all
+  gather_facts: false
+
+  vars_files:
+    - vars/common/main.yml
+    - roles/bootstrap/persist-config/vars/main.yml
+    - host_vars/bootstrap/default.yml
+    - host_vars/backup-restore/default.yml
+    - vars/backup-restore/main.yml
+    - vars/optimized-restore/main.yml
+    - host_vars/upgrade-platform/default.yml
+    - vars/upgrade-platform/main.yml
+
+  vars:
+    mode: restore
+    restore_mode: optimized
+    replayed: false
+
+  roles:
+    - common/prepare-env
+    - common/validate-target
+    - upgrade-platform/prepare-env
+    - restore-platform/precheck
+    - backup-restore/validate-input
+    - backup-restore/prepare-env
+    - optimized-restore/prepare-env
+    - restore-platform/prepare-env
+    - bootstrap/prepare-env
+    - role: bootstrap/validate-config
+      become: yes
+    - role: optimized-restore/apply-manifest
+      become: yes
+    - role: optimized-restore/restore-configuration
+      become: yes
+    - role: optimized-restore/restore-data
+      become: yes
+    - role: optimized-restore/complete-restore
+      become: yes
+    - role: bootstrap/install-platform-certificates
+      become: yes
+    - role: restore-user-images/restore-local-registry-images
+      become: yes
+    - role: common/host-unlock
+      vars:
+        target_host: 'controller-0'
+        wait_for_unlock: true

@@ -82,7 +82,7 @@
       when: os_release == "debian"
     when:
       - upgrade_in_progress
-      - previous_software_version == "21.12"
+      - previous_software_version in ["21.12", "22.06"]
       - bkp_has_centos_ldap_config.rc == 0
 
   - block:
@@ -130,7 +130,7 @@
       - upgrade_in_progress
       - os_release == "debian"
       - bkp_has_centos_ldap_config.rc == 0
-      - previous_software_version == "21.12"
+      - previous_software_version in ["21.12", "22.06"]
 
   always:
     - name: Delete files from staging dir

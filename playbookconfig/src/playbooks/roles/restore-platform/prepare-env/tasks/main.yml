@@ -197,4 +197,4 @@
     archive_banner_permdir: "opt/platform/config/{{ software_version }}/banner/etc"
     archive_deploy_permdir: "opt/platform/deploy/{{ software_version }}"
     archive_helm_permdir: "opt/platform/helm/{{ software_version }}"
-  when: not upgrade_in_progress
+  when: not upgrade_in_progress or (previous_software_version == "22.06")

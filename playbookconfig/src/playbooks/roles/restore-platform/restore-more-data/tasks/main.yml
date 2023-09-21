@@ -686,21 +686,24 @@
     - name: Update system config data
       command: "/usr/bin/sysinv-puppet create-system-config"
 
-    - name: Create a list of apiserver parameters classes to pass to puppet
-      copy:
-        dest: "/tmp/apiserver.yml"
-        content: |
-          classes:
-          - platform::kubernetes::master::change_apiserver_parameters
+    - block:
+        - name: Create a list of apiserver parameters classes to pass to puppet
+          copy:
+            dest: "/tmp/apiserver.yml"
+            content: |
+              classes:
+              - platform::kubernetes::master::change_apiserver_parameters
 
-    - name: Apply puppet apiserver parameters
-      command: >
-        /usr/local/bin/puppet-manifest-apply.sh
-        {{ puppet_permdir }}/hieradata/
-        {{ derived_network_params.controller_0_address }}
-        controller runtime /tmp/apiserver.yml
-      environment:
-        LC_ALL: "en_US.UTF-8"
+        - name: Apply puppet apiserver parameters
+          command: >
+            /usr/local/bin/puppet-manifest-apply.sh
+            {{ puppet_permdir }}/hieradata/
+            {{ derived_network_params.controller_0_address }}
+            controller runtime /tmp/apiserver.yml
+          environment:
+            LC_ALL: "en_US.UTF-8"
+
+      when: not upgrade_in_progress
 
   - name: Set restore in progress for sysinv
     shell: "source /etc/platform/openrc; system restore-start"
