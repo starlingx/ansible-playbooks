@@ -32,10 +32,16 @@
   when: mode is regex("^upgrade_") or
         mode == 'trident_install'
 
+# During a restore/upgrade docker registry information will not be in facts.
+# Instead this information will be pulled from the platform backup.
+# Obtaining the values from the backup is significantly faster than getting them
+# from sysinv and barbican.
 - name: Retrieve configured docker registries during upgrades
   import_tasks:
-    file: get_docker_registries.yml
-  when: upgrade_in_progress|default(false)
+    file: restore_docker_registries.yml
+  when:
+    - mode | default(none) == 'restore'
+    - restore_mode | default(none) == 'optimized'
 
 # Disable the log to not expose registry password
 - name: Get registry credentials if registry type is AWS ECR

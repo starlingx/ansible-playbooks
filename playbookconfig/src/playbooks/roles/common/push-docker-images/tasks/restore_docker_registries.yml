@@ -1,0 +1,34 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Restore docker registries during restore or upgrade.
+#   During the backup, the registry information was dumped into the
+#   override file.
+
+- name: Read docker registries from backup
+  slurp:
+    src: "{{ target_backup_dir }}/{{ override_filename }}"
+  register: restore_overrides
+  no_log: true
+
+- name: Set docker registries facts
+  set_fact:
+    registries:
+      docker_registries: "{{ (restore_overrides.content | b64decode | from_yaml)['docker_registries'] }}"
+  no_log: true
+
+# TODO(jkraibe): Remove after reworking how role uses facts to log in/out of registries
+- name: Create single var registry facts
+  set_fact:
+    "{{ registry_to_fact[item[0]] }}": "{{ item[1] }}"
+  loop: "{{ registries['docker_registries'].items() }}"
+  no_log: true
+
+- name: Infer missing registries values during upgrades
+  import_tasks:
+    file: get_missing_docker_registries.yml
+  when: upgrade_in_progress|default(false)

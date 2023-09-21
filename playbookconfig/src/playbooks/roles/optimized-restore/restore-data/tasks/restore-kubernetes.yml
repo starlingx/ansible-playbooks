@@ -98,71 +98,97 @@
   import_role:
     name: common/push-docker-images
 
-- name: Check if var/lib/kublet is present in the backup
-  command:
-    cmd: "tar --use-compress-program=pigz -tf '{{ platform_backup_fqpn }}' var/lib/kubelet"
-  args:
-    warn: false
-  failed_when: false
-  register: kubelet_backup_found
+- name: Restore path
+  block:
+    - name: Check if var/lib/kubelet is present in the backup
+      command:
+        cmd: "tar --use-compress-program=pigz -tf '{{ platform_backup_fqpn }}' var/lib/kubelet"
+      args:
+        warn: false
+      failed_when: false
+      register: kubelet_backup_found
 
-- name: Restore var/lib/kublet from the backup
-  command:
-    # In the case where the backed-up CPU manager policy is 'static', the
-    # state preserved in "var/lib/kubelet/cpu_manager_state" conflicts with
-    # the default 'none' policy and causes kubelet to error out in the next
-    # step. Excluding this file here is safe as it gets regenerated with
-    # intended values after subsequent unlock after the restore playbook.
-    cmd: "tar --use-compress-program=pigz -C / -xpf \
-         '{{ platform_backup_fqpn }}' var/lib/kubelet \
-         --exclude var/lib/kubelet/cpu_manager_state"
-  args:
-    warn: false
-  when: kubelet_backup_found.rc == 0
+    - name: Restore var/lib/kubelet from the backup
+      command:
+        # In the case where the backed-up CPU manager policy is 'static', the
+        # state preserved in "var/lib/kubelet/cpu_manager_state" conflicts with
+        # the default 'none' policy and causes kubelet to error out in the next
+        # step. Excluding this file here is safe as it gets regenerated with
+        # intended values after subsequent unlock after the restore playbook.
+        cmd: "tar --use-compress-program=pigz -C / -xpf \
+             '{{ platform_backup_fqpn }}' var/lib/kubelet \
+             --exclude var/lib/kubelet/cpu_manager_state"
+      args:
+        warn: false
+      when: kubelet_backup_found.rc == 0
 
-- name: Bring up Kubernetes master
-  import_role:
-    name: common/bringup-kubemaster
+    - name: Create kubelet override config file
+      template:
+        src: roles/common/bringup-kubemaster/templates/kubelet.conf.j2
+        dest: /etc/default/kubelet
+      vars:
+        node_ip: "{{ cluster_vip.stdout_lines[0].strip() }}"
 
-- name: Start kubelet
-  systemd:
-    name: kubelet
-    state: started
-  retries: 3
-  delay: 15
+    - name: Stop etcd
+      service:
+        name: etcd
+        state: stopped
 
-# Check if there is a default-registry-key for kube-system and create it when
-# there is not during platform-restore process
-- name: Get kube-system default registry key
-  command: >-
-    kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret default-registry-key --namespace=kube-system
-  failed_when: false
-  register: kube_system_default_registry_key
+    - name: Restore etcd database
+      include_role:
+        name: backup-restore/restore-etcd
 
-- name: Create kube-system default registry key
-  command: >-
-    kubectl -n kube-system create secret docker-registry default-registry-key
-      --docker-server={{ local_registry }}
-      --docker-username={{ local_registry_credentials['username'] }}
-      --docker-password={{ local_registry_credentials['password'] }}
-  environment:
-    KUBECONFIG: "/etc/kubernetes/admin.conf"
-  when: kube_system_default_registry_key.rc != 0
+    - name: Start etcd
+      service:
+        name: etcd
+        state: started
 
-- name: Get deployment namespace default registry key
-  command: >-
-    kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret default-registry-key --namespace=deployment
-  failed_when: false
-  register: get_deployment_default_registry_key
+    - name: Initializing Kubernetes master
+      command: >
+        kubeadm init
+        --ignore-preflight-errors=DirAvailable--var-lib-etc
+        --ignore-preflight-errors=FileAvailable--etc-kubernetes-manifests-kube-apiserver.yaml
+        --ignore-preflight-errors=FileAvailable--etc-kubernetes-manifests-kube-controller-manager.yaml
+        --ignore-preflight-errors=FileAvailable--etc-kubernetes-manifests-kube-scheduler.yaml
+        --config=/etc/kubernetes/kubeadm.yaml
 
-- name: Copy default-registry-key to deployment namespace
-  shell: >-
-    kubectl get secret default-registry-key --namespace=kube-system -o yaml
-    | sed 's/namespace: kube-system/namespace: deployment/'
-    | kubectl apply --namespace=deployment -f -
-  environment:
-    KUBECONFIG: "/etc/kubernetes/admin.conf"
-  when: get_deployment_default_registry_key.stdout == ""
+    - name: Set up k8s environment variable
+      copy:
+        src: /usr/share/puppet/modules/platform/files/kubeconfig.sh
+        dest: /etc/profile.d/kubeconfig.sh
+        remote_src: yes
+
+    - name: Add kubelet service override
+      copy:
+        src: "{{ kubelet_override_template }}"
+        dest: /etc/systemd/system/kubelet.service.d/kube-stx-override.conf
+        mode: preserve
+        remote_src: yes
+
+    - name: Register kubelet with pmond
+      copy:
+        src: "{{ kubelet_pmond_template }}"
+        dest: /etc/pmon.d/kubelet.conf
+        mode: preserve
+        remote_src: yes
+
+  when: not upgrade_in_progress
+
+# During an upgrade we do full bringup of Kubernetes.
+- name: Restore Kubernetes during upgrade
+  block:
+    - name: Bring up Kubernetes master
+      import_role:
+        name: common/bringup-kubemaster
+
+    - name: Start kubelet
+      systemd:
+        name: kubelet
+        state: started
+      retries: 3
+      delay: 15
+
+  when: upgrade_in_progress
 
 - name: Restore helm service
   import_tasks: restore-helm.yml

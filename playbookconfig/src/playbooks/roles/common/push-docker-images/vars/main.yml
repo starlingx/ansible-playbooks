@@ -13,5 +13,11 @@ registry_to_service:
   registry.k8s.io: registryk8s-registry
 
 registry_to_fact:
+  docker.elastic.co: elastic_registry
+  docker.io: docker_registry
+  gcr.io: gcr_registry
+  ghcr.io: ghcr_registry
   icr.io: icr_registry
+  k8s.gcr.io: k8s_registry
+  quay.io: quay_registry
   registry.k8s.io: registryk8s_registry

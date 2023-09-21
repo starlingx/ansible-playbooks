@@ -7,6 +7,34 @@
 # ROLE DESCRIPTION:
 #   Prepare environment for optimized restore.
 
+- name: Set config path facts
+  set_fact:
+    keyring_permdir: "{{ platform_path + '/.keyring/' + software_version }}"
+    config_permdir: "{{ platform_path + '/config/' + software_version }}"
+    sysinv_permdir: "{{ platform_path + '/sysinv/' + software_version }}"
+    puppet_permdir: "{{ platform_path + '/puppet/' + software_version }}"
+    images_archive_dir: "/opt/platform-backup/{{ software_version }}"
+
+- name: Set config path facts for restore
+  set_fact:
+    branding_permdir: "{{ config_permdir }}/branding"
+    banner_permdir: "{{ config_permdir }}/banner/etc"
+    ssh_config_permdir: "{{ config_permdir }}/ssh_config"
+    pxe_config_permdir: "{{ config_permdir }}/pxelinux.cfg"
+    fluxcd_permdir: "{{ platform_path }}/fluxcd/"
+    helm_overrides_permdir: "{{ platform_path + '/helm/' + software_version }}"
+    sysinv_config_permdir: "{{ platform_path + '/sysinv/' + software_version }}"
+
+- name: Check if bootstrap_finalized flag exists on host
+  stat:
+    path: "{{ config_permdir }}/.bootstrap_finalized"
+  register: bootstrap_finalized_flag
+
+- name: Fail if host is unlocked or host configurations have already started
+  fail:
+    msg: Restore cannot be performed on deployed host, reinstall the system before trying again.
+  when: bootstrap_finalized_flag.stat.exists
+
 - name: Set restore file parameter
   set_fact:
     restore_data_file: "{{ target_backup_dir }}/{{ backup_filename }}"
@@ -47,3 +75,8 @@
         previous_software_version: "{{ software_version }}"
 
   when: not upgrade_in_progress
+
+- name: Check if the prestaged registry filesystem exists
+  stat:
+    path: "{{ images_archive_dir }}/local_registry_filesystem.tgz"
+  register: prestage_registry_filesystem
