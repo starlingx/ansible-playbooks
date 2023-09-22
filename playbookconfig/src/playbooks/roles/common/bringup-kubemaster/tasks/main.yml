@@ -415,13 +415,23 @@
     - front-proxy-ca.crt
     - front-proxy-ca.key
 
-- name: Copy kube api server encryption provider config
+- name: Create controller directory path on the LUKS FS
+  file:
+    path: "{{ luks_fs_dir }}controller/etc/kubernetes/"
+    state: directory
+    mode: 0755
+
+- name: Move kube api server encryption provider config to LUKS FS
+  command: >-
+    mv "{{ encryption_provider_config }}" "{{ luks_fs_dir }}controller/etc/kubernetes/"
+
+- name: Create symbolic link of encryption-provider.yaml
   copy:
-    src: "{{ encryption_provider_config }}"
-    dest: "{{ config_permdir }}/kubernetes/"
-    remote_src: yes
-    force: yes
-    mode: 0400
+    src: "{{ luks_fs_dir }}controller/etc/kubernetes/encryption-provider.yaml"
+    dest: "{{ encryption_provider_config }}"
+    owner: root
+    group: root
+    state: link
 
 - name: Copy default audit policy config
   copy:

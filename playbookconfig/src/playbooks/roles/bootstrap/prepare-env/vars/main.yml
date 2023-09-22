@@ -17,6 +17,7 @@ audit_log_root: /var/log/kubernetes/audit/
 audit_log_filename: audit.log
 default_audit_policy_config: /etc/kubernetes/default-audit-policy.yaml
 kubelet_cgroup_root: "/k8s-infra"
+luks_fs_dir: /var/luks/stx/luks_fs/
 
 # Networking
 networking_configurations_defaults:
