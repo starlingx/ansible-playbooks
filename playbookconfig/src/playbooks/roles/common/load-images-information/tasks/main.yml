@@ -106,7 +106,6 @@
         - "{{ sriov_cni_img }}"
         - "{{ sriov_network_device_img }}"
         - "{{ intel_qat_plugin_img }}"
-        - "{{ intel_qat_initcontainer_img }}"
       static_images:
         - "{{ n3000_opae_img }}"
         - "{{ kubernetes_entrypoint_img }}"
