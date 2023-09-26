@@ -1,0 +1,93 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role verifies if certificate recovery is necessary for the subcloud
+#   and sets a flag to enter certificate_recovery mode when necessary
+#
+
+- name: Check if certificate recovery is already in progress
+  stat:
+    path: "{{ certificate_recovery_in_progress_flag }}"
+  register: recovery_in_progress
+
+- block:
+  # This task is async because show-certs.sh usually takes ~ 15-20 seconds to return
+  - name: Verify if there are certificates expired on active controller
+    # Get residual time for certificates in show-certs except for ssl_cas
+    shell: |
+      show-certs.sh | sed  "/ssl_ca_/, /Residual Time/d" |
+      grep "Residual Time" | awk '{print$4}'
+    register: show_certs_active_job
+    become: yes
+    async: 60
+    poll: 0
+
+  - name: Verify if there are k8s certificates expired on active controller
+    command: kubeadm certs check-expiration --config /etc/kubernetes/kubeadm.yaml
+    register: kubeadm_certs_results
+    failed_when: false
+    become: yes
+
+  - set_fact:
+      k8s_certs_has_expired: >-
+        {{ true if "invalid" in kubeadm_certs_results.stdout else false }}
+
+  - async_status:
+      jid: "{{ show_certs_active_job.ansible_job_id }}"
+    register: show_certs_results
+    until: show_certs_results.finished
+    retries: 10
+    delay: 10
+    become: yes
+
+  - name: Verify if show-certs.sh output has negative Residual time entries
+    set_fact:
+      show_certs_has_expired: >-
+        {{ true if item | regex_search("-[0-9]+") else false }}
+    when: show_certs_has_expired is not defined or show_certs_has_expired == false
+    loop: "{{ show_certs_results.stdout.split() }}"
+
+  - name: Set certificate_recovery when there are expired certificates present
+    set_fact:
+      certificate_recovery_necessary: >-
+        {{ show_certs_has_expired or k8s_certs_has_expired }}
+
+  - name: Mark certificate recovery in progress
+    file:
+      path: "{{ certificate_recovery_in_progress_flag }}"
+      state: touch
+    when: certificate_recovery_necessary
+
+  when: not recovery_in_progress.stat.exists
+
+- name: Set fact to mark certificate recovery mode
+  set_fact:
+    certificate_recovery_necessary: true
+  when: recovery_in_progress.stat.exists
+
+- name: Avoid running certificate recovery with both controllers running
+  block:
+  - name: Get current hostname
+    command: hostname
+    register: hostname_result
+
+  - name: Check if controller-1 is online
+    shell: ping controller-1 -c1 -w5 | grep ' 0% packet loss'
+    register: c1_ping
+    failed_when: false
+    when: hostname_result.stdout == 'controller-0'
+
+  # controller-1 should not be running for the certificate recovery procedure.
+  - name: Fail if controller-1 is running
+    fail:
+      msg: Certificate recovery in progress. Please power-off controller-1 and try again.
+    when:
+      - hostname_result.stdout == 'controller-1' or
+        ( hostname_result.stdout == 'controller-0' and c1_ping.rc == 0 )
+      - system_mode_result.stdout == 'duplex'
+
+  when: certificate_recovery_necessary

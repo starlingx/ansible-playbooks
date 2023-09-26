@@ -1,0 +1,3 @@
+---
+certificate_recovery_in_progress_flag: /tmp/.certificate_recovery_in_progress
+is_active_controller: false

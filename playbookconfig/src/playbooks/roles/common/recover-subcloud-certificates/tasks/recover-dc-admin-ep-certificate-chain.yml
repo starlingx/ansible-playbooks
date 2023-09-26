@@ -18,10 +18,9 @@
       KUBECONFIG: "/etc/kubernetes/admin.conf"
     register: dc_root_ca_cert_result
     connection: local
-
-  - name: Get software version
-    shell: source /etc/platform/platform.conf; echo $sw_version
-    register: sw_version_result
+    # prevents failing the playbook in case of a temporary failure in k8s
+    retries: 5
+    delay: 5
 
   - name: Set location of dc-adminep-root-ca.crt certificate on subcloud
     set_fact:
@@ -88,6 +87,9 @@
       environment:
         KUBECONFIG: "/etc/kubernetes/admin.conf"
       connection: local
+      # prevents failing the playbook in case of a temporary failure in k8s
+      retries: 5
+      delay: 5
 
     - name: Create dc-admin-ep ICA certificate for subcloud if missing
       block:
@@ -200,18 +202,6 @@
       retries: 5
       delay: 5
       until: subcloud_ica_update_result is not failed
-
-    - name: Wait until management affecting alarms clear up
-      shell: source /etc/platform/openrc; fm alarm-list --mgmt_affecting | grep -c True
-      register: mgmt_affecting_present
-      failed_when: |
-        mgmt_affecting_present.stdout | int != 0 or mgmt_affecting_present.stderr | length > 0
-      # Up to 10 mins to have some buffer, but usually takes ~ 3 mins.
-      retries: 30
-      delay: 20
-      until:
-        - mgmt_affecting_present.stdout | int == 0
-        - mgmt_affecting_present.stderr | length == 0
 
     - name: Set fact to mark that DC admin endpoint certificate chain recovery was performed
       set_fact:
