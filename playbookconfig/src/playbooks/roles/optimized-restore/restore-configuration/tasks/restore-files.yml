@@ -62,7 +62,11 @@
       register: home_dir_result
 
     - name: Restore home directory
-      command: "tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }} --overwrite home/"
+      command: >-
+        tar --use-compress-program=pigz
+        -C / -xpf {{ platform_backup_fqpn }}
+        --exclude home/sysadmin/ansible.log
+        --overwrite home/
       args:
         warn: false
       when: home_dir_result.rc == 0
