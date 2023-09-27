@@ -41,6 +41,30 @@
           - "{{ controller_1_cluster_host }}\tcontroller-1-infra"
 
       - block:
+        - name: Populate /etc/hosts with user dns host-records
+          script: parse_user_dns_host_record.py "{{ user_dns_host_records }}"
+          register: result
+          ignore_errors: yes
+
+        - name: Fail if script failed or error occurred
+          fail:
+            msg: >
+              {% if result.rc != 0 %}
+                Error during parsing user dns host-records, failed with return code
+                {{ result.rc }}.
+              {% elif "An error occurred" in result.stdout %}
+                User dns host-records parsing encountered null value, please update the
+                dns host-records with valid inputs. Error output: {{ result.stderr }}
+              {% endif %}
+          when: result.rc != 0 or "An error occurred" in result.stdout
+
+        - name: Write user dns host-records to /etc/hosts
+          lineinfile:
+            path: /etc/hosts
+            line: "{{ result.stdout }}"
+        when: user_dns_host_records
+
+      - block:
         - name: Set central registry for subcloud
           set_fact:
             # For virtual subcloud (StarlingX running in OpenStack Nova VM - QEMU/KVM),

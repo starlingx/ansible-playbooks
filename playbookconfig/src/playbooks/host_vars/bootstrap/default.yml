@@ -243,6 +243,19 @@ docker_registries:
 # defaults:
 #   url: example.domain
 
+# User DNS host records entry
+# ===========================
+#
+# The value must have the following format:
+# <host-record-name>:<name>[,<name>....],[<IPv4-address>],[<IPv6-address>][,<TTL>]
+# where TTL can be optionally provided.
+# Ref: https://thekelleys.org.uk/dnsmasq/docs/dnsmasq-man.html
+# Example Entry:
+# user_dns_host_records:
+#   test-server: example.com,192.168.0.1,1234::100,300
+#   host1: host,example2.com,127.0.0.1
+user_dns_host_records:
+
 # ADDITIONAL IMAGES
 # =================
 #
