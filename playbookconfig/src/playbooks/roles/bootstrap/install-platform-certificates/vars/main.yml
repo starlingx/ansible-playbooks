@@ -11,3 +11,7 @@ system_platform_certificate:
   dns_domain: starlingx.local
   duration: 2160h      # 90d
   renewBefore: 360h    # 15d
+install_oidc_auth_apps_certificate: false
+install_system_open_ldap_certificate: false
+install_system_registry_local_certificate: false
+install_system_restapi_gui_certificate: false

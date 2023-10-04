@@ -93,27 +93,30 @@
   when: distributed_cloud_role == 'subcloud'
 
 - block:
-  - name: Initialize platform certificates to not be altered
-    set_fact:
-      install_oidc_auth_apps_certificate: false
-      install_system_open_ldap_certificate: false
-      install_system_registry_local_certificate: false
-      install_system_restapi_gui_certificate: false
+  # We only create the openldap cert for non-subcloud systems and avoid recreate it
+  - name: Set creation of the openldap certificate
+    block:
+    - name: Check if openldap certificate already exists
+      shell: |
+        kubectl get secret system-openldap-local-certificate -n deployment \
+        --ignore-not-found=true --no-headers=true | \
+        awk '{ if ($0 != "") print "true"; exit}'
+      environment:
+        KUBECONFIG: "/etc/kubernetes/admin.conf"
+      register: openldap_cert_exists
 
-  # In non subcloud systems, we may need to create the openldap secret
-  - name: Check if openldap certificate already exists
-    shell: |
-      kubectl get secret system-openldap-local-certificate -n deployment \
-      --ignore-not-found=true --no-headers=true | \
-      awk '{ if ($0 != "") print "true"; exit}'
-    environment:
-      KUBECONFIG: "/etc/kubernetes/admin.conf"
-    register: openldap_cert_exists
+    - name: Register if openldap certificate should be created
+      set_fact:
+        install_system_open_ldap_certificate: "{{ not (openldap_cert_exists.stdout | bool) }}"
 
-  - name: Register if openldap certificate should be created
-    set_fact:
-      install_system_open_ldap_certificate: "{{ not (openldap_cert_exists.stdout | bool) }}"
-    when: distributed_cloud_role != 'subcloud'
+    when:
+      - distributed_cloud_role != 'subcloud'
+      - not create_platform_certificates
+
+  # TODO (mdecastr): Clear the code moved to this task once the feature is done
+  - name: Define the platform certificates that should be created by the local issuer
+    include_tasks: define-certs-to-create.yml
+    when: create_platform_certificates
 
   - name: Generate kubernetes yaml for cert-manager resources
     include_role:

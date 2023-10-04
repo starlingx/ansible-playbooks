@@ -1,0 +1,45 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Define variables (flags) that will be used in certificate creation.
+# Depending on the boolean value of the flags, the certificates will be
+# issued by local cluster issuer using 'system-local-ca' secret.
+# The platform certificates are:
+#   - OIDC-Auth-Apps (not required)
+#   - Local OpenLDAP (required for standalone and DC SystemController)
+#   - Docker Registry (required)
+#   - REST API / Web Server GUI (required)
+#
+
+- name: If first bootstrap, mark the creation flags for the required certificates
+  set_fact:
+    install_system_open_ldap_certificate: "{{ distributed_cloud_role != 'subcloud' }}"
+    install_system_registry_local_certificate: true
+    install_system_restapi_gui_certificate: true
+  when: mode == 'bootstrap'
+
+- name: If upgrading, generate required certificates only if they don't exist
+  block:
+  - name: Loop over required certificates and verify if they exist
+    shell: |
+      kubectl get secret {{ item }} -n deployment \
+      --ignore-not-found=true --no-headers=true | \
+      awk '{ if ($0 != "") print "true"; exit}'
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+    with_items:
+      - system-openldap-local-certificate
+      - system-registry-local-certificate
+      - system-restapi-gui-certificate
+    register: cert_exists
+
+  - name: Mark the creation flags for the certificates that need to be issued
+    set_fact:
+      install_system_open_ldap_certificate: "{{ not (cert_exists.results[0].stdout | bool)
+                                                and distributed_cloud_role != 'subcloud' }}"
+      install_system_registry_local_certificate: "{{ not (cert_exists.results[1].stdout | bool) }}"
+      install_system_restapi_gui_certificate: "{{ not (cert_exists.results[2].stdout | bool) }}"
+  when: upgrade_in_progress

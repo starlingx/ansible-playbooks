@@ -1,13 +1,13 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # This playbook invokes role bootstrap/install-platform-certificates
-# to create the openldap certificate during the upgrade to 22.12.
+# to create the platform certificates during the upgrade from 22.12.
 # It will be automatically executed by an upgrade script during
-# the upgrade process.
+# the upgrade process for DX upgrades.
 #
 
 - hosts: all
@@ -15,6 +15,10 @@
 
   vars:
     kubeadm_pki_dir: /etc/kubernetes/pki
+    mode: ''
+    upgrade_in_progress: true
+    system_local_ca_overrides: false
+    create_platform_certificates: true
 
   roles:
     - bootstrap/install-platform-certificates
