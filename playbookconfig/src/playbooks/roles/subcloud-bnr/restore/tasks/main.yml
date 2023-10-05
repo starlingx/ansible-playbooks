@@ -30,9 +30,15 @@
     wait_for_unlock: true
     distributed_cloud_role: 'subcloud'
 
+# Restore complete can only be sent for AIO-SX currently.
+# During restore for DX/standard deployments, the remaining nodes
+# must be resinstalled and unlocked before restore-complete is sent.
+# The reinstallation/unlock of other nodes plus restore-complete
+# must be handled as a manual process by the sysadmin in these cases for now.
 - name: Run system restore-complete
   shell: source /etc/platform/openrc; system restore-complete
   register: restore_complete_result
   until: restore_complete_result.stdout == "Restore procedure completed"
   retries: 15
   delay: 10
+  when: subcloud_is_aio_sx

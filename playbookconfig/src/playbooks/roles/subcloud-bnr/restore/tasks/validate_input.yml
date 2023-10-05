@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -32,14 +32,6 @@
 - name: Set software version for restore
   set_fact:
     software_version: "{{ sw_version_result.stdout }}"
-
-- name: Turn off optimized_bnr_supported flag and set restore_mode to legacy
-  set_fact:
-    optimized_bnr_supported: false
-    restore_mode: "legacy"
-  when: software_version is version('22.12', '<') or
-        restore_mode != 'optimized' or
-        (test_mode is defined and test_mode == 'legacy')
 
 - name: Set target_connection fact
   set_fact:
@@ -79,6 +71,9 @@
       set_fact:
         tmp_platform_backup_dir: "{{ backup_dir }}"
         tmp_platform_backup_filename: "{{ find_backup.files[0].path|basename }}"
+
+    - name: Gather subcloud facts
+      import_tasks: gather_subcloud_facts.yml
 
     - block:
       - name: Set fact for images backup file check
@@ -142,6 +137,9 @@
       set_fact:
         tmp_platform_backup_dir: "{{ backup_filename|dirname }}"
         tmp_platform_backup_filename: "{{ backup_filename|basename }}"
+
+    - name: Gather subcloud facts
+      import_tasks: gather_subcloud_facts.yml
 
     - block:
       - name: Fail if images related paramaeters are not set

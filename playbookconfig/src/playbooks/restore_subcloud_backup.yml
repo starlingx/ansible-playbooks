@@ -31,6 +31,5 @@
     default_local_backup_dir: "/opt/platform-backup/backups"
     default_central_backup_dir: "/opt/dc-vault/backups"
     default_local_staging_dir: "/opt/platform-backup/{{ inventory_hostname|list|reverse|join }}"
-    restore_mode: "optimized"
     shutdown_timeout: 180
     unlock_timeout: 900
