@@ -224,7 +224,8 @@ def download_and_push_an_image(img, auth):
         print(str(e))
         print("Image {} not found on local registry, attempt to download...".format(target_img))
         try:
-            client.pull(target_img)
+            response = client.pull(target_img)
+            check_response(response)
             print("Image download succeeded: %s" % target_img)
             client.tag(target_img, local_img)
             client.push(local_img, auth_config=auth)
@@ -352,7 +353,8 @@ def download_and_push_an_image_for_prestage(img_tuple, local_auth):
         print(str(e))
         print("Image {} not found on local registry, attempt to download...".format(target_img))
         try:
-            client.pull(target_img, auth_config=registry_auth)
+            response = client.pull(target_img, auth_config=registry_auth)
+            check_response(response)
             print("Image download succeeded: %s" % target_img)
             client.tag(target_img, local_img)
             client.push(local_img, auth_config=local_auth)
@@ -429,6 +431,13 @@ def map_function(images, function, local_download=False):
             failed_images.append(image)
 
     return failed_images
+
+
+def check_response(response):
+    for line in response.splitlines():
+        j = json.loads(line)
+        if 'errorDetail' in j:
+            raise Exception("Error download image: " + str(j['errorDetail']))
 
 
 if __name__ == '__main__':
