@@ -1,0 +1,5 @@
+---
+system_local_ca_overrides: false
+
+# Temporary feature flag https://storyboard.openstack.org/#!/story/2009811
+create_platform_certificates: false

@@ -4,6 +4,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
+
+system_local_ca_data_obtained: false
 ca_duration: 3
 system_platform_certificate:
   dns_domain: starlingx.local

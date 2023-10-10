@@ -1,0 +1,92 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Retrieve data related to 'system-local-ca' secret, used to issue
+# platform certificates, considering the different scenarios (e.g.
+# bootstrap with or without user provided RCA/ICA certs, upgrades,
+# differences between standalone and DC, and such), and install
+# certificates as trusted by the platform if required.
+#
+
+# If user provided in the bootstrap, we set the variables accordingly
+- name: Use user provided overrides for 'system-local-ca'
+  block:
+    - set_fact:
+        system_local_ca_data_obtained: true
+
+    - name: Install user provided certs as Trusted CAs
+      include_role:
+        name: common/install-trusted-ca
+      with_items:
+        - { name: system_local_ca_cert, content: "{{ system_local_ca_cert }}" }
+        - { name: system_root_ca_cert, content: "{{ system_root_ca_cert }}" }
+      loop_control:
+        label: "{{ item.name }}"
+      when: not upgrade_in_progress
+  when: system_local_ca_overrides
+
+# For subclouds and upgrades we have to retrieve the current ones, and don't need to install
+- block:
+  - name: Check if 'system-local-ca' secret exists
+    shell: |
+      kubectl get secret system-local-ca -n cert-manager \
+      --ignore-not-found=true --no-headers=true | \
+      awk '{ if ($0 != "") print "true"; exit}'
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+    register: system_local_ca_exists
+
+  - block:
+    - name: Retrieve system local CA cert from k8s secret (on System Controller)
+      command: kubectl get secret system-local-ca -n cert-manager -o jsonpath='{.data.tls\.crt}'
+      environment:
+        KUBECONFIG: "/etc/kubernetes/admin.conf"
+      register: cert_result
+
+    - name: Retrieve system local CA key from k8s secret (on System Controller)
+      command: kubectl get secret system-local-ca -n cert-manager -o jsonpath='{.data.tls\.key}'
+      environment:
+        KUBECONFIG: "/etc/kubernetes/admin.conf"
+      register: key_result
+
+    - name: Retrieve system local root CA cert from k8s secret (on System Controller)
+      command: kubectl get secret system-local-ca -n cert-manager -o jsonpath='{.data.ca\.crt}'
+      environment:
+        KUBECONFIG: "/etc/kubernetes/admin.conf"
+      register: ca_cert_result
+
+    - name: Set system-local-ca data
+      set_fact:
+        system_root_ca_cert: "{{ ca_cert_result.stdout | default(cert_result.stdout, true) }}"
+        system_local_ca_cert: "{{ cert_result.stdout }}"
+        system_local_ca_key: "{{ key_result.stdout }}"
+        system_local_ca_data_obtained: true
+
+    when: system_local_ca_exists.stdout | bool
+
+  when: distributed_cloud_role == 'subcloud' or upgrade_in_progress
+  connection: local
+
+# The default case is use Kubernetes Root CA (we also don't need to install this one)
+- block:
+  - name: Read kubernetes Root CA certificate
+    shell: cat "{{ kubeadm_pki_dir }}/ca.crt" | base64 -w0
+    register: kubernetes_root_ca_crt
+    become: true
+
+  - name: Read kubernetes Root CA key
+    shell: cat "{{ kubeadm_pki_dir }}/ca.key" | base64 -w0
+    register: kubernetes_root_ca_key
+    become: true
+
+  - name: Set system-local-ca data based on kubernetes Root CA
+    set_fact:
+      system_root_ca_cert: "{{ kubernetes_root_ca_crt.stdout }}"
+      system_local_ca_cert: "{{ kubernetes_root_ca_crt.stdout }}"
+      system_local_ca_key: "{{ kubernetes_root_ca_key.stdout }}"
+
+  connection: local
+  when: not system_local_ca_data_obtained

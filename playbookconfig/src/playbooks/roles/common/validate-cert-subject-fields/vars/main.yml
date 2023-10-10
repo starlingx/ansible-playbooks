@@ -1,0 +1,12 @@
+---
+valid_subject_fieds:
+- dns_domain
+- duration
+- renewBefore
+- subject_C
+- subject_ST
+- subject_L
+- subject_O
+- subject_OU
+- subject_CN
+- subject_prefix

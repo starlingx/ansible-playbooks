@@ -10,6 +10,7 @@
   gather_facts: no
 
   vars_files:
+    - vars/bootstrap/main.yml
     - vars/common/main.yml
     - host_vars/bootstrap/default.yml
 
