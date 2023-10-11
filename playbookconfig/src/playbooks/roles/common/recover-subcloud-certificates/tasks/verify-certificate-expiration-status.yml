@@ -23,7 +23,7 @@
       grep "Residual Time" | awk '{print$4}'
     register: show_certs_active_job
     become: yes
-    async: 60
+    async: 120
     poll: 0
 
   - name: Verify if there are k8s certificates expired on active controller
@@ -40,7 +40,7 @@
       jid: "{{ show_certs_active_job.ansible_job_id }}"
     register: show_certs_results
     until: show_certs_results.finished
-    retries: 10
+    retries: 12
     delay: 10
     become: yes
 

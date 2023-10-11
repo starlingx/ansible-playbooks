@@ -52,7 +52,9 @@
     # Waits up to 2 minutes, but in a freshly installed system, it takes ~ 20secs
     retries: 12
     delay: 10
-    until: k8s_get_nodes is not failed
+    until: |
+      k8s_get_nodes is not failed and
+      'NotReady' not in k8s_get_nodes.stdout
 
   - name: Trigger restart of networking pods first to avoid pod scheduling issues
     shell: |

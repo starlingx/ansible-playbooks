@@ -17,6 +17,21 @@
 
   - name: Recover kubelet node after certificate expiration
     block:
+    - name: Check if K8s Root CA and Key exist
+      stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ k8s_root_ca_cert }}"
+        - "{{ k8s_root_ca_key }}"
+      register: k8s_root_ca_stat
+      become: yes
+
+    - name: Fail if K8s Root CA are missing
+      fail:
+        msg: K8s Root CA and Key are necessary to generate a new kubelet certificate
+      when: "{{ not item.stat.exists }}"
+      loop: "{{ k8s_root_ca_stat.results }}"
+
     - name: Create tmp file name for kubelet client csr config file
       tempfile:
         state: file
@@ -80,8 +95,8 @@
         openssl genrsa -out {{ tmp_kubelet_key.path }} 2048
         openssl req -new -key {{ tmp_kubelet_key.path }} -out {{ tmp_kubelet_csr.path }} \
         -config {{ tmp_kubelet_conf_csr.path }}
-        openssl x509 -req -in {{ tmp_kubelet_csr.path }} -CA /etc/kubernetes/pki/ca.crt \
-        -CAkey /etc/kubernetes/pki/ca.key -CAcreateserial -out {{ tmp_kubelet_cert.path }} \
+        openssl x509 -req -in {{ tmp_kubelet_csr.path }} -CA {{ k8s_root_ca_cert }} \
+        -CAkey {{ k8s_root_ca_key }} -CAcreateserial -out {{ tmp_kubelet_cert.path }} \
         -days 365 -extensions v3_req -extfile {{ tmp_kubelet_conf_csr.path }}
 
         cat {{ tmp_kubelet_key.path }}  {{ tmp_kubelet_cert.path }}  > $KUBELET_CERT_PATH
@@ -105,7 +120,7 @@
     - name: Set cluster configuration for kubelet node
       command: >-
         kubectl config set-cluster {{ cluster_name }}
-        --certificate-authority /etc/kubernetes/pki/ca.crt --embed-certs
+        --certificate-authority {{ k8s_root_ca_cert }} --embed-certs
       environment:
         KUBECONFIG: "/etc/kubernetes/kubelet.conf"
       register: set_cluster_results

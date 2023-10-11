@@ -1,0 +1,51 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   These tasks lock, unlock and wait for reboot of a storage node
+#
+- name: Lock {{ item }}
+  shell: source /etc/platform/openrc; system host-lock {{ item }}
+  retries: 8
+  delay: 15
+  register: host_lock_output
+  failed_when: >-
+    host_lock_output.stderr != "Avoiding lock action on already 'locked' host {{ item }}"
+    and host_lock_output.rc != 0
+  until: >-
+    'rc' in host_lock_output
+    and host_lock_output.rc == 0
+
+- name: Wait {{ item }} to be locked
+  shell: source /etc/platform/openrc; system host-list --format value | grep {{ item }}
+  register: storage_list
+  retries: 20
+  delay: 15
+  until: >-
+    'stdout' in storage_list
+    and 'locked disabled online' in storage_list.stdout
+
+- name: Unlock {{ item }}
+  shell: source /etc/platform/openrc; system host-unlock {{ item }}
+  retries: 8
+  delay: 15
+  register: host_unlock_output
+  failed_when: >-
+    host_unlock_output.stderr != "Avoiding 'unlock' action on already 'unlocked' host {{ item }}"
+    and host_unlock_output.rc != 0
+  until: >-
+    'rc' in host_unlock_output
+    and host_unlock_output.rc == 0
+
+- name: Wait until {{ item }} reboots after host-unlock
+  shell: source /etc/platform/openrc; system host-list --format value | grep {{ item }}
+  register: storage_list
+  retries: 20
+  delay: 15
+  until: >-
+    'stdout' in storage_list
+    and 'unlocked enabled' in storage_list.stdout
+    and 'offline' not in storage_list.stdout
