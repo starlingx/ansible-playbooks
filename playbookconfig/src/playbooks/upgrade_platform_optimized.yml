@@ -10,6 +10,7 @@
 
   vars_files:
     - vars/common/main.yml
+    - vars/bootstrap/main.yml
     - roles/bootstrap/persist-config/vars/main.yml
     - host_vars/bootstrap/default.yml
     - host_vars/backup-restore/default.yml
