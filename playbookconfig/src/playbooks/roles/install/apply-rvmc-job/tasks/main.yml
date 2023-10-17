@@ -97,7 +97,7 @@
 
     when: 'wait_for_rvmc.stdout == "failed"'
 
-  when: wait_for_rvmc.stdout in ["failed", "complete"]
+  when: wait_for_rvmc.stdout in ["failed", "complete", "timeout"]
 
 - name: Set failure message if the job is not found
   set_fact:
