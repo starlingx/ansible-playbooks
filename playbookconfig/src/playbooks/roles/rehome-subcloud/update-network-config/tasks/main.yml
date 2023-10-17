@@ -14,6 +14,31 @@
   when: admin_network is defined and
         (admin_floating_update_required or admin_gateway_update_required)
 
+- name: Get previous system controller subnet address
+  shell: >-
+    source /etc/platform/openrc;
+    system addrpool-list
+    | awk '/system-controller-subnet/{ print$2 }'
+    | xargs -I {} system addrpool-show {}
+    | awk -F'|' '/network/ {gsub(/ /, "", $3);
+    net=$3} /prefix/ {gsub(/ /, "", $3); print net "/" $3}'
+  register: previous_system_controller_subnet_addr
+
+- block:
+  - name: Get previous system controller host route uuid
+    shell: >-
+      source /etc/platform/openrc; system host-route-list controller-0
+      | grep {{ previous_system_controller_subnet_addr.stdout }}
+      | awk '{ print $2 }'
+    register: previous_route_uuid_controller_0
+
+  - name: Delete previous system controller network
+    shell: >-
+      source /etc/platform/openrc; system host-route-delete "{{ item }}"
+    loop: "{{ previous_route_uuid_controller_0.stdout_lines }}"
+    when: previous_route_uuid_controller_0.stdout_lines | length > 0
+  when: system_controller_subnet != previous_system_controller_subnet_addr.stdout
+
 - name: Check existing host route in controller-0
   # Checking if the static route to the new system controller subnet
   # is already configured. If it is already configured, e.g. recovery
@@ -47,6 +72,32 @@
   when: existing_route_controller_0.stdout | length == 0
 
 - block:
+
+  - name: Get previous system controller subnet address
+    shell: >-
+      source /etc/platform/openrc;
+      system addrpool-list
+      | awk '/system-controller-subnet/{ print$2 }'
+      | xargs -I {} system addrpool-show {}
+      | awk -F'|' '/network/ {gsub(/ /, "", $3);
+      net=$3} /prefix/ {gsub(/ /, "", $3); print net "/" $3}'
+    register: previous_system_controller_subnet_addr
+
+  - block:
+    - name: Get previous system controller host route uuid
+      shell: >-
+        source /etc/platform/openrc; system host-route-list controller-1
+        | grep {{ previous_system_controller_subnet_addr.stdout }}
+        | awk '{ print $2 }'
+      register: previous_route_uuid_controller_1
+
+    - name: Delete previous system controller network
+      shell: >-
+        source /etc/platform/openrc; system host-route-delete "{{ item }}"
+      loop: "{{ previous_route_uuid_controller_1.stdout_lines }}"
+      when: previous_route_uuid_controller_1.stdout_lines | length > 0
+    when: system_controller_subnet != previous_system_controller_subnet_addr.stdout
+
   - name: Check existing host route in controller-1
     shell: >-
       source /etc/platform/openrc; system host-route-list controller-1 |
