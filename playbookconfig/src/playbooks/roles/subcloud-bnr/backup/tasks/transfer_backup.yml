@@ -65,9 +65,18 @@
       connection: local
       when: previous_backup_dir is defined
 
+    - name: Set failure message for transfer task failure
+      set_fact:
+        failure_msg: >
+          {{ backup_transfer.stdout | default('') }}.
+          rc: {{ backup_transfer.rc }}
+      when: backup_transfer.rc != 0
+
     - name: Force fail post rescue of transfer task failure
       fail:
-        msg: "An error occurred while transferring backup file to the system controller."
+        msg: >
+          An error occurred while transferring backup file to the system controller.
+          {{ failure_msg }}
 
   always:
     - name: Remove staging backup file/directory from {{ inventory_hostname }}
