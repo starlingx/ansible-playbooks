@@ -1,3 +1,6 @@
 ---
+certificate_recovery_necessary: false
 certificate_recovery_in_progress_flag: /tmp/.certificate_recovery_in_progress
 is_active_controller: false
+k8s_root_ca_cert: /etc/kubernetes/pki/ca.crt
+k8s_root_ca_key: /etc/kubernetes/pki/ca.key

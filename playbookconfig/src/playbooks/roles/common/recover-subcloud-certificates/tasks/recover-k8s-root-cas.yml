@@ -9,7 +9,7 @@
 #
 - name: Verify if Kubernetes Root CA is expired
   community.crypto.x509_certificate_info:
-    path: /etc/kubernetes/pki/ca.crt
+    path: "{{ k8s_root_ca_cert }}"
   register: k8s_root_ca_info
   become: yes
 
@@ -29,8 +29,8 @@
   - name: Copy K8s Root CA cert and key to target
     include_tasks: copy-file-from-local-to-remote.yml
     loop:
-      - { path: /etc/kubernetes/pki/ca.crt }
-      - { path: /etc/kubernetes/pki/ca.key }
+      - { path: "{{ k8s_root_ca_cert }}" }
+      - { path: "{{ k8s_root_ca_key }}" }
     when: k8s_root_ca_info.expired
 
   - name: Copy ETCD Root CA cert and key to target
@@ -66,18 +66,25 @@
   when: is_controller
 
 - block:
-  - name: Copy K8s Root CA cert and key to target
-    include_tasks: copy-file-from-local-to-remote.yml
-    # For compute nodes, ca.key will be deleted in main.yml after new certificates are generated
-    loop:
-      - { path: /etc/kubernetes/pki/ca.crt }
-      - { path: /etc/kubernetes/pki/ca.key }
-    when: k8s_root_ca_info.expired
+  # When kubelet certificates are expired, copying the K8s Root CA is necessary
+  # in order to generate a new certificate for the compute node
+  - name: Verify if K8s Root CA is needed to generate a new kubelet certificate
+    community.crypto.x509_certificate_info:
+      path: /var/lib/kubelet/pki/kubelet-client-current.pem
+    register: kubelet_cert_info
+    become: yes
 
-  - name: Set fact to mark that K8s Root CAs recovery was performed
-    set_fact:
-      subcloud_k8s_root_ca_recovered: true
-    when:
-      - k8s_root_ca_info.expired
+  - block:
+    - name: Copy K8s Root CA cert and key to target
+      include_tasks: copy-file-from-local-to-remote.yml
+      # For compute nodes, ca.key will be deleted in main.yml after new certificates are generated
+      loop:
+        - { path: "{{ k8s_root_ca_cert }}" }
+        - { path: "{{ k8s_root_ca_key }}" }
+
+    - set_fact:
+        subcloud_k8s_root_ca_recovered: true
+
+    when: k8s_root_ca_info.expired or kubelet_cert_info.expired
 
   when: is_compute
