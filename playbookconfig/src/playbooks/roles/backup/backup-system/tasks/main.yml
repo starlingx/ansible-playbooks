@@ -287,6 +287,26 @@
         mode: 0755
         content: '{{ updates_list | default("") }}'
 
+    # Check for protected backup directories in exclude_dirs options
+    - block:
+      - name: Set input exclude dirs list from exclude_dirs option
+        set_fact:
+          input_exclude_dirs:
+            "{{ _input_exclude_dirs.split(',') | reject('equalto', '') | list }}"
+        vars:
+          _input_exclude_dirs: "{{ exclude_dirs | default(\"\") }}"
+
+      - name: Fail if protected directories are present in exclude_dirs option
+        fail:
+          msg: |
+            {{ item }} is protected, not to be used as exclude_dirs option
+            Please use large directories that can be recreated e.g.
+            /opt/dc-vault/backups or /opt/dc-vault/loads
+        when: item in protected_backup_exclude_dirs
+        with_items: "{{ input_exclude_dirs }}"
+
+      when: exclude_dirs is defined
+
     - name: Set exclude targets
       set_fact:
         exclude_targets:
@@ -616,20 +636,40 @@
       failed_when: tar_cmd.rc >= 2 or tar_cmd.rc < 0
 
     - name: Create a tgz archive for dc-vault backup
-      shell: "tar -czf {{ dc_vault_backup_file_path }} $(ls -d \
-           {{ dc_vault_permdir }} 2>/dev/null)"
+      shell: >-
+        tar
+        --use-compress-program={{ compress_program }}
+        --exclude {{ exclude_targets | map('regex_replace', '^/', '') | list | join(' --exclude ') }}
+        -cf {{ dc_vault_backup_file_path }}
+        $(ls -d
+        {{ dc_vault_permdir }}
+        2> /dev/null)
       args:
         warn: false
+      # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it", which
+      # makes tar return 1
+      register: tar_cmd
+      failed_when: tar_cmd.rc >= 2 or tar_cmd.rc < 0
       when: check_dc_controller.rc == 0
 
     - name: Create a tgz archive for OpenStack backup
-      shell: "tar -czf {{ openstack_backup_file_path }} $(ls -d \
-           {{ fluxcd_permdir }}/{{ openstack_app_name }} \
-           {{ helm_charts_permdir }}/starlingx \
-           {{ mariadb_dir.path }} \
-           {{ helm_overrides_sqldump_dir.path }} 2>/dev/null)"
+      shell: >-
+        tar
+        --use-compress-program={{ compress_program }}
+        --exclude {{ exclude_targets | map('regex_replace', '^/', '') | list | join(' --exclude ') }}
+        -cf {{ openstack_backup_file_path }}
+        $(ls -d
+        {{ fluxcd_permdir }}/{{ openstack_app_name }}
+        {{ helm_charts_permdir }}/starlingx
+        {{ mariadb_dir.path }}
+        {{ helm_overrides_sqldump_dir.path }}
+        2> /dev/null)
       args:
         warn: false
+      # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it", which
+      # makes tar return 1
+      register: tar_cmd
+      failed_when: tar_cmd.rc >= 2 or tar_cmd.rc < 0
       when: check_mariadb_pod.rc == 0 or openstack_status.stdout == "uploaded"
 
     - name: Notify the user backup tar file(s) are available

@@ -6,3 +6,13 @@ source_helm_bind_dir: /opt/platform/helm_charts
 target_helm_bind_dir: /var/www/pages/helm_charts
 helm_repo_name_apps: starlingx
 helm_repo_name_platform: stx-platform
+# Protected directories that are not allowed in backup option 'exclude_dirs'
+protected_backup_exclude_dirs:
+  - /opt/dc-vault
+  - /opt/dc-vault/*
+  - /opt/dc-vault/**
+  - /opt/dc-vault/**/*
+  - /opt/dc-vault/ansible
+  - /opt/dc-vault/ansible/*
+  - /opt/dc-vault/ansible/**
+  - /opt/dc-vault/ansible/**/*
