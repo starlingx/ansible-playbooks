@@ -1,0 +1,43 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Retrieve REST API / Web Server GUI TLS certificate and install
+# in the SSL private folder to be used in HTTPS enable after bootstrap.
+#
+
+- name: Install HTTPS cert at bootstrap
+  block:
+  - name: Check if system-restapi-gui-certificate is ready
+    command: >-
+      kubectl get certificate system-restapi-gui-certificate -n deployment
+      --no-headers=true -o=custom-columns='READY:status.conditions[0].status'
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+    register: https_cert_is_ready
+    until: https_cert_is_ready.stdout == 'True'
+    retries: 12
+    delay: 5
+
+  - name: Retrieve cert from k8s secret
+    command: >-
+      kubectl get secret system-restapi-gui-certificate -n deployment
+      -o jsonpath='{.data.tls\.crt}'
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+    register: https_cert_b64
+
+  - name: Install https certificate in ssl folder
+    copy:
+      dest: /etc/ssl/private/server-cert.pem
+      content: "{{ https_cert_b64.stdout | b64decode }}"
+      owner: root
+      group: root
+      mode: 0400
+    become: yes
+
+  when:
+    - mode == 'bootstrap'
+    - install_system_restapi_gui_certificate

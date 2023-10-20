@@ -5,12 +5,16 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-system_local_ca_data_obtained: false
+cert_manager_spec_file: /tmp/platform_certificates.yaml
+
 ca_duration: 3
 system_platform_certificate:
   dns_domain: starlingx.local
   duration: 2160h      # 90d
   renewBefore: 360h    # 15d
+
+system_local_ca_data_obtained: false
+
 install_oidc_auth_apps_certificate: false
 install_system_open_ldap_certificate: false
 install_system_registry_local_certificate: false
