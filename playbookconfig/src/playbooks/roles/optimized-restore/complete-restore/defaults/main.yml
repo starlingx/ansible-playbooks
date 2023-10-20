@@ -17,5 +17,5 @@ default_required_flags:
 system_online_retries: 30
 system_online_retry_delay: 10
 
-application_check_retries: 60
+application_check_retries: 300
 application_check_retry_delay: 1
