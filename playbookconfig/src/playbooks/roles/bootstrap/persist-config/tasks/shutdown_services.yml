@@ -71,6 +71,13 @@
           name: etcd
           state: stopped
 
+  # Mark Kubernetes config as incomplete by removing
+  # the .initial_k8s_config_complete file.
+  - name: Mark Kubernetes config incomplete
+    file:
+      path: "/etc/platform/.initial_k8s_config_complete"
+      state: absent
+
 
 - block:  # Revert configuration to loopback interface
   - name: Set facts derived from previous network configurations
