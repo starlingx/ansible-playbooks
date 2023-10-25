@@ -49,6 +49,14 @@
         runtime
         {{ tmp_net_dir.path }}/network_runtime.yml
 
+    # mtcAgent can stop during manifest depending on network configuration.
+    # We need to manually restart it because SM is not running.
+    - name: Restart mtcAgent
+      command: /usr/lib/ocf/resource.d/platform/mtcAgent reload
+      environment:
+        OCF_ROOT: "/usr/lib/ocf"
+        OCF_RESKEY_state: "active"
+
   always:
     - name: Cleanup temp puppet dir
       file:
