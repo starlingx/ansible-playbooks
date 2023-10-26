@@ -26,10 +26,10 @@
 #
 # To target the system controller or standalone systems use target_list=localhost
 #
+
 - hosts: localhost
   gather_facts: no
   tasks:
-
     - name: Fail if target_list is not defined
       fail:
         msg: >-
@@ -64,6 +64,9 @@
 
 - hosts: target_group
   gather_facts: no
+  vars_files:
+  - host_vars/migrate_platform_certificates_to_certmanager/default.yml
+
   # for mode=check the output is too messy with free strategy
   strategy: "{{ 'linear' if mode == 'check' else 'free' }}"
   roles:
