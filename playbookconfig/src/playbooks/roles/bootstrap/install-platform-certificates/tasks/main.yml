@@ -122,7 +122,7 @@
     include_role:
       name: common/generate-platform-certificates-template
     vars:
-      destination: /tmp/platform_certificates.yaml
+      destination: "{{ cert_manager_spec_file }}"
 
   - name: Delete old secret 'system-local-ca' secret
     include_role:
@@ -131,13 +131,23 @@
       - { name: system-local-ca, namespace: cert-manager, type: secret }
 
   - name: Apply kubernetes yaml to create cert-manager resources
-    command: kubectl apply -f /tmp/platform_certificates.yaml
+    command: kubectl apply -f "{{ cert_manager_spec_file }}"
     environment:
       KUBECONFIG: /etc/kubernetes/admin.conf
     register: create_k8_apply_ep
     until: create_k8_apply_ep is not failed
     retries: 10
     delay: 30
+
+  - name: Delete kubernetes yaml with certificate spec
+    file:
+      path: "{{ cert_manager_spec_file }}"
+      state: absent
+    become: yes
+
+  - name: Install platform certificate for HTTPS
+    include_tasks: install-https-certificate.yml
+    when: create_platform_certificates
 
   when: distributed_cloud_role != 'subcloud' or
         subcloud_local_ca_should_be_altered
