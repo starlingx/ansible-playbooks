@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -14,6 +14,7 @@ system_platform_certificate:
   renewBefore: 360h    # 15d
 
 system_local_ca_data_obtained: false
+install_rca_as_trusted: false
 
 install_oidc_auth_apps_certificate: false
 install_system_open_ldap_certificate: false

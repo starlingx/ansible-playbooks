@@ -813,22 +813,57 @@
   when: k8s_root_ca_key and (not k8s_root_ca_key is file)
 
 - block:
+  - name: Check if the user provided file paths for RCA, ICA cert and ICA key
+    set_fact:
+      system_local_ca_rca_crt_provided: "{{ system_root_ca_cert | length > 0 }}"
+      system_local_ca_ica_crt_provided: "{{ system_local_ca_cert | length > 0 }}"
+      system_local_ca_ica_key_provided: "{{ system_local_ca_key | length > 0 }}"
+
+  - name: Fail if any 'system-local-ca' override field is defined during upgrade
+    fail:
+      msg: >-
+        ERROR: 'system-local-ca' override fields cannot be used during upgrades.
+        Please remove all of the following from the override file: system_root_ca_cert,
+        system_local_ca_cert, system_local_ca_key and system_platform_certificate.
+        The procedure to update platform certificates (previously known as
+        cert-manager migration) should be followed to change these certificates
+        when necessary.
+    when:
+      - upgrade_in_progress
+      - system_local_ca_rca_crt_provided or
+        system_local_ca_ica_crt_provided or
+        system_local_ca_ica_key_provided or
+        system_platform_certificate is defined
+
+  - name: Fail if 'system-local-ca' certificates overrides are present in subcloud
+    fail:
+      msg: >-
+        ERROR: For subclouds, the data for 'system-local-ca' is propagated from the
+        SystemController. Please remove all of the following from the override file:
+        system_root_ca_cert, system_local_ca_cert and system_local_ca_key.
+        You can stil provide custom overrides for the child platform certificates
+        using the field 'system_platform_certificate'.
+
+    when:
+      - distributed_cloud_role == 'subcloud'
+      - system_local_ca_rca_crt_provided or
+        system_local_ca_ica_crt_provided or
+        system_local_ca_ica_key_provided
+
   - name: Verify user provided data for system-local-ca
     block:
-    - name: Check if the user provided file paths for RCA, ICA cert and ICA key
-      set_fact:
-        local_ca_rca_crt_provided: "{{ system_root_ca_cert | length > 0 }}"
-        local_ca_ica_crt_provided: "{{ system_local_ca_cert | length > 0 }}"
-        local_ca_ica_key_provided: "{{ system_local_ca_key | length > 0 }}"
-
     - name: If one is provided, fail if user don't provided all the 3 fields
       fail:
         msg: >-
           "To set the local issuer, system_root_ca_cert, system_local_ca_cert and
           system_local_ca_key must be provided."
       when:
-        - local_ca_rca_crt_provided or local_ca_ica_crt_provided or local_ca_ica_key_provided
-        - not (local_ca_rca_crt_provided and local_ca_ica_crt_provided and local_ca_ica_key_provided)
+        - system_local_ca_rca_crt_provided or
+          system_local_ca_ica_crt_provided or
+          system_local_ca_ica_key_provided
+        - not (system_local_ca_rca_crt_provided and
+               system_local_ca_ica_crt_provided and
+               system_local_ca_ica_key_provided)
 
     - name: Check the existence of system_root_ca_cert file
       fail:
