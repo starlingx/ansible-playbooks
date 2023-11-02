@@ -10,6 +10,7 @@ restore_items:
   - etc/containerd
   - etc/cni
   - etc/default
+  - etc/dnsmasq.conf
   - etc/docker
   - etc/docker-distribution
   - etc/drbd.d

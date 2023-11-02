@@ -193,7 +193,7 @@
       place_holder: place_holder
     ansible_remote_tmp: "{{ ansible_remote_tmp | default('/tmp/.ansible-${USER}/tmp') }}"
     pods_wait_time: "{{ pods_wait_time | default(120) }}"
-    bootstrap_completed_flag: "{{ config_permdir }}/.bootstrap_completed"
+    bootstrap_completed_flag: "/etc/platform/.bootstrap_completed"
     initial_db_populated_flag: "{{ config_permdir }}/.initial_db_population_completed"
 
 - name: Turn on use_docker_proxy flag
