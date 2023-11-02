@@ -678,6 +678,9 @@
 
 # Validate user dns host records if defined
 - block:
+  - set_fact:
+      user_dns_host_records_lines: ""
+
   - name: Fetch the user dns host records for validation
     set_fact:
       host_records_values: "{{ host_records_values | default([]) +
@@ -686,11 +689,34 @@
     loop_control:
       loop_var: host_record
 
-  - name: Check for valid IP address and DNS name
+  - name: Check for valid IP address and DNS name in user dns host records
     loop: "{{ host_records_values }}"
     loop_control:
       loop_var: host_records_value
     include: validate_address.yml input_address={{ host_records_value }}
+
+  - name: Create entries for /etc/hosts from user dns host records
+    script: parse_user_dns_host_record.py "{{ user_dns_host_records }}"
+    register: result
+    failed_when: false
+
+  - name: Fail if script parse_user_dns_host_record.py failed or error occurred
+    fail:
+      msg: >
+        {% if result.rc != 0 %}
+          Error during parsing user dns host-records, failed with return code
+          {{ result.rc }}.
+        {% elif "An error occurred" in result.stdout %}
+          User dns host-records parsing encountered null value, please update the
+          dns host-records with valid inputs. Error output: {{ result.stderr }}
+        {% endif %}
+    when: result.rc != 0
+
+
+  - name: Set entries for /etc/hosts in variable later use
+    set_fact:
+      user_dns_host_records_lines: "{{ result.stdout_lines }}"
+
   when: user_dns_host_records
 
 # System applications validation
