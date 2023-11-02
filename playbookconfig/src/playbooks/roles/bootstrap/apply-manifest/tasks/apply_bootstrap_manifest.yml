@@ -303,7 +303,7 @@
   command: >
     /usr/local/bin/puppet-manifest-apply.sh
     {{ hieradata_workdir }}
-    {{ derived_network_params.controller_0_address }}
+    controller-0
     controller ansible_bootstrap
     {{ hieradata_workdir }}/runtime.yaml > {{ manifest_apply_log }}
   register: bootstrap_manifest

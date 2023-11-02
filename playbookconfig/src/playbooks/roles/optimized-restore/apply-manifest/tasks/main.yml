@@ -59,7 +59,7 @@
   command: >-
     /usr/local/bin/puppet-manifest-apply.sh
     {{ hieradata_workdir }}
-    localhost
+    controller-0
     controller
     restore
     {{ hieradata_workdir }}/runtime.yaml

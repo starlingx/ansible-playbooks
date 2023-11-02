@@ -698,7 +698,7 @@
           command: >
             /usr/local/bin/puppet-manifest-apply.sh
             {{ puppet_permdir }}/hieradata/
-            {{ derived_network_params.controller_0_address }}
+            controller-0
             controller runtime /tmp/apiserver.yml
           environment:
             LC_ALL: "en_US.UTF-8"
