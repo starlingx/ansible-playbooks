@@ -203,6 +203,13 @@
 
 - name: Include override data
   include_vars: "{{ temp_upgrade_platform_dir }}/{{ override_filename }}"
+  no_log: true
+
+- name: Save original docker_registries override value for later
+  set_fact:
+    original_overrides:
+      docker_registries: "{{ docker_registries }}"
+  no_log: true
 
 - name: Extract the upgrade metadata
   command: >-

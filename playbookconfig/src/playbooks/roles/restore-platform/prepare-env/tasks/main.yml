@@ -148,6 +148,7 @@
   - name: Load override data (local execution)
     include_vars: "{{ target_backup_dir }}/{{ override_filename }}"
     when: inventory_hostname == "localhost"
+    no_log: true
 
   - block:
       - name: Create a temporary file
@@ -165,6 +166,7 @@
 
       - name: Load override data (remote execution)
         include_vars: "{{ host_override_tmp_file.path }}"
+        no_log: true
 
       - name: Remove override temp file on Ansible control host
         file:
@@ -182,6 +184,12 @@
 
   become: yes
   become_user: root
+
+- name: Save original docker_registries override value for later
+  set_fact:
+    original_overrides:
+      docker_registries: "{{ docker_registries }}"
+  no_log: true
 
 - name: Perform additional validation that requires values from after restore is started
   import_role:
