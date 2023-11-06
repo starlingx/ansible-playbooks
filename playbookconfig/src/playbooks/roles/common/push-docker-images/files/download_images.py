@@ -347,7 +347,7 @@ def download_and_push_an_image_for_prestage(img_tuple, local_auth):
 
         client.inspect_distribution(local_img, auth_config=local_auth)
         print("Image {} found on local registry".format(target_img))
-        return target_img, True
+        return None, True
     except docker.errors.APIError as e:
         print(str(e))
         print("Image {} not found on local registry, attempt to download...".format(target_img))
@@ -362,7 +362,7 @@ def download_and_push_an_image_for_prestage(img_tuple, local_auth):
                 client.remove_image(target_img)
             if client.images(local_img):
                 client.remove_image(local_img)
-            return target_img, True
+            return prestage_img, True
         except Exception as e:
             return handle_docker_exception(e, err_msg, target_img)
 
@@ -427,6 +427,9 @@ def map_function(images, function, local_download=False):
     for image, success in pool.imap(function, images, auth_list):
         if not success:
             failed_images.append(image)
+        elif purge_images_list_file and image is not None:
+            with open(purge_images_list_file, 'a+') as f_out:
+                f_out.write(str(image) + '\n')
 
     return failed_images
 
@@ -441,6 +444,7 @@ if __name__ == '__main__':
     image_outfile = None
     local_download = False
     prestage_download = False
+    purge_images_list_file = None
 
     start = time.time()
 
@@ -455,6 +459,9 @@ if __name__ == '__main__':
         if not prestage_download:
             failed_downloads = map_function(image_list, download_and_push_an_image)
         else:
+            if os.getenv('PURGE_IMAGES_LIST_FILE') is not None:
+                purge_images_list_file = os.environ['PURGE_IMAGES_LIST_FILE']
+
             # The specified images may also contain the url prefix.
             # Remove them before processing.
             images_with_auth = get_image_list_with_auth_info(image_list)
