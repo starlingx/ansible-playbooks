@@ -1,0 +1,4 @@
+---
+kubelet_cni_bin_dir: /var/opt/cni/bin
+registry_central: registry.central:9001
+registry_local: registry.local:9001

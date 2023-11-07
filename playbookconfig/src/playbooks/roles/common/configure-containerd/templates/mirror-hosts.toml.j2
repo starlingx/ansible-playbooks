@@ -1,0 +1,12 @@
+# explicitly use v2 config format for identification
+# Updated the file to the new format
+version = 2
+
+# Begin of insecure registries
+{% for insecure_registry in insecure_registries %}
+  server = "{{ insecure_registry }}"
+
+  [host."{{ insecure_registry }}"]
+    capabilities = ["pull", "resolve"]
+{% endfor %}
+# End of insecure registries

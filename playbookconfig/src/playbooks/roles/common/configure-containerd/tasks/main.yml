@@ -1,12 +1,12 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# SUB-TASKS DESCRIPTION:
+# ROLE DESCRIPTION:
 #   Configure containerd to use local registry
-
+#
 - name: Create containerd config file directory
   file:
     path: /etc/containerd
@@ -51,19 +51,6 @@
     regexp: '^(<%- @insecure_registries.+)\n(.+)\n(.+)\n(.+end -%>)'
     replace: ''
 
-- name: Update config.toml with insecure registries
-  blockinfile:
-    path: /etc/containerd/config.toml
-    insertafter: '# Begin of insecure registries'
-    marker: "        # {{ item }}"
-    block: |2
-              [plugins.cri.registry.mirrors."{{ item }}"]
-                endpoint = ["http://{{ item }}"]
-  loop:
-    "{{ insecure_registries }}"
-  when: (insecure_registries is defined and
-        insecure_registries | length > 0)
-
 - name: Get local registry credentials
   vars:
     script_content: |
@@ -79,6 +66,54 @@
 
 - set_fact:
     local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
+
+- name: Create containerd certs.d directory
+  file:
+    path: /etc/containerd/certs.d
+    state: directory
+    mode: 0700
+
+- block:
+  - name: Default mirror directory for all registries
+    file:
+      path: /etc/containerd/certs.d/default
+      state: directory
+      mode: 0700
+
+  - name: Create hosts.toml file for containerd default mirrors configuration
+    template:
+      src: "mirror-hosts.toml.j2"
+      dest: /etc/containerd/certs.d/default/hosts.toml
+      mode: 0600
+
+  when: insecure_registries is defined
+
+- name: Create containerd local registry directory
+  file:
+    path: "/etc/containerd/certs.d/{{ registry_local }}"
+    state: directory
+    mode: 0700
+
+- name: Create hosts.toml file for containerd host configuration
+  template:
+    src: "local-hosts.toml.j2"
+    dest: "/etc/containerd/certs.d/{{ registry_local }}/hosts.toml"
+    mode: 0600
+
+- block:
+  - name: Create containerd central registry directory
+    file:
+      path: "/etc/containerd/certs.d/{{ registry_central }}"
+      state: directory
+      mode: 0700
+
+  - name: Create hosts.toml file for containerd host configuration
+    template:
+      src: "central-hosts.toml.j2"
+      dest: "/etc/containerd/certs.d/{{ registry_central }}/hosts.toml"
+      mode: 0600
+
+  when: distributed_cloud_role == 'subcloud'
 
 - name: Restart containerd
   systemd:
