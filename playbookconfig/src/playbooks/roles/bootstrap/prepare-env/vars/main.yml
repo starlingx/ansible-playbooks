@@ -38,7 +38,6 @@ apiserver_extra_args_defaults:
 controllermanager_extra_args_defaults:
   node-monitor-period: "2s"
   node-monitor-grace-period: "20s"
-  pod-eviction-timeout: '30s'
   flex-volume-plugin-dir: "{{ kubelet_vol_plugin_dir }}"
 
 scheduler_extra_args_defaults: { }
