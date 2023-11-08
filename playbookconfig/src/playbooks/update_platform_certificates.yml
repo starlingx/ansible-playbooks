@@ -83,6 +83,14 @@
   gather_facts: no
   tasks:
     - block:
+      # If 'localhost' wasn't included in the target_list, we need the
+      # 'target_group' variables from the inventory for privilege escalation
+      - name: Include localhost in target_group to acquire required variables
+        add_host:
+          name: localhost
+          groups: target_group
+        when: "'localhost' not in groups['target_group']"
+
       - name: Install Root CA certificate as trusted by the platform
         include_role:
           name: common/verify-and-install-system-local-ca-certs
