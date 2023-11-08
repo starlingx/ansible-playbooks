@@ -39,9 +39,9 @@
 - name: Retrieve configured docker registries during upgrades
   import_tasks:
     file: restore_docker_registries.yml
-  when:
-    - mode | default(none) == 'restore'
-    - restore_mode | default(none) == 'optimized'
+  when: ((mode | default(none) == 'restore') and
+          (restore_mode | default(none) == 'optimized')) or
+        upgrade_in_progress|default(false)
 
 # Disable the log to not expose registry password
 - name: Get registry credentials if registry type is AWS ECR
