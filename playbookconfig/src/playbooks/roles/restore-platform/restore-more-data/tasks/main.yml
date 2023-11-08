@@ -547,6 +547,14 @@
     retries: 6
     delay: 10
 
+  - name: Add missing registries during stx7 upgrade
+    import_role:
+      name: common/push-docker-images
+      tasks_from: restore_docker_registries.yml
+    when:
+      - upgrade_in_progress
+      - previous_software_version == '22.06'
+
   - name: Bring up Maintenance Agent
     command: /usr/lib/ocf/resource.d/platform/mtcAgent start
     environment:
