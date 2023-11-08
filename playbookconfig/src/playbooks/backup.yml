@@ -11,6 +11,7 @@
 
   vars_files:
     - host_vars/backup-restore/default.yml
+    - vars/backup-restore/main.yml
 
   vars:
     mode: 'backup'
