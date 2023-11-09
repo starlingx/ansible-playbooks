@@ -21,7 +21,6 @@
     - rehome-subcloud/update-ca-cert
     - common/update-sc-admin-endpoints
     - common/update-sc-cert
-    - rehome-subcloud/update-k8s-root-ca
     - rehome-subcloud/update-network-config
     - { role: rehome-subcloud/update-keystone-data, become: yes }
     - common/check-services-status
