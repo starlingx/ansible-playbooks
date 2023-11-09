@@ -626,6 +626,14 @@
           mode: 644
           state: touch
 
+      - name: Mark ceph backend as configured
+        file:
+          path: "{{ ceph_backend_flag }}"
+          owner: root
+          group: root
+          mode: 644
+          state: touch
+
       when: not wipe_ceph_osds|bool
 
     - block:
