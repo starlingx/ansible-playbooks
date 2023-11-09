@@ -15,20 +15,6 @@
       docker_registries: "{{ original_overrides.docker_registries }}"
   no_log: true
 
-# TODO(jkraibe): Remove after stx7 to stx8 upgrade deprecated
-# During stx7 upgrade, there are no missing registries because default values were added
-# during earlier bootstrap. So we make them missing.
-- name: Remove default registry entries when upgrading from stx7
-  shell: >-
-    source /etc/platform/openrc;
-    system service-parameter-list
-    --section '{{ registry_to_service[item] }}'
-    --format value
-    --column uuid
-    | xargs -n1 system service-parameter-delete
-  loop: "{{ possible_missing_registries }}"
-  when: previous_software_version == "22.06"
-
 # TODO(jkraibe): Remove after reworking how role uses facts to log in/out of registries
 - name: Create single var registry facts
   set_fact:
