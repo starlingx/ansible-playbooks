@@ -92,10 +92,8 @@
 
 - name: Install system_root_ca_cert as Trusted CA
   include_role:
-    name: common/install-trusted-ca
-  with_items:
-    - { name: system_root_ca_cert, content: "{{ system_root_ca_cert }}" }
-  loop_control:
-    label: "{{ item.name }}"
+    name: common/verify-and-install-system-local-ca-certs
+  vars:
+    - install_rca: true
   when:
     - install_rca_as_trusted

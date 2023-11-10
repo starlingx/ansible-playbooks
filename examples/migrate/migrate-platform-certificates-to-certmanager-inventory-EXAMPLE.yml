@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2022 Wind River Systems, Inc.
+# Copyright (c) 2021-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -32,13 +32,15 @@
 #
 # Please make sure that you use a system_root_ca_cert and system_local_ca_cert certificate
 # with a long duration. The playbook will fail if any of these CA certificates expire in
-# less than 3 years.
+# less than the default expected values in min years:
+# - For RCA, is 3 years;
+# - For ICA, is 1 year.
 #
 # If you wish to use a different value for CA duration you can override
-# it by setting a different value to validation parameter ca_duration:
+# it by setting a different value to validation parameters rca_duration/ica_duration.
 # Example:
-# ca_duration: 2
-# Notice that ca_duration is applied to both system_root_ca_cert and system_local_ca_cert
+# 'rca_duration: 2' will result in the playbook only accepting RCAs expiring 2 or more
+# years from now.
 #
 # Please also make sure that duration and renewBefore are sensible values
 # considering the system_local_ca_cert remaining duration.
@@ -57,11 +59,13 @@ all:
     # Note: system_local_ca_cert and system_root_ca_cert must be the same for that configuration.
     system_local_ca_cert: <base64_cert>
     system_local_ca_key: <base64_key>
-    # the ca_duration parameter is optional. If not specified, it defaults to 3.
-    # It represents the number of years for the CA certificates validity check.
+    # the ica_duration/rca_duration parameters are optional. If not specified, it defaults to 3
+    # for RCA and 1 for ICA.
+    # It represents the number of years for the CA certificates expiration validity check.
     # It is not recommended to use short values for this parameter.
-    # It applies to both system_local_ca_cert and the system_local_ca_cert certificates.
-    ca_duration: 3
+    # rca_duration: 3
+    # ica_duration: 1
+
   children:
     # This will be applied to all online subclouds
     # Use the below example in hosts to override particulars for a subcloud such as passwords

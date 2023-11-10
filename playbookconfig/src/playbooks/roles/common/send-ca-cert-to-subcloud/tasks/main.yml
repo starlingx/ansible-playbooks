@@ -152,9 +152,7 @@
 - block:
   - name: Install new CA certificate (Subcloud)
     include_role:
-      name: common/install-trusted-ca
-    with_items:
-      - { name: system_root_ca_cert, content: "{{ system_root_ca_cert }}" }
-    loop_control:
-      label: "{{ item.name }}"
+      name: common/verify-and-install-system-local-ca-certs
+    vars:
+      - install_rca: true
   when: not ca_send_from_bootstrap

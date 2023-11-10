@@ -1,0 +1,114 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Task that receives an ICA bundle file and RCA file and verifies the
+# chain consistency and other requirements for it to be used as local
+# issuer for the platform certificates, such as certificate duration.
+# Optionally, the RCA can be used as RCA and ICA bundle (for test lab
+# scenarios).
+#
+
+- name: Retrieve the number of certificates in RCA file
+  shell: expr $(openssl storeutl -noout -certs "{{ system_local_ca_rca.path }}" | wc -l) - 1
+  register: rca_certs_number
+
+- name: Fail if there isn't exactly one certificate in the RCA file
+  fail:
+    msg: >-
+      RCA file for system_local_ca should contain only the CA certificate at the
+      top of the trusted chain (Root CA).
+  when: rca_certs_number.stdout | int != 1
+
+- name: Get RCA pem contents
+  command: openssl x509 -in "{{ system_local_ca_rca.path }}"
+  register: rca_pem_cert
+
+- name: Set variable with RCA content
+  set_fact:
+    cert_req_pem_stream: "{{ rca_pem_cert.stdout }}"
+
+- name: Verify RCA certificate content requirements
+  include_tasks: cert-content-requirements-verification.yml
+
+- name: Verify if certificate is RCA
+  shell: >-
+    openssl verify -verbose -no-CApath -CAfile
+    <(echo "{{ cert_req_pem_stream }}") <(echo "{{ cert_req_pem_stream }}")
+  register: openssl_return
+  failed_when: false
+
+- name: Fail if certificate is not a RCA
+  fail:
+    msg: >-
+      RCA file should contain a Root CA certificate.
+  when: openssl_return.rc != 0
+
+- name: Retrieve the number of certificates in ICA file
+  shell: expr $(openssl storeutl -noout -certs "{{ system_local_ca_ica.path }}" | wc -l) - 1
+  register: ica_certs_number
+
+- name: Fail if there isn't one or more certificates in the ICA file
+  fail:
+    msg: >-
+      ICA file for system_local_ca should have at least one CA certificate.
+  when: ica_certs_number.stdout | int == 0
+
+- name: Create pem temporary file for manipulating the certificates
+  tempfile:
+    state: file
+    prefix: bundle_
+    suffix: .pem
+    path: /tmp/
+  register: aux_ca_file
+
+- name: Copy ICA file contents to auxiliar file
+  copy:
+    src: "{{ system_local_ca_ica.path }}"
+    dest: "{{ aux_ca_file.path }}"
+    mode: 0640
+    owner: root
+    group: root
+  become: yes
+
+- name: Verification for ICA enforced mode
+  block:
+  - name: Retrieve the certificate in the end of the ICA chain (first read from the file)
+    command: openssl x509 -in "{{ aux_ca_file.path }}"
+    register: ica_pem_cert
+
+  - name: Assign ICA stream to variable
+    set_fact:
+      cert_pem_stream: "{{ ica_pem_cert.stdout }}"
+
+  - name: Verify if certificate is a RCA
+    shell: >-
+      openssl verify -verbose -no-CApath -CAfile
+      <(echo "{{ cert_pem_stream }}") <(echo "{{ cert_pem_stream }}")
+    register: openssl_return
+    failed_when: false
+
+  - name: Fail if certificate is a RCA
+    fail:
+      msg: >-
+        ICA file must contain a proper Intermediate CA certificate (not a Root CA).
+    when: openssl_return.rc == 0
+  when: enforce_ica
+
+- name: Set counter for ICA bundle verification
+  set_fact:
+    ica_cert_loop_executions: "{{ ica_certs_number.stdout | int }}"
+
+- name: Loop over the ICA bundle to verify the certificates
+  include_tasks: ica-individual-verification.yml
+  with_sequence: start="{{ ica_cert_loop_executions | int - 1 }}" end=0 stride=-1
+  loop_control:
+    loop_var: ica_bundle_cert_remaining
+
+- name: Remove the auxiliar file
+  file:
+    path: "{{ aux_ca_file.path }}"
+    state: absent
+  become: yes

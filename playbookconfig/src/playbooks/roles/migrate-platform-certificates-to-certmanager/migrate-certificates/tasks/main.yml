@@ -142,12 +142,9 @@
 
     - name: Install certificates as system Trusted CA certificates
       include_role:
-        name: common/install-trusted-ca
-      with_items:
-        - { name: system_local_ca_cert, content: "{{ system_local_ca_cert }}" }
-        - { name: system_root_ca_cert, content: "{{ system_root_ca_cert }}" }
-      loop_control:
-        label: "{{ item.name }}"
+        name: common/verify-and-install-system-local-ca-certs
+      vars:
+        - install_rca: true
 
     - name: Restart kube-apiserver to pick the new certificates
       include_role:

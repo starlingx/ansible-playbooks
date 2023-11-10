@@ -7,7 +7,6 @@
 
 cert_manager_spec_file: /tmp/platform_certificates.yaml
 
-ca_duration: 3
 system_platform_certificate:
   dns_domain: starlingx.local
   duration: 2160h      # 90d
