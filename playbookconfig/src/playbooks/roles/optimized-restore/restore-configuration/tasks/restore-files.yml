@@ -64,9 +64,10 @@
     - name: Restore home directory
       command: >-
         tar --use-compress-program=pigz
+        --wildcards
         -C / -xpf {{ platform_backup_fqpn }}
         --exclude home/sysadmin/ansible.log
-        --overwrite home/
+        --overwrite home/**/*
       args:
         warn: false
       when: home_dir_result.rc == 0
