@@ -42,8 +42,7 @@
     msg: "Rehoming can only be done when controller-0 is active."
   when: which_ctlr.stdout != "controller-0"
 
-# Verify if there is management affecting alarms, the kube-rootca-update strategy
-# will fail if any management affecting alarms exists.
+# Verify if there is management affecting alarms.
 # It checks for column 6 below because that's the column for mgmt_affecting
 - name: Check for management affecting alarms
   shell: |
