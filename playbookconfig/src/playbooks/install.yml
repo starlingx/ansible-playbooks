@@ -19,37 +19,81 @@
 
     # The following block is executed locally
     - block:
-      - name: Start rvmc job
-        import_role:
-          name: install/apply-rvmc-job
+      - name: Run rvmc script
+        script: >
+          /usr/local/bin/rvmc_install.py
+          --debug={{ rvmc_debug_level | default(0) }}
+          --subcloud_name="{{ inventory_hostname }}"
+          --config_file="{{ rvmc_config_file }}"
+        # Script return code:
+        # 0 - Success
+        # 1 - Retryable failures
+        # 2 - Non-retryable failures
+        #     (eg. Invalid credentials, Script execution timeout in 30 minutes,
+        #      Failed to terminate the previous process.)
+        # Refer to rvmc_install.py in the distributedcloud repository for details.
+        until: script_result.rc != 1
+        register: script_result
+        retries: 1
+        delay: "{{ job_retry_delay }}"
+        failed_when: false
 
-      # In this job retry block, we only initiate retries for job failures or
-      # when a job is not found. The retry mechanism for job timeouts is already
-      # built into the apply-rvmc-job role.
-      - name: Job retry
-        block:
-        - name: Wait for {{ job_retry_delay }} seconds to retry the rvmc job
-          wait_for:
-            timeout: "{{ job_retry_delay }}"
-          when: wait_for_rvmc.stdout in ['failed', 'not found'] and not credential_failure
+      - name: Display script output
+        debug:
+          msg: "{{ script_result.stdout }}"
 
-        - name: Retry rvmc job
-          include_role:
-            name: install/apply-rvmc-job
-          # Avoid moving the condition out of the task, even though both tasks
-          # within the retry block share the same condition. There's an open issue
-          # regarding the application of the "when" conditional over a block
-          # containing an include_role, which affects all role tasks regardless of
-          # the 'apply' status.
-          # (Issue link: https://github.com/ansible/ansible/issues/74382)
-          when: wait_for_rvmc.stdout in ['failed', 'not found'] and not credential_failure
+      # Block to isolate failure message
+      - block:
+        - name: Set credential failure flag
+          set_fact:
+            failure_msg: >-
+              Credential failure.
+              Action: Check BMC username and password in config file
+          when: '"Action: Check BMC username and password in config file" in script_result.stdout'
 
-      - name: Fail if Redfish Virtual Media Controller job returns an error
-        fail:
-          msg: |
-           Failed to install the host via Redfish Virtual Media Controller.
-           {{ failure_msg }}
-        when: wait_for_rvmc.stdout != "complete"
+        - name: Set output msg if BMC is unreachable.
+          set_fact:
+            failure_msg: >-
+              Ping to BMC has failed.
+              Check BMC values in install values file.
+              Ensure you can ssh into BMC using these credentials.
+              Err_code=ping_bmc
+          when: '"Action: Check BMC ip address is pingable" in script_result.stdout'
+
+        - name: Set output message if session creation fails
+          set_fact:
+            failure_msg: >-
+              Failed to connect to BMC.
+              Check BMC credentials in install values file.
+              Ensure you can ssh into BMC using these credentials.
+              Err_code=bmc_cred
+          when: '"Failed to Create session" in script_result.stdout'
+
+        - name: Set output message if the script execution times out
+          set_fact:
+            failure_msg: >-
+              BMC operations timed out.
+              Please review the script output to identify the operation
+              that is currently stuck.
+              Err_code=rvmc_timeout
+          when: '"RVMC script execution timed out" in script_result.stdout'
+
+        - name: Set output message if failed to terminate the previous RVMC process
+          set_fact:
+            failure_msg: >-
+              Failed to terminate the previous RVMC process.
+              Please review the script output to find out the previous
+              RVMC process ID.
+              Err_code=rvmc_process
+          when: '"Failed to terminate the previous process" in script_result.stdout'
+
+        - name: Fail if Redfish Virtual Media Controller returns an error
+          fail:
+            msg: |
+              Failed to install the host via Redfish Virtual Media Controller.
+              {{ failure_msg | default('The RVMC script exited with failure response or exception.') }}
+
+        when: script_result.rc != 0
 
       delegate_to: localhost
 
@@ -64,7 +108,7 @@
           delay={{ boot_wait_time }}
           timeout={{ wait_for_timeout }}
           state=started
-          msg="Timeout waiting for {{ ansible_host }}:{{ ansible_port }}. Err_code= wait_install"
+          msg="Timeout waiting for {{ ansible_host }}:{{ ansible_port }}. Err_code=wait_install"
 
 
 - name: Run validate host playbook post install

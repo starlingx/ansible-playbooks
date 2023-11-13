@@ -158,10 +158,6 @@
     when: additional_static_images_list is defined
 
   - block:
-    - name: Append RVMC image for a DC system controller
-      set_fact:
-        static_images: "{{ static_images }} + [ '{{ rvmc_img }}' ]"
-
     - name: Append additional static images for a DC system controller if provisioned
       set_fact:
         static_images: "{{ static_images }} + [ '{{item.value}}' ]"
