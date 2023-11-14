@@ -27,6 +27,14 @@
   args:
     warn: false
 
+- name: Read in system.yaml network values
+  shell: "grep -E '^platform::network::' {{ hieradata_workdir }}/system.yaml"
+  register: system_result
+
+- name: Include system values as facts
+  set_fact:
+    system_values: "{{ system_result.stdout | from_yaml }}"
+
 - name: Create puppet hieradata runtime configuration
   copy:
     dest: "{{ hieradata_workdir }}/runtime.yaml"
@@ -35,6 +43,21 @@
       platform::network::mgmt::params::controller0_address: 127.0.0.1
       platform::network::mgmt::params::controller1_address: 127.0.0.2
     force: yes
+
+- name: Check for mgmt network controller0 hieradata
+  stat:
+    path: "{{ hieradata_workdir }}/{{ system_values[key] }}.yaml"
+  vars:
+    key: "platform::network::mgmt::params::controller0_address"
+  register: controller0_hieradata
+
+- name: Add original lv_sizes to runtime configuration
+  shell: >
+    grep -E '{{ pattern }}' '{{ controller0_hieradata.stat.path }}'
+    | tee -a '{{ hieradata_workdir }}/runtime.yaml'
+  vars:
+    pattern: "::lv_size:\\s"
+  when: controller0_hieradata.stat.isreg|default(false)
 
 - name: Create SSL CA cert directory
   file:
@@ -53,7 +76,6 @@
   args:
     warn: false
   when: upgrade_in_progress
-
 
 - name: Applying puppet restore manifest
   command: >-
