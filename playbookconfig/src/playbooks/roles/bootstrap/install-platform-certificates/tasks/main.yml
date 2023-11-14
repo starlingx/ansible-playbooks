@@ -21,10 +21,20 @@
 
   when: distributed_cloud_role is undefined
 
+# For subclouds, in normal restore the ca cert must be restored from backup,
+# so we are only recreating it in upgrades.
+- name: Define whether 'system-local-ca' secret should be created in the subcloud
+  set_fact:
+    subcloud_local_ca_should_be_altered: >-
+      "{{ mode == 'bootstrap' or upgrade_in_progress }}"
+  when: distributed_cloud_role == 'subcloud'
+
 # TODO (mdecastr): Clear the code moved to this task once the feature is done
 - name: Retrieve local CA data
   include_tasks: retrieve-system-local-ca-data.yml
-  when: create_platform_certificates
+  when:
+    - create_platform_certificates
+    - distributed_cloud_role != 'subcloud' or subcloud_local_ca_should_be_altered
 
 # If subcloud or in upgrades, retrieve data from 'system-local-ca' if it exists
 - block:
@@ -85,13 +95,6 @@
   connection: local
   when: not system_local_ca_data_obtained
 
-# For subclouds, in normal restore the ca cert must be restored from backup,
-# so we are only recreating it in upgrades.
-- name: Define whether 'system-local-ca' secret should be created in the subcloud
-  set_fact:
-    subcloud_local_ca_should_be_altered: "{{ mode == 'bootstrap' or upgrade_in_progress }}"
-  when: distributed_cloud_role == 'subcloud'
-
 - block:
   # We only create the openldap cert for non-subcloud systems and avoid recreate it
   - name: Set creation of the openldap certificate
@@ -124,7 +127,15 @@
     vars:
       destination: "{{ cert_manager_spec_file }}"
 
-  - name: Delete old secret 'system-local-ca' secret
+  # We don't support auto renewals for this certificate
+  - name: Delete old 'system-local-ca' certificate if it exists
+    include_role:
+      name: common/delete-kubernetes-resources
+    with_items:
+      - { name: system-local-ca, namespace: cert-manager, type: certificate }
+    when: create_platform_certificates
+
+  - name: Delete old 'system-local-ca' secret
     include_role:
       name: common/delete-kubernetes-resources
     with_items:
@@ -149,5 +160,4 @@
     include_tasks: install-https-certificate.yml
     when: create_platform_certificates
 
-  when: distributed_cloud_role != 'subcloud' or
-        subcloud_local_ca_should_be_altered
+  when: distributed_cloud_role != 'subcloud' or subcloud_local_ca_should_be_altered

@@ -11,24 +11,19 @@
 # certificates as trusted by the platform if required.
 #
 
-# If user provided in the bootstrap, we set the variables accordingly
+# If user provided in the bootstrap, we already have the data set in the variables.
+# We must install the RCA provided as a Trusted CA.
 - name: Use user provided overrides for 'system-local-ca'
-  block:
-    - set_fact:
-        system_local_ca_data_obtained: true
+  set_fact:
+    system_local_ca_data_obtained: true
+    install_rca_as_trusted: true
+  when:
+    - system_local_ca_overrides
+    - not upgrade_in_progress
 
-    - name: Install user provided certs as Trusted CAs
-      include_role:
-        name: common/install-trusted-ca
-      with_items:
-        - { name: system_local_ca_cert, content: "{{ system_local_ca_cert }}" }
-        - { name: system_root_ca_cert, content: "{{ system_root_ca_cert }}" }
-      loop_control:
-        label: "{{ item.name }}"
-      when: not upgrade_in_progress
-  when: system_local_ca_overrides
-
-# For subclouds and upgrades we have to retrieve the current ones, and don't need to install
+# When bootstrapping subclouds or upgrading we have to retrieve the current values
+# in the Standalone controller or in the DC's SystemController.
+# We must install the RCA as a Trusted CA if bootstrapping.
 - block:
   - name: Check if 'system-local-ca' secret exists
     shell: |
@@ -64,13 +59,16 @@
         system_local_ca_cert: "{{ cert_result.stdout }}"
         system_local_ca_key: "{{ key_result.stdout }}"
         system_local_ca_data_obtained: true
+        install_rca_as_trusted: "{{ mode == 'bootstrap' }}"
 
     when: system_local_ca_exists.stdout | bool
 
-  when: distributed_cloud_role == 'subcloud' or upgrade_in_progress
+  when:
+    - distributed_cloud_role == 'subcloud' or upgrade_in_progress
+    - not system_local_ca_data_obtained
   connection: local
 
-# The default case is use Kubernetes Root CA (we also don't need to install this one)
+# The default case is use Kubernetes Root CA (we don't need to install this one)
 - block:
   - name: Read kubernetes Root CA certificate
     shell: cat "{{ kubeadm_pki_dir }}/ca.crt" | base64 -w0
@@ -87,6 +85,17 @@
       system_root_ca_cert: "{{ kubernetes_root_ca_crt.stdout }}"
       system_local_ca_cert: "{{ kubernetes_root_ca_crt.stdout }}"
       system_local_ca_key: "{{ kubernetes_root_ca_key.stdout }}"
+      system_local_ca_data_obtained: true
 
   connection: local
   when: not system_local_ca_data_obtained
+
+- name: Install system_root_ca_cert as Trusted CA
+  include_role:
+    name: common/install-trusted-ca
+  with_items:
+    - { name: system_root_ca_cert, content: "{{ system_root_ca_cert }}" }
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - install_rca_as_trusted
