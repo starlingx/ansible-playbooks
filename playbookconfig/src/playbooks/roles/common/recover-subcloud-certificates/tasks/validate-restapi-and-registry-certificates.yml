@@ -59,7 +59,7 @@
       {% endif %}
       Manual action required! On the subcloud, please update the expired certificates with
       `system certificate-install` or run
-      /usr/share/ansible/stx-ansible/playbooks/migrate_platform_certificates_to_certmanager.yml
+      /usr/share/ansible/stx-ansible/playbooks/update_platform_certificates.yml
       playbook following the section Migrate Platform Certificates to Use Cert Manager of the
       docs.
   when: restapi_cert_expiration.rc is defined and

@@ -13,18 +13,20 @@
 # To run the playbook, the user would define an overrides file that
 # provides the required variable settings, passing this on the ansible
 # command-line as a parameter.
-# (see migrate-platform-certificates-to-certmanager-inventory-EXAMPLE.yml)
+# (see update-platform-certificates-inventory-EXAMPLE.yml)
 #
 # Example command:
-# ansible-playbook migrate_platform_certificates_to_certmanager.yml \
-#     -i @migrate-platform-certificates-to-certmanager-inventory.yml \
+# ansible-playbook update_platform_certificates.yml \
+#     -i @update-platform-certificates-inventory.yml \
 #     --extra-vars "target_list=subcloud1 mode=update"
 #
 # Use target_list to target individual subclouds, or a comma-separated
 # list of subclouds such as 'subcloud1,subcloud2'. To target all online
 # subclouds at once use target_list=all_online_subclouds
 #
-# To target the system controller or standalone systems use target_list=localhost
+# To target the system controller or standalone systems use target_list=localhost.
+# It's recomended to have always at least localhost in the target_list, avoiding
+# the loss of consistency of the certificates between the hosts in DC systems.
 #
 
 - hosts: localhost
@@ -65,12 +67,12 @@
 - hosts: target_group
   gather_facts: no
   vars_files:
-  - host_vars/migrate_platform_certificates_to_certmanager/default.yml
+  - host_vars/update_platform_certificates/default.yml
 
   # for mode=check the output is too messy with free strategy
   strategy: "{{ 'linear' if mode == 'check' else 'free' }}"
   roles:
-    - migrate-platform-certificates-to-certmanager/migrate-certificates
+    - update-platform-certificates
 
 # Ensures ICA is also installed in system controller
 # even when target_list contains only subclouds
@@ -81,7 +83,7 @@
   gather_facts: no
   tasks:
     - block:
-      - name: Install certificates as system Trusted CA certificates
+      - name: Install Root CA certificate as trusted by the platform
         include_role:
           name: common/verify-and-install-system-local-ca-certs
         vars:
