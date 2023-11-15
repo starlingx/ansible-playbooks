@@ -234,21 +234,38 @@
     msg: "Incorrect software load installed. Expecting {{ upgrade_metadata.to_release }}"
   when: upgrade_metadata.to_release != software_version
 
-- name: Extract kubeadm.yaml file
-  command: >
-    tar -C {{ temp_upgrade_platform_dir }} -xf {{ restore_data_file }}
-    --use-compress-program=pigz
-    --wildcards
-    --transform 's,.*/,,'
-    etc/kubernetes/kubeadm.yaml
+# Following code is identical to the code in the file
+# playbookconfig/src/playbooks/roles/bootstrap/prepare-env/tasks/main.yml
+# which retrieves the kubernetes version from the sysinv database file.
+- name: Extract kubeadm version from the backup tarball
+  # Match kube_cmd_versions VALUES from sysinv database table.
+  shell: >
+    tar --use-compress-program=pigz --wildcards -Oxf
+    {{ restore_data_file }} */sysinv.postgreSql.data |
+    grep -E '^INSERT INTO .*kube_cmd_versions VALUES'
+  args:
+    warn: false
+  failed_when: false
+  register: kube_search_cmd
 
-- name: Get kubernetes version
-  command: grep kubernetesVersion {{ temp_upgrade_platform_dir }}/kubeadm.yaml
-  register: backup_k8s_version
-
-- name: Set upgrade_k8s_version to use the correct k8s version on upgrade
+- name: Fetch the kubeadm version from the kube_cmd_versions table insert entry.
   set_fact:
-    upgrade_k8s_version: "{{ backup_k8s_version.stdout | regex_replace('^.*: v', '') }}"
+    # Note: regex_search() returns a list containing capture groups.
+    # The first filter obtains the first grouped element and converts
+    # unicode string to string.
+    latest_k8s_version: "{{ kube_search_cmd.stdout_lines[0] \
+                        | regex_search(version_re, '\\1') \
+                        | first }}"
+  when: kube_search_cmd.rc == 0
+  vars:
+    # kubeadm_version is second last entry within VALUES tuple containing
+    # 6 CSV elements. Exclude the single quotes surrounding the version.
+    version_re: 'VALUES\s+\([^,]+,[^,]+,[^,]+,[^,]+,\s+''([^\s]+)'',[^,]+\);'
+
+- name: Set upgrade kubernetes version for platform upgrade
+  set_fact:
+    upgrade_k8s_version: "{{ latest_k8s_version }}"
+  when: latest_k8s_version is defined and latest_k8s_version|length > 0
 
 - name: Set more upgrade facts
   set_fact:
