@@ -27,13 +27,6 @@
         content: "{{ tbc_yaml | to_nice_yaml }}"
         dest: "{{ tbc_file }}"
 
-    - name: Remove TridentBackendConfig if it exists
-      command: >
-        "kubectl -n {{ trident_namespace }}
-        --kubeconfig=/etc/kubernetes/admin.conf
-        delete tbc {{ backend.metadata.name }}"
-      failed_when: false
-
     - name: Create K8s TridentBackendConfig
       command: "kubectl -n {{ trident_namespace }} --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ tbc_file }}"
 

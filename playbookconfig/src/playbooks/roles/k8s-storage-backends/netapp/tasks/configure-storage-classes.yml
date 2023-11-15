@@ -13,15 +13,24 @@
   set_fact:
     storageclass_file: "{{ trident_setup_dir }}/storage-class-{{ storage_class.metadata.name }}.yml"
 
+- name: Remove provisioner from content
+  set_fact:
+    sc_without_provisioner: "{% set copy=storage_class.copy() %}{% set removed=copy.pop('provisioner') %}{{ copy }}"
+  with_items: "{{ storage_class }}"
+  when: "item == 'provisioner'"
+
 - name: Set StorageClass headers
   set_fact:
     storageclass_headers:
       apiVersion: storage.k8s.io/v1
       kind: StorageClass
+      provisioner: "{{ netapp_k8s_storageclass[0].provisioner }}"
 
 - name: Prepare StorageClass content
   set_fact:
-    storageclass: "{{ storageclass_headers | combine(storage_class) }}"
+    storageclass: "{{ storageclass_headers | combine(storage_class_) }}"
+  vars:
+    storage_class_: "{{ sc_without_provisioner | default(storage_class) }}"
 
 - name: Create storage-class.yaml
   copy:
@@ -29,10 +38,10 @@
     dest: "{{ storageclass_file }}"
 
 - name: Remove StorageClass if it exists
-  command: >
-    "kubectl --kubeconfig=/etc/kubernetes/admin.conf
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf
     -n {{ trident_namespace }}
-    delete storageclass {{ storage_class.metadata.name }}"
+    delete storageclasses {{ storage_class.metadata.name }}
   failed_when: false
 
 - name: Create K8s StorageClass
