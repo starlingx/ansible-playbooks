@@ -1,0 +1,68 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Subtask designed to be executed in a loop for verifying an ICA
+# bundle looking at each individual certificate.
+# Assumes that used variable are set in the calling task.
+#
+
+- name: Retrieve the certificate in the end of the chain (first read from the file)
+  command: openssl x509 -in "{{ aux_ca_file.path }}"
+  register: ica_pem_cert
+
+- name: Get a stream from the auxiliar file without the certificate being read
+  shell: >-
+    { openssl x509 >/dev/null && cat; } < "{{ aux_ca_file.path }}"
+  register: cert_stream
+  become: yes
+
+- name: Overwrite auxiliar file with remaining ICAs (minus cert currently being checked)
+  copy:
+    content: "{{ cert_stream.stdout }}"
+    dest: "{{ aux_ca_file.path }}"
+    mode: 0640
+    owner: root
+    group: root
+  become: yes
+
+- name: Assign ICA stream to variable
+  set_fact:
+    cert_req_pem_stream: "{{ ica_pem_cert.stdout }}"
+
+- name: Verify ICA certificate content requirements
+  include_tasks: cert-content-requirements-verification.yml
+
+- block:
+  - name: Verify if the ICA is signed by the next CA in the bundle
+    shell: >-
+      openssl verify -verbose -no-CApath -no-CAfile -partial_chain -trusted
+      "{{ aux_ca_file.path }}" <(echo "{{ cert_req_pem_stream }}")
+    register: openssl_return
+    failed_when: false
+
+  - name: Fail the ICA certificate isn't signed by the next CA in the bundle
+    fail:
+      msg: >-
+        Failure while verifying system_local_ca ICA chain. Verify the certificates in the
+        files provided. Error "{{ openssl_return.rc }}": "{{ openssl_return.stdout }}".
+    when: openssl_return.rc !=0
+  when: ica_bundle_cert_remaining | int > 0
+
+- block:
+  - name: Verify if the last certificate is signed by the RCA
+    shell: >-
+      openssl verify -verbose -no-CApath -CAfile
+      "{{ system_local_ca_rca.path }}" <(echo "{{ cert_req_pem_stream }}")
+    register: openssl_return
+    failed_when: false
+
+  - name: Fail the certificate isn't signed by the RCA
+    fail:
+      msg: >-
+        Failure while verifying system_local_ca RCA/ICA chain. Verify the certificates
+        in the files provided. Error "{{ openssl_return.rc }}": "{{ openssl_return.stdout }}".
+    when: openssl_return.rc !=0
+  when: ica_bundle_cert_remaining | int == 0

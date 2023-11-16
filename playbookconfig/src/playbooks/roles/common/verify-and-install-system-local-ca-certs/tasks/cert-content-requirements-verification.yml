@@ -1,0 +1,57 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Task that receives an RCA/ICA certs and verifies the requirements
+# for it to be used as local issuer for the platform certificates.
+#
+
+- name: Fail if pem stream is undefined
+  fail:
+    msg: Variable cert_req_pem_stream must be defined for this task.
+  when: cert_req_pem_stream is not defined
+
+- name: Get CA information from certificate
+  shell: |
+    echo "{{ cert_req_pem_stream }}" | openssl x509 -text -noout | grep "CA:"
+  register: is_ca
+
+- name: Fail when certificate is not a CA certificate
+  fail:
+    msg: One of the certificates provided for system-local-ca is not a CA certificate.
+  when: "'CA:TRUE' not in is_ca.stdout"
+
+- name: Verify if certificate is a root certificate
+  shell: >-
+    openssl verify -verbose -no-CApath -CAfile
+    <(echo "{{ cert_req_pem_stream }}") <(echo "{{ cert_req_pem_stream }}")
+  register: openssl_return
+  failed_when: false
+
+- name: Assume RCA if verification succeeds
+  set_fact:
+    ca_duration: "{{ rca_duration if rca_duration is defined else def_rca_duration }}"
+  when: openssl_return.rc == 0
+
+- name: Assume ICA if verification fails
+  set_fact:
+    ca_duration: "{{ ica_duration if ica_duration is defined else def_ica_duration }}"
+  when: openssl_return.rc != 0
+
+- name: Check that CA certificate remaining duration is longer than {{ ca_duration }} years
+  shell: |
+      expiration_date=$(echo "{{ cert_req_pem_stream }}" | openssl x509 -noout -enddate | cut -d'=' -f2)
+      expiration_date_timestamp=$(date -d "${expiration_date}" +%s)
+      min_date_from_now_timestamp=$(date -d "+{{ ca_duration }} years" +%s)
+      time_left_ca=$(expr $expiration_date_timestamp - $min_date_from_now_timestamp)
+      echo $time_left_ca
+  register: ca_time_left
+
+- name: Fail when CA certificate remaining duration is shorter than {{ ca_duration }} years
+  fail:
+    msg: >-
+      The remaining duration for one of the certificates specified for system-local-ca
+      is less than {{ ca_duration }} years. Please use a certificate with a longer validity.
+  when: ca_time_left.stdout | int < 0

@@ -906,7 +906,7 @@
         msg: "system_local_ca_key file not found. ({{ system_local_ca_key }})"
       when: (system_local_ca_key | length > 0) and not (system_local_ca_key is file)
 
-    - name: Encode the user provided files cert/key files
+    - name: Encode the user provided cert/key files
       block:
         - name: Encode system_root_ca_cert
           shell: cat "{{ system_root_ca_cert }}" | base64 -w0
@@ -926,12 +926,19 @@
             system_local_ca_cert_file: "{{ system_local_ca_cert }}"
             system_local_ca_key_file: "{{ system_local_ca_key }}"
 
-        # TODO (mdecastr): Generalize cert verification for trusted CAs and include in here
         - set_fact:
             system_root_ca_cert: "{{ root_ca_cert_output.stdout }}"
             system_local_ca_cert: "{{ local_ca_cert_output.stdout }}"
             system_local_ca_key: "{{ local_ca_key_output.stdout }}"
             system_local_ca_overrides: true
+
+        - name: Verify 'system-local-ca' certs
+          include_role:
+            name: common/verify-and-install-system-local-ca-certs
+          vars:
+            - install_rca: false
+            - enforce_ica: true
+
       when: system_local_ca_cert | length > 0
     when: mode != 'restore'
 
