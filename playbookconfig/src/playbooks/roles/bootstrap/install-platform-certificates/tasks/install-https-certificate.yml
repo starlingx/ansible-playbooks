@@ -28,6 +28,9 @@
     environment:
       KUBECONFIG: "/etc/kubernetes/admin.conf"
     register: https_cert_b64
+    until: https_cert_b64.rc == 0 and https_cert_b64.stdout | length > 0
+    retries: 6
+    delay: 5
 
   - name: Install https certificate in ssl folder
     copy:

@@ -160,4 +160,8 @@
     include_tasks: install-https-certificate.yml
     when: create_platform_certificates
 
+  - name: Install Docker local registry certificate
+    include_tasks: install-docker-registry-certificate.yml
+    when: create_platform_certificates
+
   when: distributed_cloud_role != 'subcloud' or subcloud_local_ca_should_be_altered
