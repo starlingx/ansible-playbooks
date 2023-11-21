@@ -43,6 +43,7 @@ controllermanager_extra_args_defaults:
   node-monitor-period: "2s"
   node-monitor-grace-period: "20s"
   flex-volume-plugin-dir: "{{ kubelet_vol_plugin_dir }}"
+  allocate-node-cidrs: "false"
 
 scheduler_extra_args_defaults: { }
 
