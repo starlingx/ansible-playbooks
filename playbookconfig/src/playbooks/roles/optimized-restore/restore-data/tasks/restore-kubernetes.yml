@@ -177,6 +177,28 @@
 # During an upgrade we do full bringup of Kubernetes.
 - name: Restore Kubernetes during upgrade
   block:
+    # The condition of requirement for updating the containerd config is:
+    # Does the pause image in the config file match the pause image in platform image list for
+    # the Kubernetes version being restored. If the pause image is changed for a specific
+    # Kubernetes version between releases this step is required, e.g.
+    # stx5 has pause:3.2 for Kubernetes 1.21 and stx8 has pause:3.4 for Kubernetes 1.21.
+    # This change aligns with puppet:
+    # https://opendev.org/starlingx/stx-puppet/src/commit/c1f08898163ee1ca65987a80d55fd953817e1fbb/puppet-manifests/src/modules/platform/manifests/containerd.pp#L129
+    - name: Update pause image in containerd config
+      replace:
+        path: /etc/containerd/config.toml
+        after: "sandbox_image ="
+        before: "$"
+        regexp: '"{{ local_registry }}/.+/pause:.+"'
+        replace: '"{{ local_registry }}/{{ pause_img }}"'
+      register: update_pause_img
+
+    - name: Restart containerd service
+      systemd:
+        name: containerd
+        state: restarted
+      when: update_pause_img.changed
+
     - name: Bring up Kubernetes master
       import_role:
         name: common/bringup-kubemaster
