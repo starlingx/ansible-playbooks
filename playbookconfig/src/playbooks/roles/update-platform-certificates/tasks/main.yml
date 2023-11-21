@@ -10,8 +10,8 @@
 # Before installing new certificates, a backup of old ones is saved to
 # /home/sysadmin/certificates_backup/ in case they are needed
 #
-# The ICA used as issuer of the certificates created, is also installed
-# to the platform as a Trusted CA
+# The RCA that signs the ICA that is used to issue the certificates created
+# is also installed to the platform as a Trusted CA
 #
 # For oidc-auth-app certificate an application-apply is also performed
 # in order to restart the application with the new certificate
@@ -21,6 +21,16 @@
     - name: Check for management affecting alarms
       include_tasks: check-for-management-alarms.yml
       when: ignore_alarms is undefined or ignore_alarms | bool == False
+
+    - name: Install Root CA certificate as trusted by the platform
+      include_role:
+        name: common/verify-and-install-system-local-ca-certs
+      vars:
+        - install_rca: true
+
+    - name: Restart kube-apiserver to pick the new certificate
+      include_role:
+        name: common/restart-kube-apiserver
 
     - name: Check certificates to be installed
       include_tasks: check-certificates-to-be-installed.yml
@@ -140,16 +150,6 @@
         name: common/delete-kubernetes-resources
       loop: "{{ certs_to_renew.stdout_lines | map('from_yaml') | unique | list }}"
 
-    - name: Install certificates as system Trusted CA certificates
-      include_role:
-        name: common/verify-and-install-system-local-ca-certs
-      vars:
-        - install_rca: true
-
-    - name: Restart kube-apiserver to pick the new certificates
-      include_role:
-        name: common/restart-kube-apiserver
-
     - name: Update oidc-auth-apps in order to use new certificate
       include_tasks: reapply-oidc-auth-app.yml
       when: oidc_applied.stdout | bool
@@ -227,22 +227,22 @@
         - {
           secret: system-registry-local-certificate,
           namespace: deployment,
-          should_run: 'true'
+          should_run: "{{ install_system_registry_local_certificate }}"
         }
         - {
           secret: system-restapi-gui-certificate,
           namespace: deployment,
-          should_run: "{{https_enabled.stdout}}"
+          should_run: "{{ install_system_restapi_gui_certificate }}"
         }
         - {
           secret: oidc-auth-apps-certificate,
           namespace: kube-system,
-          should_run: "{{oidc_applied.stdout}}"
+          should_run: "{{ install_oidc_auth_apps_certificate }}"
         }
         - {
           secret: system-openldap-local-certificate,
           namespace: deployment,
-          should_run: "{{ true if openldap_certificate_exists.stdout | int == 0 else false }}"
+          should_run: "{{ install_system_open_ldap_certificate }}"
         }
 
   when: mode == 'check'
