@@ -27,6 +27,7 @@
           Current password: 'sysadmin'
           (?i)New password: "{{ ansible_ssh_pass }}"
           (?i)Retype new password: "{{ ansible_ssh_pass }}"
+        enforce_password_change: "{{ enforce_password_change | default(false) }}"
 
   roles:
     - common/prepare-env

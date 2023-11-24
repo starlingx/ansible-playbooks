@@ -92,10 +92,18 @@
         delegate_to: localhost
 
       rescue:
-        # Password change timed out. We are not going to fail it here.
+        # Password change timed out. We are not going to fail it here,
+        # unless if enforce_password_change is set to true.
         # It should be allowed for instance when initial password has been
         # changed and the user forgot to exclude password_change option
         # in the command line for the replay.
+        - name: Fail if host password is not default password post fresh install
+          fail:
+            msg: "Password change failed. Likely the host has not been re-installed."
+          when: enforce_password_change is defined and enforce_password_change
+
+        # It will only reach here if the previous condition is false,
+        # so there's no need to check the condition here
         - debug:
             msg: "Timed out or the password has already been changed"
 
