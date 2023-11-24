@@ -119,3 +119,4 @@
     check_bootstrap_address: false
     check_patches: false
     sync_patch_metadata: true
+    enforce_password_change: true
