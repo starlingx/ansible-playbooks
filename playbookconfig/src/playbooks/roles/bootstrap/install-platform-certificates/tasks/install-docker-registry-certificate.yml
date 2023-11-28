@@ -1,0 +1,70 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Retrieve Docker Registry TLS certificate and install in the
+# shared folder. From there, it will be copied to the required places
+# in the controllers during configuration.
+#
+
+- name: Install Docker Registry certificate in shared folder
+  block:
+  - name: Check if system-registry-local-certificate is ready
+    command: >-
+      kubectl get certificate system-registry-local-certificate -n deployment
+      --no-headers=true -o=custom-columns='READY:status.conditions[0].status'
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+    register: registry_cert_is_ready
+    until: registry_cert_is_ready.stdout == 'True'
+    retries: 12
+    delay: 5
+
+  - name: Retrieve cert from k8s secret
+    command: >-
+      kubectl get secret system-registry-local-certificate -n deployment
+      -o jsonpath='{.data.tls\.crt}'
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+    register: registry_cert_b64
+    until: registry_cert_b64.rc == 0 and registry_cert_b64.stdout | length > 0
+    retries: 6
+    delay: 5
+
+  - name: Retrieve key from k8s secret
+    command: >-
+      kubectl get secret system-registry-local-certificate -n deployment
+      -o jsonpath='{.data.tls\.key}'
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+    register: registry_key_pkcs8_b64
+    until: registry_key_pkcs8_b64.rc == 0 and registry_key_pkcs8_b64.stdout | length > 0
+    retries: 6
+    delay: 5
+
+  - name: Get the key also in PKCS1 format
+    shell: >-
+      echo "{{ registry_key_pkcs8_b64.stdout | b64decode }}" | openssl rsa
+    register: registry_key_pkcs1_b64
+
+  - name: Write Docker Registry certificate and keys in the shared folder
+    copy:
+      dest: /opt/platform/config/{{ software_version }}/{{ item.file }}
+      content: "{{ item.content }}"
+      owner: root
+      group: root
+      mode: 0400
+    loop:
+      - file: registry-cert.crt
+        content: "{{ registry_cert_b64.stdout | b64decode }}"
+      - file: registry-cert.key
+        content: "{{ registry_key_pkcs8_b64.stdout | b64decode }}"
+      - file: registry-cert-pkcs1.key
+        content: "{{ registry_key_pkcs1_b64.stdout }}"
+    become: yes
+
+  when:
+    - mode == 'bootstrap'
+    - install_system_registry_local_certificate
