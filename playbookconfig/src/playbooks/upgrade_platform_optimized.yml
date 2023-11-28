@@ -44,7 +44,7 @@
       become: yes
     - role: optimized-restore/complete-restore
       become: yes
-    - role: bootstrap/install-platform-certificates
+    - role: common/install-platform-certificates
       become: yes
     - role: restore-user-images/restore-local-registry-images
       become: yes

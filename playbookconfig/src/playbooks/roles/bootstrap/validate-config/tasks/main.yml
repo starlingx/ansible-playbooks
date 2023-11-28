@@ -838,7 +838,8 @@
     msg: "k8s_root_ca_key file not found. ({{ k8s_root_ca_key }})"
   when: k8s_root_ca_key and (not k8s_root_ca_key is file)
 
-- block:
+- name: Verify 'system-local-ca' overrides
+  block:
   - name: Check if the user provided file paths for RCA, ICA cert and ICA key
     set_fact:
       system_local_ca_rca_crt_provided: "{{ system_root_ca_cert | length > 0 }}"
@@ -942,12 +943,10 @@
       when: system_local_ca_cert | length > 0
     when: mode != 'restore'
 
-  - name: Verify user provided SANs for platform certificates
-    include_role:
-      name: common/validate-cert-subject-fields
-    when: system_platform_certificate is defined
-
-  when: create_platform_certificates
+- name: Verify user provided SANs for platform certificates
+  include_role:
+    name: common/validate-cert-subject-fields
+  when: system_platform_certificate is defined
 
 - name: Check for ssl_ca_cert file
   fail:

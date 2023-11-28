@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2022 Wind River Systems, Inc.
+# Copyright (c) 2019-2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -25,7 +25,7 @@
     - { role: bootstrap/persist-config, become: yes }
     - { role: bootstrap/bringup-essential-services, become: yes }
     - { role: bootstrap/bringup-bootstrap-applications, become: yes }
-    - { role: bootstrap/install-platform-certificates, become: yes }
+    - { role: common/install-platform-certificates, become: yes }
     - { role: bootstrap/configure-kernel, become: yes }
     - { role: bootstrap/complete-bootstrap, become: yes }
 

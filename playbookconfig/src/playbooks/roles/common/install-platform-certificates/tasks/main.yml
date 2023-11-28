@@ -1,0 +1,89 @@
+---
+#
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# These tasks get information from the running system and use it to
+# generate a certificate spec file which is going to be applied to
+# kubernetes at a later step
+#
+
+- name: Set create_platform_certificates if not defined
+  set_fact:
+    create_platform_certificates: "{{ create_platform_certificates | default(false) }}"
+
+- name: Get distributed_cloud_role if not defined
+  shell: |
+    source /etc/platform/openrc
+    system show | grep distributed_cloud_role | awk '{ print $4 }'
+  register: dc_role
+
+- name: Set distributed_cloud_role value
+  set_fact:
+    distributed_cloud_role: "{{ dc_role.stdout }}"
+
+# For subclouds, in normal restore the ca cert must be restored from backup,
+# so we are only recreating it in upgrades.
+- name: Define whether 'system-local-ca' secret should be created in the subcloud
+  set_fact:
+    subcloud_local_ca_should_be_altered: >-
+      "{{ mode == 'bootstrap' or mode == 'rehoming' or upgrade_in_progress }}"
+  when: distributed_cloud_role == 'subcloud'
+
+- name: Retrieve local CA data
+  include_tasks: retrieve-system-local-ca-data.yml
+  when: distributed_cloud_role != 'subcloud' or subcloud_local_ca_should_be_altered
+
+- name: Define the platform certificates that should be created by the local issuer
+  include_tasks: define-certs-to-create.yml
+
+- block:
+  - name: Generate kubernetes yaml for cert-manager resources
+    include_role:
+      name: common/generate-platform-certificates-template
+    vars:
+      destination: "{{ cert_manager_spec_file }}"
+
+  # We don't support auto renewals for this certificate
+  - name: Delete old 'system-local-ca' certificate if it exists
+    include_role:
+      name: common/delete-kubernetes-resources
+    with_items:
+      - { name: system-local-ca, namespace: cert-manager, type: certificate }
+
+  - name: Delete old 'system-local-ca' secret
+    include_role:
+      name: common/delete-kubernetes-resources
+    with_items:
+      - { name: system-local-ca, namespace: cert-manager, type: secret }
+
+  - name: Apply kubernetes yaml to create cert-manager resources
+    command: kubectl apply -f "{{ cert_manager_spec_file }}"
+    environment:
+      KUBECONFIG: /etc/kubernetes/admin.conf
+    register: create_k8_apply_ep
+    until: create_k8_apply_ep is not failed
+    retries: 10
+    delay: 30
+
+  - name: Delete kubernetes yaml with certificate spec
+    file:
+      path: "{{ cert_manager_spec_file }}"
+      state: absent
+    become: yes
+
+  - name: Install platform certificate for HTTPS
+    include_tasks: install-https-certificate.yml
+
+  - name: Install Docker local registry certificate
+    include_tasks: install-docker-registry-certificate.yml
+
+  - name: Signal that creation of RestAPI/GUI and Docker Registry at bootstrap is enabled
+    copy:
+      dest: "{{ platform_config_dir }}/{{ create_platform_certificates_flag_filename }}"
+      content: ""
+    become: yes
+    when: create_platform_certificates
+
+  when: distributed_cloud_role != 'subcloud' or subcloud_local_ca_should_be_altered

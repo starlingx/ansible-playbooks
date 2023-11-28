@@ -4,7 +4,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# This playbook invokes role bootstrap/install-platform-certificates
+# This playbook invokes role common/install-platform-certificates
 # to create the platform certificates during the upgrade from 22.12.
 # It will be automatically executed by an upgrade script during
 # the upgrade process for DX upgrades.
@@ -21,4 +21,4 @@
     create_platform_certificates: true
 
   roles:
-    - bootstrap/install-platform-certificates
+    - common/install-platform-certificates
