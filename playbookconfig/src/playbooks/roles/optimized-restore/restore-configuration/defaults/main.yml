@@ -67,10 +67,12 @@ pxelinux_config_permdir: "/opt/platform/config/{{ software_version }}/pxelinux.c
 network_scripts: /etc/network/interfaces.d
 network_routes: /etc/network/routes
 
-# When restoring networking, addresses for these hosts are added temporarily
-temporary_address_names:
-  - controller
-  - controller-0
-  - oamcontroller
-  - pxecontroller
-  - registry.local
+# These are the addresses in puppet system hieradata that are required during optimized restore/upgrade
+network_address_keys:
+  - platform::network::cluster_host::params::controller_address
+  - platform::network::cluster_host::params::controller0_address
+  - platform::network::mgmt::params::controller_address
+  - platform::network::mgmt::params::controller0_address
+  - platform::network::oam::params::controller_address
+  - platform::network::pxeboot::params::controller_address
+  - platform::network::pxeboot::params::controller0_address

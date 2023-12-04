@@ -10,23 +10,6 @@
 #   registry.  If the images were not included in the backup
 #   they will be downloaded in the same way as during a bootstrap.
 
-# Cluster host floating IP is required on subclouds for etcd restoration
-- name: Get cluster host floating IP
-  shell: |-
-    source /etc/platform/openrc
-    system addrpool-list --nowrap | grep cluster-host-subnet | cut -d'|' -f8
-  failed_when: not cluster_vip.stdout
-  register: cluster_vip
-
-- name: Check if cluster host floating IP is up
-  shell: "ping {{ cluster_vip.stdout_lines[0].strip() }} -c1 -w2 | grep ' 0% packet loss'"
-  failed_when: false
-  register: cluster_vip_up
-
-- name: Configure cluster host floating IP addresses
-  command: "ip addr add {{ cluster_vip.stdout_lines[0].strip() }} dev lo scope host"
-  when: cluster_vip_up.rc != 0
-
 # We may need to update /etc/hosts because registry.central will not be
 # available on system controllers or subclouds because dnsmasq is not brought up.
 - name: Check if registry.central is present in sysinv
@@ -127,7 +110,7 @@
         src: roles/common/bringup-kubemaster/templates/kubelet.conf.j2
         dest: /etc/default/kubelet
       vars:
-        node_ip: "{{ cluster_vip.stdout_lines[0].strip() }}"
+        node_ip: "{{ derived_network_params.controller_0_cluster_host }}"
 
     - name: Stop etcd
       service:

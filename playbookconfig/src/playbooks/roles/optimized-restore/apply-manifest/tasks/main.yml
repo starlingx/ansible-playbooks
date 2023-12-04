@@ -35,6 +35,15 @@
   set_fact:
     system_values: "{{ system_result.stdout | from_yaml }}"
 
+- name: Set derived network parameters
+  set_fact:
+    derived_network_params:
+      controller_0_address: "{{ system_values[c0_address_key] }}"
+      controller_0_cluster_host: "{{ system_values[c0_cluster_host_key] }}"
+  vars:
+    c0_address_key: "platform::network::mgmt::params::controller0_address"
+    c0_cluster_host_key: "platform::network::cluster_host::params::controller_address"
+
 - name: Create puppet hieradata runtime configuration
   copy:
     dest: "{{ hieradata_workdir }}/runtime.yaml"
@@ -46,9 +55,7 @@
 
 - name: Check for mgmt network controller0 hieradata
   stat:
-    path: "{{ hieradata_workdir }}/{{ system_values[key] }}.yaml"
-  vars:
-    key: "platform::network::mgmt::params::controller0_address"
+    path: "{{ hieradata_workdir }}/{{ derived_network_params.controller_0_address }}.yaml"
   register: controller0_hieradata
 
 - name: Add original lv_sizes to runtime configuration
