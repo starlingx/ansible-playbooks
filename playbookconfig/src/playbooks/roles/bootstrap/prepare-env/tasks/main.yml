@@ -732,7 +732,7 @@
     fail:
       msg: >-
         Bootstrap registry filesystem did not exist: {{ bootstrap_registry_filesystem_fqpn }}
-      when: not bootstrap_registry_filesystem_stat.stat.exists
+    when: not bootstrap_registry_filesystem_stat.stat.exists
   when: bootstrap_registry_filesystem_fqpn is not none
 
 - block:
