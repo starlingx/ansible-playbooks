@@ -16,7 +16,7 @@
     state: present
     regexp: '^KUBELET_EXTRA_ARGS='
     line: >-
-      "KUBELET_EXTRA_ARGS=--node-ip={{ ansible_ssh_host }} --container-runtime=remote
+      "KUBELET_EXTRA_ARGS=--node-ip={{ ansible_ssh_host }}
       --container-runtime-endpoint=unix:///run/containerd/containerd.sock"
     create: yes
   notify: Restart kubelet
