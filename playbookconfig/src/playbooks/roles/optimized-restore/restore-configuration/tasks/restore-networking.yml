@@ -35,23 +35,18 @@
 
 - name: Bring up temporary addresses
   block:
-    - name: Lookup controller host addresses
-      shell: >
-        grep -E '[^\\w]({{ '|'.join(temporary_address_names) }})($|[^\\w])' /etc/hosts
-        | awk '{print $1}'
-        | uniq
-      register: host_addresses
+    # This will create a list of currently available internal IP addresses on the system
+    - name: Read current IP addresses
+      shell: ip addr | awk '$1 ~ "inet" {print $2}' | cut -d'/' -f1
+      register: all_addr_result
 
-    - name: Check if host address is up
-      shell: "ping {{ item }} -c1 -w2 | grep ' 0% packet loss'"
-      failed_when: false
-      loop: "{{ host_addresses.stdout_lines }}"
-      register: checked_addresses
-
-    - name: Configure missing controller host address
-      command: "ip addr add {{ item.item }} dev lo scope host"
-      when: item.rc != 0
-      loop: "{{ checked_addresses.results }}"
+    # System values contains the puppet hieradata values for networking addresses.
+    # Here we get the respective address from hieradata and add it if it's missing from
+    # our list of already available internal addresses.
+    - name: Add missing controller IP addresses
+      command: "ip addr add {{ system_values[item] }} dev lo scope host"
+      when: system_values[item] not in all_addr_result.stdout_lines
+      loop: "{{ network_address_keys }}"
 
 - name: Start dnsmasq for internal FQDN
   command: dnsmasq
