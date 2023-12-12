@@ -83,6 +83,10 @@ etcd:
     caFile: /etc/etcd/ca.crt
     certFile: /etc/kubernetes/pki/apiserver-etcd-client.crt
     keyFile: /etc/kubernetes/pki/apiserver-etcd-client.key
+{% if kubernetes_long_version is version('v1.24.4', '>') %}
+dns:
+  imageRepository: {{ image_repository + '/coredns'}}
+{% endif %}
 imageRepository: {{ image_repository }}
 kubernetesVersion: {{ kubernetes_long_version }}
 networking:
