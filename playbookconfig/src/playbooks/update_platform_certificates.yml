@@ -67,7 +67,7 @@
 - hosts: target_group
   gather_facts: no
   vars_files:
-  - host_vars/update_platform_certificates/default.yml
+  - host_vars/update-platform-certificates/default.yml
 
   # for mode=check the output is too messy with free strategy
   strategy: "{{ 'linear' if mode == 'check' else 'free' }}"
