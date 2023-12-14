@@ -31,3 +31,6 @@ controlplane_endpoint: "{{ cluster_floating_address }}"
 etcd_endpoint: "https://{{ cluster_floating_address | ipwrap }}:2379"
 apiserver_advertise_address: "{{ controller_0_cluster_host }}"
 kubelet_taints: []
+legacy_restore_exclude_items:
+  - etc/ssl/certs/ssl-cert-snakeoil.pem
+  - etc/ssl/private/ssl-cert-snakeoil.key
