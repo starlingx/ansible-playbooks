@@ -15,12 +15,15 @@
   roles:
     - common/prepare-env
     - common/validate-target
+    - common/recover-subcloud-certificates
     - rehome-subcloud/validate-before-rehome
     - common/check-services-status
     - rehome-subcloud/prepare-env
     - rehome-subcloud/update-ca-cert
     - common/update-sc-admin-endpoints
-    - common/update-sc-cert
+    - role: common/update-sc-cert
+      when: subcloud_dc_admin_ep_cert_chain_recovered is undefined
     - rehome-subcloud/update-network-config
-    - { role: rehome-subcloud/update-keystone-data, become: yes }
+    - role: rehome-subcloud/update-keystone-data
+      become: yes
     - common/check-services-status
