@@ -127,15 +127,6 @@
         state: started
         enabled: false
 
-    - name: Initializing Kubernetes master
-      command: >
-        kubeadm init
-        --ignore-preflight-errors=DirAvailable--var-lib-etc
-        --ignore-preflight-errors=FileAvailable--etc-kubernetes-manifests-kube-apiserver.yaml
-        --ignore-preflight-errors=FileAvailable--etc-kubernetes-manifests-kube-controller-manager.yaml
-        --ignore-preflight-errors=FileAvailable--etc-kubernetes-manifests-kube-scheduler.yaml
-        --config=/etc/kubernetes/kubeadm.yaml
-
     - name: Set up k8s environment variable
       copy:
         src: /usr/share/puppet/modules/platform/files/kubeconfig.sh
@@ -156,10 +147,19 @@
         mode: preserve
         remote_src: yes
 
+    - name: Do a systemd daemon-reload
+      systemd:
+        daemon_reload: true
+
+    - name: Start kubelet
+      systemd:
+        name: kubelet
+        state: started
+
   when: not upgrade_in_progress
 
-# During an upgrade we do full bringup of Kubernetes.
-- name: Restore Kubernetes during upgrade
+# During an upgrade, do a full bringup of Kubernetes to pick up changes. E.g. audit config.
+- name: Restore Kubernetes during upgrades
   block:
     # The condition of requirement for updating the containerd config is:
     # Does the pause image in the config file match the pause image in platform image list for
