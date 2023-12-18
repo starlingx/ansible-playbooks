@@ -17,8 +17,8 @@
 - name: If first bootstrap, mark the creation flags for the required certificates
   set_fact:
     install_system_open_ldap_certificate: "{{ distributed_cloud_role != 'subcloud' }}"
-    install_system_registry_local_certificate: true
-    install_system_restapi_gui_certificate: true
+    install_system_registry_local_certificate: "{{ create_platform_certificates }}"
+    install_system_restapi_gui_certificate: "{{ create_platform_certificates }}"
   when: mode == 'bootstrap'
 
 - name: If upgrading, generate required certificates only if they don't exist
@@ -40,6 +40,8 @@
     set_fact:
       install_system_open_ldap_certificate: "{{ not (cert_exists.results[0].stdout | bool)
                                                 and distributed_cloud_role != 'subcloud' }}"
-      install_system_registry_local_certificate: "{{ not (cert_exists.results[1].stdout | bool) }}"
-      install_system_restapi_gui_certificate: "{{ not (cert_exists.results[2].stdout | bool) }}"
+      install_system_registry_local_certificate: "{{ not (cert_exists.results[1].stdout | bool)
+                                                     and create_platform_certificates }}"
+      install_system_restapi_gui_certificate: "{{ not (cert_exists.results[2].stdout | bool)
+                                                  and create_platform_certificates }}"
   when: upgrade_in_progress

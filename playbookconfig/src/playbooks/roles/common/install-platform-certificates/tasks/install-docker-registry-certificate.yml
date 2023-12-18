@@ -51,7 +51,7 @@
 
   - name: Write Docker Registry certificate and keys in the shared folder
     copy:
-      dest: /opt/platform/config/{{ software_version }}/{{ item.file }}
+      dest: "{{ platform_config_dir }}/{{ item.file }}"
       content: "{{ item.content }}"
       owner: root
       group: root
