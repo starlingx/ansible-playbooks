@@ -420,18 +420,21 @@
     path: "{{ luks_fs_dir }}controller/etc/kubernetes/"
     state: directory
     mode: 0755
+  become: true
 
 - name: Move kube api server encryption provider config to LUKS FS
   command: >-
     mv "{{ encryption_provider_config }}" "{{ luks_fs_dir }}controller/etc/kubernetes/"
+  become: true
 
 - name: Create symbolic link of encryption-provider.yaml
-  copy:
+  file:
     src: "{{ luks_fs_dir }}controller/etc/kubernetes/encryption-provider.yaml"
     dest: "{{ encryption_provider_config }}"
     owner: root
     group: root
     state: link
+  become: true
 
 - name: Copy default audit policy config
   copy:
