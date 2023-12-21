@@ -128,6 +128,7 @@ spec:
     - trident
     - trident-internal
     - trident-external
+
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -232,6 +233,66 @@ spec:
     - trident
     - trident-internal
     - trident-external
+
+---
+ apiVersion: apiextensions.k8s.io/v1
+ kind: CustomResourceDefinition
+ metadata:
+   name: tridentactionmirrorupdates.trident.netapp.io
+ spec:
+   group: trident.netapp.io
+   versions:
+     - name: v1
+       served: true
+       storage: true
+       schema:
+         openAPIV3Schema:
+           type: object
+           x-kubernetes-preserve-unknown-fields: true
+       additionalPrinterColumns:
+         - description: Namespace
+           jsonPath: .metadata.namespace
+           name: Namespace
+           type: string
+           priority: 0
+         - description: State
+           jsonPath: .status.state
+           name: State
+           type: string
+           priority: 0
+         - description: CompletionTime
+           jsonPath: .status.completionTime
+           name: CompletionTime
+           type: date
+           priority: 0
+         - description: Message
+           jsonPath: .status.message
+           name: Message
+           type: string
+           priority: 1
+         - description: LocalVolumeHandle
+           jsonPath: .status.localVolumeHandle
+           name: LocalVolumeHandle
+           type: string
+           priority: 1
+         - description: RemoteVolumeHandle
+           jsonPath: .status.remoteVolumeHandle
+           name: RemoteVolumeHandle
+           type: string
+           priority: 1
+   scope: Namespaced
+   names:
+     plural: tridentactionmirrorupdates
+     singular: tridentactionmirrorupdate
+     kind: TridentActionMirrorUpdate
+     shortNames:
+     - tamu
+     - tamupdate
+     - tamirrorupdate
+     categories:
+     - trident
+     - trident-external
+
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -510,3 +571,98 @@ spec:
     categories:
     - trident
     - trident-internal
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tridentvolumereferences.trident.netapp.io
+spec:
+  group: trident.netapp.io
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                pvcName:
+                  type: string
+                pvcNamespace:
+                  type: string
+              required:
+              - pvcName
+              - pvcNamespace
+      additionalPrinterColumns:
+  scope: Namespaced
+  names:
+    plural: tridentvolumereferences
+    singular: tridentvolumereference
+    kind: TridentVolumeReference
+    shortNames:
+    - tvr
+    - tvref
+    categories:
+    - trident
+    - trident-external
+    - trident-internal
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tridentactionsnapshotrestores.trident.netapp.io
+spec:
+  group: trident.netapp.io
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - description: Namespace
+        jsonPath: .metadata.namespace
+        name: Namespace
+        type: string
+        priority: 0
+      - description: PVC
+        jsonPath: .spec.pvcName
+        name: PVC
+        type: string
+        priority: 0
+      - description: Snapshot
+        jsonPath: .spec.volumeSnapshotName
+        name: Snapshot
+        type: string
+        priority: 0
+      - description: State
+        jsonPath: .status.state
+        name: State
+        type: string
+        priority: 0
+      - description: CompletionTime
+        jsonPath: .status.completionTime
+        name: CompletionTime
+        type: date
+        priority: 0
+      - description: Message
+        jsonPath: .status.message
+        name: Message
+        type: string
+        priority: 1
+  scope: Namespaced
+  names:
+    plural: tridentactionsnapshotrestores
+    singular: tridentactionsnapshotrestore
+    kind: TridentActionSnapshotRestore
+    shortNames:
+    - tasr
+    categories:
+    - trident
+    - trident-external

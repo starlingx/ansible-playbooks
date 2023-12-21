@@ -2,10 +2,10 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: trident-csi
+  name: trident-node-linux
   labels:
-    app: node.csi.trident.netapp.io
     kubectl.kubernetes.io/default-container: trident-main
+    app: node.csi.trident.netapp.io
 spec:
   selector:
     matchLabels:
@@ -15,7 +15,7 @@ spec:
       labels:
         app: node.csi.trident.netapp.io
     spec:
-      serviceAccount: trident-csi
+      serviceAccount: trident-node-linux
       hostNetwork: true
       hostIPC: true
       hostPID: true
@@ -26,20 +26,32 @@ spec:
         securityContext:
           privileged: true
           allowPrivilegeEscalation: true
+          capabilities:
+            drop:
+            - all
+            add:
+            - SYS_ADMIN
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/docker.io/netapp/trident:23.04.0
+        image: {{ local_registry }}/docker.io/netapp/trident:23.10.0
+        imagePullPolicy: IfNotPresent
         command:
         - /trident_orchestrator
         args:
         - "--no_persistence"
+        - "--k8s_pod"
         - "--rest=false"
         - "--csi_node_name=$(KUBE_NODE_NAME)"
         - "--csi_endpoint=$(CSI_ENDPOINT)"
         - "--csi_role=node"
         - "--log_format=text"
+        - "--log_level=info"
+        - "--log_workflows="
+        - "--log_layers="
+        - "--disable_audit_log=true"
         - "--http_request_timeout=1m30s"
         - "--https_rest"
         - "--https_port=17546"
+        - "--enable_force_detach=false"
         #- -debug
         startupProbe:
           httpGet:
@@ -71,6 +83,8 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: spec.nodeName
+        - name: KUBELET_DIR
+          value: /var/lib/kubelet
         - name: CSI_ENDPOINT
           value: unix://plugin/csi.sock
         - name: PATH
@@ -99,7 +113,8 @@ spec:
           readOnly: true
       - name: driver-registrar
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.7.0
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.9.0
+        imagePullPolicy: IfNotPresent
         args:
         - "--v=2"
         - "--csi-address=$(ADDRESS)"
@@ -118,14 +133,35 @@ spec:
           mountPath: /plugin
         - name: registration-dir
           mountPath: /registration
+      # STX_change: deploy only on controller nodes
+      # TODO: determine if this is needed or not
+      {% if trident_deploy_only_on_controllers is sameas true -%}
       nodeSelector:
-        # STX_change: deploy only on controller nodes
-        # TODO: determine if this is needed or not
-        {% if trident_deploy_only_on_controllers is sameas true -%}
         node-role.kubernetes.io/control-plane: ""
-        {%- endif -%}
-        kubernetes.io/os: linux
-        kubernetes.io/arch: amd64
+      {%- endif -%}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values:
+                    - arm64
+                    - amd64
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                    - linux
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - node.csi.trident.netapp.io
+              topologyKey: kubernetes.io/hostname
       tolerations:
       - effect: "NoExecute"
         operator: "Exists"
