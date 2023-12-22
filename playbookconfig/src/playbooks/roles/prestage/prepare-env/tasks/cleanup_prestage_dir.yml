@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -87,10 +87,10 @@
     file_type: directory
   register: prestage_release_subdirs
 
-- name: Clean up old release(s) (lower than {{ minimum_supported_release_version_for_prestage }}) prestage data
+- name: Clean up old release(s) (lower than {{ minimum_supported_release_version }}) prestage data
   file:
     path: "{{ item.path }}"
     state: absent
   with_items: "{{ prestage_release_subdirs.files }}"
   when: item.path.split('/')[-1] is regex("^[1-9]\d.[0-9]\d$") and
-        item.path.split('/')[-1] is version(minimum_supported_release_version_for_prestage, "<")
+        item.path.split('/')[-1] is version(minimum_supported_release_version, "<")

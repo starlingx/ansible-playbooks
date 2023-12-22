@@ -1,5 +1,0 @@
----
-# This is used for prestage cleanup operation and release checking.
-# The old release(s) (lower than this minimum supported release version)
-# prestage data will be automatically cleaned up.
-minimum_supported_release_version_for_prestage: "21.12"

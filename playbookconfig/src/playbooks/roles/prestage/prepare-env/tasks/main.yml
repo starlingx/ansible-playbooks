@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -14,12 +14,16 @@
     msg: "Please specify software version for prestaging."
   when: software_version is not defined
 
+- name: Get minimum supported release version
+  import_role:
+    name: common/minimum-upgradable-release
+
 - name: Fail if software version is not supported for prestaging
   fail:
     msg: >-
       The specified software version {{ software_version }} is not supported.
-      Minimum supported release versions for prestage: {{ minimum_supported_release_version_for_prestage }}
-  when: software_version is version(minimum_supported_release_version_for_prestage, "<")
+      Minimum supported release versions for prestage: {{ minimum_supported_release_version }}
+  when: software_version is version(minimum_supported_release_version, "<")
 
 - name: Set prestage software version and cleanup directores fact
   set_fact:
