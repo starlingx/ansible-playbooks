@@ -436,6 +436,15 @@
     state: link
   become: true
 
+- name: Create symbolic link of encryption-provider.yaml to config_permdir
+  file:
+    src: "{{ luks_fs_dir }}controller/etc/kubernetes/encryption-provider.yaml"
+    dest: "{{ config_permdir }}/kubernetes/encryption-provider.yaml"
+    owner: root
+    group: root
+    state: link
+  become: true
+
 - name: Copy default audit policy config
   copy:
     src: "{{ default_audit_policy_config }}"
@@ -451,7 +460,7 @@
     remote_src: yes
     force: yes
     mode: 0400
-  when: (item.pathType == 'File')
+  when: (item.pathType == 'File') and (item.name != 'encryption-config')
   loop: "{{ apiserver_extra_volumes + controllermanager_extra_volumes + scheduler_extra_volumes }}"
 
 # creating the associated service-parameter extra-volumes configmaps.
