@@ -26,6 +26,7 @@
     - { role: bootstrap/bringup-essential-services, become: yes }
     - { role: bootstrap/bringup-bootstrap-applications, become: yes }
     - { role: bootstrap/configure-kernel, become: yes }
+    - { role: bootstrap/bringup-mgmt-ipsec, become: yes }
     - { role: bootstrap/complete-bootstrap, become: yes }
 
   vars:

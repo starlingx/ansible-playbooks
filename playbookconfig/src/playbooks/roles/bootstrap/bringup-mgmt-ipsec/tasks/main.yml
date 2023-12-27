@@ -1,0 +1,28 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to config and enable IPSec on mgmt network.
+#
+
+- block:
+  # Ensure ipsec-server service is running. (restart it for replay)
+  - name: Start ipsec-server service
+    systemd:
+      name: ipsec-server
+      state: restarted
+    retries: 3
+    delay: 5
+
+  # Invoke ipsec-auth client to config and enable IPSec
+  - name: Config and enable IPSec on mgmt
+    command: /usr/bin/ipsec-client pxecontroller
+    retries: 3
+    delay: 5
+    register: result
+    until: result.rc == 0
+
+  when: system_mode != "simplex"
