@@ -24,18 +24,24 @@
   - name: Retrieve cert from k8s secret
     command: >-
       kubectl get secret system-restapi-gui-certificate -n deployment
-      -o jsonpath='{.data.tls\.crt}'
+      -o jsonpath='{.data.tls\.{{ item }}}'
     environment:
       KUBECONFIG: "/etc/kubernetes/admin.conf"
-    register: https_cert_b64
-    until: https_cert_b64.rc == 0 and https_cert_b64.stdout | length > 0
+    register: https_secret_b64_result
+    until:
+      - https_secret_b64_result.rc == 0
+      - https_secret_b64_result.stdout | length > 0
     retries: 6
     delay: 5
+    loop:
+      - "key"
+      - "crt"
 
   - name: Install https certificate in ssl folder
     copy:
       dest: /etc/ssl/private/server-cert.pem
-      content: "{{ https_cert_b64.stdout | b64decode }}"
+      content: "{{ (https_secret_b64_result.results[0].stdout | b64decode) +
+                   (https_secret_b64_result.results[1].stdout | b64decode) }}"
       owner: root
       group: root
       mode: 0400
