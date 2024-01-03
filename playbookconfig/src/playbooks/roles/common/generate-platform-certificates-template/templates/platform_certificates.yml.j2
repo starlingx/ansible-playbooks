@@ -32,16 +32,16 @@ items:
     name: system-restapi-gui-certificate
     namespace: deployment
   spec:
-    commonName: "{{ system_platform_certificate.subject_CN | default(oam_ip.stdout) }}"
+    commonName: "{{ system_platform_certificate.subject_CN | default(oam_ip.stdout, true) }}"
     dnsNames:
-    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain) }}"
-    duration: "{{ system_platform_certificate.duration | default(default.duration) }}"
+    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain, true) }}"
+    duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
     ipAddresses:
     - "{{ oam_ip.stdout }}"
     issuerRef:
       kind: ClusterIssuer
       name: system-local-ca
-    renewBefore: "{{ system_platform_certificate.renewBefore }}"
+    renewBefore: "{{ system_platform_certificate.renewBefore | default(default.renewBefore, true) }}"
     secretName: system-restapi-gui-certificate
 {% include 'subject_snippet.j2' %}
   status: {}
@@ -55,21 +55,21 @@ items:
     name: system-registry-local-certificate
     namespace: deployment
   spec:
-    commonName: "{{ system_platform_certificate.subject_CN | default(oam_ip.stdout) }}"
+    commonName: "{{ system_platform_certificate.subject_CN | default(oam_ip.stdout, true) }}"
     dnsNames:
-    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain) }}"
+    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain, true) }}"
     - registry.local
 {% if dc_role.stdout == 'systemcontroller' %}
     - registry.central
 {% endif %}
-    duration: "{{ system_platform_certificate.duration | default(default.duration) }}"
+    duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
     ipAddresses:
     - "{{ oam_ip.stdout }}"
     - "{{ management_floating_ip.stdout }}"
     issuerRef:
       kind: ClusterIssuer
       name: system-local-ca
-    renewBefore: "{{ system_platform_certificate.renewBefore }}"
+    renewBefore: "{{ system_platform_certificate.renewBefore | default(default.renewBefore, true) }}"
     secretName: system-registry-local-certificate
 {% include 'subject_snippet.j2' %}
   status: {}
@@ -83,10 +83,10 @@ items:
     name: oidc-auth-apps-certificate
     namespace: kube-system
   spec:
-    commonName: "{{ system_platform_certificate.subject_CN | default(oam_ip.stdout) }}"
+    commonName: "{{ system_platform_certificate.subject_CN | default(oam_ip.stdout, true) }}"
     dnsNames:
-    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain) }}"
-    duration: "{{ system_platform_certificate.duration | default(default.duration) }}"
+    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain, true) }}"
+    duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
     ipAddresses:
     - "{{ oam_ip.stdout }}"
     # Add kubernetes cluster ip to make sure certificate has issuer ip in san list
@@ -97,7 +97,7 @@ items:
     issuerRef:
       kind: ClusterIssuer
       name: system-local-ca
-    renewBefore: "{{ system_platform_certificate.renewBefore }}"
+    renewBefore: "{{ system_platform_certificate.renewBefore | default(default.renewBefore, true) }}"
     secretName: oidc-auth-apps-certificate
 {% include 'subject_snippet.j2' %}
   status: {}
@@ -111,13 +111,13 @@ items:
     name: system-openldap-local-certificate
     namespace: deployment
   spec:
-    commonName: "{{ system_platform_certificate.subject_CN | default(short_certificate_name) }}"
+    commonName: "{{ system_platform_certificate.subject_CN | default(short_certificate_name, true) }}"
     dnsNames:
-    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain) }}"
+    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain, true) }}"
     - controller
     - controller-0
     - controller-1
-    duration: "{{ system_platform_certificate.duration | default(default.duration) }}"
+    duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
     ipAddresses:
     - "{{ management_floating_ip.stdout }}"
     - "{{ management_c0_ip.stdout }}"
@@ -125,7 +125,7 @@ items:
     issuerRef:
       kind: ClusterIssuer
       name: system-local-ca
-    renewBefore: "{{ system_platform_certificate.renewBefore }}"
+    renewBefore: "{{ system_platform_certificate.renewBefore | default(default.renewBefore, true) }}"
     secretName: system-openldap-local-certificate
 {% include 'subject_snippet.j2' %}
   status: {}
