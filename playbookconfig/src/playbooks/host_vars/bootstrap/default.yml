@@ -494,9 +494,8 @@ override_files_dir: "{{ lookup('env', 'HOME') }}"
 wipe_ceph_osds: false
 
 # "enable_volume_snapshot_support" is a setting for enabling support
-# for PVC snapshots. Since the Starlingx storage backend is not enabled
-# by default, this parameter is set to false.
-enable_volume_snapshot_support: false
+# for PVC snapshots.
+enable_volume_snapshot_support: true
 
 # K8S_PLUGINS
 # ===========
