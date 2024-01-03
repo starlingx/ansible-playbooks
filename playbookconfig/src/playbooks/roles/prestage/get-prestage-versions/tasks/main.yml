@@ -1,0 +1,36 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is used to get prestage versions by searching them from
+#   the subcloud protected partition "/opt/platform-backup".
+#
+
+- name: Find ostree_repo subdirectories
+  find:
+    paths: "{{ platform_backup_dir }}"
+    patterns: "ostree_repo"
+    recurse: true
+    depth: 2
+    file_type: directory
+  register: ostree_dirs
+
+- name: Get parent directories of ostree_repo subdirectories
+  set_fact:
+    parent_dirs: "{{ ostree_dirs.files
+                  | map(attribute='path')
+                  | map('dirname')
+                  | map('basename')
+                  | select('regex', '^[1-9][0-9]*.[0-9]+$')
+                  | list }}"
+
+- name: Extract and sort version numbers
+  set_fact:
+    prestege_versions: "{{ parent_dirs | sort | join(',') }}"
+
+- name: Print prestage versions
+  debug:
+    msg: "prestage_versions: {{ prestege_versions }}"

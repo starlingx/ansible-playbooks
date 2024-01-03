@@ -36,3 +36,6 @@
     - role: prestage/prestage-patches
       when: host_patches_exist
       become: yes
+
+    - role: prestage/get-prestage-versions
+      become: yes
