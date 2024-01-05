@@ -9,3 +9,4 @@ default:
   cert_manager_version: 'cert-manager.io/v1'
   dns_domain: 'starlingx.local'
   duration: '2160h'     # 90d
+  renewBefore: '360h'  # 15d

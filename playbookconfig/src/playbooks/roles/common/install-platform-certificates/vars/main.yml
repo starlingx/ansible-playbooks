@@ -9,11 +9,6 @@ cert_manager_spec_file: /tmp/platform_certificates.yaml
 platform_config_dir: /opt/platform/config/{{ software_version }}
 create_platform_certificates_flag_filename: .create_platform_certificates
 
-system_platform_certificate:
-  dns_domain: starlingx.local
-  duration: 2160h      # 90d
-  renewBefore: 360h    # 15d
-
 system_local_ca_data_obtained: false
 install_rca_as_trusted: false
 
