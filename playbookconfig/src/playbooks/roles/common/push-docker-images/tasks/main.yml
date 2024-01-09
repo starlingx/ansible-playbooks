@@ -99,6 +99,12 @@
     download_images_list: "{{ download_images_list|default([]) + networking_images }}"
   when: mode == 'upgrade_k8s_networking'
 
+# Only download k8s storage images if k8s storage upgrade
+- name: Set download images list to k8s storage images if upgrading k8s storage
+  set_fact:
+    download_images_list: "{{ download_images_list|default([]) + storage_images }}"
+  when: mode == 'upgrade_k8s_storage'
+
 # Only download kubernetes images if kubernetes upgrade
 - name: Set download images list to kubernetes images if upgrading kubernetes
   set_fact:
