@@ -142,6 +142,7 @@
       - upgrade_in_progress is defined
       - upgrade_in_progress
       - previous_software_version == '22.12'
+      - cert_manager_controller_img_171 is defined
 
   - name: Add armada image if optimized upgrading from 21.12
     set_fact:

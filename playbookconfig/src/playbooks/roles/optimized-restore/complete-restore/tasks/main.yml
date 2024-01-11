@@ -24,8 +24,8 @@
 - set_fact:
     _upgrade_remove_items:
       - "{{ temp_upgrade_platform_dir }}"
-      - "{{ mini_restore_data_file }}"
-      - "{{ patching_restore_data_file }}"
+      - "{{ mini_restore_data_file | default('') }}"
+      - "{{ patching_restore_data_file | default('') }}"
   when: upgrade_in_progress
 
 - name: Remove temporary files and directories used during restore

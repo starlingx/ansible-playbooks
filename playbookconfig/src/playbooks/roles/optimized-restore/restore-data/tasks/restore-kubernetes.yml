@@ -125,6 +125,7 @@
       service:
         name: etcd
         state: started
+        enabled: false
 
     - name: Initializing Kubernetes master
       command: >
@@ -183,7 +184,7 @@
       when: update_pause_img.changed
 
     - name: Bring up Kubernetes master
-      import_role:
+      include_role:
         name: common/bringup-kubemaster
 
     - name: Start kubelet

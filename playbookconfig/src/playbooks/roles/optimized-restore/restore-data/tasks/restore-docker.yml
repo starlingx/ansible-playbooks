@@ -13,6 +13,10 @@
     state: stopped
   loop: "{{ docker_services }}"
 
+# TODO(jkraitbe):
+# During restore, restore_registry_filesystem takes precedence over prestage_registry_filesystem.
+# During upgrade, prestage_registry_filesystem takes precedence over restore_registry_filesystem.
+
 - name: Restore image registry data to /var/lib/docker-distribution
   command: >
     tar --use-compress-program=pigz
