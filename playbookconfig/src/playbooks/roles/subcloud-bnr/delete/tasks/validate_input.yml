@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -22,10 +22,14 @@
   register: system_controller_sw_version
   connection: local
 
+- name: Get minimum supported release version
+  import_role:
+    name: common/minimum-upgradable-release
+
 - name: Fail if the specified software version is invalid
   fail:
     msg: "Specified software_version is invalid."
-  when: software_version is version(minimum_supported_release_version_for_backup_delete, "<")
+  when: software_version is version(minimum_supported_release_version, "<")
 
 - name: Fail if storage location is not specified for backup removal on system controller
   fail:
