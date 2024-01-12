@@ -55,6 +55,7 @@ backup:
     - "{{ puppet_permdir }}/hieradata"
     - "{{ postgres_dir.path }}"
     - "{{ sysinv_permdir }}"
+    - "/var/luks/stx/luks_volume.img"
   exclude:
     - "/etc/selinux/**"
     - "/etc/selinux"
