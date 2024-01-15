@@ -1,0 +1,34 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   The tasks below restore luks volume
+
+- name: Set parameters used by luks tasks
+  set_fact:
+    archive_luks_image_path: "{{ luks_image_path | regex_replace('^\\/', '') }}"
+
+- name: stop luks-fs-mgr service
+  systemd:
+    name: "luks-fs-mgr"
+    state: stopped
+
+- name: unmount luks volume
+  command: "/usr/bin/umount /var/luks/stx/luks_fs"
+
+- name: close the luks vault
+  command: "/usr/sbin/cryptsetup close luks_encrypted_vault"
+
+- name: Restore luks_volume.img to luks image path
+  command: >-
+    tar -C {{ luks_image_path }} -xpf {{ platform_backup_fqpn }}  --transform='s,.*/,,'
+    {{ archive_luks_image_path }}/luks_volume.img
+  args:
+    warn: false
+- name: restart luks-fs-mgr service
+  systemd:
+    name: "luks-fs-mgr"
+    state: restarted

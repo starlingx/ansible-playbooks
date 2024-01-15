@@ -22,3 +22,6 @@
 
 - name: Apply final changes after restoring configuration files
   import_tasks: apply-changes.yml
+
+- name: Restore luks
+  import_role: name=backup-restore/restore-luks
