@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2023 Wind River Systems, Inc.
+# Copyright (c) 2021-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -426,20 +426,12 @@
   command: >-
     mv "{{ encryption_provider_config }}" "{{ luks_fs_dir }}controller/etc/kubernetes/"
   become: true
+  when: mode == 'bootstrap'
 
 - name: Create symbolic link of encryption-provider.yaml
   file:
     src: "{{ luks_fs_dir }}controller/etc/kubernetes/encryption-provider.yaml"
     dest: "{{ encryption_provider_config }}"
-    owner: root
-    group: root
-    state: link
-  become: true
-
-- name: Create symbolic link of encryption-provider.yaml to config_permdir
-  file:
-    src: "{{ luks_fs_dir }}controller/etc/kubernetes/encryption-provider.yaml"
-    dest: "{{ config_permdir }}/kubernetes/encryption-provider.yaml"
     owner: root
     group: root
     state: link
