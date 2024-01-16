@@ -41,6 +41,7 @@ REGISTRY_PATTERNS = ['.io', 'docker.elastic.co']
 image_outfile = None
 registries = json.loads(os.environ['REGISTRIES'])
 add_docker_prefix = False
+crictl_image_list = []
 
 
 def get_local_registry_auth():
@@ -154,6 +155,23 @@ def get_image_list_with_auth_info(images):
     return images_with_auth
 
 
+def get_crictl_image_list():
+    cmd = ['crictl', 'images', '--output=json']
+    try:
+        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        crictl_output = json.loads(output)
+    except json.JSONDecodeError as e:
+        print('Could not parse json output=%s', e)
+        return []
+    except subprocess.CalledProcessError as e:
+        print('Could not list images, error=%s', e)
+        return []
+    crictl_image_list = []
+    for img in crictl_output['images']:
+        crictl_image_list.extend(img['repoTags'])
+    return crictl_image_list
+
+
 def download_and_push_an_image(img):
     # This function is used to pull an image from public/private
     # registry and push it to the local registry.
@@ -164,20 +182,27 @@ def download_and_push_an_image(img):
     client = docker.APIClient()
     auth = get_local_registry_auth()
     try:
-        client.inspect_distribution(local_img, auth_config=auth)
-        print("Image {} found on local registry".format(target_img))
-        try:
-            auth_str = '{0}:{1}'.format(auth['username'], auth['password'])
-            subprocess.check_call(["crictl", "pull", "--creds", auth_str,
-                                   local_img])
-        except Exception as e:
-            print(err_msg + str(e))
-            return target_img, False
-
+        if local_img not in crictl_image_list:
+            print("Image %s does not exist in the containerd cache."
+                  % target_img)
+            client.inspect_distribution(local_img, auth_config=auth)
+            print("Image %s found on local registry" % target_img)
+            try:
+                auth_str = '{0}:{1}'.format(auth['username'], auth['password'])
+                subprocess.check_call(["crictl", "pull", "--creds", auth_str,
+                                       local_img])
+            except Exception as e:
+                print(err_msg + str(e))
+                return target_img, False
+            print("Image %s download succeeded by containerd." % target_img)
+        else:
+            print("Image %s already exists in the containerd cache."
+                  % target_img)
         return target_img, True
     except docker.errors.APIError as e:
         print(str(e))
-        print("Image {} not found on local registry, attempt to download...".format(target_img))
+        print("Image %s not found on local registry, attempt to download..."
+              % target_img)
         try:
             response = client.pull(target_img)
             check_response(response)
@@ -255,11 +280,12 @@ def download_an_image(img_tuple):
         err_msg = " Image download failed: %s " % target_img
 
         client.inspect_distribution(local_img, auth_config=local_auth)
-        print("Image {} found on local registry".format(target_img))
+        print("Image %s found on local registry" % target_img)
         return download_a_local_image(local_img.split(LOCAL_REGISTRY_URL)[1])
     except docker.errors.APIError as e:
         print(str(e))
-        print("Image {} not found on local registry, attempt to download...".format(target_img))
+        print("Image %s not found on local registry, attempt to download..."
+              % target_img)
         try:
             client.pull(target_img, auth_config=registry_auth)
             print("Image download succeeded: %s" % target_img)
@@ -286,11 +312,12 @@ def download_and_push_an_image_for_prestage(img_tuple):
         err_msg = " Image download failed: %s " % target_img
 
         client.inspect_distribution(local_img, auth_config=local_auth)
-        print("Image {} found on local registry".format(target_img))
+        print("Image %s found on local registry" % target_img)
         return None, True
     except docker.errors.APIError as e:
         print(str(e))
-        print("Image {} not found on local registry, attempt to download...".format(target_img))
+        print("Image %s not found on local registry, attempt to download..."
+              % target_img)
         try:
             response = client.pull(target_img, auth_config=registry_auth)
             check_response(response)
@@ -356,6 +383,7 @@ if __name__ == '__main__':
         raise Exception("Invalid Input!")
 
     image_list = sys.argv[1].split(',')
+    crictl_image_list = get_crictl_image_list()
     success_msg = ""
     image_outfile = None
     local_download = False
