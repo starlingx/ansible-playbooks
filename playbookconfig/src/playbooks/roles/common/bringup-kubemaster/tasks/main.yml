@@ -422,11 +422,16 @@
     mode: 0755
   become: true
 
-- name: Move kube api server encryption provider config to LUKS FS
+- name: Check if the kube api server encryption provider config file exists
+  stat:
+    path: "{{ encryption_provider_config }}"
+  register: file_info
+
+- name: Move kube api server encryption provider config to LUKS FS if it exists and is not a symbolic link
   command: >-
     mv "{{ encryption_provider_config }}" "{{ luks_fs_dir }}controller/etc/kubernetes/"
+  when: file_info.stat.exists and not file_info.stat.islnk
   become: true
-  when: mode == 'bootstrap'
 
 - name: Create symbolic link of encryption-provider.yaml
   file:

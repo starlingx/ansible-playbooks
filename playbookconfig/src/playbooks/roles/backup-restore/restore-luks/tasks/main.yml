@@ -22,12 +22,22 @@
 - name: close the luks vault
   command: "/usr/sbin/cryptsetup close luks_encrypted_vault"
 
+- name: Check if luks image directory is present in the backup tarball
+  shell: "tar --use-compress-program=pigz -tf {{ restore_data_file }} | grep '{{ archive_luks_image_path}}'"
+  args:
+    warn: false
+  failed_when: false
+  register: bkp_has_luks_image
+
 - name: Restore luks_volume.img to luks image path
   command: >-
     tar -C {{ luks_image_path }} -xpf {{ platform_backup_fqpn }}  --transform='s,.*/,,'
     {{ archive_luks_image_path }}/luks_volume.img
   args:
     warn: false
+  when: bkp_has_luks_image.rc is defined and
+        bkp_has_luks_image.rc == 0
+
 - name: restart luks-fs-mgr service
   systemd:
     name: "luks-fs-mgr"
