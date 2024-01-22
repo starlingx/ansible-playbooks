@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2023 Wind River Systems, Inc.
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -121,6 +121,21 @@
 
     - name: Save local registry images currently on the system to list
       command: /usr/bin/sysinv-utils local-registry-list {{ system_image_list_path }} --all-apps
+
+    - name: Create a list for cached local registry images
+      set_fact:
+        crictl_image_cache_list_path: "{{ tempdir.path }}/crictl_image_cache_list.txt"
+
+    - name: Dump local registry images in crictl image cache to file
+      shell:
+        cmd: >
+          crictl image ls
+          | tail -n +2
+          | awk '/registry.local:9001/ {print $1":"$2}'
+          | sed 's$registry.local:9001/$$'
+          | uniq
+          | sort
+          > '{{ crictl_image_cache_list_path }}'
 
     - name: Create postgres temp dir
       file:
@@ -617,6 +632,7 @@
           crushmap_file_,
           ceph_conf_ctrl_0_,
           system_image_list_path,
+          crictl_image_cache_list_path,
           ]) | reject('equalto', '') | list }}"  # rejecting vars that might be empty
       vars:
         crushmap_file_: "{{ crushmap_file | default(\"\") }}"

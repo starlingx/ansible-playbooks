@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -61,6 +61,16 @@
       failed_when: false
       register: system_image_list
 
+    - name: Attempt to read crictl cache image list from backup
+      command:
+        cmd: >
+          tar --wildcards --use-compress-program=pigz -O -xf
+          {{ platform_backup_fqpn | quote }} 'opt/*/crictl_image_cache_list.txt'
+      args:
+        warn: false
+      failed_when: false
+      register: crictl_image_cache
+
     - name: Add original images to additional download list if found
       set_fact:
         backed_up_local_registry_images: "{{ (system_image_list.stdout | from_yaml).images }}"
@@ -70,6 +80,22 @@
       debug:
         var: backed_up_local_registry_images
       when: system_image_list.rc == 0
+
+    # Get the list of k8s control plane images to satisfy the scenario.
+    # - crictl_image_cache_list is not present in backup file during restore.
+    # - crictl image cache was cleared before backup.
+    - name: Get the list of kubernetes control plane images
+      command: "/usr/local/kubernetes/{{ kubernetes_version }}/stage1/usr/bin/kubeadm
+               --kubeconfig=/etc/kubernetes/admin.conf config images list
+               --kubernetes-version {{ kubernetes_version }}"
+      register: k8s_cp_images_output
+
+    - name: Save the crictl cache images to a list
+      set_fact:
+        crictl_image_cache_list:
+          "{{ (k8s_cp_images_output.stdout_lines)
+          if (crictl_image_cache.rc != 0)
+          else ((k8s_cp_images_output.stdout_lines + crictl_image_cache.stdout_lines) | unique) }}"
 
   when: >
     restore_original_images|bool and

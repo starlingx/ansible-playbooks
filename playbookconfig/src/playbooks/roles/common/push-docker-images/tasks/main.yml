@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2023 Wind River Systems, Inc.
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -271,6 +271,7 @@
     environment:
       REGISTRIES: "{{ registries | to_json }}"
       ADD_DOCKER_PREFIX: "{{ add_docker_prefix }}"
+      CRICTL_CACHE_IMAGES: "{{ crictl_image_cache_list|default(None) }}"
 
   - debug:
       msg: "{{ download_images_output.stdout_lines }}"
