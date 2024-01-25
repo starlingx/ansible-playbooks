@@ -1,12 +1,27 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 #   This role is to validate the target host environment before proceeding
 #   to the next step.
 #
+
+# Verify if it's controller-0.
+# This check must precede the subsequent validations since credentials can't
+# be loaded for the remaining checks if it's not the active controller.
+- name: Get subcloud active controller
+  shell: |
+    source /etc/platform/openrc
+    system host-show $(cat /etc/hostname) --column hostname --format value
+  register: which_ctlr
+  failed_when: false # Gracefully handle this error in the next task
+
+- name: Fail if controller-0 is not the active controller
+  fail:
+    msg: "Rehoming can only be done when controller-0 is active."
+  when: which_ctlr.stdout != "controller-0"
 
 # Make sure that it is a subcloud
 - name: Get distributed_cloud role
@@ -29,18 +44,6 @@
   fail:
     msg: "Cannot rehome a subcloud with software version: {{ host_software_version }}."
   when: host_software_version.stdout is version(rehoming_min_software_version, '<')
-
-# Verify if it's controller-0
-- name: Get subcloud active controller
-  shell: |
-    source /etc/platform/openrc
-    system host-show $(cat /etc/hostname) --column hostname --format value
-  register: which_ctlr
-
-- name: Fail if controller-0 is not the active controller
-  fail:
-    msg: "Rehoming can only be done when controller-0 is active."
-  when: which_ctlr.stdout != "controller-0"
 
 # Verify if there is management affecting alarms.
 # It checks for column 6 below because that's the column for mgmt_affecting
