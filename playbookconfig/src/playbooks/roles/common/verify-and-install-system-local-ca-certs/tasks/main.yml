@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2023 Wind River Systems, Inc.
+# Copyright (c) 2021-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -21,7 +21,9 @@
 - name: Fail if system_local_ca_cert and system_local_ca_key doesn't match
   fail:
     msg: system_local_ca_cert and system_local_ca_key should be a TLS cert/key pair.
-  when: diff_return.stdout != ""
+  when:
+  - diff_return.stdout != ""
+  - diff_return.stderr != ""
 
 - name: Create local CA pem temporary file
   tempfile:

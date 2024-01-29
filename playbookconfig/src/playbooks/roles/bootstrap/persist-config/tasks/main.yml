@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2023 Wind River Systems, Inc.
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -477,33 +477,29 @@
 
   when: use_docker_proxy
 
+- name: Remove previous ssl_ca certs if replayed
+  block:
+  - name: Check for existing ssl_ca certificates
+    shell: |
+      source /etc/platform/openrc
+      system certificate-list | grep ssl_ca | awk '{ print $2 }'
+    register: existing_ssl_ca_certificates_uuid
+
+  - name: Delete existing ssl_ca certificates
+    shell: source /etc/platform/openrc; system certificate-uninstall -m ssl_ca {{ item }}
+    with_items:
+    - "{{ existing_ssl_ca_certificates_uuid.stdout_lines }}"
+    when: existing_ssl_ca_certificates_uuid.stdout_lines | length > 0
+
+  when: replayed
 
 # Install certificate if SSL CA certificate is configured
 - block:
-  - name: Set source for copying certificate
-    set_fact:
-      ssl_ca_source: "{{ mode == 'restore' }}"
-
-  - block:
-    - name: Check for existing ssl_ca certificates
-      shell: |
-        source /etc/platform/openrc
-        system certificate-list | grep ssl_ca | awk '{ print $2 }'
-      register: existing_ssl_ca_certificates_uuid
-
-    - name: Delete existing ssl_ca certificates
-      shell: source /etc/platform/openrc; system certificate-uninstall -m ssl_ca {{ item }}
-      with_items:
-      - "{{ existing_ssl_ca_certificates_uuid.stdout_lines }}"
-      when: existing_ssl_ca_certificates_uuid.stdout_lines | length > 0
-
-    when: replayed
-
   - name: Copy ssl_ca certificate
     copy:
       src: "{{ ssl_ca_cert }}"
       dest: "{{ temp_ssl_ca }}"
-      remote_src: "{{ ssl_ca_source }}"
+      remote_src: yes
 
   - name: Remove ssl_ca complete flag
     file:

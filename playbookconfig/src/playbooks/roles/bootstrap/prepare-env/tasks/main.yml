@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2023 Wind River Systems, Inc.
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -260,6 +260,9 @@
     k8s_root_ca_cert: "{{ k8s_root_ca_cert | default('') }}"
     k8s_root_ca_key: "{{ k8s_root_ca_key | default('') }}"
   when: distributed_cloud_role != 'subcloud'
+
+- name: Check if external certificates were embedded as strings and install them
+  include_tasks: convert_embedded_certificates.yml
 
 # Set the kubernetes_version if the user hasn't overridden it
 - name: Check if kubernetes_version is specified
@@ -531,6 +534,9 @@
         set_fact:
           prev_docker_no_proxy:
             "{{ (prev_docker_no_proxy.split(',') | sort) if prev_docker_no_proxy else [] }}"
+
+      - name: If replayed, don't change K8S and ETCD CA filepaths if content doesn't change
+        include_tasks: verify_k8s_etcd_certs_changed.yml
 
       - name: Turn on docker reconfiguration flag if docker config is changed
         set_fact:

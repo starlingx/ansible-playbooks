@@ -8,6 +8,18 @@ temp_ssl_ca_dir: "/tmp"
 temp_ssl_ca_file: "ca-cert.pem"
 temp_k8s_plugins_dir: "/tmp"
 
+external_cert_overrides_list:
+- ssl_ca_cert
+- k8s_root_ca_cert
+- k8s_root_ca_key
+- etcd_root_ca_cert
+- etcd_root_ca_key
+- system_root_ca_cert
+- system_local_ca_cert
+- system_local_ca_key
+
+cert_or_key_begin_marker: "-----BEGIN"
+
 # KUBERNETES PARAMETERS
 # =====================
 kubelet_vol_plugin_dir: /var/opt/libexec/kubernetes/kubelet-plugins/volume/exec/
