@@ -513,8 +513,11 @@
     with_items:
       - "{{ existent_configmaps.results }}"
 
-# The following labels are used by pod security admission controller
-- name: Add pod security labels to the kube-system namespace
+# The following labels are used by pod security admission controller.
+# Also was added the label app.starlingx.io/component which is used
+# to group applications that are in the kube-system namespace into
+# platform cores.
+- name: Add labels to the kube-system namespace
   command: kubectl --kubeconfig=/etc/kubernetes/admin.conf
            label --overwrite namespaces kube-system
            pod-security.kubernetes.io/audit-version=latest
@@ -523,6 +526,7 @@
            pod-security.kubernetes.io/audit=privileged
            pod-security.kubernetes.io/enforce=privileged
            pod-security.kubernetes.io/warn=privileged
+           app.starlingx.io/component=platform
 
 - name: Stop kubelet to mitigate systemd interactions
   systemd:
