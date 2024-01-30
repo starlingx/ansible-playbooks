@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -87,9 +87,21 @@
           and host_lock_output.rc != 0
         loop: "{{ lock_unlock_host_list }}"
 
+      - name: Wait until standby controller and compute nodes are locked
+        shell: source /etc/platform/openrc; system host-list --format value | grep {{ item }}
+        register: host_list_var
+        retries: 40
+        delay: 15
+        until: >-
+          'stdout' in host_list_var
+          and 'locked disabled' in host_list_var.stdout
+        loop: "{{ lock_unlock_host_list }}"
+
       # The active controller on the subcloud will target other nodes and do certificate recovery
       - block:
-        - name: Do certificate recovery on other nodes
+        - name: >-
+            Running certificate recovery on other nodes. Connect to the subcloud and run
+            'tail -f /root/ansible.log' to follow the logs.
           command: >
             ansible-playbook
             /usr/share/ansible/stx-ansible/playbooks/recover_subcloud_certificates_other_nodes.yml
@@ -129,7 +141,6 @@
          | grep storage | awk '{ print$2 }'
         register: storage_nodes_results
         until: storage_nodes_results is not failed
-
       - name: Lock / Unlock storage nodes when they are present
         block:
           - name: Check if 2 storage nodes or more are present
@@ -140,31 +151,93 @@
             when: "{{ storage_nodes_results.stdout_lines | length < 2 }}"
 
           - name: Host-lock / unlock storage nodes
-            include_tasks: storage-lock-unlock.yml
+            include_tasks: host-lock-unlock.yml
             loop: "{{ storage_nodes_results.stdout_lines }}"
 
         when: storage_nodes_results.stdout_lines | length > 0
 
+      # 200.004: controller-0 experienced a service-affecting failure. Auto-recovery in progress.
+      # Manual Lock and Unlock may be required if auto-recovery is unsuccessful.
+      - name: Verify if controller-0 blocking management affecting alarm is present
+        shell: >-
+          source /etc/platform/openrc; fm alarm-list --mgmt_affecting --nowrap |
+          grep "200.004" | grep "controller-0"
+        register: c0_service_affecting_alarm
+        failed_when: c0_service_affecting_alarm.stderr | length > 0
+
+      - set_fact:
+          need_to_host_lock_unlock_c0: >-
+            {{ true if c0_service_affecting_alarm.stdout | length > 0 else false }}
+
+      - name: Do host-lock and unlock of controller-0 to clear up management affecting alarm
+        block:
+          - name: Trigger a host-swact out of controller-0
+            shell: source /etc/platform/openrc; system host-swact controller-0
+            register: host_swact_var
+            retries: 3
+            delay: 15
+            until: host_swact_var.stderr | length == 0
+
+          - name: Wait until swact finishes
+            shell: source /etc/platform/openrc; system host-show controller-1
+            register: host_show_var
+            retries: 40
+            delay: 15
+            until: >-
+              'stdout' in host_show_var
+              and 'Controller-Active' in host_show_var.stdout
+
+          - name: Host-lock / unlock of controller-0
+            include_tasks: host-lock-unlock.yml
+            loop: "{{ ['controller-0'] }}"
+
+          - name: Trigger a host-swact out of controller-1
+            shell: source /etc/platform/openrc; system host-swact controller-1
+            register: host_swact_var
+            retries: 3
+            delay: 15
+            until: host_swact_var.stderr | length == 0
+
+          - name: Wait until swact finishes
+            shell: source /etc/platform/openrc; system host-show controller-0
+            register: host_show_var
+            retries: 40
+            delay: 15
+            until: >-
+              'stdout' in host_show_var
+              and 'Controller-Active' in host_show_var.stdout
+
+        when: need_to_host_lock_unlock_c0
     when:
       - system_mode_result.stdout == 'duplex'
       - is_active_controller
 
-  - name: Restart cert-mon and cert-alarm to clear up certificate related alarms
-    shell: echo "cert-mon cert-alarm" | xargs -n1 sm-restart service
-    become: yes
-    when: is_active_controller
+  - block:
+    - name: Restart cert-mon and cert-alarm to clear up certificate related alarms
+      shell: echo "cert-mon cert-alarm" | xargs -n1 sm-restart service
+      become: yes
 
-  - name: Wait until management affecting alarms clear up
-    shell: source /etc/platform/openrc; fm alarm-list --mgmt_affecting | grep -c True
-    register: mgmt_affecting_present
-    failed_when: |
-      mgmt_affecting_present.stdout | int != 0 or mgmt_affecting_present.stderr | length > 0
-    # Up to 10 mins to have some buffer, but usually takes ~ 3 mins.
-    retries: 30
-    delay: 20
-    until:
-      - mgmt_affecting_present.stdout | int == 0
-      - mgmt_affecting_present.stderr | length == 0
+    - name: Wait until management affecting alarms clear up
+      shell: source /etc/platform/openrc; fm alarm-list --mgmt_affecting | grep -c True
+      register: mgmt_affecting_present
+      # Fail will be better handled by next task
+      failed_when: false
+      # Up to 10 mins to have some buffer, but usually takes ~ 3 mins.
+      retries: 30
+      delay: 20
+      until:
+        - mgmt_affecting_present.stdout | int == 0
+        - mgmt_affecting_present.stderr | length == 0
+
+    - name: Fail when management affecting alarms don't clear up
+      fail:
+        msg: >-
+          The subcloud has management affecting alarms which are blocking the rehoming procedure
+          from continuing. The subcloud may still be recoverable, connect to it and run
+          'fm alarm-list --mgmt_affecting' to check the alarms. Please
+          resolve the alarm condition(s) then try again.
+      when: mgmt_affecting_present.stdout | int != 0 or mgmt_affecting_present.stderr | length > 0
+
     when: is_active_controller
 
   - name: Mark certificate recovery as complete

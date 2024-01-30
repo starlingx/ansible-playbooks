@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -42,6 +42,7 @@
       failed_when: false
       retries: 10
       delay: 6
+      until: restapi_cert_expiration.rc == 0
 
   become: yes
   when: https_enabled.stdout == "True"
@@ -58,10 +59,10 @@
       Docker Registry certificate is expired.
       {% endif %}
       Manual action required! On the subcloud, please update the expired certificates with
-      `system certificate-install` or run
-      /usr/share/ansible/stx-ansible/playbooks/update_platform_certificates.yml
-      playbook following the section Migrate Platform Certificates to Use Cert Manager of the
-      docs.
+      `system certificate-install` or, to use cert-manager, refer to the documentation in
+      https://docs.starlingx.io/security/kubernetes/migrate-platform-certificates-to-use-cert-manager-c0b1727e4e5d.html.
+      After completing this, run 'dcmanager subcloud delete' and
+      'dcmanager subcloud add' again to restart the procedure.
   when: restapi_cert_expiration.rc is defined and
         restapi_cert_expiration.rc != 0 or
         registry_cert_expiration.rc != 0
