@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2023 Wind River Systems, Inc.
+# Copyright (c) 2021-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -207,3 +207,27 @@
         for more information and solve any 250.001 alarms before retrying.
     when: alarm_subcloud.stdout != ""
   when: new_cert_installed and not ignore_alarms
+
+# Also, when RCA is installed as trusted during subcloud's bootstrap, we have issues
+# to pull images from 'registry.central' after puppet changes /etc/hosts file, since
+# dnsmasq isn't running yet. Fix by temporarily adding the entry.
+- name: Temporarily add central OAM as registry.central in /etc/hosts
+  block:
+  - name: Set central registry for subcloud
+    set_fact:
+      # For virtual subcloud set 'registry.central' to system controller's MGMT IP
+      registry_central_address:
+        "{{ system_controller_floating_address
+            if (virtual_system is defined and virtual_system | bool)
+            else system_controller_oam_floating_address }}"
+
+  - name: Update /etc/hosts for subcloud
+    lineinfile:
+      path: /etc/hosts
+      line: "{{ registry_central_address }}\tregistry.central"
+      insertbefore: EOF
+
+  when:
+    - new_cert_installed
+    - mode is defined and mode == 'bootstrap'
+    - distributed_cloud_role is defined and distributed_cloud_role == 'subcloud'

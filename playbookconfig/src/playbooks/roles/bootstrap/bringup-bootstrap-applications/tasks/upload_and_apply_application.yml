@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020 Wind River Systems, Inc.
+# Copyright (c) 2020-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -9,6 +9,30 @@
 #   Apply overrides if specified
 #   Apply application
 #
+
+# retrieve application data by name from the overrides if searched_app_name is provided
+- name: Retrieve application data by name
+  block:
+    - name: Default application data to null
+      set_fact:
+        application: null
+
+    - name: Seek for data matching application tarball name
+      set_fact:
+        application: "{{ application_data }}"
+      with_items: "{{ applications }}"
+      loop_control:
+        loop_var: application_data
+      when: (application_data.keys() | list | first) is
+        search(searched_app_name + "-[^-]*-[^-]*\\.tgz")
+
+    - name: Fail if application data isn't found in the overrides
+      fail:
+        msg: "Application data for {{ searched_app_name }} not found in the overrides."
+      when: application == None
+  when:
+    - searched_app_name is defined
+    - searched_app_name | length > 0
 
 # application is specified by full path or the tar file
 # extract the name of the tar file
@@ -61,3 +85,7 @@
     retries: 30
     delay: 20
   when: '"applied" not in check_exist.stdout'
+
+- name: Include applied application in control list
+  set_fact:
+    applied_applications: "{{ (applied_applications | default([])) + [ application ] }}"
