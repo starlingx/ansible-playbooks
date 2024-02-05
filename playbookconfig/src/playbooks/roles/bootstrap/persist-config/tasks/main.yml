@@ -177,24 +177,27 @@
   include: shutdown_services.yml
   when: restart_services
 
-- name: Find old registry secrets in Barbican
-  shell: "{{ item }}"
-  failed_when: false
-  with_items:
-    - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n k8s-registry-secret -f value"
-    - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n gcr-registry-secret -f value"
-    - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n quay-registry-secret -f value"
-    - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n docker-registry-secret -f value"
-    - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n elastic-registry-secret -f value"
-    - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n ghcr-registry-secret -f value"
-    - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n registryk8s-registry-secret -f value"
-    - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n icr-registry-secret -f value"
-  register: old_barbican_secrets
+- block:
+  - name: Find old registry secrets in Barbican
+    shell: "{{ item }}"
+    failed_when: false
+    with_items:
+      - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n k8s-registry-secret -f value"
+      - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n gcr-registry-secret -f value"
+      - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n quay-registry-secret -f value"
+      - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n docker-registry-secret -f value"
+      - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n elastic-registry-secret -f value"
+      - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n ghcr-registry-secret -f value"
+      - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n registryk8s-registry-secret -f value"
+      - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n icr-registry-secret -f value"
+    register: old_barbican_secrets
 
-- name: Delete old registry secrets in Barbican
-  shell: "source /etc/platform/openrc; openstack secret delete {{ item }}"
-  with_items:
-    - "{{ old_barbican_secrets.results | map(attribute='stdout_lines') | flatten }}"
+  - name: Delete old registry secrets in Barbican
+    shell: "source /etc/platform/openrc; openstack secret delete {{ item }}"
+    with_items:
+      - "{{ old_barbican_secrets.results | map(attribute='stdout_lines') | flatten }}"
+
+  when: replayed
 
 # need to do this here to get the barbican secret id for sysinv
 - block:
