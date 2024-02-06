@@ -50,6 +50,9 @@
     command: >-
       tar -C /etc/ssl/private -xpf {{ restore_data_file }} --wildcards
       --transform='s,.*/,,' 'etc/ssl/private/*cert*'
+      {% for v in legacy_restore_exclude_items %}
+      --exclude {{ v | quote }}
+      {% endfor %}
     args:
       warn: false
 
