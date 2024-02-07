@@ -85,12 +85,14 @@
       src: "{{ k8s_pki_files['ca.crt'] }}"
       dest: "{{ kubeadm_pki_dir }}/ca.crt"
       mode: '0644'
+      remote_src: yes
 
   - name: Copy kubernetes CA key file
     copy:
       src: "{{ k8s_pki_files['ca.key'] }}"
       dest: "{{ kubeadm_pki_dir }}/ca.key"
       mode: '0600'
+      remote_src: yes
   when: k8s_pki_files is defined
 
 - block:

@@ -70,6 +70,7 @@
   copy:
     src: "{{ item.value }}"
     dest: "/etc/etcd/{{item.key}}"
+    remote_src: yes
   with_dict: "{{ etcd_ca_files }}"
   when: etcd_ca_files is defined
 
