@@ -1,11 +1,11 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # SUB-TASK DESCRIPTION:
-#   These tasks lock, unlock and wait for reboot of a storage node
+#   These tasks lock, unlock and wait for reboot of a node
 #
 - name: Lock {{ item }}
   shell: source /etc/platform/openrc; system host-lock {{ item }}
