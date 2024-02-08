@@ -289,20 +289,6 @@
 
   when: icr_registry.username is defined
 
-- name: Append config ini file with Barbican secret uuid
-  lineinfile:
-    path: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
-    line: "{{ item }}"
-  with_items:
-    - "K8S_REGISTRY_SECRET={{ k8s_registry_secret | default('none') }}"
-    - "GCR_REGISTRY_SECRET={{ gcr_registry_secret | default('none') }}"
-    - "QUAY_REGISTRY_SECRET={{ quay_registry_secret | default('none') }}"
-    - "DOCKER_REGISTRY_SECRET={{ docker_registry_secret | default('none') }}"
-    - "ELASTIC_REGISTRY_SECRET={{ elastic_registry_secret | default('none') }}"
-    - "GHCR_REGISTRY_SECRET={{ ghcr_registry_secret | default('none') }}"
-    - "REGISTRYK8S_REGISTRY_SECRET={{ registryk8s_registry_secret | default('none') }}"
-    - "ICR_REGISTRY_SECRET={{ icr_registry_secret | default('none') }}"
-
 - name: Add section [KUBE_APISERVER]
   set_fact:
     sysinv_k8s_vars: "[KUBE_APISERVER]\n"
@@ -366,11 +352,6 @@
     sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
   loop: "{{ kubelet_configurations|dict2items }}"
 
-- name: Append k8s sections to config ini
-  lineinfile:
-    path: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
-    line: "{{ sysinv_k8s_vars }}"
-
 - block:
   - name: Add section [USER_DNS_HOST_RECORDS]
     set_fact:
@@ -382,13 +363,15 @@
       }}={{ user_dns_host_records[item] }}\n"
     loop: "{{ user_dns_host_records.keys() }}"
 
-  - name: Append user dns host records to config ini
-    lineinfile:
-      path: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
-      line: "{{ sysinv_user_dns_host_records }}"
   when: user_dns_host_records
 
-- include: update_sysinv_database.yml
+- block:
+  - name: Generate config ini file for python sysinv db population script
+    template:
+      src: bootstrap_config.j2
+      dest: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
+
+  - include: update_sysinv_database.yml
   when: save_config_to_db
 
 # Update docker and containerd config files and restart docker and containerd

@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -106,58 +106,6 @@
     state: absent
 
 - name: Save the current system and network config for reference in subsequent replays
-  lineinfile:
-    # This file should be cleared upon host reboot
-    path: "{{ last_bootstrap_config_file }}"
-    line: "{{ item }}"
-    create: yes
-  with_items:
-    - "prev_system_mode: {{ system_mode }}"
-    - "prev_timezone: {{ timezone }}"
-    - "prev_distributed_cloud_role: {{ distributed_cloud_role }}"
-    - "prev_management_dynamic_address_allocation: {{ management_dynamic_address_allocation }}"
-    - "prev_cluster_host_dynamic_address_allocation: {{ cluster_host_dynamic_address_allocation }}"
-    - "prev_pxeboot_subnet: {{ pxeboot_subnet }}"
-    - "prev_management_subnet: {{ management_subnet }}"
-    - "prev_cluster_host_subnet: {{ cluster_host_subnet }}"
-    - "prev_cluster_pod_subnet: {{ cluster_pod_subnet }}"
-    - "prev_cluster_service_subnet: {{ cluster_service_subnet }}"
-    - "prev_external_oam_subnet: {{ external_oam_subnet }}"
-    - "prev_external_oam_gateway_address: {{ external_oam_gateway_address }}"
-    - "prev_external_oam_floating_address: {{ external_oam_floating_address }}"
-    - "prev_management_multicast_subnet: {{ management_multicast_subnet }}"
-    - "prev_admin_network: {{ admin_network | default([]) }}"
-    - "prev_admin_subnet: {{ admin_subnet | default('undef') }}"
-    - "prev_dns_servers: {{ dns_servers | join(',') }}"
-    - "prev_docker_http_proxy: {{ docker_http_proxy }}"
-    - "prev_docker_https_proxy: {{ docker_https_proxy }}"
-    - "prev_docker_no_proxy: {{ docker_no_proxy | sort | join(',') }}"
-    # Store the addresses as values determined in prepare-env stage not as merged values in
-    # validate-config stage as the latter requires subnet validation.
-    - "prev_pxeboot_start_address: {{  pxeboot_start_address }}"
-    - "prev_pxeboot_end_address: {{  pxeboot_end_address }}"
-    - "prev_management_start_address: {{  management_start_address }}"
-    - "prev_management_end_address: {{  management_end_address }}"
-    - "prev_cluster_host_start_address: {{ cluster_host_start_address }}"
-    - "prev_cluster_host_end_address: {{ cluster_host_end_address }}"
-    - "prev_cluster_pod_start_address: {{ cluster_pod_start_address }}"
-    - "prev_cluster_pod_end_address: {{ cluster_pod_end_address }}"
-    - "prev_cluster_service_start_address: {{ cluster_service_start_address }}"
-    - "prev_cluster_service_end_address:  {{ cluster_service_end_address }}"
-    - "prev_external_oam_start_address: {{ external_oam_start_address }}"
-    - "prev_external_oam_end_address: {{ external_oam_end_address }}"
-    - "prev_admin_start_address: {{  admin_start_address | default('undef') }}"
-    - "prev_admin_end_address: {{  admin_end_address | default('undef') }}"
-    - "prev_management_multicast_start_address: {{ management_multicast_start_address }}"
-    - "prev_management_multicast_end_address: {{ management_multicast_end_address }}"
-    - "prev_external_oam_node_0_address: {{ external_oam_node_0_address }}"
-    - "prev_external_oam_node_1_address: {{ external_oam_node_1_address }}"
-    - "prev_apiserver_cert_sans: {{ apiserver_cert_sans | to_yaml }}"
-    - "prev_k8s_root_ca_cert: {{ k8s_root_ca_cert }}"
-    - "prev_k8s_root_ca_key: {{ k8s_root_ca_key }}"
-    - "prev_apiserver_oidc: {{ apiserver_oidc | to_yaml }}"
-    - "prev_etcd_root_ca_cert: {{ etcd_root_ca_cert }}"
-    - "prev_etcd_root_ca_key: {{ etcd_root_ca_key }}"
-    # Nested dictionaries are picky about having things on the same line
-    - "prev_docker_registries: "
-    - "{{ docker_registries | to_yaml }}"
+  template:
+    src: last_bootstrap_config.j2
+    dest: "{{ last_bootstrap_config_file }}"
