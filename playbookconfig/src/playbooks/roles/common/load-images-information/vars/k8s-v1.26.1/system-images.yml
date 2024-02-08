@@ -26,7 +26,6 @@ cert_manager_ctl_img: quay.io/jetstack/cert-manager-ctl:v1.13.1
 # cluster/addons/volumesnapshots/volume-snapshot-controller/volume-snapshot-controller-deployment.yaml
 # in the kubernetes github repo
 snapshot_controller_img: registry.k8s.io/sig-storage/snapshot-controller:v6.1.0
-rvmc_img: docker.io/starlingx/rvmc:stx.8.0-v1.0.2
 pause_img: k8s.gcr.io/pause:3.4.1
 flux_helm_controller_img: docker.io/fluxcd/helm-controller:v0.35.0
 flux_source_controller_img: docker.io/fluxcd/source-controller:v1.0.1
