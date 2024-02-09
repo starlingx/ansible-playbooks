@@ -8,6 +8,153 @@
 #   These tasks perform certificate expiry verification for Rest API
 #   and Docker Registry certificates.
 #
+- name: Get cert-manager certificates
+  shell: kubectl get certificate -n deployment -o jsonpath='{.items[*].metadata.name}'
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  register: cert_manager_certificates
+
+- name: Check if CA Issuer for cert-manager certificates is valid
+  shell: |
+    ISSUER_NAME=\
+    $(kubectl -n deployment get certificate {{ item }} -o jsonpath='{.spec.issuerRef.name}')
+    ISSUER_KIND=\
+    $(kubectl -n deployment get certificate {{ item }} -o jsonpath='{.spec.issuerRef.kind}')
+    ISSUER_CA_SECRET=\
+    $(kubectl -n deployment get $ISSUER_KIND $ISSUER_NAME -o jsonpath='{.spec.ca.secretName}')
+    ISSUER_TYPE=$(kubectl -n deployment get $ISSUER_KIND $ISSUER_NAME -o jsonpath='{.spec}')
+    ISSUER_TYPE=$(echo "$ISSUER_TYPE" | cut -d":" -f1 | sed "s/{//; s/\"//g")
+
+    # Other issuer types do not need further checks
+    if [ "$ISSUER_TYPE" != "ca" ]; then
+        exit 0
+    fi
+
+    ISSUER_CA_SECRET_NAMESPACE='deployment'
+
+    if [ "$ISSUER_KIND" == "ClusterIssuer" ]; then
+        ISSUER_CA_SECRET_NAMESPACE='cert-manager'
+    fi
+
+    kubectl -n $ISSUER_CA_SECRET_NAMESPACE get secret $ISSUER_CA_SECRET \
+    -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -checkend 0 > /dev/null
+
+    RC=$?
+
+    if [ $RC -ne 0  ]; then
+        echo "$ISSUER_CA_SECRET_NAMESPACE/${ISSUER_CA_SECRET}"
+    fi
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  register: cert_manager_issuers
+  loop:
+    - system-registry-local-certificate
+    - system-restapi-gui-certificate
+  when: item in cert_manager_certificates.stdout
+
+- set_fact:
+    expired_issuers: "{{ expired_issuers | default([]) + [item.stdout] }}"
+  loop: "{{ cert_manager_issuers.results }}"
+  when:
+    - "'stdout' in item"
+    - item.stdout | length > 0
+
+- name: Update system-local-ca Issuer's secret on subcloud when its expired
+  block:
+    - name: Create tmp file name for system-local-ca
+      tempfile:
+        state: file
+        prefix: tmp_system_local_ca_secret_
+        suffix: .j2
+        path: /tmp/
+      register: tmp_system_local_ca_secret
+
+    - name: Retrieve system-local-ca crt from from k8s secret
+      command: >-
+        kubectl get secret system-local-ca
+        -n cert-manager -o jsonpath='{{ item }}'
+      environment:
+        KUBECONFIG: "/etc/kubernetes/admin.conf"
+      register: system_local_ca_k8s_var
+      connection: local
+      retries: 3
+      delay: 5
+      until: system_local_ca_k8s_var is not failed
+      loop:
+        - '{.data.ca\.crt}'
+        - '{.data.tls\.crt}'
+        - '{.data.tls\.key}'
+
+    - set_fact:
+        system_local_ca_ca_crt: "{{ system_local_ca_k8s_var.results[0].stdout }}"
+        system_local_ca_tls_crt: "{{ system_local_ca_k8s_var.results[1].stdout }}"
+        system_local_ca_tls_key: "{{ system_local_ca_k8s_var.results[2].stdout }}"
+
+    - name: Save certificate template to file {{ tmp_system_local_ca_secret.path }}
+      vars:
+        template_content: |
+          apiVersion: v1
+          data:
+            ca.crt: "{{ system_local_ca_ca_crt | default(system_local_ca_tls_crt, true) }}"
+            tls.crt: "{{ system_local_ca_tls_crt }}"
+            tls.key: "{{ system_local_ca_tls_key }}"
+          kind: Secret
+          metadata:
+            name: system-local-ca
+            namespace: cert-manager
+          type: kubernetes.io/tls
+      copy:
+        dest: "{{ tmp_system_local_ca_secret.path }}"
+        content: "{{ template_content }}"
+        mode: 0640
+
+    - name: Update system-local-ca on subcloud
+      command: kubectl apply -f {{ tmp_system_local_ca_secret.path }}
+      environment:
+        KUBECONFIG: "/etc/kubernetes/admin.conf"
+      register: system_local_ca_update_result
+      retries: 3
+      delay: 5
+      until: system_local_ca_update_result is not failed
+
+  when:
+    - expired_issuers is defined
+    - "'cert-manager/system-local-ca' in expired_issuers"
+
+  always:
+    - name: Delete temporary files on subcloud
+      file:
+        path: "{{ item }}"
+        state: absent
+      become: yes
+      loop:
+        - "{{ tmp_system_local_ca_secret.path if tmp_system_local_ca_secret.path is defined }}"
+
+- name: Fail when CA Issuer for cert-manager certificates is expired
+  fail:
+    msg: >-
+      Cert-manager certificate(s) with their issuer expired.
+      Please verify secret(s) {{ expired_issuers | unique | join(', ') }} on the subcloud,
+      manually update and try again."
+  when:
+    - expired_issuers is defined
+    - expired_issuers | length > 0
+    - "'cert-manager/system-local-ca' not in expired_issuers"
+
+- name: Trigger a renewal of platform certificates on subcloud
+  command: >-
+    kubectl -n deployment delete secret
+    system-registry-local-certificate system-restapi-gui-certificate --ignore-not-found=true
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  register: platfm_certs_renew_rc
+  retries: 3
+  delay: 5
+  until: platfm_certs_renew_rc is not failed
+  when: >-
+    'system-registry-local-certificate' in cert_manager_certificates.stdout or
+    'system-restapi-gui-certificate' in cert_manager_certificates.stdout
+
 - name: Check if docker registry certificate file exists
   stat:
     path: /etc/ssl/private/registry-cert.crt
@@ -59,9 +206,7 @@
       Docker Registry certificate is expired.
       {% endif %}
       Manual action required! On the subcloud, please update the expired certificates with
-      `system certificate-install` or, to use cert-manager, refer to the documentation in
-      https://docs.starlingx.io/security/kubernetes/migrate-platform-certificates-to-use-cert-manager-c0b1727e4e5d.html.
-      After completing this, run 'dcmanager subcloud delete' and
+      `system certificate-install` and then run 'dcmanager subcloud delete' and
       'dcmanager subcloud add' again to restart the procedure.
   when: restapi_cert_expiration.rc is defined and
         restapi_cert_expiration.rc != 0 or
