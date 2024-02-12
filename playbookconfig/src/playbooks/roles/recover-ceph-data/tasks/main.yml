@@ -59,7 +59,7 @@
 
       - name: Restore ceph_controller-0.conf from controller-0
         command: >-
-          tar -C {{ ceph_conf | dirname }} -xpf {{ restore_data_file }}
+          tar -C {{ ceph_conf | dirname }} -xpf {{ restore_data_file }} --wildcards
           --transform='s,.*/,,' '*/{{ ceph_conf_controller_0 | basename }}'
         args:
           warn: false
