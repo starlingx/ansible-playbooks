@@ -45,6 +45,18 @@
     msg: "Cannot rehome a subcloud with software version: {{ host_software_version }}."
   when: host_software_version.stdout is version(rehoming_min_software_version, '<')
 
+- name: Get the destination system controller's software version
+  shell: source /etc/build.info; echo $SW_VERSION
+  register: destination_software_version
+  delegate_to: localhost
+
+- name: Fail if the subcloud runs higher software version than the receiving System Controller
+  fail:
+    msg: >-
+      Cannot rehome to a System Controller running a lower
+      software version than {{ host_software_version.stdout }}.
+  when: host_software_version.stdout is version(destination_software_version.stdout, '>')
+
 # Verify if there is management affecting alarms.
 # It checks for column 6 below because that's the column for mgmt_affecting
 - name: Check for management affecting alarms
