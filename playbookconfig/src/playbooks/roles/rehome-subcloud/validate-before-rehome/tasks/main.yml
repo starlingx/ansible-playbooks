@@ -71,3 +71,31 @@
       The subcloud currently has one or more management affecting alarms. Please
       resolve the alarm condition(s) then try again.
   when: management_alarm_count.stdout | int > 0
+
+# Verify if there is a strategy in an aborted state as aborted strategies don't
+# raise management affecting alarms. States that raises mgmt affecting alarms:
+# applying, apply-failed, apply-timeout, aborting
+- name: Find existing strategies
+  shell: |
+    source /etc/platform/openrc
+    sw-manager {{ item }} show | awk '/state:/ {print $2}' | grep .
+  loop: "{{ vim_strategies }}"
+  register: result
+  failed_when: false
+  when: "(result | default({'rc': 1})).rc == 1"
+
+- name: Store the existing strategy
+  set_fact:
+    existing_strategy: >-
+      {{ result.results |
+      json_query('[?rc==`0`].{type: item, status: stdout}') |
+      first | default(None)}}
+
+- name: Fail if existing strategy is in an aborted state
+  fail:
+    msg: >-
+      The subcloud currently has an aborted {{ existing_strategy.type}}.
+      Please resolve the strategy condition then try again.
+  when: >
+    existing_strategy and existing_strategy.status in
+    ["abort-failed", "abort-timeout", "aborted"]

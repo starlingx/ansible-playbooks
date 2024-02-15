@@ -1,0 +1,22 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   Validates and perform cleanup tasks post rehome
+#
+
+- name: Verify that all services are enabled-active
+  import_role:
+    name: common/check-services-status
+
+# Delete any existing strategy if it's in a safe state
+- name: Delete existing {{ existing_strategy.type | default("strategy") }}
+  shell: |
+    source /etc/platform/openrc
+    sw-manager {{ existing_strategy.type }} delete
+  when: >
+    existing_strategy.status is defined and existing_strategy.status in
+    ["applied", "ready-to-apply", "build-failed", "build-timeout"]
