@@ -1,27 +1,34 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019,2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # SUB-TASKS DESCRIPTION:
-#   Validate the format of docker registry/no-proxy address
+#   Validate the format of each item in the specified list of domain names and/or ip addresses.
 #
 
-- name: Check if the supplied address is a valid domain name or ip address
+- name: Check if the specified addresses in the list are valid
   vars:
     script_content: |
       # Make use of sysinv Address Validator
       from sysinv.common.utils import is_valid_domain_or_ip
-      if not is_valid_domain_or_ip( "{{ input_address }}" ):
-        raise Exception("Invalid address format!")
+      invalid_addresses = []
+      for address in {{ address_list }}:
+        if not is_valid_domain_or_ip( address ):
+          invalid_addresses.append(address)
+      if invalid_addresses:
+        msg = f"Invalid addresses: {invalid_addresses}"
+        print(msg)
+        raise Exception(msg)
+
   shell: "{{ script_content }}"
   args:
     executable: /usr/bin/python
   failed_when: false
   register: domain_name_ip_check
 
-- name: Fail if the supplied address is not a valid domain name or ip address
+- name: Fail if any specified address is not a valid domain name or ip address
   fail:
-    msg: "{{ input_address }} is an invalid address."
+    msg: "{{ domain_name_ip_check.stdout_lines }}"
   when: domain_name_ip_check.rc != 0

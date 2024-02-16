@@ -544,8 +544,7 @@
 
     - block:
       - name: Validate no proxy addresses
-        include: validate_address.yml input_address={{ item }}
-        with_items: "{{ docker_no_proxy }}"
+        include: validate_address.yml address_list={{ docker_no_proxy }}
         when: docker_no_proxy|length > 0
 
     - name: Add user defined no-proxy address list to default
@@ -656,16 +655,18 @@
       when: (item.value.secure is defined and
             not (item.value.secure|type_debug == 'bool'))
 
-    - include: validate_address.yml input_address={{ item }}
-      with_items:
-        - "{{ k8s_registry.url }}"
-        - "{{ gcr_registry.url }}"
-        - "{{ quay_registry.url }}"
-        - "{{ docker_registry.url }}"
-        - "{{ elastic_registry.url }}"
-        - "{{ ghcr_registry.url }}"
-        - "{{ registryk8s_registry.url }}"
-        - "{{ icr_registry.url }}"
+    - include: validate_address.yml address_list={{ addr_list }}
+      vars:
+        addr_list:
+          - "{{ k8s_registry.url }}"
+          - "{{ gcr_registry.url }}"
+          - "{{ quay_registry.url }}"
+          - "{{ docker_registry.url }}"
+          - "{{ elastic_registry.url }}"
+          - "{{ ghcr_registry.url }}"
+          - "{{ registryk8s_registry.url }}"
+          - "{{ icr_registry.url }}"
+
     when: not use_default_registries
 
 - name: Validate additional_local_registry_images list
@@ -784,8 +785,7 @@
   when: apiserver_cert_sans | type_debug != 'list'
 
 - name: Validate apiserver_cert_sans entries
-  include: validate_address.yml input_address={{ item }}
-  with_items: "{{ apiserver_cert_sans }}"
+  include: validate_address.yml address_list={{ apiserver_cert_sans | list }}
 
 - name: Verify that either both etcd root ca cert and key are defined or not at all
   fail:
