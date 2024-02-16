@@ -794,53 +794,60 @@
 - name: Validate apiserver_cert_sans entries
   include: validate_address.yml address_list={{ apiserver_cert_sans | list }}
 
-- name: Verify that either both etcd root ca cert and key are defined or not at all
-  fail:
-    msg: "etcd_root_ca_cert and etcd_root_ca_key must be provided as a pair"
-  when: (etcd_root_ca_cert and not etcd_root_ca_key) or
-        (not etcd_root_ca_cert and etcd_root_ca_key)
+- name: Check if external certificates and CA files exists
+  block:
+  - name: Verify that either both etcd root ca cert and key are defined or not at all
+    fail:
+      msg: "etcd_root_ca_cert and etcd_root_ca_key must be provided as a pair"
+    when: (etcd_root_ca_cert and not etcd_root_ca_key) or
+          (not etcd_root_ca_cert and etcd_root_ca_key)
 
-- name: Check if external CA files exist
-  stat:
-    path: "{{ lookup('vars', cert_override, default='') }}"
-  register: external_ca_files
-  with_items: "{{ external_cert_overrides_list }}"
-  loop_control:
-    loop_var: cert_override
+  - name: Check if external CA files exist
+    stat:
+      path: "{{ lookup('vars', cert_override, default='') }}"
+    register: external_ca_files
+    with_items: "{{ external_cert_overrides_list }}"
+    loop_control:
+      loop_var: cert_override
 
-- name: Register if external CA files exist
-  set_fact:
-    ca_file_exist: "{{ ca_file_exist | default ({}) |
-      combine({ cert_override[1] : external_ca_files.results[cert_override[0]].stat.exists }) }}"
-  with_indexed_items: "{{ external_cert_overrides_list }}"
-  loop_control:
-    loop_var: cert_override
+  - name: Register if external CA files exist
+    set_fact:
+      ca_file_exist: >-
+        {{ ca_file_exist | default ({}) |
+        combine({
+          cert_override[1] :
+          external_ca_files.results[cert_override[0]].stat.exists
+        }) }}
+    with_indexed_items: "{{ external_cert_overrides_list }}"
+    loop_control:
+      loop_var: cert_override
 
-- name: Check for etcd_root_ca_cert file
-  fail:
-    msg: "etcd_root_ca_cert file not found. ({{ etcd_root_ca_cert }})"
-  when: etcd_root_ca_cert and not ca_file_exist['etcd_root_ca_cert']
+  - name: Check for etcd_root_ca_cert file
+    fail:
+      msg: "etcd_root_ca_cert file not found. ({{ etcd_root_ca_cert }})"
+    when: etcd_root_ca_cert and not ca_file_exist['etcd_root_ca_cert']
 
-- name: Check for etcd_root_ca_key file
-  fail:
-    msg: "etcd_root_ca_key file not found. ({{ etcd_root_ca_key }})"
-  when: etcd_root_ca_key and not ca_file_exist['etcd_root_ca_key']
+  - name: Check for etcd_root_ca_key file
+    fail:
+      msg: "etcd_root_ca_key file not found. ({{ etcd_root_ca_key }})"
+    when: etcd_root_ca_key and not ca_file_exist['etcd_root_ca_key']
 
-- name: Verify that either both Kubernetes root ca cert and key are defined or not at all
-  fail:
-    msg: "k8s_root_ca_cert and k8s_root_ca_key must be provided as a pair"
-  when: (k8s_root_ca_cert and not k8s_root_ca_key) or
-        (not k8s_root_ca_cert and k8s_root_ca_key)
+  - name: Verify that either both Kubernetes root ca cert and key are defined or not at all
+    fail:
+      msg: "k8s_root_ca_cert and k8s_root_ca_key must be provided as a pair"
+    when: (k8s_root_ca_cert and not k8s_root_ca_key) or
+          (not k8s_root_ca_cert and k8s_root_ca_key)
 
-- name: Check for k8s_root_ca_cert file
-  fail:
-    msg: "k8s_root_ca_cert file not found. ({{ k8s_root_ca_cert }})"
-  when: k8s_root_ca_cert and not ca_file_exist['k8s_root_ca_cert']
+  - name: Check for k8s_root_ca_cert file
+    fail:
+      msg: "k8s_root_ca_cert file not found. ({{ k8s_root_ca_cert }})"
+    when: k8s_root_ca_cert and not ca_file_exist['k8s_root_ca_cert']
 
-- name: Check for k8s_root_ca_key file
-  fail:
-    msg: "k8s_root_ca_key file not found. ({{ k8s_root_ca_key }})"
-  when: k8s_root_ca_key and not ca_file_exist['k8s_root_ca_key']
+  - name: Check for k8s_root_ca_key file
+    fail:
+      msg: "k8s_root_ca_key file not found. ({{ k8s_root_ca_key }})"
+    when: k8s_root_ca_key and not ca_file_exist['k8s_root_ca_key']
+  when: mode != 'restore'
 
 - name: Verify 'system-local-ca' overrides
   block:
