@@ -83,7 +83,7 @@
         shell: source /etc/platform/openrc; system host-lock {{ item }} --force
         register: host_lock_output
         failed_when: >-
-          host_lock_output.stderr != "Avoiding lock action on already 'locked' host {{ item }}"
+          host_lock_output.stderr != "Avoiding lock action on already 'locked' host item"
           and host_lock_output.rc != 0
         loop: "{{ lock_unlock_host_list }}"
 
@@ -114,7 +114,9 @@
         always:
           - name: Print the output of platform certificate recovery playbook
             debug:
-              msg: "{{ other_nodes_recovery_output.stdout }}"
+              msg: >-
+                {{ other_nodes_recovery_output.stdout if 'stdout' in other_nodes_recovery_output
+                else 'Failed to run certificate recovery on other nodes.' }}
 
       - name: Unlock standby controller and compute nodes
         shell: source /etc/platform/openrc; system host-unlock {{ item }}
