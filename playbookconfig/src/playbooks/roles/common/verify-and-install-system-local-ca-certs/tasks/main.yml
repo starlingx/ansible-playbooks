@@ -81,7 +81,7 @@
         source /etc/platform/openrc;
         fm alarm-list --query alarm_id=250.001
       register: alarm_subcloud
-      retries: 10
+      retries: 15
       delay: 20
       until: alarm_subcloud.stdout == ""
       failed_when: false

@@ -44,8 +44,8 @@
   command: stat -c %Y "/etc/ssl/private/{{ sc_adminep_cert }}"
   register: adminep_cert_modify_time
   until: adminep_cert_modify_time.stdout|int > (start_time.stdout|int + 1)
-  retries: 12
-  delay: 30
+  retries: 63
+  delay: 10
 
 - name: Check haproxy service restarted
   shell: >-
