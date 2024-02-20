@@ -20,9 +20,16 @@
 - pause:
     seconds: 30
 
-- name: Upload and apply applications
-  include: upload_and_apply_application.yml application={{ item }}
-  with_items: "{{ applications }}"
+# Apply sequence for essential applications is being hardcoded as opposed to
+# maintained in a list to prevent the user from overriding it.
+# Order has to be ensured, nginx needs to be applied before cert-manager.
+- name: Apply essential applications
+  include_tasks: upload_and_apply_application.yml
+  with_items:
+    - nginx-ingress-controller
+    - cert-manager
+  vars:
+    searched_app_name: "{{ item }}"
   when: mode != 'restore'
 
 # While FluxCD indicates pods are ready, some bugs were raised indicating
@@ -99,6 +106,19 @@
     when: distributed_cloud_role == 'subcloud'
 
   when: mode == 'bootstrap'
+
+- include_role:
+    name: common/install-platform-certificates
+
+- name: Upload and apply user defined applications
+  include_tasks: upload_and_apply_application.yml
+  with_items: "{{ applications }}"
+  vars:
+    application: "{{ item }}"
+    searched_app_name: ''
+  when:
+    - mode != 'restore'
+    - item not in applied_applications
 
 - name: Remove config file from previous play
   file:
