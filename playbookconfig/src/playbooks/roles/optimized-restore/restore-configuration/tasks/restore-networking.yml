@@ -52,3 +52,5 @@
   command: dnsmasq
   args:
     warn: false
+  become: yes
+  when: previous_software_version is version('22.12', '>')
