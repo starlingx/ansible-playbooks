@@ -416,21 +416,16 @@
     path: /etc/platform/openrc
   register: openrc_file
 
-# pxeboot can leave an interface script in controller-0 with
-# a dhcp config that can remain if the pxeboot interface isn't
-# part of StarlingX managed interfaces. This will start a "rogue"
-# dhclient after unlock (controllers use static addressing from DB).
-- name: Remove auto flag from scripts in /etc/network/interfaces.d/ with dhcp
-  shell: |
-    target_dir="/etc/network/interfaces.d/"
-    for filename in "${target_dir}"*; do
-        if [[ -f "${filename}" ]]; then
-            if grep -q "inet dhcp" "${filename}" || grep -q "inet6 dhcp" "${filename}"; then
-                sed -i '/^auto/d' ${filename}
-            fi
-        fi
-    done
-  become: true
+# Eliminate any interface config file that was left to avoid potential
+# problems. For example, pxeboot can leave an interface script in controller-0
+# with a dhcp config that can remain if the pxeboot interface isn't part of
+# StarlingX managed interfaces. This will start a "rogue" dhclient after unlock
+# (controllers use static addressing from DB).
+- name: Clean up interface config files in /etc/network/interfaces.d/
+  shell: rm -rf /etc/network/interfaces.d/*
+  args:
+    warn: false
+  become: yes
 
 - block:
   - name: Turn on replayed flag
