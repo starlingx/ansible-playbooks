@@ -306,6 +306,13 @@
       (distributed_cloud_role == 'systemcontroller' and
       (management_start_address == 'derived' or management_end_address == 'derived'))
 
+  - name: Fail if multicast subnet is not in valid range
+    fail:
+      msg: "Invalid multicast subnet: {{ item.name }} -> {{ item.address }}"
+    when: item.address | ipaddr('multicast') == None
+    with_items:
+      - { name: 'management_multicast_subnet', address: "{{ network_params.management_multicast_subnet }}" }
+
   # The provided subnets have passed validation, set the default addresses
   # based on the subnet values
   - name: Set default start and end addresses based on provided subnets
