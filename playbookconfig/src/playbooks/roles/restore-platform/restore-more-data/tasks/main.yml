@@ -188,6 +188,12 @@
         regexp: "^MACs"
         line: "{{ debian_sshd_macs.stdout_lines[0] }}"
 
+    - name: Replace sftp-server executable from CentOS path with Debian's
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^Subsystem\s+sftp\s+/usr/libexec/openssh/sftp-server'
+        line: "Subsystem       sftp    /usr/lib/openssh/sftp-server"
+
     - name: Gather SSH private keys
       command: find /etc/ssh -name '*_key'
       register: pvt_keys
