@@ -164,11 +164,20 @@
       args:
         warn: false
 
-    - name: Replace MACs from CentOS with Debian
-      lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: "^MACs"
-        line: "{{ debian_sshd_macs.stdout_lines[0] }}"
+    - name: Update values from CentOS with Debian's
+      block:
+        - name: Replace MACs from CentOS with Debian
+          lineinfile:
+            path: /etc/ssh/sshd_config
+            regexp: "^MACs"
+            line: "{{ debian_sshd_macs.stdout_lines[0] }}"
+
+        - name: Replace sftp-server executable from CentOS path with Debian's
+          lineinfile:
+            path: /etc/ssh/sshd_config
+            regexp: '^Subsystem\s+sftp\s+/usr/libexec/openssh/sftp-server'
+            line: "Subsystem       sftp    /usr/lib/openssh/sftp-server"
+
       when: previous_software_version == '21.12'
 
   when: upgrade_in_progress
