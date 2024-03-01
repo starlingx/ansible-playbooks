@@ -111,14 +111,10 @@
     name: common/install-platform-certificates
 
 - name: Upload and apply user defined applications
-  include_tasks: upload_and_apply_application.yml
-  with_items: "{{ applications }}"
-  vars:
-    application: "{{ item }}"
-    searched_app_name: ''
+  include_tasks: upload_and_apply_user_applications.yml
   when:
     - mode != 'restore'
-    - item not in applied_applications
+    - applications | length > 0
 
 - name: Remove config file from previous play
   file:

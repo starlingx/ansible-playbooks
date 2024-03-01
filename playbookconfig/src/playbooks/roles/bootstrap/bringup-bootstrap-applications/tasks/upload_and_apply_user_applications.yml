@@ -1,0 +1,96 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Prepare the list of applications to be applied
+#   Upload the applications in parallel
+#   Apply application overrides sequentially
+#   Apply the applications in parallel
+#
+# application is specified by full path or the tar file
+# extract the name of the tar file
+# e.g. kubernetes-power-manager-24.03-5.tgz
+- name: Set application tar name
+  set_fact:
+    tar_name_list: "{{ (tar_name_list | default([])) + [(item.keys()|list|first).split('/')[-1]] }}"
+  with_items: "{{ applications }}"
+
+- name: Set application installation directory
+  set_fact:
+    app_dir_list: "{{ (app_dir_list | default([])) + [(item.keys()|list|first)] }}"
+  with_items: "{{ applications }}"
+
+- name: Collect list of applied applications
+  shell: "source /etc/platform/openrc; system application-list | grep 'fluxcd-manifests' | awk '{print $2}'"
+  register: existing_apps
+
+- name: Check if application is already applied
+  set_fact:
+    _apps: "{{ (_apps | default([])) + [item.keys()|list|first] }}"
+  when: "[(item.keys() |list|first).split('/')[-1].split('-')[0:-2] | join('-')][0]
+             not in (existing_apps.stdout_lines)"
+  with_items: "{{ applications }}"
+
+- block:
+  - name: Upload user defined applications in parallel
+    shell: "source /etc/platform/openrc;
+            system application-upload {{ item }}"
+    with_items: "{{ _apps }}"
+    async: 600
+    poll: 0
+
+  - name: Build application search list
+    set_fact:
+      app_search_list: "{{ [(item).split('/')[-1].split('-')[0:-2] | join('-')] | join('|') }}"
+    with_items: "{{ _apps }}"
+
+  - name: Wait for all applications to reach uploaded state
+    shell: "source /etc/platform/openrc; system application-list | grep -E {{ app_search_list }} |
+            awk '{print $10}' | sort | uniq"
+    register: app_states
+    retries: 5
+    delay: 20
+    until:
+      - "app_states.stdout_lines | length == 1"
+      - app_states.stdout_lines[0] == "uploaded"
+
+  - name: Apply overrides for applications
+    shell: "source /etc/platform/openrc; system helm-override-update {{
+            [(item.keys() |list|first).split('/')[-1].split('-')[0:-2] |
+            join('-')][0] }}
+            {{ (item[item.keys()|list|first]['overrides'])[0]['chart'] }}
+            {{ (item[item.keys()|list|first]['overrides'])[0]['namespace'] }}
+            --values {{ (item[item.keys()|list|first]['overrides'])[0]['values-path'] }}"
+    with_items: "{{ applications }}"
+    when:
+      - item[item.keys()|list|first]
+      - '"overrides" in item[item.keys()|list|first]'
+
+  - name: Apply user defined applications in parallel
+    shell: "source /etc/platform/openrc; system application-apply {{
+            [(item).split('/')[-1].split('-')[0:-2] | join('-')][0] }}"
+    with_items: "{{ _apps }}"
+    async: 600
+    poll: 0
+
+  - name: Wait for all applications to reach applied state
+    shell: "source /etc/platform/openrc; system application-list | grep -E {{ app_search_list }} |
+            awk '{print $10}' | sort | uniq"
+    register: app_states
+    retries: 30
+    delay: 10
+    until:
+      - app_states.stdout_lines | length == 1
+      - app_states.stdout_lines[0] == "applied"
+
+  - name: Include applied application in control list
+    set_fact:
+      applied_applications: "{{ (applied_applications | default([])) + [ item ] }}"
+    with_items: "{{ _apps }}"
+
+  when:
+    - _apps is defined
+    - _apps | length > 0
