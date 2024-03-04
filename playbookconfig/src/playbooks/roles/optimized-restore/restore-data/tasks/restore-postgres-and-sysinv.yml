@@ -36,6 +36,16 @@
 
 - name: Upgrade path
   block:
+    # N3000 reset requires running a container,
+    # containerd hasn't been setup yet so it's unavailable.
+    # Creating this flag will have the reset be skipped during migration if it's triggered.
+    # This flag is deleted on reboot so reset will still be done after unlock.
+    - name: Disable N3000 reset during migration
+      file:
+        name: /var/run/.sysinv_n3000_reset
+        state: touch
+      become: true
+
     - name: Migrate databases and platform data
       command: "upgrade_controller_simplex {{ restore_data_file }}"
       register: migration_output
