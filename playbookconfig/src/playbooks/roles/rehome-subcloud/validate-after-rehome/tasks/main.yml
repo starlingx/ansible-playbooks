@@ -20,3 +20,9 @@
   when: >
     existing_strategy.status is defined and existing_strategy.status in
     ["applied", "ready-to-apply", "build-failed", "build-timeout"]
+  register: result
+  until: result.rc == 0
+  # Retry is needed because the 'enabled-active' state doesn't guarantee
+  # the service is immediately ready to receive requests after restart
+  retries: 10
+  delay: 3
