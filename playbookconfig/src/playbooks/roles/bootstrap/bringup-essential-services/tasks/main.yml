@@ -199,9 +199,39 @@
 
     when: mode == 'restore'
 
-  - name: Wait for {{ pods_wait_time }} seconds to ensure kube-system pods are all started
-    wait_for:
-      timeout: "{{ pods_wait_time }}"
+  - name: Convert Kubernetes components list to a grep pattern string
+    set_fact:
+      # The component list items are in the format "key=value" (neccessary for the --selector flag input).
+      # However, we're searching the pod labels, which has the labels listed in the format "key:value"
+      kube_component_grep_pattern: "{{ kube_component_list | join('\\|') | replace('=',':') }}"
+
+  # In order to avoid a race between pod creation and the subsequent Kubernetes tasks,
+  # we must block until the kube-system pod resources are created.
+  # Otherwise, the subsequent task "kubectl wait" may fail with 'resource not found' error
+  # if task runs before the pods are created. This is a known limitation of kubectl wait,
+  # and a common workaround is to use "kubectl get" to ensure that the resource exists
+  # before attemtping a wait [1]. This task can be reworked in the future once "kubectl wait"
+  # supports the --wait-for-creation flag [2].
+  #
+  # [1] https://github.com/kubernetes/kubectl/issues/1516
+  # [2] https://github.com/kubernetes/kubernetes/pull/122994
+  - name: Ensure kube-system pods are all started
+    # Retrieve the number of pods for 'kube-system' that are tagged with the
+    # kube_component_list labels. Each kube_component_list label is exclusive to
+    # a single pod on given node (i.e., one-to-one mapping between label and node-pod),
+    # so the number of pods must equal to the length of kube_component_list when all pods are created.
+    shell: |
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods \
+        --namespace=kube-system \
+        --field-selector spec.nodeName=controller-0 \
+        -o custom-columns=LABELS:.metadata.labels |
+      grep "{{ kube_component_grep_pattern }}" |
+      wc -l
+    register: result
+    until: result.stdout|int >= kube_component_list|length
+    retries: 10
+    delay: 12
+    failed_when: false
 
   - name: Start parallel tasks to wait for Kubernetes component and Networking pods to reach ready state
     # Only check for pods on the current host to avoid waiting for pods on downed nodes
