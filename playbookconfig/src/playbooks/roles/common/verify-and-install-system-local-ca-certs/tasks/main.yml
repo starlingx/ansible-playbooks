@@ -175,8 +175,8 @@
         path: /etc/platform/.config_applied
       register: current_config_applied_stat
       until: current_config_applied_stat.stat.checksum != prev_config_applied_stat.stat.checksum
-      retries: 10
-      delay: 20
+      retries: 60
+      delay: 10
       failed_when: false
 
     - name: Set fail control variable
