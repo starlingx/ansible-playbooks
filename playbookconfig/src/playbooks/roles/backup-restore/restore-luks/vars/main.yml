@@ -1,2 +1,2 @@
 ---
-luks_image_path: /var/luks/stx
+luks_fs_path: /var/luks/stx/luks_fs
