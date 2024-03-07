@@ -537,6 +537,16 @@
            pod-security.kubernetes.io/warn=privileged
            app.starlingx.io/component=platform
 
+- name: Update system:node clusterrole to get and list namespaces
+  command: kubectl --kubeconfig=/etc/kubernetes/admin.conf patch
+           clusterrole system:node --type='json'
+           --patch='[{"op":"add","path":"/rules/0","value":{"apiGroups":[""],"resources":["namespaces"],"verbs":["get","list"]}}]'
+
+- name: Add system:node:controller-0 as a subject to system:node clusterrolebinding
+  command: kubectl --kubeconfig=/etc/kubernetes/admin.conf patch
+           clusterrolebinding system:node --type='json'
+           --patch='[{"op":"add","path":"/subjects","value":[{"apiGroup":"rbac.authorization.k8s.io","kind":"User","name":"system:node:controller-0"}]}]'
+
 - name: Stop kubelet to mitigate systemd interactions
   systemd:
     name: kubelet
