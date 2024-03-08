@@ -1,0 +1,24 @@
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Bootstrap mtce:
+#     - Collect required values for mtc_ini.j2
+#     - Generate mtce.ini
+
+- name: Read the required mtce var file contents
+  command: chdir=/tmp/puppet/hieradata grep -E -rh "mtce::"|"keyring"
+  register: mtce_vars
+  no_log: true
+
+- name: Convert mtce var file content to a dictionary
+  set_fact:
+    mtce_var_dict: "{{ mtce_vars.stdout | from_yaml }}"
+
+- name: Creates the /etc/mtc.ini file
+  ansible.builtin.template:
+    src: mtc_ini.j2 # We can convert the current puppet template mtc_ini.erb to jinja2
+    dest: /etc/mtc.ini
+    mode: '0600'
