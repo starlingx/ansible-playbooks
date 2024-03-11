@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2019-2023 Wind River Systems, Inc.
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -42,6 +42,7 @@ image_outfile = None
 registries = json.loads(os.environ['REGISTRIES'])
 add_docker_prefix = False
 crictl_image_list = []
+backed_up_crictl_cache_images = os.environ.get('CRICTL_CACHE_IMAGES', None)
 
 
 def get_local_registry_auth():
@@ -188,6 +189,14 @@ def download_and_push_an_image(img):
             client.inspect_distribution(local_img, auth_config=auth)
             print("Image %s found on local registry" % target_img)
             try:
+                if backed_up_crictl_cache_images:
+                    # This excludes the images to download during restore operation
+                    # that are not present in list of cached images pulled
+                    # during backup operation.
+                    if img not in backed_up_crictl_cache_images:
+                        print("Image %s not found on backed_up_crictl_cache_images."
+                              % target_img)
+                        return target_img, True
                 auth_str = '{0}:{1}'.format(auth['username'], auth['password'])
                 subprocess.check_call(["crictl", "pull", "--creds", auth_str,
                                        local_img])
