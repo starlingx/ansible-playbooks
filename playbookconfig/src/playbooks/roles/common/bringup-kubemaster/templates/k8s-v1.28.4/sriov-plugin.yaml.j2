@@ -1,10 +1,10 @@
-# SRIOV device CNI plugin version 3.5.1
+# SRIOV device CNI plugin version 3.6.2
 # Based on:
-# https://raw.githubusercontent.com/k8snetworkplumbingwg/sriov-network-device-plugin/v3.5.1/
-#                deployments/k8s-v1.16/sriovdp-daemonset.yaml
+# https://raw.githubusercontent.com/k8snetworkplumbingwg/sriov-network-device-plugin/v3.6.2/
+#                deployments/sriovdp-daemonset.yaml
 #
 # This file is licensed under Apache 2.0.  You can obtain a copy of the license at:
-# https://github.com/k8snetworkplumbingwg/sriov-network-device-plugin/blob/v3.5.1/LICENSE
+# https://github.com/k8snetworkplumbingwg/sriov-network-device-plugin/blob/v3.6.2/LICENSE
 #
 # The following modifications have been made:
 #
@@ -21,7 +21,7 @@
 #   allow a rolling update to succeed.
 # - Set CPU requests to 0
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -59,7 +59,7 @@ spec:
     spec:
       hostNetwork: true
       nodeSelector:
-        beta.kubernetes.io/arch: amd64
+        kubernetes.io/arch: amd64
         sriovdp: enabled
       tolerations:
       - operator: Exists
@@ -87,6 +87,9 @@ spec:
         - name: devicesock
           mountPath: /var/lib/kubelet/device-plugins/
           readOnly: false
+        - name: plugins-registry
+          mountPath: /var/lib/kubelet/plugins_registry/
+          readOnly: false
         - name: log
           mountPath: /var/log
         - name: config
@@ -98,6 +101,9 @@ spec:
         - name: devicesock
           hostPath:
             path: /var/lib/kubelet/device-plugins/
+        - name: plugins-registry
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry/
         - name: log
           hostPath:
             path: /var/log
@@ -109,3 +115,4 @@ spec:
           hostPath:
             path: /etc/pcidp/config.json
             type: File
+
