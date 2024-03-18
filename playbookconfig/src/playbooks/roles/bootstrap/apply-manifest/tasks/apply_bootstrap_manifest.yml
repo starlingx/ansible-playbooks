@@ -320,6 +320,9 @@
          for details.
   when: bootstrap_manifest.rc != 0
 
+- name: Configure Barbican bootstrap
+  import_tasks: barbican_bootstrap.yml
+
 - name: Import mtce bootstrap
   import_tasks: mtce_bootstrap.yml
 

@@ -1,0 +1,98 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Bootstrap Barbican:
+#     - Generate barbican.conf
+#     - Configure Barbican DB/User
+#     - Set initial gunicorn-config.py worker value
+#     - Generate barbican-api-logrotate configuration
+#     - Sync secret stores database
+#     - Enable barbican-api service
+
+- name: Read the required barbican var file contents
+  command: "egrep 'barbican::' {{ hieradata_workdir }}/secure_static.yaml"
+  register: barbican_vars
+  no_log: true
+
+- name: Convert barbican var file content to a dictionary
+  set_fact:
+    barbican_var_dict: "{{ barbican_vars.stdout | from_yaml }}"
+
+# set up the connection string for barbican, remove psycopg2 if it exists
+- name: Replace database connection string
+  set_fact:
+    sql_connection: "{{ barbican_var_dict['barbican::db::database_connection'] |
+                        regex_replace('^postgresql\\+psycopg2:', 'postgresql:') }}"
+
+# add psycopg2 driver to postgresql (only does this if it is missing)
+- name: Replace database connection string for psycopg2
+  set_fact:
+    real_connection: "{{ barbican_var_dict['barbican::db::database_connection'] |
+                         regex_replace('^postgresql:', 'postgresql+psycopg2:') }}"
+
+- name: Generate barbican.conf
+  template:
+    src: barbican.conf.j2
+    dest: /etc/barbican/barbican.conf
+    owner: barbican
+    group: barbican
+    mode: 0600
+
+- name: Ensure PostgreSQL barbican database and user is created
+  become_user: postgres
+  postgresql_db:
+    name: "barbican"
+    state: present
+
+- name: Set PostgreSQL user password
+  become_user: postgres
+  postgresql_user:
+    db: "barbican"
+    name: "admin-barbican"
+    password: "{{ barbican_var_dict['barbican::db::postgresql::password'] }}"
+    priv: "ALL"
+
+- name: Create barbican database
+  postgresql_db:
+    name: barbican
+    owner: admin-barbican
+    template: template0
+  become_user: postgres
+
+- name: Ensure /var/run/barbican directory exists
+  file:
+    path: /var/run/barbican
+    state: directory
+    owner: barbican
+    group: barbican
+    mode: '0755'
+
+- name: Modify workers in gunicorn-config.py
+  lineinfile:
+    path: /etc/barbican/gunicorn-config.py
+    regexp: '.*workers = .*'
+    line: "workers = 1"
+
+- name: Configure logrotate for barbican
+  template:
+    src: barbican-api-logrotate.j2
+    dest: /etc/logrotate.d/barbican-common
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Exec keystone-manage credential_setup
+  command: /usr/bin/barbican-manage db upgrade
+
+- name: Exec barbican-db-manage sync secret stores
+  command: /usr/bin/barbican-manage db sync_secret_stores
+
+- name: Ensure barbican-api service is enabled and started
+  systemd:
+    name: barbican-api
+    state: started
+    enabled: yes
