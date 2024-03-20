@@ -121,7 +121,7 @@
       - name: Unlock standby controller and compute nodes
         shell: source /etc/platform/openrc; system host-unlock {{ item }}
         register: host_unlock_output
-        retries: 8
+        retries: 20
         delay: 15
         until: host_unlock_output is not failed
         loop: "{{ lock_unlock_host_list }}"
