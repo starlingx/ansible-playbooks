@@ -12,6 +12,7 @@
 - name: Retrieve the certificate in the end of the chain (first read from the file)
   command: openssl x509 -in "{{ aux_ca_file.path }}"
   register: ica_pem_cert
+  no_log: true
 
 - name: Get a stream from the auxiliar file without the certificate being read
   shell: >-
@@ -31,6 +32,7 @@
 - name: Assign ICA stream to variable
   set_fact:
     cert_req_pem_stream: "{{ ica_pem_cert.stdout }}"
+  no_log: true
 
 - name: Verify ICA certificate content requirements
   include_tasks: cert-content-requirements-verification.yml
@@ -42,6 +44,7 @@
       "{{ aux_ca_file.path }}" <(echo "{{ cert_req_pem_stream }}")
     register: openssl_return
     failed_when: false
+    no_log: true
 
   - name: Fail the ICA certificate isn't signed by the next CA in the bundle
     fail:
@@ -58,6 +61,7 @@
       "{{ system_local_ca_rca.path }}" <(echo "{{ cert_req_pem_stream }}")
     register: openssl_return
     failed_when: false
+    no_log: true
 
   - name: Fail the certificate isn't signed by the RCA
     fail:

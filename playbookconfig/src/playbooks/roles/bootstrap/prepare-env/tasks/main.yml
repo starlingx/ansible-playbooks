@@ -248,18 +248,21 @@
     system_local_ca_cert: "{{ system_local_ca_cert | default('', true) }}"
     system_local_ca_key: "{{ system_local_ca_key | default('', true) }}"
     system_root_ca_cert: "{{ system_root_ca_cert | default('', true) }}"
+  no_log: true
 
 - name: Define k8s root CA certificate parameters for subcloud role
   set_fact:
     k8s_root_ca_cert: "{{ k8s_root_ca_cert | default(default_subcloud_k8s_root_ca_cert) }}"
     k8s_root_ca_key: "{{ k8s_root_ca_key | default(default_subcloud_k8s_root_ca_key) }}"
   when: distributed_cloud_role == 'subcloud'
+  no_log: true
 
 - name: Define k8s root CA certificate parameters for non subcloud roles
   set_fact:
     k8s_root_ca_cert: "{{ k8s_root_ca_cert | default('') }}"
     k8s_root_ca_key: "{{ k8s_root_ca_key | default('') }}"
   when: distributed_cloud_role != 'subcloud'
+  no_log: true
 
 - name: Check if external certificates were embedded as strings and install them
   include_tasks: convert_embedded_certificates.yml

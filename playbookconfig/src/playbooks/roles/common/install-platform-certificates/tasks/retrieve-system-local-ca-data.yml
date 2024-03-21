@@ -40,18 +40,21 @@
       environment:
         KUBECONFIG: "/etc/kubernetes/admin.conf"
       register: cert_result
+      no_log: true
 
     - name: Retrieve system local CA key from k8s secret (on System Controller)
       command: kubectl get secret system-local-ca -n cert-manager -o jsonpath='{.data.tls\.key}'
       environment:
         KUBECONFIG: "/etc/kubernetes/admin.conf"
       register: key_result
+      no_log: true
 
     - name: Retrieve system local root CA cert from k8s secret (on System Controller)
       command: kubectl get secret system-local-ca -n cert-manager -o jsonpath='{.data.ca\.crt}'
       environment:
         KUBECONFIG: "/etc/kubernetes/admin.conf"
       register: ca_cert_result
+      no_log: true
 
     - name: Set system-local-ca data
       set_fact:
@@ -60,6 +63,7 @@
         system_local_ca_key: "{{ key_result.stdout }}"
         system_local_ca_data_obtained: true
         install_rca_as_trusted: "{{ mode == 'bootstrap' or mode == 'rehoming' }}"
+      no_log: true
 
     when: system_local_ca_exists.stdout | bool
 
@@ -74,11 +78,13 @@
     shell: cat "{{ kubeadm_pki_dir }}/ca.crt" | base64 -w0
     register: kubernetes_root_ca_crt
     become: true
+    no_log: true
 
   - name: Read kubernetes Root CA key
     shell: cat "{{ kubeadm_pki_dir }}/ca.key" | base64 -w0
     register: kubernetes_root_ca_key
     become: true
+    no_log: true
 
   - name: Set system-local-ca data based on kubernetes Root CA
     set_fact:
@@ -86,6 +92,7 @@
       system_local_ca_cert: "{{ kubernetes_root_ca_crt.stdout }}"
       system_local_ca_key: "{{ kubernetes_root_ca_key.stdout }}"
       system_local_ca_data_obtained: true
+    no_log: true
 
   connection: local
   when: not system_local_ca_data_obtained

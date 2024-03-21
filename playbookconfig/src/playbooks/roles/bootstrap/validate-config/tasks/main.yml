@@ -923,26 +923,31 @@
         - name: Encode system_root_ca_cert
           shell: cat "{{ system_root_ca_cert }}" | base64 -w0
           register: root_ca_cert_output
+          no_log: true
 
         - name: Encode system_local_ca_cert
           shell: cat "{{ system_local_ca_cert }}" | base64 -w0
           register: local_ca_cert_output
+          no_log: true
 
         - name: Encode system_local_ca_key
           shell: cat "{{ system_local_ca_key }}" | base64 -w0
           register: local_ca_key_output
+          no_log: true
 
         - name: Keep the file paths for the CA certs/key as variables
-          set_fact:
-            system_root_ca_cert_file: "{{ system_root_ca_cert }}"
-            system_local_ca_cert_file: "{{ system_local_ca_cert }}"
-            system_local_ca_key_file: "{{ system_local_ca_key }}"
+          block:
+            - set_fact:
+                system_root_ca_cert_file: "{{ system_root_ca_cert }}"
+                system_local_ca_cert_file: "{{ system_local_ca_cert }}"
+                system_local_ca_key_file: "{{ system_local_ca_key }}"
 
-        - set_fact:
-            system_root_ca_cert: "{{ root_ca_cert_output.stdout }}"
-            system_local_ca_cert: "{{ local_ca_cert_output.stdout }}"
-            system_local_ca_key: "{{ local_ca_key_output.stdout }}"
-            system_local_ca_overrides: true
+            - set_fact:
+                system_root_ca_cert: "{{ root_ca_cert_output.stdout }}"
+                system_local_ca_cert: "{{ local_ca_cert_output.stdout }}"
+                system_local_ca_key: "{{ local_ca_key_output.stdout }}"
+                system_local_ca_overrides: true
+              no_log: true
 
         - name: Verify 'system-local-ca' certs
           include_role:

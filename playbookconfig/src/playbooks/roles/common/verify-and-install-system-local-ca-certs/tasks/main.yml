@@ -17,6 +17,7 @@
     <(echo "{{ system_local_ca_key | b64decode }}" | openssl rsa -noout -modulus)
   register: diff_return
   failed_when: false
+  no_log: true
 
 - name: Fail if system_local_ca_cert and system_local_ca_key doesn't match
   fail:
