@@ -5,40 +5,37 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # SUB-TASK DESCRIPTION:
-#   The tasks below restore luks volume
+#   The tasks below restore luks volume content
 
 - name: Set parameters used by luks tasks
   set_fact:
-    archive_luks_image_path: "{{ luks_image_path | regex_replace('^\\/', '') }}"
+    archive_luks_fs_path: "{{ luks_fs_path | regex_replace('^\\/', '') }}"
 
-- name: stop luks-fs-mgr service
-  systemd:
-    name: "luks-fs-mgr"
-    state: stopped
-
-- name: unmount luks volume
-  command: "/usr/bin/umount /var/luks/stx/luks_fs"
-
-- name: close the luks vault
-  command: "/usr/sbin/cryptsetup close luks_encrypted_vault"
-
-- name: Check if luks image directory is present in the backup tarball
-  shell: "tar --use-compress-program=pigz -tf {{ restore_data_file }} | grep '{{ archive_luks_image_path}}'"
+- name: Check if luks volume configuration is present in the backup tarball
+  shell: "tar --use-compress-program=pigz -tf {{ restore_data_file }} | grep 'created_luks.json'"
   args:
     warn: false
   failed_when: false
-  register: bkp_has_luks_image
+  register: bkp_has_luks_config
 
-- name: Restore luks_volume.img to luks image path
-  command: >-
-    tar -C {{ luks_image_path }} -xpf {{ platform_backup_fqpn }}  --transform='s,.*/,,'
-    {{ archive_luks_image_path }}/luks_volume.img
-  args:
-    warn: false
-  when: bkp_has_luks_image.rc is defined and
-        bkp_has_luks_image.rc == 0
-
-- name: restart luks-fs-mgr service
+- name: Ensure luks-fs-mgr service is running
   systemd:
     name: "luks-fs-mgr"
-    state: restarted
+    state: started
+  when: bkp_has_luks_config.rc is defined and
+        bkp_has_luks_config.rc == 0
+
+- name: Pause for service initialization
+  pause:
+    seconds: 30
+  when: bkp_has_luks_config.rc is defined and
+        bkp_has_luks_config.rc == 0
+
+- name: Restore luks filesystem content
+  command: >-
+    tar -C {{ luks_fs_path }} -xpf {{ platform_backup_fqpn }}  --strip-components=4
+    {{ archive_luks_fs_path }}
+  args:
+    warn: false
+  when: bkp_has_luks_config.rc is defined and
+        bkp_has_luks_config.rc == 0
