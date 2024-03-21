@@ -1,0 +1,176 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+# These tasks create and configure sysinv.
+#
+# Steps:
+#   - Store sysinv's variables and convert them to a dictionary
+#   - Create the database connection string and setup the database and user
+#   - Setup sysinv's openstack user, role, service and enpoint and set the
+#   ignore_lockout_failure_attempts option to true for both sysinv and admin users
+#   - Update the database's actor_id and user id to match the system controller's
+#   when bootstrapping a subcloud
+#   - Ensure sysinv-agent is running and enabled
+#   - Configure sysinv's group, user and directory
+#   - Generate sysinv.conf and api-paste.ini
+#   - Check controller's software version
+#   - Execute sysinv-dbsync
+#   - Ensure sysinv-api, sysinv-conductor and sysinv-agent are running and enabled
+
+- name: Retrieve sysinv's variables
+  shell: >-
+    grep -h "sysinv::" secure_static.yaml static.yaml &&
+    grep -h "keystone::roles::admin::admin_tenant:" personality.yaml &&
+    grep -h "platform::client::params::admin_username" static.yaml &&
+    grep -h "platform::client::params::admin_password:" secure_static.yaml &&
+    grep -h "platform::client::params::identity_auth_url" personality.yaml
+  args:
+    chdir: /tmp/puppet/hieradata
+  register: sysinv_variables
+
+- name: Convert sysinv variables to a dictionary
+  set_fact:
+    sysinv_var_dict: "{{ sysinv_variables.stdout | from_yaml }}"
+
+- name: Create database connection string
+  set_fact:
+    database_connection: "{{ sysinv_var_dict['sysinv::database_connection'] |
+      regex_replace('^postgresql:', 'postgresql+psycopg2:') }}"
+
+- name: Ensure PostgreSQL database and user are created
+  postgresql_db:
+    name: sysinv
+    state: present
+
+- name: Set PostgreSQL user password
+  postgresql_user:
+    db: sysinv
+    name: "{{ sysinv_var_dict['sysinv::db::postgresql::user'] }}"
+    password: "{{ sysinv_var_dict['sysinv::db::postgresql::password'] }}"
+    priv: ALL
+
+- name: Create sysinv endpoints
+  script: >
+    create_sysinv_endpoints.py {{ OS_USERNAME }} {{ OS_PASSWORD }} {{ sysinv_password }} {{ admin_username }}
+  vars:
+    - OS_USERNAME: "{{ sysinv_var_dict['keystone::roles::admin::admin_tenant'] }}"
+    - OS_PASSWORD: "{{ sysinv_var_dict['platform::client::params::admin_password'] }}"
+    - sysinv_password: "{{ sysinv_var_dict['sysinv::api::keystone_password'] }}"
+    - admin_username: "{{ sysinv_var_dict['platform::client::params::admin_username'] }}"
+
+- block:
+    - name: Retrieve dc_sysinv_user_id_dict
+      command: grep -h "platform::sysinv::bootstrap::dc_sysinv_user_id" static.yaml
+      args:
+        chdir: /tmp/puppet/hieradata
+      register: dc_sysinv_user_id_yaml
+
+    - name: Store dc_sysinv_user_id_dict
+      set_fact:
+        dc_sysinv_user_id_dict: "{{ dc_sysinv_user_id_yaml.stdout | from_yaml }}"
+
+    - name: Store dc_sysinv_user_id
+      set_fact:
+        dc_sysinv_user_id: "{{ dc_sysinv_user_id_dict['platform::sysinv::bootstrap::dc_sysinv_user_id'] }}"
+
+    - name: Update keystone sysinv assignment actor_id to match system controller
+      command: >-
+        psql -d keystone -c "update public.assignment set actor_id='{{ dc_sysinv_user_id }}'
+        from public.local_user where public.assignment.actor_id=public.local_user.user_id and
+        public.local_user.name='sysinv'"
+      become_user: postgres
+
+    # The create_sysinv_endpoints.py as the last step, configures the
+    # ignore_lockout_failure_attempts option for both the sysinv and admin users,
+    # which creates entries in the public.user_option table.
+    # Because its foreign key does not have the on update cascade configuration,
+    # it's necessary to remove it, update the tables and recreate the constraint.
+    - name: Update keystone sysinv user id to match system controller
+      command: >-
+        psql -d keystone
+        -c "alter table public.user_option drop constraint user_option_user_id_fkey"
+        -c "update public.user_option set user_id='{{ dc_sysinv_user_id }}' from
+        public.local_user where public.local_user.user_id=public.user_option.user_id
+        and public.local_user.name='sysinv'"
+        -c "update public.user set id='{{ dc_sysinv_user_id }}'
+        from public.local_user where public.user.id=public.local_user.user_id and
+        public.local_user.name='sysinv'"
+        -c "alter table public.user_option add constraint user_option_user_id_fkey
+        foreign key (user_id) references public."user"(id) on delete cascade"
+      become_user: postgres
+  when: distributed_cloud_role == "subcloud"
+
+- name: Configure sysinv group
+  group:
+    name: sysinv
+    state: present
+    gid: 168
+
+- name: Configure sysinv user
+  user:
+    name: sysinv
+    state: present
+    comment: sysinv Daemons
+    group: sysinv
+    groups: nobody, sysinv, sys_protected
+    home: /var/lib/sysinv
+    shell: /sbin/nologin
+    uid: 168
+
+- name: Configure sysinv directory
+  file:
+    path: /etc/sysinv
+    state: directory
+    owner: sysinv
+    group: sysinv
+    mode: 0750
+
+- name: Generate sysinv.conf
+  template:
+    src: sysinv/sysinv.conf.j2
+    dest: /etc/sysinv/sysinv.conf
+    owner: sysinv
+    group: sysinv
+    mode: 0600
+
+- name: Generate api-paste.ini
+  template:
+    src: sysinv/api-paste.ini.j2
+    dest: /etc/sysinv/api-paste.ini
+    owner: sysinv
+    group: sysinv
+    mode: 0600
+
+- name: Check if controllers software version mismatch
+  command: echo $CONTROLLER_SW_VERSIONS_MISMATCH
+  register: controller_sw_versions_mismatch
+
+- name: Execute sysinv-dbsync
+  command:
+    cmd: sysinv-dbsync
+    chdir: /usr/bin
+  become: true
+  become_user: sysinv
+  when: controller_sw_versions_mismatch.stdout != 'true'
+
+- name: Ensure sysinv-api service is running and enabled
+  service:
+    name: sysinv-api
+    state: started
+    enabled: yes
+
+- name: Ensure sysinv-conductor service is running and enabled
+  systemd:
+    name: sysinv-conductor
+    state: started
+    enabled: yes
+
+- name: Ensure sysinv-agent service is running and enabled
+  service:
+    name: sysinv-agent
+    state: started
+    enabled: yes
