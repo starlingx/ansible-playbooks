@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2023 Wind River Systems, Inc.
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -319,6 +319,21 @@
          before attempting to bootstrap it again. See /var/log/puppet/latest/puppet.log
          for details.
   when: bootstrap_manifest.rc != 0
+
+- name: Import mtce bootstrap
+  import_tasks: mtce_bootstrap.yml
+
+- block:
+  - name: Update keystone assignment target id for services to match system controller
+    command: psql -d keystone -c "update public.assignment set
+           target_id='{{ system_controller_keystone_services_project_id }}' from public.project where
+           public.assignment.target_id=public.project.id and public.project.name='services'"
+
+  - name: Update keystone services project id to match system controller
+    command: psql -d keystone -c "update public.project set
+           id='{{ system_controller_keystone_services_project_id }}' where name='services'"
+  become_user: postgres
+  when: distributed_cloud_role == 'subcloud'
 
 - name: Remove runtime hieradata
   file:

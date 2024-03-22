@@ -83,6 +83,21 @@
     msg: "Failed to provision initial system configuration."
   when: populate_result.rc != 0
 
+- block:
+  - name: Update keystone dcmanager assignment to match system controller
+    command: psql -d keystone -c "update public.assignment set
+           actor_id='{{ system_controller_keystone_dcmanager_user_id }}' from public.local_user
+           where public.assignment.actor_id=public.local_user.user_id
+           and public.local_user.name='dcmanager'"
+
+  - name: Update keystone dcmanager user id to match system controller
+    command: psql -d keystone -c "update public.user set
+           id='{{ system_controller_keystone_dcmanager_user_id }}' from public.local_user where
+           public.user.id=public.local_user.user_id and
+           public.local_user.name='dcmanager'"
+  become_user: postgres
+  when: distributed_cloud_role == 'subcloud'
+
 # If this is initial play or replay with management and/or oam network
 # config change, must wait for the keystone endpoint runtime manifest
 # to complete
