@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -8,10 +8,6 @@
 # generate a certificate spec file which is going to be applied to
 # kubernetes at a later step
 #
-
-- name: Set create_platform_certificates if not defined
-  set_fact:
-    create_platform_certificates: "{{ create_platform_certificates | default(false) }}"
 
 - name: Get distributed_cloud_role if not defined
   shell: |
@@ -80,10 +76,10 @@
     include_tasks: install-docker-registry-certificate.yml
 
   - name: Signal that creation of RestAPI/GUI and Docker Registry at bootstrap is enabled
-    copy:
-      dest: "{{ platform_config_dir }}/{{ create_platform_certificates_flag_filename }}"
-      content: ""
+    file:
+      path: "{{ platform_config_dir }}/{{ create_platform_certificates_flag_filename }}"
+      mode: 0644
+      state: touch
     become: yes
-    when: create_platform_certificates
 
   when: distributed_cloud_role != 'subcloud' or subcloud_local_ca_should_be_altered
