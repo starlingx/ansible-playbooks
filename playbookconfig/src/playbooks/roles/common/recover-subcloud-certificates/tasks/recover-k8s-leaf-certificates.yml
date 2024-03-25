@@ -81,8 +81,9 @@
   - name: Wait pods to restart (become READY) on controller
     shell: >-
       kubectl get po -l '!job-name' -A --no-headers -o
-      'custom-columns=NAME:.metadata.name,
+      'custom-columns=NAME:.metadata.name, NAMESPACE:.metadata.namespace,
       READY:.status.containerStatuses[*].ready,NODE:.spec.nodeName'
+      | grep "armada\|cert-manager\|flux-helm\|kube-system"
       | grep -v calico-node
       | grep $(hostname)
       | grep -cv true
