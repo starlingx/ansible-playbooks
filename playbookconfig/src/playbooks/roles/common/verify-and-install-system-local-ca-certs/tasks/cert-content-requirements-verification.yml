@@ -17,6 +17,7 @@
   shell: |
     echo "{{ cert_req_pem_stream }}" | openssl x509 -text -noout | grep "CA:"
   register: is_ca
+  no_log: true
 
 - name: Fail when certificate is not a CA certificate
   fail:
@@ -29,6 +30,7 @@
     <(echo "{{ cert_req_pem_stream }}") <(echo "{{ cert_req_pem_stream }}")
   register: openssl_return
   failed_when: false
+  no_log: true
 
 - name: Assume RCA if verification succeeds
   set_fact:
@@ -48,6 +50,7 @@
       time_left_ca=$(expr $expiration_date_timestamp - $min_date_from_now_timestamp)
       echo $time_left_ca
   register: ca_time_left
+  no_log: true
 
 - name: Fail when CA certificate remaining duration is shorter than {{ ca_duration }} years
   fail:

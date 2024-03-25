@@ -36,6 +36,7 @@
     loop:
       - "key"
       - "crt"
+    no_log: true
 
   - name: Install https certificate in ssl folder
     copy:

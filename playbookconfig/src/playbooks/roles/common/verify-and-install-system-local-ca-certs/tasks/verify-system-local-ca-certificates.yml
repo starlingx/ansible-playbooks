@@ -25,10 +25,12 @@
 - name: Get RCA pem contents
   command: openssl x509 -in "{{ system_local_ca_rca.path }}"
   register: rca_pem_cert
+  no_log: true
 
 - name: Set variable with RCA content
   set_fact:
     cert_req_pem_stream: "{{ rca_pem_cert.stdout }}"
+  no_log: true
 
 - name: Verify RCA certificate content requirements
   include_tasks: cert-content-requirements-verification.yml
@@ -39,6 +41,7 @@
     <(echo "{{ cert_req_pem_stream }}") <(echo "{{ cert_req_pem_stream }}")
   register: openssl_return
   failed_when: false
+  no_log: true
 
 - name: Fail if certificate is not a RCA
   fail:
@@ -79,10 +82,12 @@
   - name: Retrieve the certificate in the end of the ICA chain (first read from the file)
     command: openssl x509 -in "{{ aux_ca_file.path }}"
     register: ica_pem_cert
+    no_log: true
 
   - name: Assign ICA stream to variable
     set_fact:
       cert_pem_stream: "{{ ica_pem_cert.stdout }}"
+    no_log: true
 
   - name: Verify if certificate is a RCA
     shell: >-
@@ -90,6 +95,7 @@
       <(echo "{{ cert_pem_stream }}") <(echo "{{ cert_pem_stream }}")
     register: openssl_return
     failed_when: false
+    no_log: true
 
   - name: Fail if certificate is a RCA
     fail:

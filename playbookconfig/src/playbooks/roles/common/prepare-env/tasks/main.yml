@@ -26,6 +26,7 @@
 - include_vars: "{{ item.item }}"
   when: item.stat.exists
   with_items: "{{ files_to_import.results }}"
+  no_log: true
 
 # Check host connectivity, change password if provided
 - block:
