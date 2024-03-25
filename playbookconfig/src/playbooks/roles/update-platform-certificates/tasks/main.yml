@@ -154,6 +154,60 @@
       include_tasks: reapply-oidc-auth-app.yml
       when: oidc_applied.stdout | bool
 
+    - name: Update ipsec certificates
+      block:
+      - name: Get PXEBoot network list addresses
+        script: get_pxeboot_addr_list.py
+        register: ip_addrs_list_result
+
+      - set_fact:
+          failures_list: []
+
+      - name: Create root CA crt temporary file
+        tempfile:
+          state: file
+          prefix: root_ca_
+          suffix: .crt
+          path: /tmp/
+        register: root_ca_cert
+
+      - name: Create local CA crt temporary file
+        tempfile:
+          state: file
+          prefix: ca_
+          suffix: .crt
+          path: /tmp/
+        register: local_ca_cert
+
+      - name: Copy CAs certificates to temporary files
+        copy:
+          dest: "{{ item.path }}"
+          content: "{{ item.secret | b64decode }}"
+        loop:
+          - path: "{{ root_ca_cert.path }}"
+            secret: "{{ system_root_ca_cert }}"
+          - path: "{{ local_ca_cert.path }}"
+            secret: "{{ system_local_ca_cert }}"
+
+      - name: Update IPSec certificates
+        include_tasks: update_ipsec_certificates_in_hosts.yaml
+        loop: "{{ ip_addrs_list_result.stdout }}"
+
+      - name: Failed to update IPSec certificates on nodes
+        debug:
+          msg: "{{ failures_list | join('\n') }}"
+        when: 'failures_list | length > 0'
+
+      always:
+        - name: Cleanup temporary certificate files
+          file:
+            state: absent
+            path: "{{ item }}"
+          become: yes
+          loop:
+            - "{{ root_ca_cert.path }}"
+            - "{{ local_ca_cert.path }}"
+
   rescue:
     - block:
       - debug:
