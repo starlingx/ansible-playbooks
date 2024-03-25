@@ -7,10 +7,13 @@ Some of the templates have been changed to make them compatible with StarlingX
 The parts of the code that have been changes are marked with an "STX_change" comment.
 
 Files changed:
+- trident-controller-clusterrolebinding.yaml.j2
+- trident-controller-role.yaml.j2
+- trident-controller-rolebinding.yaml.j2
+- trident-controller-serviceaccount.yaml.j2
 - trident-daemonset.yaml.j2
-- trident-clusterrolebinding.yaml.j2
-- trident-namespace.yaml.j2
-- trident-serviceaccount.yaml.j2
 - trident-deployment.yaml.j2
-- trident-service.yaml.j2
+- trident-namespace.yaml.j2
+- trident-node-linux-serviceaccount.yaml.j2
 - trident-resourcequota.yaml.j2
+- trident-service.yaml.j2

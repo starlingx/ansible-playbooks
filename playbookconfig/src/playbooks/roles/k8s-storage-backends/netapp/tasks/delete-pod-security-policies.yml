@@ -1,0 +1,21 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SUB-TASKS DESCRIPTION:
+#   These tasks delete Trident's PodSecurityPolicy when the Kubernetes version is lower than v1.25.3
+#
+
+- name: Get all pod security policies
+  command: kubectl get psp -o jsonpath='{.items[*].metadata.name}'
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  failed_when: false
+  register: kubectl_get_psp_result
+
+- name: Delete trident pod security policies
+  command: kubectl delete psp {{ item }}
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  with_items: "{{ kubectl_get_psp_result.stdout }}"
+  when: "'trident' in item"

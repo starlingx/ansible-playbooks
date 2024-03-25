@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020 Wind River Systems, Inc.
+# Copyright (c) 2020,2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -15,5 +15,4 @@
     - { role: common/prepare-env }
     - { role: common/get-kube-version, become: yes }
     - { role: roles/common/push-docker-images, become: yes }
-    - { role: roles/k8s-storage-backends/snapshot-controller, become: yes }
     - { role: roles/k8s-storage-backends/netapp, become: yes }

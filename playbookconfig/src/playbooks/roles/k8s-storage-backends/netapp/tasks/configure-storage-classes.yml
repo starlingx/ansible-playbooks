@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020,2023 Wind River Systems, Inc.
+# Copyright (c) 2020,2023-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -41,7 +41,7 @@
   command: >-
     kubectl --kubeconfig=/etc/kubernetes/admin.conf
     -n {{ trident_namespace }}
-    delete storageclasses {{ storage_class.metadata.name }}
+    delete storageclass {{ storage_class.metadata.name }}
   failed_when: false
 
 - name: Create K8s StorageClass

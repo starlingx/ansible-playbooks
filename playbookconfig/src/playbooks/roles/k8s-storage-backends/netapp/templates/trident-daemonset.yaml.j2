@@ -4,8 +4,8 @@ kind: DaemonSet
 metadata:
   name: trident-node-linux
   labels:
-    kubectl.kubernetes.io/default-container: trident-main
     app: node.csi.trident.netapp.io
+    kubectl.kubernetes.io/default-container: trident-main
 spec:
   selector:
     matchLabels:
@@ -32,7 +32,7 @@ spec:
             add:
             - SYS_ADMIN
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/docker.io/netapp/trident:23.10.0
+        image: {{ local_registry }}/docker.io/netapp/trident:24.02.0
         imagePullPolicy: IfNotPresent
         command:
         - /trident_orchestrator
@@ -52,6 +52,8 @@ spec:
         - "--https_rest"
         - "--https_port=17546"
         - "--enable_force_detach=false"
+        - "--iscsi_self_healing_interval=5m0s"
+        - "--iscsi_self_healing_wait_time=7m0s"
         #- -debug
         startupProbe:
           httpGet:
@@ -113,7 +115,7 @@ spec:
           readOnly: true
       - name: driver-registrar
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.9.0
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.10.0
         imagePullPolicy: IfNotPresent
         args:
         - "--v=2"
