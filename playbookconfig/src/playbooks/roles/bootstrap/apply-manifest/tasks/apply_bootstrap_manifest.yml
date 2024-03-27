@@ -335,6 +335,9 @@
   become_user: postgres
   when: distributed_cloud_role == 'subcloud'
 
+- name: Prepare FM Manager
+  import_tasks: fm_bootstrap.yml
+
 - name: Remove runtime hieradata
   file:
     path: "{{ hieradata_workdir }}/runtime.yaml"
