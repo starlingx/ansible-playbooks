@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -21,9 +21,10 @@
     - system_local_ca_overrides
     - not upgrade_in_progress
 
-# When bootstrapping subclouds or upgrading we have to retrieve the current values
-# in the Standalone controller or in the DC's SystemController.
-# We must install the RCA as a Trusted CA if bootstrapping.
+# When bootstrapping subclouds, upgrading or restoring, we have to
+# retrieve the current values in the Standalone controller or in
+# the DC's SystemController.
+# We must install the RCA as a Trusted CA if bootstrapping/rehoming.
 - block:
   - name: Check if 'system-local-ca' secret exists
     shell: |
@@ -68,7 +69,7 @@
     when: system_local_ca_exists.stdout | bool
 
   when:
-    - distributed_cloud_role == 'subcloud' or upgrade_in_progress
+    - distributed_cloud_role == 'subcloud' or upgrade_in_progress or mode == 'restore'
     - not system_local_ca_data_obtained
   connection: local
 
