@@ -6,14 +6,8 @@
 #
 
 """
-Creates the sysinv's user, grant it admin role and setup its services and endpoints.
-After the setup, the ignore_lockout_failure_attempts option is set up for both the
-sysinv and admin users.
-
-It's necessary to perform the sysinv endpoint creation outside the
-openstack_config_endpoints.py script because all of the other endpoints are created
-in sysinv, requiring it to be configured priorly in order to provide access to the
-API.
+Configure keystone by adding the services project, _member_ role and updating
+the admin user to the correct e-mail address.
 """
 
 import os
@@ -26,42 +20,26 @@ from keystoneauth1 import loading, session
 from keystoneclient.v3 import client
 
 
-SYSINV_USER_TO_CREATE = [
+PROJECTS_TO_CREATE = [
     {
-        "name": "sysinv",
-        "password": "",
-        "email": "sysinv@localhost",
+        "name": "services",
+        "domain": "default",
+        "description": "",
+        "parent": "default"
     }
 ]
 
-SERVICES_TO_CREATE = [
+ROLES_TO_CREATE = [
     {
-        "name": "sysinv",
-        "description": "SysInvService",
-        "type": "platform",
-    }
-]
-
-ENDPOINTS_TO_CREATE = [
-    {
-        "service": "sysinv",
-        "region": "RegionOne",
-        "endpoints": {
-            "admin": "http://127.0.0.1:6385/v1/",
-            "internal": "http://127.0.0.1:6385/v1/",
-            "public": "http://127.0.0.1:6385/v1/"
-        }
+        "name": "_member_",
+        "domain": None
     }
 ]
 
 USERS_TO_UPDATE = [
     {
-        "name": "sysinv",
-        "options": {"ignore_lockout_failure_attempts": True}
-    },
-    {
         "name": "admin",
-        "options": {"ignore_lockout_failure_attempts": True}
+        "email": "admin@localhost"
     }
 ]
 
@@ -115,20 +93,10 @@ def _create_keystone_client(env_vars):
 if __name__ == "__main__":
     username = sys.argv[1]
     password = sys.argv[2]
-    SYSINV_USER_TO_CREATE[0]["password"] = sys.argv[3]
-    admin_username = sys.argv[4]
 
     env_vars = _retrieve_environment_variables(username, password)
-    ENDPOINTS_TO_CREATE[0]["region"] = env_vars["region_name"]
-
     keystone = _create_keystone_client(env_vars)
 
-    openstack_config_endpoints.create_users(keystone, SYSINV_USER_TO_CREATE)
-    openstack_config_endpoints.grant_admin_role(
-        keystone, SYSINV_USER_TO_CREATE, "services"
-    )
-    openstack_config_endpoints.create_services(keystone, SERVICES_TO_CREATE)
-    openstack_config_endpoints.create_endpoints(keystone, ENDPOINTS_TO_CREATE)
-
-    USERS_TO_UPDATE[1]["name"] = admin_username
+    openstack_config_endpoints.create_projects(keystone, PROJECTS_TO_CREATE)
+    openstack_config_endpoints.create_roles(keystone, ROLES_TO_CREATE)
     openstack_config_endpoints.update_users(keystone, USERS_TO_UPDATE)

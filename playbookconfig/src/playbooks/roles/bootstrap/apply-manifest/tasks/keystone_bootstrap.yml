@@ -1,0 +1,209 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+# These tasks create and configure keystone
+#
+# Steps:
+# - Retrieve keystone's variables and convert them to a dictionary
+# - Create the database connection string
+# - Configure the database user
+# - Create the database
+# - Create the keystone-extra.conf file
+# - Update the keystone.conf file
+# - Update the logging.conf file
+# - Create the keystone and fernet-keys directories
+# - Ensure the keystone service is started
+# - Ensure the python3-openstackclient library is installed
+# - Execute keystone-manage db_sync, fernet_setup and bootstrap
+# - Configure required services, roles and users in keystone
+# - Update keystone's admin actor_id, target_id, user_id and project_id to match
+# system controller's
+# - Update the services' target_id and project_id to match the system controller's
+# in a subcloud deployment
+
+- name: Retrieve keystone's variables
+  shell: >-
+    grep -h "keystone::" secure_static.yaml &&
+    grep -h "keystone::db" static.yaml &&
+    grep -h "platform::client::params::admin_username" static.yaml &&
+    grep -h "platform::client::params::admin_password:" secure_static.yaml &&
+    grep -h "platform::client::params::identity_auth_url" personality.yaml &&
+    grep -h "platform::amqp::" secure_static.yaml global.yaml
+  args:
+    chdir: /tmp/puppet/hieradata
+  register: keystone_variables
+  no_log: true
+
+- name: Convert keystone variables to a dictionary
+  set_fact:
+    keystone_var_dict: "{{ keystone_variables.stdout | from_yaml }}"
+
+- name: Create database connection string
+  set_fact:
+    database_connection: "{{ keystone_var_dict['keystone::database_connection'] |
+      regex_replace('^postgresql:', 'postgresql+psycopg2:') }}"
+    OS_USERNAME: "{{ keystone_var_dict['platform::client::params::admin_username'] }}"
+    OS_PASSWORD: "{{ keystone_var_dict['platform::client::params::admin_password'] }}"
+  no_log: true
+
+- block:
+  - name: Configure keystone database user
+    postgresql_user:
+      name: "{{ keystone_var_dict['keystone::db::postgresql::user'] }}"
+      password: "{{ keystone_var_dict['keystone::db::postgresql::password'] }}"
+      role_attr_flags: NOCREATEDB,NOSUPERUSER,NOCREATEROLE,LOGIN,INHERIT
+    become_user: postgres
+    no_log: true
+
+  - name: Create keystone database
+    postgresql_db:
+      name: keystone
+      owner: admin-keystone
+      template: template0
+      state: present
+    become_user: postgres
+
+  # The engine workers is overridden on host-unlock
+  - name: Store keystone engine workers
+    set_fact:
+      keystone_eng_workers: "2"
+
+  - name: Generate keystone-extra.conf
+    template:
+      src: keystone/keystone-extra.conf.j2
+      dest: /etc/keystone/keystone-extra.conf
+      owner: root
+      group: keystone
+      mode: 0640
+
+  - name: Update keystone.conf
+    template:
+      src: keystone/keystone.conf.j2
+      dest: /etc/keystone/keystone.conf
+      owner: root
+      group: keystone
+      mode: 0640
+
+  - name: Update logging.conf
+    template:
+      src: keystone/logging.conf.j2
+      dest: /etc/keystone/logging.conf
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: Configure keystone directory
+    file:
+      path: "{{ platform_path }}/keystone"
+      state: directory
+      owner: root
+      group: root
+      mode: 0755
+
+  - name: Create fernet-keys directory
+    file:
+      path: "{{ platform_path }}/keystone/fernet-keys"
+      state: directory
+      owner: keystone
+      group: keystone
+      mode: 0700
+
+  - name: Ensure keystone service is started
+    service:
+      name: keystone
+      state: started
+
+  - name: Ensure python3-openstackclient library is installed
+    package:
+      name: python3-openstackclient
+      state: present
+
+  - name: Exec keystone-manage db_sync
+    command: /usr/bin/keystone-manage db_sync
+
+  - name: Exec keystone-manage fernet_setup
+    command: >
+      /usr/bin/keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone
+    become_user: keystone
+
+  - name: Exec keystone boostrap
+    command: >-
+      /usr/bin/keystone-manage bootstrap --bootstrap-username={{ OS_USERNAME }}
+      --bootstrap-password={{ OS_PASSWORD }} --bootstrap-project-name=admin
+      --bootstrap-role-name=admin --bootstrap-service-name=keystone
+      --bootstrap-admin-url=http://127.0.0.1:5000 --bootstrap-public-url=http://127.0.0.1:5000
+      --bootstrap-internal-url=http://127.0.0.1:5000 --bootstrap-region-id={{ region_name }}
+    become_user: keystone
+    no_log: true
+    register: keystone_bootstrap
+    failed_when: false
+
+  - name: Fail if exec keystone bootstrap returns an error
+    fail:
+      msg: "{{ keystone_bootstrap.stderr }}"
+    when: keystone_bootstrap.rc != 0
+
+  - name: Configure keystone services, roles and users
+    script: configure_keystone.py {{ OS_USERNAME }} {{ OS_PASSWORD }}
+    no_log: true
+    register: keystone_configuration
+    failed_when: false
+
+  - name: Fail if configure keystone returns an error
+    fail:
+      msg: "{{ keystone_configuration.stderr }}"
+    when: keystone_configuration.rc != 0
+
+  - block:
+    - name: Update keystone admin assignment actor_id to match system controller
+      command: >-
+        psql -d keystone -c "update public.assignment
+        set actor_id='{{ system_controller_keystone_admin_user_id }}'
+        from public.local_user
+        where public.assignment.actor_id=public.local_user.user_id
+        and public.local_user.name='admin'"
+
+    - name: Update keystone admin assignment target_id to match system controller
+      command: >-
+        psql -d keystone -c "update public.assignment
+        set target_id='{{ system_controller_keystone_admin_project_id }}'
+        from public.project
+        where public.assignment.target_id=public.project.id
+        and public.project.name='admin'"
+
+    - name: Update keystone admin user id to match system controller
+      command: >-
+        psql -d keystone -c "update public.user
+        set id='{{ system_controller_keystone_admin_user_id }}'
+        from public.local_user
+        where public.user.id=public.local_user.user_id
+        and public.local_user.name='admin'"
+
+    - name: Update keystone admin project id to match system controller
+      command: >-
+        psql -d keystone -c "update public.project
+        set id='{{ system_controller_keystone_admin_project_id }}'
+        where name='admin'"
+
+    - name: Update keystone assignment target id for services to match system controller
+      command: >-
+        psql -d keystone -c "update public.assignment
+        set target_id='{{ system_controller_keystone_services_project_id }}'
+        from public.project
+        where public.assignment.target_id=public.project.id
+        and public.project.name='services'"
+
+    - name: Update keystone services project id to match system controller
+      command: >-
+        psql -d keystone -c "update public.project
+        set id='{{ system_controller_keystone_services_project_id }}'
+        where name='services'"
+
+    become_user: postgres
+    when: distributed_cloud_role == "subcloud" and mode == "bootstrap"
+
+  when: distributed_cloud_role == "subcloud" or not region_config

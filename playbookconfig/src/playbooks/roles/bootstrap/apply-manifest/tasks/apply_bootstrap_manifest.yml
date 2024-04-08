@@ -321,6 +321,9 @@
          for details.
   when: bootstrap_manifest.rc != 0
 
+- name: Import keystone bootstrap tasks
+  import_tasks: keystone_bootstrap.yml
+
 - name: Import barbican bootstrap tasks
   import_tasks: barbican_bootstrap.yml
 
@@ -329,18 +332,6 @@
 
 - name: Import mtce bootstrap tasks
   import_tasks: mtce_bootstrap.yml
-
-- block:
-  - name: Update keystone assignment target id for services to match system controller
-    command: psql -d keystone -c "update public.assignment set
-           target_id='{{ system_controller_keystone_services_project_id }}' from public.project where
-           public.assignment.target_id=public.project.id and public.project.name='services'"
-
-  - name: Update keystone services project id to match system controller
-    command: psql -d keystone -c "update public.project set
-           id='{{ system_controller_keystone_services_project_id }}' where name='services'"
-  become_user: postgres
-  when: distributed_cloud_role == 'subcloud' and mode == 'bootstrap'
 
 - name: Import fm bootstrap tasks
   import_tasks: fm_bootstrap.yml
