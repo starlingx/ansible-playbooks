@@ -1,11 +1,11 @@
 ---
-# Multus Version v4.0.2
+# Multus Version v3.9.3
 # Based on:
-# https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v4.0.2/deployments/
+# https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v3.9.3/deployments/
 #             multus-daemonset.yml
 #
 # This file is licensed under Apache 2.0.  You can obtain a copy of the license at:
-# https://github.com/k8snetworkplumbingwg/multus-cni/blob/v4.0.2/LICENSE
+# https://github.com/k8snetworkplumbingwg/multus-cni/blob/v3.9.3/LICENSE
 #
 # The following modifications have been made:
 #
@@ -22,12 +22,8 @@
 #   multus-cni-config.
 # - Due to the limitations on resource tracking and CPU usage in Kubernetes,
 #   platform pod's CPU requests are set to zero and must not request CPU resources.
-# - multus v4.0.2 changes thin container base image to distroless,
-#   hence using --multus-conf-file=auto instead of custom conf file as done previously.
-# - multus v4.0.2 has an issue with nested delegate misconfiguration in the conf file;
-#   Adding an initContainer that deletes the multus cni configuration on startup.
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2023 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -239,13 +235,21 @@ spec:
       containers:
       - name: kube-multus
         image: "{{ local_registry }}/{{ multus_img }}"
-        command: ["/thin_entrypoint"]
-        args:
-        - "--multus-conf-file=auto"
-        - "--multus-autoconfig-dir=/host/etc/cni/net.d"
-        - "--cni-conf-dir=/host/etc/cni/net.d"
-        - "--multus-log-file=/var/log/multus.log"
-        - "--multus-log-level=debug"
+        env:
+          - name: KUBERNETES_NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+        command:
+          - /bin/bash
+          - -cex
+          - |
+            #!/bin/bash
+            sed "s|__KUBERNETES_NODE_NAME__|${KUBERNETES_NODE_NAME}|g" /tmp/multus-conf/05-multus.conf > /usr/src/multus-cni/05-multus.conf
+            {% if cluster_network_ipv6 -%}
+            sed -i 's#//\${KUBERNETES_SERVICE_HOST}#//\[\${KUBERNETES_SERVICE_HOST}\]#' /entrypoint.sh
+            {% endif -%}
+            /entrypoint.sh --multus-conf-file=/usr/src/multus-cni/05-multus.conf
         resources:
           requests:
             memory: "50Mi"
@@ -263,10 +267,10 @@ spec:
       initContainers:
         - name: install-multus-binary
           image: "{{ local_registry }}/{{ multus_img }}"
-          command: ["/install_multus"]
-          args:
-            - "--type"
-            - "thin"
+          command:
+            - "cp"
+            - "/usr/src/multus-cni/bin/multus"
+            - "/host/opt/cni/bin/multus"
           resources:
             requests:
               cpu: "0"
@@ -277,18 +281,6 @@ spec:
             - name: cnibin
               mountPath: /host/opt/cni/bin
               mountPropagation: Bidirectional
-        # 00-multus.conf is generated with a nested delegate misconfiguration.
-        # Use initcontainer 'delete-multus-conf' to re-generate 00-multus.conf on startup.
-        # This upstream bug was found in v4.0.2.
-        - name: delete-multus-conf
-          image: "alpine"
-          command: ["rm"]
-          args:
-            - "-f"
-            - "/host/etc/cni/net.d/00-multus.conf"
-          volumeMounts:
-            - name: cni
-              mountPath: "/host/etc/cni/net.d"
       terminationGracePeriodSeconds: 10
       volumes:
         - name: cni
@@ -302,4 +294,4 @@ spec:
             name: multus-cni-config.v1
             items:
             - key: cni-conf.json
-              path: 00-multus.conf
+              path: 05-multus.conf
