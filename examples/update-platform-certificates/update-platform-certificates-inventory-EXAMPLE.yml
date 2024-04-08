@@ -83,7 +83,6 @@ all:
           subject_O: myorganization
           subject_OU: engineering
           subject_CN: myorganization.com
-          subject_prefix: starlingx
         # SSH password to connect to all subclouds
         ansible_ssh_user: sysadmin
         ansible_ssh_pass: <sysadmin-pwd>
