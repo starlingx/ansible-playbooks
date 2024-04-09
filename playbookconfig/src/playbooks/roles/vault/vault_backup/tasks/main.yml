@@ -1,0 +1,28 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Create vault snapshot
+  block:
+    - name: Create vault snapshot with default encryption
+      script: vault_snapshot.sh {{ vault_backup_dir }}
+      when: not vault_encrypt
+      register: vault_snapshot_script
+      failed_when: vault_snapshot_script.rc != 0
+
+    - name: Create vault snapshot with custom encryption
+      script: vault_snapshot.sh {{ vault_backup_dir }} '--encrypt' "custom_var"
+      when: vault_encrypt
+      register: vault_snapshot_script
+      failed_when: vault_snapshot_script.rc != 0
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+    custom_var: "{{ encrypt_hc_vault_secret }}"
+  always:
+    - name: Unpause vault manager
+      shell: >-
+        kubectl exec -n "vault" "{{ vault_manager_pod_name.stdout }}" --
+        bash -c "source /opt/script/init.sh; if [ -f $PAUSEFILE ]; then rm -f $PAUSEFILE; fi" 2>&1

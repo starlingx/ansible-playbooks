@@ -1,0 +1,22 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- hosts: all
+  gather_facts: no
+
+  vars_files:
+    - host_vars/backup-restore/default.yml
+
+  vars:
+    password_change: false
+    vault_encrypt: false
+    encrypt_hc_vault_secret: ""
+
+  roles:
+    - role: common/prepare-env
+    - role: vault/prepare_env
+    - role: vault/vault_restore
+      become: yes

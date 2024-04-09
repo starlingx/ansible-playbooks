@@ -1,0 +1,43 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Set backup file path
+  set_fact:
+    backup_filepath: "{{ vault_backup_dir }}/{{ backup_filename }}"
+
+- name: Find snapshot
+  shell: |
+    ls {{ backup_filepath }}
+  register: snapshot_tar_name
+
+- name: Fail if vault snapshot tar not found
+  fail:
+    msg: "Vault snapshot tarball: {{ backup_filename }} was not found"
+  when: snapshot_tar_name.stdout | length == 0
+
+# call vault_restore.sh
+- name: Restore vault from the snapshot
+  block:
+    - name: Restore vault snapshot with default encryption
+      script: vault_restore.sh {{ backup_filepath }}
+      when: not vault_encrypt
+      register: vault_restore_script
+      failed_when: vault_restore_script.rc != 0
+
+    - name: Restore vault snapshot with custom encryption
+      script: vault_restore.sh {{ backup_filepath }} '--decrypt' "custom_var"
+      when: vault_encrypt
+      register: vault_restore_script
+      failed_when: vault_restore_script.rc != 0
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+    custom_var: "{{ encrypt_hc_vault_secret }}"
+  always:
+    - name: Unpause vault manager
+      shell: >-
+        kubectl exec -n "vault" "{{ vault_manager_pod_name.stdout }}" --
+        bash -c "source /opt/script/init.sh; if [ -f $PAUSEFILE ]; then rm -f $PAUSEFILE; fi" 2>&1
