@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020-2023 Wind River Systems, Inc.
+# Copyright (c) 2020-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -89,6 +89,10 @@
   when: (tridentctl_rest_response.rc is defined and
          tridentctl_rest_response.rc != 0) or
         trident_force_reinstall
+
+- name: Delete pod security policies
+  include_tasks: delete-pod-security-policies.yml
+  when: kubernetes_long_version is version('v1.25.3', '<')
 
 # Configure NetApp backends
 - name: Configure tbc secret

@@ -22,7 +22,7 @@ spec:
       containers:
       - name: trident-main
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/docker.io/netapp/trident:23.10.0
+        image: {{ local_registry }}/docker.io/netapp/trident:24.02.0
         imagePullPolicy: IfNotPresent
         securityContext:
           runAsNonRoot: false
@@ -92,7 +92,7 @@ spec:
 
       - name: trident-autosupport
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/docker.io/netapp/trident-autosupport:23.10
+        image: {{ local_registry }}/docker.io/netapp/trident-autosupport:24.02
         imagePullPolicy: IfNotPresent
         securityContext:
           capabilities:
@@ -113,7 +113,7 @@ spec:
           mountPath: /asup
       - name: csi-provisioner
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-provisioner:v3.6.0
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-provisioner:v4.0.0
         imagePullPolicy: IfNotPresent
         securityContext:
           capabilities:
@@ -133,7 +133,7 @@ spec:
           mountPath: /var/lib/csi/sockets/pluginproxy/
       - name: csi-attacher
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-attacher:v4.4.0
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-attacher:v4.5.0
         imagePullPolicy: IfNotPresent
         securityContext:
           capabilities:
@@ -152,7 +152,7 @@ spec:
           mountPath: /var/lib/csi/sockets/pluginproxy/
       - name: csi-resizer
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-resizer:v1.9.0
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-resizer:v1.9.3
         imagePullPolicy: IfNotPresent
         args:
         - "--v=2"
@@ -166,7 +166,7 @@ spec:
           mountPath: /var/lib/csi/sockets/pluginproxy/
       - name: csi-snapshotter
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-snapshotter:v6.3.0
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-snapshotter:v6.3.3
         imagePullPolicy: IfNotPresent
         securityContext:
           capabilities:
