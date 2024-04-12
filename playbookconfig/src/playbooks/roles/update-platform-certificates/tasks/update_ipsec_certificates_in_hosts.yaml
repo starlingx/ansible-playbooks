@@ -1,0 +1,79 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   This task execute commands to update ipsec
+#   certificates on each host
+#
+- block:
+  - name: Set async parameter
+    set_fact:
+      async_timeout: 120
+
+  - name: Send system-root-ca to host
+    command: >-
+      ansible all -i "{{ item }}," -m copy -a
+       "src={{ file.source }} dest={{ file.destination }}" -b -e
+       "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+    async: "{{ async_timeout }}"
+    loop:
+      - source: "{{ root_ca_cert.path }}"
+        destination: "/tmp/system-root-ca.crt"
+      - source: "{{ local_ca_cert.path }}"
+        destination: "/tmp/system-local-ca.crt"
+    loop_control:
+      loop_var: file
+
+  - name: Copy certificate 1 to certificate 0
+    command: >-
+      ansible all -i "{{ item }}," -m command -a
+       "cp {{ file.cert_1 }} {{ file.cert_0 }}" -b -e
+       "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+    async: "{{ async_timeout }}"
+    loop:
+      - cert_0: "/etc/swanctl/x509ca/system-root-ca-0.crt"
+        cert_1: "/etc/swanctl/x509ca/system-root-ca-1.crt"
+      - cert_0: "/etc/swanctl/x509ca/system-local-ca-0.crt"
+        cert_1: "/etc/swanctl/x509ca/system-local-ca-1.crt"
+    loop_control:
+      loop_var: file
+
+  - name: Update certificate
+    command: >-
+      ansible all -i "{{ item }}," -m command -a
+       "mv {{ file.tmp_cert }} {{ file.cert }}" -b -e
+       "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+    async: "{{ async_timeout }}"
+    loop:
+      - tmp_cert: "/tmp/system-root-ca.crt"
+        cert: "/etc/swanctl/x509ca/system-root-ca-1.crt"
+      - tmp_cert: "/tmp/system-local-ca.crt"
+        cert: "/etc/swanctl/x509ca/system-local-ca-1.crt"
+    loop_control:
+      loop_var: file
+
+  - name: Load strongswan credentials
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "swanctl --load-creds" -b -e
+      "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+    async: "{{ async_timeout }}"
+
+  - name: Run ipsec-client command
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "ipsec-client pxecontroller -o 2" -b -e
+      "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+    async: "{{ async_timeout }}"
+
+  no_log: true
+  rescue:
+    - name: Fail to update ipsec certificates
+      set_fact:
+        failures_list: "{{ failures_list + [item] }}"
