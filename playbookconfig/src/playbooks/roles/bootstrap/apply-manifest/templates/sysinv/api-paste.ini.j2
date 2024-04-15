@@ -1,0 +1,9 @@
+[filter:authtoken]
+region_name=
+auth_url=http://localhost:5000
+auth_uri=http://localhost:5000
+project_name=services
+username=sysinv
+password={{ sysinv_var_dict['sysinv::api::keystone_password'] }}
+user_domain_name=Default
+project_domain_name=Default
