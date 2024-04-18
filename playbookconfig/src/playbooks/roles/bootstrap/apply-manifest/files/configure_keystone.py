@@ -52,7 +52,6 @@ SERVICES_TO_CREATE = [
 ENDPOINTS_TO_CREATE = [
     {
         "service": "keystone",
-        "region": "RegionOne",
         "endpoints": {
             "admin": "http://127.0.0.1:5000",
             "internal": "http://127.0.0.1:5000",
@@ -114,6 +113,11 @@ if __name__ == "__main__":
 
     env_vars = _retrieve_environment_variables(username, password)
     keystone = _create_keystone_client(env_vars)
+    # This value is overridden based on distributed_cloud_role
+    # if distributed_cloud_role is subcloud or none region_name will
+    # be UUID value else in case of systemcontroller it will be
+    # default 'RegionOne'
+    ENDPOINTS_TO_CREATE[0]["region"] = env_vars["region_name"]
 
     openstack_config_endpoints.create_projects(keystone, PROJECTS_TO_CREATE)
     openstack_config_endpoints.create_roles(keystone, ROLES_TO_CREATE)

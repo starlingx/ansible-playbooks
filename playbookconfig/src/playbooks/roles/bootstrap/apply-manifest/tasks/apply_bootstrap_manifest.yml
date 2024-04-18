@@ -171,6 +171,38 @@
     mode: 0600
 
 - block:
+  - name: Set identity_region in runtime.yaml
+    lineinfile:
+      path: "{{ hieradata_workdir }}/runtime.yaml"
+      regexp: "^platform::client::params::identity_region:.*"
+      line: "platform::client::params::identity_region: {{ region_name }}"
+      create: yes
+
+  - name: Set keystone_identity_region in runtime.yaml
+    lineinfile:
+      path: "{{ hieradata_workdir }}/runtime.yaml"
+      regexp: "^platform::client::params::keystone_identity_region:.*"
+      line: "platform::client::params::keystone_identity_region: {{ region_name }}"
+      create: yes
+  - name: Ensure keystone::endpoint::region is set correctly in controller.yaml
+    lineinfile:
+      path: /etc/puppet/hieradata/controller.yaml
+      regexp: '^keystone::endpoint::region:'
+      line: "keystone::endpoint::region: {{ region_name }}"
+  - name: Ensure platform::mtce::params::auth_region is set correctly in controller.yaml
+    lineinfile:
+      path: /etc/puppet/hieradata/controller.yaml
+      regexp: '^platform::mtce::params::auth_region:'
+      line: "platform::mtce::params::auth_region: {{ region_name }}"
+  - name: Ensure barbican::keystone::authtoken::region_name is set correctly in static.yaml
+    lineinfile:
+      path: "{{ hieradata_workdir }}/static.yaml"
+      regexp: '^barbican::keystone::authtoken::region_name:'
+      line: "barbican::keystone::authtoken::region_name: {{ region_name }}"
+
+  when: distributed_cloud_role in ['subcloud', 'none']
+
+- block:
   - name: Specify filesystem sizes
     set_fact:
       pgsql_size: 10

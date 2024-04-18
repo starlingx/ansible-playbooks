@@ -12,7 +12,6 @@ fresh_install_k8s_version: 1.28.4
 
 # These variables are only used for subcloud configuration and are set
 # automatically by dcmanager
-region_name: 'RegionOne'
 system_controller_floating_address: none
 system_controller_subnet: none
 system_controller_oam_floating_address: none

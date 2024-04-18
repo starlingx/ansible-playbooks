@@ -6,6 +6,7 @@ system_mode: simplex
 # and 'subcloud'.  However subclouds are automatically provisioned during their
 # creation in dcmanager and are not meant to be configured manually by the user.
 distributed_cloud_role: none
+region_name: 'RegionOne'
 timezone: UTC
 
 # At least one DNS server is required and maximum 3 servers are allowed
