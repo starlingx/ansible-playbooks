@@ -466,11 +466,11 @@
   - name: Check for existing ssl_ca certificates
     shell: |
       source /etc/platform/openrc
-      system certificate-list | grep ssl_ca | awk '{ print $2 }'
+      system ca-certificate-list | awk '{ print $2 }' | awk 'NR>3 && NF'
     register: existing_ssl_ca_certificates_uuid
 
   - name: Delete existing ssl_ca certificates
-    shell: source /etc/platform/openrc; system certificate-uninstall -m ssl_ca {{ item }}
+    shell: source /etc/platform/openrc; system ca-certificate-uninstall {{ item }}
     with_items:
     - "{{ existing_ssl_ca_certificates_uuid.stdout_lines }}"
     when: existing_ssl_ca_certificates_uuid.stdout_lines | length > 0
@@ -491,7 +491,7 @@
       state: absent
 
   - name: Add ssl_ca certificate
-    shell: source /etc/platform/openrc; system certificate-install -m ssl_ca {{ temp_ssl_ca }}
+    shell: source /etc/platform/openrc; system ca-certificate-install {{ temp_ssl_ca }}
     register: add_ssl_ca_certificate
 
   - name: Wait for certificate install
