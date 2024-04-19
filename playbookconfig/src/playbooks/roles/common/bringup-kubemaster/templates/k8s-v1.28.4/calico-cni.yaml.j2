@@ -4873,17 +4873,11 @@ spec:
             # Set Felix endpoint to host default action to ACCEPT.
             - name: FELIX_DEFAULTENDPOINTTOHOSTACTION
               value: "ACCEPT"
-            {% if cluster_network_ipv6 -%}
             # Enable IPv6 on Kubernetes.
             - name: FELIX_IPV6SUPPORT
               value: "true"
             - name: CALICO_ROUTER_ID
               value: "hash"
-            {% else -%}
-            # Disable IPv6 on Kubernetes.
-            - name: FELIX_IPV6SUPPORT
-              value: "false"
-            {% endif -%}
             - name: FELIX_HEALTHENABLED
               value: "true"
             # Set Felix logging to "warning"
