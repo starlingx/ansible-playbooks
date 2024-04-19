@@ -1,0 +1,297 @@
+---
+# Multus Version v3.9.2
+# Based on:
+# https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v3.9.2/deployments/
+#             multus-daemonset.yml
+#
+# This file is licensed under Apache 2.0.  You can obtain a copy of the license at:
+# https://github.com/k8snetworkplumbingwg/multus-cni/blob/v3.9.2/LICENSE
+#
+# The following modifications have been made:
+#
+# - The multus CNI configuration file has been explicitly specified to ensure
+#   it has a lower lexographic order than the calico CNI configuration file.
+# - The configMap has been modified to work with Calico rather than Flannel
+# - The tuning plugin is used to update sysctl tcp_keepalive timers.
+# - The portmap plugin is enabled to allow forwarding from one or more ports
+#   on the host to the container
+# - The cnibin volume hostPath is made variable
+# - An updateStrategy was added to the DaemonSet spec to allow controlled template
+#   updates of pods with "kubectl apply".
+# - The attributes confDir, cniDir and binDir are added to the configmap of
+#   multus-cni-config.
+# - Due to the limitations on resource tracking and CPU usage in Kubernetes,
+#   platform pod's CPU requests are set to zero and must not request CPU resources.
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: network-attachment-definitions.k8s.cni.cncf.io
+spec:
+  group: k8s.cni.cncf.io
+  scope: Namespaced
+  names:
+    plural: network-attachment-definitions
+    singular: network-attachment-definition
+    kind: NetworkAttachmentDefinition
+    shortNames:
+    - net-attach-def
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          description: 'NetworkAttachmentDefinition is a CRD schema specified by the Network Plumbing
+            Working Group to express the intent for attaching pods to one or more logical or physical
+            networks. More information available at: https://github.com/k8snetworkplumbingwg/multi-net-spec'
+          type: object
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this represen
+                tation of an object. Servers should convert recognized schemas to the
+                latest internal value, and may reject unrecognized values. More info:
+                https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: 'NetworkAttachmentDefinition spec defines the desired state of a network attachment'
+              type: object
+              properties:
+                config:
+                  description: 'NetworkAttachmentDefinition config is a JSON-formatted CNI configuration'
+                  type: string
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: multus
+rules:
+  - apiGroups: ["k8s.cni.cncf.io"]
+    resources:
+      - '*'
+    verbs:
+      - '*'
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - pods/status
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - ""
+      - events.k8s.io
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+      - update
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: multus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: multus
+subjects:
+- kind: ServiceAccount
+  name: multus
+  namespace: kube-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: multus
+  namespace: kube-system
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: multus-cni-config.v1
+  namespace: kube-system
+  labels:
+    tier: node
+    app: multus
+data:
+  # NOTE: If you'd prefer to manually apply a configuration file, you may create one here.
+  # In the case you'd like to customize the Multus installation, you should change the arguments to the Multus pod
+  # change the "args" line below from
+  # - "--multus-conf-file=auto"
+  # to:
+  # "--multus-conf-file=/tmp/multus-conf/70-multus.conf"
+  # Additionally -- you should ensure that the name "70-multus.conf" is the alphabetically first name in the
+  # /etc/cni/net.d/ directory on each node, otherwise, it will not be used by the Kubelet.
+  cni-conf.json: |
+    {
+      "name": "multus-cni-network",
+      "type": "multus",
+      "cniVersion": "0.3.1",
+      "confDir": "/etc/cni/net.d",
+      "cniDir": "/var/lib/cni/multus",
+      "binDir": "/var/opt/cni/bin",
+      "logFile": "/var/log/multus.log",
+      "logLevel": "debug",
+      "capabilities": {
+        "portMappings": true
+      },
+      "delegates": [
+        {
+          "cniVersion": "0.3.1",
+          "name": "chain",
+          "plugins": [
+            {
+              "cniVersion": "0.3.1",
+              "name": "k8s-pod-network",
+              "type": "calico",
+              "masterplugin": true,
+              "log_level": "info",
+              "datastore_type": "kubernetes",
+              "nodename": "__KUBERNETES_NODE_NAME__",
+              "mtu": 1500,
+              "ipam": {
+                  "type": "calico-ipam",
+                  "assign_ipv4": "{{ "true" if cluster_network_ipv4 else "false" }}",
+                  "assign_ipv6": "{{ "true" if cluster_network_ipv6 else "false" }}"
+              },
+              "policy": {
+                  "type": "k8s"
+              },
+              "kubernetes": {
+                  "kubeconfig": "/etc/cni/net.d/calico-kubeconfig"
+              }
+            },
+            {
+              "name": "sysctl-tuning",
+              "type": "tuning",
+              "sysctl": {
+                "net.ipv4.tcp_keepalive_intvl": "1",
+                "net.ipv4.tcp_keepalive_probes": "5",
+                "net.ipv4.tcp_keepalive_time": "5"
+                }
+              },
+              {
+                "type": "portmap",
+                "snat": true,
+                "capabilities": {
+                  "portMappings": true
+                }
+              }
+          ]
+        }
+      ],
+      "kubeconfig": "/etc/cni/net.d/multus.d/multus.kubeconfig"
+    }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kube-multus-ds-amd64
+  namespace: kube-system
+  labels:
+    tier: node
+    app: multus
+    name: multus
+spec:
+  selector:
+    matchLabels:
+      name: multus
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        tier: node
+        app: multus
+        name: multus
+    spec:
+      hostNetwork: true
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      - operator: Exists
+        effect: NoExecute
+      serviceAccountName: multus
+      imagePullSecrets:
+        - name: registry-local-secret
+      containers:
+      - name: kube-multus
+        image: "{{ local_registry }}/{{ multus_img }}"
+        env:
+          - name: KUBERNETES_NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+        command:
+          - /bin/bash
+          - -cex
+          - |
+            #!/bin/bash
+            sed "s|__KUBERNETES_NODE_NAME__|${KUBERNETES_NODE_NAME}|g" /tmp/multus-conf/05-multus.conf > /usr/src/multus-cni/05-multus.conf
+            {% if cluster_network_ipv6 -%}
+            sed -i 's#//\${KUBERNETES_SERVICE_HOST}#//\[\${KUBERNETES_SERVICE_HOST}\]#' /entrypoint.sh
+            {% endif -%}
+            /entrypoint.sh --multus-conf-file=/usr/src/multus-cni/05-multus.conf
+        resources:
+          requests:
+            memory: "50Mi"
+          limits:
+            memory: "50Mi"
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: cni
+          mountPath: /host/etc/cni/net.d
+        - name: cnibin
+          mountPath: /host/opt/cni/bin
+        - name: multus-cfg
+          mountPath: /tmp/multus-conf
+      initContainers:
+        - name: install-multus-binary
+          image: "{{ local_registry }}/{{ multus_img }}"
+          command:
+            - "cp"
+            - "/usr/src/multus-cni/bin/multus"
+            - "/host/opt/cni/bin/multus"
+          resources:
+            requests:
+              cpu: 0
+              memory: "15Mi"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: cnibin
+              mountPath: /host/opt/cni/bin
+              mountPropagation: Bidirectional
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - name: cni
+          hostPath:
+            path: /etc/cni/net.d
+        - name: cnibin
+          hostPath:
+            path: {{ kubelet_cni_bin_dir }}
+        - name: multus-cfg
+          configMap:
+            name: multus-cni-config.v1
+            items:
+            - key: cni-conf.json
+              path: 05-multus.conf
