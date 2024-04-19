@@ -1,24 +1,37 @@
 {% if system_platform_certificate is defined %}
+    commonName: "{{ system_platform_certificate.subject_CN | default(short_certificate_name) }}"
     subject:
-{% if system_platform_certificate.subject_C is defined %}
+{% if system_platform_certificate.subject_C is defined and system_platform_certificate.subject_C != '' %}
       countries:
         - "{{ system_platform_certificate.subject_C }}"
 {% endif %}
-{% if system_platform_certificate.subject_ST is defined %}
+{% if system_platform_certificate.subject_ST is defined and system_platform_certificate.subject_ST != '' %}
       provinces:
         - "{{ system_platform_certificate.subject_ST }}"
 {% endif %}
-{% if system_platform_certificate.subject_L is defined %}
+{% if system_platform_certificate.subject_L is defined and system_platform_certificate.subject_L != '' %}
       localities:
         - "{{ system_platform_certificate.subject_L }}"
-        - "{{ system_platform_certificate.subject_prefix + ':' if system_platform_certificate.subject_prefix is defined else '' }}{{ clean_region_name }}:{{ short_certificate_name }}"
+{% elif system_platform_certificate.subject_L is not defined %}
+      localities:
+        - "{{ clean_region_name }}"
 {% endif %}
-{% if system_platform_certificate.subject_O is defined %}
+{% if system_platform_certificate.subject_O is defined and system_platform_certificate.subject_O != '' %}
       organizations:
         - "{{ system_platform_certificate.subject_O }}"
+{% elif system_platform_certificate.subject_O is not defined %}
+      organizations:
+        - "{{ default.subject_O }}"
 {% endif %}
-{% if system_platform_certificate.subject_OU is defined %}
+{% if system_platform_certificate.subject_OU is defined and system_platform_certificate.subject_OU != '' %}
       organizationalUnits:
         - "{{ system_platform_certificate.subject_OU }}"
 {% endif %}
+{% else %}
+    commonName: "{{ short_certificate_name }}"
+    subject:
+      localities:
+        - "{{ clean_region_name }}"
+      organizations:
+        - "{{ default.subject_O }}"
 {% endif %}

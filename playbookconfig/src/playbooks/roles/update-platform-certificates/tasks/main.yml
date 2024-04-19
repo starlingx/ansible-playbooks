@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2023 Wind River Systems, Inc.
+# Copyright (c) 2021-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -95,9 +95,18 @@
       vars:
         destination: "{{ cert_manager_spec_file }}"
 
-    # This list is composed of all certificates issued by the cluster issuer
-    # plus the four platform ones we will always renew
-    - name: Create a list of certificates that should be migrated to the new 'system-local-ca' issuer
+    - name: Remove default leaf certificates (plus OIDC)
+      include_role:
+        name: common/delete-kubernetes-resources
+      with_items:
+        - { name: system-openldap-local-certificate, namespace: deployment, type: certificate }
+        - { name: system-registry-local-certificate, namespace: deployment, type: certificate }
+        - { name: system-restapi-gui-certificate, namespace: deployment, type: certificate }
+        - { name: oidc-auth-apps-certificate, namespace: kube-system, type: certificate }
+
+    # This list is composed of other certificates issued by the cluster issuer
+    # (i.e. not local REST API/GUI, OpenLDAP, Docker Registry or OIDC)
+    - name: List other certificates that should be migrated to the new 'system-local-ca' issuer
       shell: |
         #Collecting certs previously issued by 'system-local-ca'
         {(kubectl get certificates -A \
@@ -105,30 +114,10 @@
         --no-headers=true |
         awk '$3 == "system-local-ca"' |
         awk '{ print "{name: "$1", namespace: "$2", type: secret}" }' |
-        awk NF);
-
-        #Adding certs we will renew by default (if repeated, they will be filtered in renewal task)
-        (printf "{name: system-openldap-local-certificate, namespace: deployment, type: secret}
-        {name: system-registry-local-certificate, namespace: deployment, type: secret}
-        {name: system-restapi-gui-certificate, namespace: deployment, type: secret}
-        {name: oidc-auth-apps-certificate, namespace: kube-system, type: secret}\n")}
+        awk NF)}
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: certs_to_renew
-
-    # This is a workaround for a problem found in upgrades (not really ideal)
-    # It will cause warnings uppon applying the file
-    - name: Remove 'last-applied-configuration' annotation from certs to avoid version problems after upgrades
-      shell: |
-        kubectl annotate certificate "{{ item.certificate }}" -n "{{ item.namespace }}" \
-        kubectl.kubernetes.io/last-applied-configuration- || true
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      with_items:
-        - { certificate: system-openldap-local-certificate, namespace: deployment }
-        - { certificate: system-registry-local-certificate, namespace: deployment }
-        - { certificate: system-restapi-gui-certificate, namespace: deployment }
-        - { certificate: oidc-auth-apps-certificate, namespace: kube-system }
 
     - name: Apply kubernetes yaml to create cert-manager clusterissuer and certificates
       command: kubectl apply -f "{{ cert_manager_spec_file }}"
@@ -149,6 +138,13 @@
       include_role:
         name: common/delete-kubernetes-resources
       loop: "{{ certs_to_renew.stdout_lines | map('from_yaml') | unique | list }}"
+
+    - name: Wait for local OpenLDAP certificate to be Ready
+      command: >-
+        kubectl wait certificate -n deployment system-openldap-local-certificate
+        --for=condition=Ready --timeout=90s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: Update oidc-auth-apps in order to use new certificate
       include_tasks: reapply-oidc-auth-app.yml
