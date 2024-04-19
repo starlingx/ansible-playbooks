@@ -87,11 +87,13 @@
       health_status.rc != 0 or (
         (health_status.stdout.count('[Fail]') == 0) or (
           health_status.stdout.count('[Fail]') == 1 and
-          no_mgmt_alarms in health_status.stdout
+          no_mgmt_alarms in health_status.stdout and
+          no_cert_alarms in health_status.stdout
         )
       )
     vars:
       no_mgmt_alarms: "[0] of which are management affecting"
+      no_cert_alarms: "[0] are certificate expiration alarms"
     when: not ignore_health|bool
 
   - name: Query health status for reference
