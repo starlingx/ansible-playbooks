@@ -1,0 +1,73 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Validate initial_backup_dir is supplied
+  fail:
+    msg: "--initial_backup_dir variable not provided"
+  when: not initial_backup_dir
+
+- name: Validate initial_backup_dir exists
+  stat:
+    path: "{{ initial_backup_dir }}"
+  register: initial_backup_dir_exists
+
+- name: Fail if initial_backup_dir does not exists
+  fail:
+    msg: "Directory initial_backup_dir: {{ initial_backup_dir }} does not exist"
+  when: not initial_backup_dir_exists.stat.exists
+
+- name: Set vault backup directory fact
+  set_fact:
+    vault_backup_dir: "{{ initial_backup_dir }}/vault"
+
+- name: Create vault subdirectory in initial_backup_dir
+  file:
+    path: "{{ vault_backup_dir }}"
+    state: directory
+
+- name: Check if encrypt is enabled
+  set_fact:
+    vault_encrypt: true
+  when: encrypt_hc_vault_secret | length > 0
+
+# check if vault is applied
+- name: Check if vault is applied
+  shell: |
+    source /etc/platform/openrc
+    system application-show vault --format value --column status
+  register: vault_applied_exists
+
+- name: Fail if vault is not applied
+  fail:
+    msg: "Vault application is not applied"
+  when: vault_applied_exists.stdout != "applied"
+
+- name: Find vault manager pod
+  shell: >-
+    kubectl get pods -n vault | grep "vault-manager" | cut -d " " -f 1
+  register: vault_manager_pod_name
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Fail if vault manager pod is not found
+  fail:
+    msg: "Vault manager pod is not found"
+  when: vault_manager_pod_name.stdout | length == 0
+
+# check vault system health
+- name: Check vault system health
+  shell: >-
+    kubectl exec -n "vault" "{{ vault_manager_pod_name.stdout }}" --
+    bash -c "source /opt/script/init.sh; snapshotPreCheck" 2>&1
+  register: vault_system_health
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Fail if vault health check returns error
+  fail:
+    msg: "Vault system health check returned error"
+  when: vault_system_health.rc != 0
