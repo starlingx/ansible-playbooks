@@ -220,19 +220,20 @@
       line: "platform::config::hosts::host_records: {{ user_dns_host_records_lines }}"
     when: user_dns_host_records
 
-  - name: Add L4 service ports value to bootstrap runtime hieradata
-    vars:
-      script_content: |
-        import sysinv.common.platform_firewall as pf
-        file = "{{ hieradata_workdir }}/runtime.yaml"
-        with open(file, "a") as f:
-          for key in pf.SYSTEM_CONFIG:
-            f.write(f"{key}: {pf.SYSTEM_CONFIG[key]}\n")
-    shell: "{{ script_content }}"
-    args:
-      executable: /usr/bin/python
-
   when: mode == 'bootstrap'
+
+- name: Add L4 service ports value to bootstrap runtime hieradata
+  vars:
+    script_content: |
+      import sysinv.common.platform_firewall as pf
+      file = "{{ hieradata_workdir }}/runtime.yaml"
+      with open(file, "a") as f:
+        for key in pf.SYSTEM_CONFIG:
+          f.write(f"{key}: {pf.SYSTEM_CONFIG[key]}\n")
+  shell: "{{ script_content }}"
+  args:
+    executable: /usr/bin/python
+  when: mode == 'bootstrap' or mode == 'restore'
 
 - block:
   - name: Read drbd settings from system hieradata
