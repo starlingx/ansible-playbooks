@@ -1,0 +1,35 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# refer also to the 'gpg' linux command
+
+encrypt_shred: true
+    # Whether to shred and delete the source encrypt_file after
+    # encryption.
+    # boolean: implemented with roles/shred; default True
+
+encrypt_passphrase: ""
+    # The passphrase with which to encrypt the file.
+    # string: the passphrase; Required
+
+encrypt_file: ""
+    # The file to encrypt.  Only regular files are supported.
+    # Encryption is accomplished with gpg command with option
+    # '--passphrase-fd 0".
+    # string: the file to encrypt; Required
+
+encrypt_output_file: ""
+    # Then name/path of the output file. When omitted, the output file
+    # will be encrypt_file with ".gpg" appended. The output file must
+    # not be pre-existing; the playbook does not support overwriting
+    # the output file.
+    # string: the name/path of the encrypted file; Default is to append
+    #         '.gpg' to encrypt_file
+
+encrypt_command: "gpg"
+
+encrypt_file_extension: "gpg"
