@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -12,50 +12,125 @@
   include_role:
     name: common/validate-cert-subject-fields
 
-- name: Get address pool information for system
-  shell: |
-    source /etc/platform/openrc; system addrpool-list --nowrap
-  register: address_table
+- block:
+  - name: Get primary management ip addresses
+    include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: mgmt
+      network_stack: primary
 
-- name: Get floating management ip
-  shell: |
-    echo "{{ address_table.stdout }}" | awk  '$4 == "management" { print $14 }'
-  register: management_floating_ip
+  - debug:
+      msg: primary management addresses {{ addresses }}
 
-- name: Get controller0 floating management ip
-  shell: |
-    echo "{{ address_table.stdout }}" | awk  '$4 == "management" { print $16 }'
-  register: management_c0_ip
+  - name: Assign primary management ip addresses
+    set_fact:
+      management_floating_ip_primary: "{{ addresses.floating_address }}"
+      management_c0_ip_primary: "{{ addresses.controller0_address }}"
+      management_c1_ip_primary: "{{ addresses.controller1_address }}"
 
-- name: Get controller1 floating management ip
-  shell: |
-    echo "{{ address_table.stdout }}" | awk  '$4 == "management" { print $18 }'
-  register: management_c1_ip
+- block:
+  - name: Get secondary management ip addresses
+    include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: mgmt
+      network_stack: secondary
 
-- name: Get floating oam ip
-  shell: |
-    echo "{{ address_table.stdout }}" | awk  '$4 == "oam" { print $14 }'
-  register: oam_ip
+  - debug:
+      msg: secondary management addresses {{ addresses }}
 
-- name: Get floating kubernetes cluster ip
-  shell: |
-    echo "{{ address_table.stdout }}" | awk  '$4 == "cluster-host-subnet" { print $14 }'
-  register: kubernetes_cluster_floating_ip
+  - name: Assign secondary management ip addresses
+    set_fact:
+      management_floating_ip_secondary: "{{ addresses.floating_address }}"
+      management_c0_ip_secondary: "{{ addresses.controller0_address }}"
+      management_c1_ip_secondary: "{{ addresses.controller1_address }}"
 
-- name: Get controller0 kubernetes cluster ip
-  shell: |
-    echo "{{ address_table.stdout }}" | awk  '$4 == "cluster-host-subnet" { print $16 }'
-  register: kubernetes_cluster_c0_ip
+- block:
+  - name: Get primary oam ip addresses
+    include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: oam
+      network_stack: primary
 
-- name: Get controller1 kubernetes cluster ip
-  shell: |
-    echo "{{ address_table.stdout }}" | awk  '$4 == "cluster-host-subnet" { print $18 }'
-  register: kubernetes_cluster_c1_ip
+  - debug:
+      msg: primary oam addresses {{ addresses }}
 
-- name: Get floating admin ip
-  shell: |
-    echo "{{ address_table.stdout }}" | awk  '$4 == "admin" { print $14 }'
-  register: admin_floating_ip
+  - name: Assign primary oam ip addresses
+    set_fact:
+      oam_ip_primary: "{{ addresses.floating_address }}"
+
+- block:
+  - name: Get secondary oam ip addresses
+    include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: oam
+      network_stack: secondary
+
+  - debug:
+      msg: secondary oam addresses {{ addresses }}
+
+  - name: Assign secondary oam ip addresses
+    set_fact:
+      oam_ip_secondary: "{{ addresses.floating_address }}"
+
+- block:
+  - name: Get primary cluster-host ip addresses
+    include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: cluster-host
+      network_stack: primary
+
+  - debug:
+      msg: primary cluster-host addresses {{ addresses }}
+
+  - name: Assign primary cluster-host ip addresses
+    set_fact:
+      kubernetes_cluster_floating_ip_primary: "{{ addresses.floating_address }}"
+      kubernetes_cluster_c0_ip_primary: "{{ addresses.controller0_address }}"
+      kubernetes_cluster_c1_ip_primary: "{{ addresses.controller1_address }}"
+
+- block:
+  - name: Get secondary cluster-host ip addresses
+    include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: cluster-host
+      network_stack: secondary
+
+  - debug:
+      msg: secondary cluster-host addresses {{ addresses }}
+
+  - name: Assign secondary cluster-host ip addresses
+    set_fact:
+      kubernetes_cluster_floating_ip_secondary: "{{ addresses.floating_address }}"
+      kubernetes_cluster_c0_ip_secondary: "{{ addresses.controller0_address }}"
+      kubernetes_cluster_c1_ip_secondary: "{{ addresses.controller1_address }}"
+
+- block:
+  - name: Get primary admin ip addresses
+    include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: admin
+      network_stack: primary
+
+  - debug:
+      msg: primary admin addresses {{ addresses }}
+
+  - name: Assign primary admin ip addresses
+    set_fact:
+      admin_floating_ip_primary: "{{ addresses.floating_address }}"
+
+- block:
+  - name: Get secondary admin ip addresses
+    include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: admin
+      network_stack: secondary
+
+  - debug:
+      msg: secondary admin addresses {{ addresses }}
+
+  - name: Assign secondary admin ip addresses
+    set_fact:
+      admin_floating_ip_secondary: "{{ addresses.floating_address }}"
 
 - name: Get region name
   shell: |

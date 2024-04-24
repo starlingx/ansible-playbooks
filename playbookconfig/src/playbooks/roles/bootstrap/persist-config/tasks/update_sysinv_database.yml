@@ -69,6 +69,40 @@
     failed_when: (add_mgmt_address.rc != 0) and
                  (not incomplete_bootstrap) and
                  (mgmt_floating_virtual != prev_mgmt_floating_virtual)
+
+  # secondary management
+  - block:
+    # Make sure the secondary management virtual address is available
+    - block:
+      - name: Add the secondary controller-0 address
+        command: ip addr add {{ mgmt_virtual_secondary }} brd {{
+                management_broadcast_secondary }} dev lo scope host label lo:1
+        register: add_mgmt_virtual_address_secondary
+        failed_when: false
+
+      - name: Check failure
+        fail:
+          msg: "{{ add_mgmt_virtual_address_secondary.stderr_lines }}"
+        when: (add_mgmt_virtual_address_secondary.rc != 0) and
+              (not incomplete_bootstrap) and
+              (mgmt_virtual_secondary != prev_mgmt_virtual_secondary)
+      when: mgmt_virtual_secondary is defined and
+            management_broadcast_secondary is defined
+
+    # Make sure the secondary management floating address is available
+    - block:
+      - name: Add the secondary management floating address
+        command: ip addr add {{ mgmt_floating_virtual_secondary }} dev lo scope host
+        register: add_mgmt_address_secondary
+        failed_when: false
+
+      - name: Check failure
+        fail:
+          msg: "{{ add_mgmt_address_secondary.stderr_lines }}"
+        when: (add_mgmt_address_secondary.rc != 0) and
+              (not incomplete_bootstrap) and
+              (mgmt_floating_virtual_secondary != prev_mgmt_floating_virtual_secondary)
+      when: mgmt_floating_virtual_secondary is defined
   when: (not replayed) or (not initial_db_populated) or (reconfigure_endpoints)
 
 - name: Saving config in sysinv database

@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2021 Wind River Systems, Inc.
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -8,22 +8,72 @@
 #   These tasks configure a default route to the oam gateway.
 #
 
-- name: Set the ip command based on IP address version
+- name: Set the ip command based on primary IP address version
   set_fact:
-    ip_command: "{{ 'ip' if ipv6_addressing == False else 'ip -6' }}"
+    ip_command_primary: "{{ 'ip' if network_params.external_oam_subnet_primary|ipv6 == False else 'ip -6' }}"
 
 - name: Check if the default route exists
-  shell: "{{ ip_command }} route show | grep 'default via {{ external_oam_gateway_address }}'"
+  shell: "{{ ip_command_primary }} route show | grep 'default via {{ network_params.external_oam_gateway_address_primary }}'"
   failed_when: false
   register: route_check
 
 - block:
   - name: Configure the default route
-    shell: "{{ ip_command }} route replace default via {{ external_oam_gateway_address }}"
+    shell: "{{ ip_command_primary }} route replace default via {{ network_params.external_oam_gateway_address_primary }}"
     register: route_config
 
   - name: Fail if configuring the default route returns an error
-    fail: msg="Failed to configure a default route to {{ external_oam_gateway_address }}."
+    fail: msg="Failed to configure a default route to {{ network_params.external_oam_gateway_address_primary }}."
     when: route_config.rc != 0
 
   when: route_check.rc != 0
+
+# ip and default route for secondary OAM
+- block:
+  - name: Find interface of primary OAM
+    shell: "{{ ip_command_primary }} route show | grep 'default via {{
+           network_params.external_oam_gateway_address_primary }}' | awk '{print $5}' "
+    failed_when: false
+    register: oam_interface_check
+
+  - name: Fail if no OAM interface found
+    fail:
+      msg: "{{ oam_interface_check.stderr_lines }}"
+    when: oam_interface_check.rc != 0 or oam_interface_check.stderr
+
+  - set_fact:
+      oam_interface: "{{ oam_interface_check.stdout }}"
+      oam_network_mask_secondary: "{{ network_params.external_oam_subnet_secondary | regex_replace('.*/(.?.?)$','\\1') }}"
+      ip_command_secondary: "{{ 'ip' if network_params.external_oam_subnet_secondary|ipv6 == False else 'ip -6' }}"
+
+  - name: Set secondary OAM IP
+    shell: "{{ ip_command_secondary }} addr add {{ network_params.external_oam_floating_address_secondary }}/{{
+            oam_network_mask_secondary }} dev {{ oam_interface }}"
+    failed_when: false
+    register: set_secondary_oam
+
+  # Ignoring if there is failure, as the secondary IP already could be present/preconfigured.
+  # If the IP didnot get set, it will be caught while setting up default route below.
+  - name: Ignore if setting secondary oam interface failed
+    debug:
+      msg: Ignoring "{{ set_secondary_oam.stderr_lines }}"
+    when: set_secondary_oam.rc != 0 or set_secondary_oam.stderr
+
+  - name: Check if the default route exists
+    shell: "{{ ip_command_secondary }} route show | grep 'default via {{
+               network_params.external_oam_gateway_address_secondary }}'"
+    failed_when: false
+    register: route_check
+
+  - block:
+    - name: Configure the default route
+      shell: "{{ ip_command_secondary }} route replace default via {{
+                 network_params.external_oam_gateway_address_secondary }}"
+      register: route_config
+
+    - name: Fail if configuring the default route returns an error
+      fail: msg="Failed to configure a default route to {{ network_params.external_oam_gateway_address_secondary }}."
+      when: route_config.rc != 0
+
+    when: route_check.rc != 0
+  when: network_params.external_oam_subnet_secondary

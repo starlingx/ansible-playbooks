@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2022 Wind River Systems, Inc.
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -118,27 +118,63 @@
 - block:  # Revert configuration to loopback interface
   - name: Set facts derived from previous network configurations
     set_fact:
-      prev_management_subnet_prefix: "{{ prev_management_subnet | ipaddr('prefix') }}"
+      prev_management_subnet_prefix: "{{ prev_network_params.prev_management_subnet_primary | ipaddr('prefix') }}"
       prev_controller_floating_address:
-        "{{ (prev_management_subnet | ipaddr(1)).split('/')[0]
-        if prev_management_start_address == 'derived' else prev_management_start_address }}"
+        "{{ default_prev_management_start_address_primary
+        if prev_management_start_address == 'derived' else prev_network_params.prev_management_start_address_primary }}"
       prev_cluster_floating_address:
-        "{{ (prev_cluster_host_subnet | ipaddr(1)).split('/')[0]
-        if prev_cluster_host_start_address == 'derived' else prev_cluster_host_start_address }}"
-      prev_cluster_subnet_prefix: "{{ prev_cluster_host_subnet | ipaddr('prefix') }}"
+        "{{ default_prev_cluster_host_start_address_primary
+        if prev_cluster_host_start_address == 'derived' else prev_network_params.prev_cluster_host_start_address_primary }}"
+      prev_cluster_subnet_prefix: "{{ prev_network_params.prev_cluster_host_subnet_primary | ipaddr('prefix') }}"
       prev_controller_pxeboot_floating_address:
         "{{ (prev_pxeboot_subnet | ipaddr(1)).split('/')[0]
         if prev_pxeboot_start_address == 'derived' else prev_pxeboot_start_address }}"
       prev_pxe_subnet_prefix: "{{ prev_pxeboot_subnet | ipaddr('prefix') }}"
 
+  # set facts for secondary if defined/exists
+  - block:
+    - name: Set secondary management facts derived from previous network configurations
+      set_fact:
+        prev_management_subnet_prefix_secondary: "{{ prev_network_params.prev_management_subnet_secondary |
+                                                     ipaddr('prefix') }}"
+        prev_controller_floating_address_secondary:
+          "{{ default_prev_management_start_address_secondary
+          if prev_management_start_address == 'derived' else prev_network_params.prev_management_start_address_secondary }}"
+      when: prev_network_params.prev_management_subnet_secondary
+
+    - name: Set secondary cluster-host facts derived from previous network configurations
+      set_fact:
+        prev_cluster_floating_address_secondary:
+          "{{ default_prev_cluster_host_start_address_secondary
+          if prev_cluster_host_start_address == 'derived'
+          else prev_network_params.prev_cluster_host_start_address_secondary }}"
+        prev_cluster_subnet_prefix_secondary: "{{ prev_network_params.prev_cluster_host_subnet_secondary |
+                                                  ipaddr('prefix') }}"
+      when: prev_network_params.prev_cluster_host_subnet_secondary
+
   - name: Set facts derived from previous admin network configuration
     set_fact:
-      prev_admin_subnet_prefix: "{{ prev_admin_subnet | ipaddr('prefix') }}"
+      prev_admin_subnet_prefix: "{{ prev_network_params.prev_admin_subnet_primary | ipaddr('prefix') }}"
       prev_controller_admin_floating_address:
-        "{{ (prev_admin_subnet | ipaddr(1)).split('/')[0]
-        if prev_admin_start_address == 'derived' else prev_admin_start_address }}"
+        "{{ default_prev_admin_start_address_primary
+        if prev_admin_start_address == 'derived' else prev_network_params.prev_admin_start_address_primary }}"
+      # TODO: where prev_admin_controller_floating_address, should it be prev_controller_admin_floating_address ?
       prev_admin_floating_virtual: "{{ prev_admin_controller_floating_address }}/{{ prev_admin_subnet_prefix }}"
     when: (admin_network is defined and (prev_admin_network|bool == true))
+
+  # set facts for secondary if defined/exists
+  - block:
+    - name: Set facts derived from previous secondary admin network configuration
+      set_fact:
+        prev_admin_subnet_prefix_secondary: "{{ prev_network_params.prev_admin_subnet_secondary | ipaddr('prefix') }}"
+        prev_controller_admin_floating_address_secondary:
+          "{{ default_prev_admin_start_address_secondary
+          if prev_admin_start_address == 'derived' else prev_network_params.prev_admin_start_address_secondary }}"
+        prev_admin_floating_virtual_secondary: "{{ prev_controller_admin_floating_address_secondary
+                                                }}/{{ prev_admin_subnet_prefix_secondary }}"
+      when: (admin_network is defined and
+             (prev_admin_network|bool == true) and
+             prev_network_params.prev_admin_subnet_secondary)
 
   - name: Set facts derived from previous floating addresses
     set_fact:
@@ -153,26 +189,94 @@
       prev_mgmt_virtual: "{{ prev_controller_0_address }}/{{ prev_management_subnet_prefix }}"
       prev_cluster_virtual: "{{ prev_controller_0_cluster_host }}/{{ prev_cluster_subnet_prefix }}"
 
+  # set facts for secondary if defined
+  - block:
+    - name: Set facts derived from previous secondary floating address
+      set_fact:
+        prev_controller_0_address_secondary: "{{ prev_controller_floating_address_secondary|ipmath(1) }}"
+      when: prev_controller_floating_address_secondary is defined
+
+    - name: Set facts derived from previous secondary cluster-host floating address
+      set_fact:
+        prev_controller_0_cluster_host_secondary: "{{ prev_cluster_floating_address_secondary|ipmath(1) }}"
+      when: prev_cluster_floating_address_secondary is defined
+
+    # Set facts for the removal of secondary addresses assigned to loopback interface
+    - block:
+      - name: Set facts for the removal of secondary mgmt floating assigned to loopback interface
+        set_fact:
+          prev_mgmt_floating_virtual_secondary: "{{ prev_controller_floating_address_secondary
+                                                 }}/{{ prev_management_subnet_prefix_secondary }}"
+        when: prev_controller_floating_address_secondary is defined and prev_management_subnet_prefix_secondary is defined
+
+      - name: Set facts for the removal of secondary cluster floating assigned to loopback interface
+        set_fact:
+          prev_cluster_floating_virtual_secondary: "{{ prev_cluster_floating_address_secondary
+                                                    }}/{{ prev_cluster_subnet_prefix_secondary }}"
+        when: prev_cluster_floating_address_secondary is defined and prev_cluster_subnet_prefix_secondary is defined
+
+      - name: Set facts for the removal of secondary mgmt assigned to loopback interface
+        set_fact:
+          prev_mgmt_virtual_secondary: "{{ prev_controller_0_address_secondary
+                                        }}/{{ prev_management_subnet_prefix_secondary }}"
+        when: prev_controller_0_address_secondary is defined and prev_management_subnet_prefix_secondary is defined
+
+      - name: Set facts for the removal of secondary cluster assigned to loopback interface
+        set_fact:
+          prev_cluster_virtual_secondary: "{{ prev_controller_0_cluster_host_secondary
+                                           }}/{{ prev_cluster_subnet_prefix_secondary }}"
+        when: prev_controller_0_cluster_host_secondary is defined and prev_cluster_subnet_prefix_secondary is defined
+
   # Remove previous addresses associated with lo interface except the previous mgmt floating address
   # and previous mgmt virtual address as we still need sysinv-api to be reachable at the previous
   # addresses until the service endpoints are reconfigured.
+  - name: Prepare removal items -- Remove loopback interface in sysinv db and associated addresses
+    set_fact:
+      remove_items:
+        - source /etc/platform/openrc; system host-if-delete controller-0 lo
+        - "ip addr delete {{ prev_cluster_floating_virtual }} dev lo scope host"
+        - "ip addr delete {{ prev_pxe_virtual }} dev lo scope host"
+        - "ip addr delete {{ prev_cluster_virtual }}  brd {{ cluster_broadcast }} dev lo:5 scope host"
+
+  - name: Add admin address of the loopback interface on removal list
+    set_fact:
+      remove_items: "{{ remove_items + [item] }}"
+    with_items:
+      - "ip addr delete {{ prev_admin_floating_virtual }} brd {{ admin_broadcast }} dev lo:8 scope host"
+    when: (admin_network is defined and (prev_admin_network|bool == true))
+
+  # add secondary addresses for removal
+  - block:
+    - name: Add secondary cluster floating of the loopback interface on removal list
+      set_fact:
+        remove_items: "{{ remove_items + [item] }}"
+      with_items:
+        - "ip addr delete {{ prev_cluster_floating_virtual_secondary }} dev lo scope host"
+      when: prev_cluster_floating_virtual_secondary is defined
+
+    - name: Add secondary cluster floating of the loopback interface on removal list
+      set_fact:
+        remove_items: "{{ remove_items + [item] }}"
+      with_items:
+        - "ip addr delete {{ prev_cluster_virtual_secondary }}  brd {{
+          cluster_broadcast_secondary }} dev lo:5 scope host"
+      when: prev_cluster_virtual_secondary is defined and cluster_broadcast_secondary is defined
+
+    - name: Add secondary admin address of the loopback interface on removal list
+      set_fact:
+        remove_items: "{{ remove_items + [item] }}"
+      with_items:
+        - "ip addr delete {{ prev_admin_floating_virtual_secondary }} brd {{
+          admin_broadcast_secondary }} dev lo:8 scope host"
+      when: (admin_network is defined and (prev_admin_network|bool == true)
+              and prev_admin_floating_virtual_secondary is defined
+              and admin_broadcast_secondary is defined)
+
   - name: Remove loopback interface in sysinv db and associated addresses
     shell: "{{ item }}"
     register: remove_addresses
     failed_when: false
-    with_items:
-      - source /etc/platform/openrc; system host-if-delete controller-0 lo
-      - "ip addr delete {{ prev_cluster_floating_virtual }} dev lo scope host"
-      - "ip addr delete {{ prev_pxe_virtual }} dev lo scope host"
-      - "ip addr delete {{ prev_cluster_virtual }}  brd {{ cluster_broadcast }} dev lo:5 scope host"
-
-  - name: Remove admin address on the loopback interface
-    shell: "{{ item }}"
-    register: remove_admin_addresses
-    failed_when: false
-    with_items:
-      - "ip addr delete {{ prev_admin_floating_virtual }} brd {{ admin_broadcast }} dev lo:8 scope host"
-    when: (admin_network is defined and (prev_admin_network|bool == true))
+    with_items: "{{ remove_items }}"
 
   - name: Fail if removing interface addresses failed for reason other than it has been done already
     fail:

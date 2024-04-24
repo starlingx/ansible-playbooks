@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2023 Wind River Systems, Inc.
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -14,7 +14,19 @@
   - name: Set network info for docker registry
     set_fact:
       docker_registry_ip: "{{ controller_floating_address }}"
-      docker_registry_public_ip: "{{ external_oam_floating_address }}"
+      docker_registry_public_ip: "{{ network_params.external_oam_floating_address_primary }}"
+
+  # Set secondary network info for docker registry
+  - block:
+    - name: Set secondary network info for docker registry
+      set_fact:
+        docker_registry_ip_secondary: "{{ controller_floating_address_secondary }}"
+      when: controller_floating_address_secondary is defined
+
+    - name: Set secondary network info for docker registry
+      set_fact:
+        docker_registry_public_ip_secondary: "{{ network_params.external_oam_floating_address_secondary }}"
+      when: network_params.external_oam_floating_address_secondary
 
   - name: Generate cnf file from template
     template:

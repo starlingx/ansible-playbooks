@@ -1,0 +1,39 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# These tasks get addresses of network type and network stack (primary/secondary)
+# from the running system
+#
+
+- name: Call to get addresses of given network type and stack
+  script: roles/common/get_network_addresses_from_sysinv/files/get_network_addresses_from_sysinv.py {{
+          network_type }} {{ network_stack }}
+  register: result
+  failed_when: false
+
+- name: Fail if get addresses script throws an exception
+  fail:
+    msg: >
+      Failed to get {{ network_stack }} addresses of {{ network_type }} network-type,
+      return code: {{ result.rc }}
+      Error output: {{ result.stderr }}
+  when: result.rc != 0
+
+- name: Set parsed output as variable
+  set_fact:
+    address_lines: "{{ result.stdout_lines }}"
+
+- name: Initialize addresses as empty
+  set_fact:
+    addresses: { }
+
+- name: Add key-value pair on addresses
+  set_fact:
+    addresses: >-
+      {% set key, val = item.partition('=')[::2]|map('trim') -%}
+      {% set val = False if val=='None' else val -%}
+      {{ addresses | combine ({key: val}) }}
+  with_items: "{{ address_lines }}"

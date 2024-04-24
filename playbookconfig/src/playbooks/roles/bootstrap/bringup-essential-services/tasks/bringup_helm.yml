@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -85,7 +85,7 @@
   replace:
     path: /etc/lighttpd/lighttpd-inc.conf
     regexp: "var.management_ip_network =.*$"
-    replace: 'var.management_ip_network = "{{ management_subnet }}"'
+    replace: 'var.management_ip_network = "{{ network_params.management_subnet_primary }}"'
 
 - name: Update pxe subnet in lighttp-inc.conf
   replace:

@@ -4571,7 +4571,9 @@ spec:
             - name: IP
               value: "autodetect"
             - name: IP_AUTODETECTION_METHOD
-              value: "can-reach={{ controller_0_cluster_host }}"
+              value: "can-reach={{ controller_0_cluster_host
+                                if controller_0_cluster_host|ipv4
+                                else controller_0_cluster_host_secondary }}"
             {% else -%}
             # Disable IPv4
             - name: IP
@@ -4581,7 +4583,9 @@ spec:
             - name: IP6
               value: "autodetect"
             - name: IP6_AUTODETECTION_METHOD
-              value: "can-reach={{ controller_0_cluster_host }}"
+              value: "can-reach={{ controller_0_cluster_host
+                                if controller_0_cluster_host|ipv6
+                                else controller_0_cluster_host_secondary }}"
             {% else -%}
             # Disable IPv6
             - name: IP6
@@ -4815,7 +4819,7 @@ kind: IPPool
 metadata:
   name: default-ipv4-ippool
 spec:
-  cidr: "{{ cluster_pod_subnet }}"
+  cidr: "{{ cluster_network_ipv4 }}"
   ipipMode: "Always"
   natOutgoing: True
   vxlanMode: "Never"
@@ -4827,7 +4831,7 @@ kind: IPPool
 metadata:
   name: default-ipv6-ippool
 spec:
-  cidr: "{{ cluster_pod_subnet }}"
+  cidr: "{{ cluster_network_ipv6 }}"
   natOutgoing: True
   vxlanMode: "Never"
 {% endif -%}

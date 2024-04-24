@@ -520,6 +520,87 @@
         include_vars:
           file: "{{ last_config }}"
 
+      - name: Validate and parse previous dual-stack subnets into primary and secondary
+        include_tasks: roles/common/validate-addresses/tasks/validate_and_parse_dual_stack.yml
+        with_dict:
+          prev_management_subnet: "{{ prev_management_subnet }}"
+          prev_cluster_host_subnet: "{{ prev_cluster_host_subnet }}"
+          prev_cluster_pod_subnet: "{{ prev_cluster_pod_subnet }}"
+          prev_cluster_service_subnet: "{{ prev_cluster_service_subnet }}"
+          prev_external_oam_subnet: "{{ prev_external_oam_subnet }}"
+          prev_management_multicast_subnet: "{{ prev_management_multicast_subnet }}"
+          prev_admin_subnet: "{{ prev_admin_subnet }}"
+        loop_control:
+          loop_var: network_param
+        when: network_param.value != "undef"
+
+      - name: Validate and parse previous dual-stack addresses into primary and secondary
+        include_tasks: roles/common/validate-addresses/tasks/validate_and_parse_dual_stack.yml
+        with_dict:
+          prev_external_oam_gateway_address: "{{ prev_external_oam_gateway_address }}"
+          prev_external_oam_floating_address: "{{ prev_external_oam_floating_address }}"
+          prev_management_start_address: "{{ prev_management_start_address }}"
+          prev_management_end_address: "{{ prev_management_end_address }}"
+          prev_cluster_host_start_address: "{{ prev_cluster_host_start_address }}"
+          prev_cluster_host_end_address: "{{ prev_cluster_host_end_address }}"
+          prev_cluster_pod_start_address: "{{ prev_cluster_pod_start_address }}"
+          prev_cluster_pod_end_address: "{{ prev_cluster_pod_end_address }}"
+          prev_cluster_service_start_address: "{{ prev_cluster_service_start_address }}"
+          prev_cluster_service_end_address: "{{ prev_cluster_service_end_address }}"
+          prev_external_oam_start_address: "{{ prev_external_oam_start_address }}"
+          prev_external_oam_end_address: "{{ prev_external_oam_end_address }}"
+          prev_admin_start_address: "{{ prev_admin_start_address }}"
+          prev_admin_end_address: "{{ prev_admin_end_address }}"
+          prev_management_multicast_start_address: "{{ prev_management_multicast_start_address }}"
+          prev_management_multicast_end_address: "{{ prev_management_multicast_end_address }}"
+          prev_external_oam_node_0_address: "{{ prev_external_oam_node_0_address }}"
+          prev_external_oam_node_1_address: "{{ prev_external_oam_node_1_address }}"
+        loop_control:
+          loop_var: network_param
+        when: network_param.value != "undef" and network_param.value != "derived"
+
+      - name: Assign dual_stack_network_params to prev_network_params
+        set_fact:
+          prev_network_params: >-
+                            {{ dual_stack_network_params }}
+          dual_stack_network_params: { }
+
+      - debug:
+          msg:
+            - previous dual-stack parsed {{ prev_network_params }}
+
+      # set the previous primary default addresses based on the previous primary subnet values
+      - name: Set default previous start primary addresses based on provided previous primary subnets
+        set_fact:
+          default_prev_management_start_address_primary: "{{ (prev_network_params.prev_management_subnet_primary |
+                                                              ipaddr(1)).split('/')[0] }}"
+          default_prev_cluster_host_start_address_primary: "{{ (prev_network_params.prev_cluster_host_subnet_primary |
+                                                              ipaddr(1)).split('/')[0] }}"
+
+      # set the previous secondary default addresses based on the previous secondary subnet values
+      - name: Set default previous start secondary addresses based on provided previous secondary subnets
+        set_fact:
+          default_prev_management_start_address_secondary: "{{ False if (not prev_network_params.
+                                                                         prev_management_subnet_secondary)
+                                                                     else (prev_network_params.
+                                                                           prev_management_subnet_secondary |
+                                                                           ipaddr(1)).split('/')[0] }}"
+          default_prev_cluster_host_start_address_secondary: "{{ False if (not prev_network_params.
+                                                                           prev_cluster_host_subnet_secondary)
+                                                                       else (prev_network_params.
+                                                                             prev_cluster_host_subnet_secondary |
+                                                                             ipaddr(1)).split('/')[0] }}"
+
+      # set the previous default addresses based on the previous admin subnet values
+      - name: Set default previous start primary and secondary addresses based on provided previous admin subnets
+        set_fact:
+          default_prev_admin_start_address_primary: "{{ (prev_network_params.prev_admin_subnet_primary |
+                                                              ipaddr(1)).split('/')[0] }}"
+          default_prev_admin_start_address_secondary: "{{ False if (not prev_network_params.prev_admin_subnet_secondary)
+                                                                else (prev_network_params.prev_admin_subnet_secondary |
+                                                                      ipaddr(1)).split('/')[0] }}"
+        when: prev_admin_network|bool == true
+
       - name: Turn on system attributes reconfiguration flag
         set_fact:
           system_config_update: true

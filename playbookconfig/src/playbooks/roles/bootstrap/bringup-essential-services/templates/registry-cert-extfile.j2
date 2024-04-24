@@ -11,3 +11,9 @@ DNS.1 = registry.local
 DNS.2 = registry.central
 IP.1 = "{{ docker_registry_ip }}"
 IP.2 = "{{ docker_registry_public_ip }}"
+{% if docker_registry_ip_secondary is defined %}
+IP.3 = "{{ docker_registry_ip_secondary }}"
+{% endif %}
+{% if docker_registry_public_ip_secondary is defined %}
+IP.4 = "{{ docker_registry_public_ip_secondary }}"
+{% endif %}

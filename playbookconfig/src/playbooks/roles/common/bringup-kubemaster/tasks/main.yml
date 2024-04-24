@@ -168,13 +168,30 @@
   when: (item.pathType == 'File') and 'content' in item
   loop: "{{ apiserver_extra_volumes + controllermanager_extra_volumes + scheduler_extra_volumes }}"
 
-- name: Set loopback ip for kubeadm configuration
+- name: Set primary loopback ip for kubeadm configuration
   set_fact:
     loopback_ip: "{{ '127.0.0.1' if ipv6_addressing == False else '::1' }}"
 
 - name: Set apiserver SAN list
   set_fact:
-    apiserver_cert_list: "{{ [ cluster_floating_address, loopback_ip ] + apiserver_cert_sans + OAM_addresses}}"
+    apiserver_cert_list: "{{ [ cluster_floating_address, loopback_ip ] + apiserver_cert_sans + OAM_addresses_primary }}"
+
+# add secondary to apiserver SAN list
+- block:
+  - name: Set secondary loopback ip for kubeadm configuration
+    set_fact:
+      apiserver_cert_list: "{{ apiserver_cert_list + ['127.0.0.1' if ipv6_addressing_secondary == False else '::1'] }}"
+    when: ipv6_addressing_secondary is defined
+
+  - name: Add secondary cluster floating address on apiserver SAN list
+    set_fact:
+      apiserver_cert_list: "{{ apiserver_cert_list + [cluster_floating_address_secondary] }}"
+    when: cluster_floating_address_secondary is defined
+
+  - name: Add secondary OAM on apiserver SAN list
+    set_fact:
+      apiserver_cert_list: "{{ apiserver_cert_list + OAM_addresses_secondary}}"
+    when: OAM_addresses_secondary is defined
 
 - name: Set taint configuration for non-AIO systems
   set_fact:
@@ -186,10 +203,19 @@
     src: roles/common/files/kubeadm.yaml.j2
     dest: /etc/kubernetes/kubeadm.yaml
 
+# This is being called from both bootstrap and optimized-restore, not to break
+# when called from optimized-restore, lets not use network_params.cluster_pod_subnet_primary and
+# network_params.cluster_pod_subnet_secondary, instead lets split by comma from cluster_pod_subnet.
 - name: Set Calico cluster configuration
   set_fact:
-    cluster_network_ipv4: "{{ cluster_pod_subnet | ipv4 }}"
-    cluster_network_ipv6: "{{ cluster_pod_subnet | ipv6 }}"
+    cluster_network_ipv4: "{{ cluster_pod_subnet.split(',')[0] | ipv4
+                            if cluster_pod_subnet.split(',')[0] | ipv4
+                            else  cluster_pod_subnet.split(',')[-1] | ipv4
+                          }}"
+    cluster_network_ipv6: "{{ cluster_pod_subnet.split(',')[0] | ipv6
+                            if cluster_pod_subnet.split(',')[0] | ipv6
+                            else  cluster_pod_subnet.split(',')[-1] | ipv6
+                          }}"
 
 - name: Create Calico config file
   template:
