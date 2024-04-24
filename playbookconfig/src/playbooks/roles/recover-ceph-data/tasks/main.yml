@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2023 Wind River Systems, Inc.
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -257,7 +257,7 @@
     - debug: var=prepare_ceph_partitions.stdout_lines
 
     - name: Bring up ceph-mon
-      command: /etc/init.d/ceph start mon
+      command: /etc/init.d/ceph start mon.{{ mon_name }}
 
     # Recover ceph-data from every osd with ceph-objectore-tool
     - name: Recover ceph-data
@@ -267,7 +267,7 @@
     - debug: var=ceph_data_out.stdout_lines
 
     - name: Bring down ceph-mon
-      command: /etc/init.d/ceph stop mon
+      command: /etc/init.d/ceph stop mon.{{ mon_name }}
 
     - name: Delete store.db file from ceph-mon
       file:
@@ -306,10 +306,10 @@
         state: absent
 
     - name: Bring up ceph Monitor
-      command: /etc/init.d/ceph start mon
+      command: /etc/init.d/ceph start mon.{{ mon_name }}
 
     - name: Wait for ceph monitor to be up
-      shell: timeout 15 ceph -s
+      shell: timeout 15 /usr/bin/ceph -s
       retries: 5
       delay: 2
       register: result
@@ -329,14 +329,14 @@
       until: result.rc == 0
 
     - name: Enable Ceph Msgr v2 protocol
-      shell: ceph mon enable-msgr2
+      shell: /usr/bin/ceph mon enable-msgr2
       retries: 5
       delay: 2
       register: result
       until: result.rc == 0
 
     - name: Wait for V2 protocol to be enabled
-      shell: ceph -s
+      shell: /usr/bin/ceph -s
       register: result
       until: "'1 monitors have not enabled msgr2' not in result"
       retries: 30
@@ -346,7 +346,7 @@
       command: /usr/bin/ceph-mgr --cluster ceph --id controller-0 - start ceph-mgr
 
     - name: Wait for ceph-mgr to detect Ceph's pools
-      shell: ceph -s
+      shell: /usr/bin/ceph -s
       register: result
       until: "'0 pools' not in result"
       retries: 30
@@ -362,8 +362,8 @@
         path: "/etc/ceph/ceph.client.guest.keyring"
         state: touch
 
-    - name: Restart ceph one more time to pick latest changes
-      command: /etc/init.d/ceph restart
+    - name: Restart ceph-mon one more time to pick latest changes
+      command: /etc/init.d/ceph restart mon.{{ mon_name }}
 
     - name: Check and recover CephFs filesystem
       script: recover_cephfs.sh
