@@ -1,0 +1,117 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#   This role is to validate the target host environment before proceeding
+#   to the next step.
+#
+
+# TODO(yuxing) uncomment this task when testing in factory installed host
+# Fail if host is not factory installed
+# - name: Verify host is a factory installed finalized
+#  file:
+#    path: "{{ factory_install_finalized }}"
+#    state: file
+#  register: factory_installed_file
+#  failed_when: not factory_installed_file.stat.exists
+
+- name: Initialize some facts to be used in subsequent roles/tasks
+  set_fact:
+    use_docker_proxy: false
+    use_default_registries: true
+    k8s_registry: "{{ default_k8s_registry }}"
+    gcr_registry: "{{ default_gcr_registry }}"
+    quay_registry: "{{ default_quay_registry }}"
+    docker_registry: "{{ default_docker_registry }}"
+    elastic_registry: "{{ default_elastic_registry }}"
+    ghcr_registry: "{{ default_ghcr_registry }}"
+    registryk8s_registry: "{{ default_registryk8s_registry }}"
+    icr_registry: "{{ default_icr_registry }}"
+
+- name: Turn on use_docker_proxy flag
+  set_fact:
+    use_docker_proxy: true
+  when: (docker_http_proxy is defined and docker_http_proxy is not none) or
+        (docker_https_proxy is defined and docker_https_proxy is not none)
+
+- name: Set default registries dictionary to central registry
+  set_fact:
+    default_docker_registries:
+      k8s.gcr.io:
+        url: "{{ central_registry }}/k8s.gcr.io"
+      gcr.io:
+        url: "{{ central_registry }}/gcr.io"
+      quay.io:
+        url: "{{ central_registry }}/quay.io"
+      docker.io:
+        url: "{{ central_registry }}/docker.io"
+      docker.elastic.co:
+        url: "{{ central_registry }}/docker.elastic.co"
+      ghcr.io:
+        url: "{{ central_registry }}/ghcr.io"
+      registry.k8s.io:
+        url: "{{ central_registry }}/registry.k8s.io"
+      icr.io:
+        url: "{{ central_registry }}/icr.io"
+
+- name: Save the list of user defined registry keys
+  set_fact:
+    user_defined_registry_keys: "{{ docker_registries.keys() | list }}"
+
+- name: Merge user and default registries dictionaries
+  set_fact:
+    docker_registries: "{{ default_docker_registries | combine(docker_registries) }}"
+
+- debug:
+    msg: "Docker registries: {{ docker_registries }}"
+
+- name: Validate registry configurations
+  import_role:
+    name: common/validate-registries
+
+# TODO(yuxing) uncomment the following block when the admin network can be configured
+# during factory installation. Task: 50089
+# - name: Validate admin network configuration
+#   block:
+#   - name: Fail if admin network configuration not specified
+#     fail:
+#       msg: "Admin_subnet or admin_gateway_address is not defined in bootstrap values."
+#     when: admin_network is not defined
+#
+#  - name: Set default start and end admin network addresses based on provided subnets
+#    set_fact:
+#      default_admin_start_address: "{{ (admin_subnet | ipaddr(1)).split('/')[0] }}"
+#      default_admin_end_address: "{{ (admin_subnet | ipaddr(-2)).split('/')[0] }}"
+#    when: admin_network is defined
+#
+#  - name: Build admin address pairs for validation
+#    set_fact:
+#      address_pairs:
+#        admin:
+#          start:
+#            "{{ admin_start_address if admin_start_address is defined
+#            else default_admin_start_address }}"
+#          end:
+#            "{{ admin_end_address if admin_end_address is defined
+#            else default_admin_end_address }}"
+#          subnet: "{{ admin_subnet }}"
+#
+#  - include_tasks: roles/common/validate-addresses/tasks/validate_address_range.yml
+#    with_dict: "{{ address_pairs }}"
+
+# Verify if there is management affecting alarms.
+# It checks for column 6 below because that's the column for mgmt_affecting
+- name: Check for management affecting alarms
+  shell: |
+    source /etc/platform/openrc
+    fm alarm-list --nowrap --mgmt_affecting | cut -d'|' -f6 | grep True | wc -l
+  register: management_alarm_count
+
+- name: Fail when there are management alarms
+  fail:
+    msg: >-
+      The subcloud currently has one or more management affecting alarms. Please
+      resolve the alarm condition(s) then try again.
+  when: management_alarm_count.stdout | int > 0

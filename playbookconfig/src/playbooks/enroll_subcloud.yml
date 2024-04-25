@@ -1,0 +1,43 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#   This playbook convert a factory installed system into a subcloud of a
+#   distributed cloud system.
+#
+#   Example command:
+#   ansible-playbook /usr/share/ansible/stx-ansible/playbooks/enroll_subcloud.yml \
+#   -i <inventory-file> --limit <subcloudname> -e '@<subcloudname>.yml'
+#   -e 'override_files_dir=<overrides-files-dir>'
+#
+
+- hosts: all
+  gather_facts: no
+
+  vars_files:
+    - vars/common/main.yml
+    - host_vars/enroll-subcloud/default.yml
+
+  vars:
+    mode: "enroll"
+    distributed_cloud_role: "subcloud"
+
+  # TODO(yuxing) uncomment the roles below onces enabled the support of subcloud enrollment
+  roles:
+    - common/prepare-env
+    - common/validate-target
+    # - common/recover-subcloud-certificates
+    - rehome-enroll-common/prepare-env
+    - enroll-subcloud/validate-before-enroll
+    # - rehome-subcloud/update-registries
+    # - rehome-subcloud/update-ca-cert
+    # - common/update-sc-admin-endpoints
+    # - role: common/update-sc-cert
+    #   when: subcloud_dc_admin_ep_cert_chain_recovered is undefined
+    # - rehome-subcloud/update-network-config
+    # - role: rehome-subcloud/update-keystone-data
+    #   become: yes
+    # - rehome-subcloud/update-dc-role
+    # - enroll-subcloud/complete-enrollment

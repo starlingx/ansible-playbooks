@@ -4,3 +4,19 @@ password_change: false
 cluster_service_subnet: 10.96.0.0/12
 # cluster_service_start_address:
 # cluster_service_end_address:
+
+# DOCKER PROXIES
+# ==============
+#
+# If the host OAM network is behind a proxy, Docker must be configured with
+# the same proxy. When an http and/or https proxy is provided, a no-proxy
+# address list can optionally be provided. This list will be added to the
+# default no-proxy list derived from localhost, loopback, management and oam
+# floating addresses at run time. Each address in the list must neither
+# contain a wildcard nor have subnet format.
+
+# docker_http_proxy: http://proxy.com:1234
+# docker_https_proxy: https://proxy.com:1234
+# docker_no_proxy:
+#   - 1.2.3.4
+#   - 5.6.7.8

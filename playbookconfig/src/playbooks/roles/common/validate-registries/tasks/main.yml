@@ -1,0 +1,244 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to validate the configured registries
+#
+
+- name: Fail if any of the configured registry keys is unknown
+  fail:
+    msg: "Unknown registry key: '{{ item }}'. Acceptable keys are {{ known_registry_keys|join(', ') }} "
+  when: not item in known_registry_keys
+  with_items: "{{ user_defined_registry_keys }}"
+
+# error check the password section of docker registries
+# check password parameters before trying to hide the password
+# we need to do that here as opposed to with the other docker registry
+# stuff because of the debug log statement.
+# we need to do this all before the debug log statement to not log passwords.
+- name: Check k8s_registry credentials
+  fail:
+    msg: "k8s registry username and password must both be specified or not at all"
+  when: (docker_registries[default_k8s_registry.url].username is defined and
+         docker_registries[default_k8s_registry.url].password is not defined) or
+        (docker_registries[default_k8s_registry.url].username is not defined and
+         docker_registries[default_k8s_registry.url].password is defined)
+
+- name: Check gcr_registry credentials
+  fail:
+    msg: "gcr registry username and password must both be specified or not at all"
+  when: (docker_registries[default_gcr_registry.url].username is defined and
+         docker_registries[default_gcr_registry.url].password is not defined) or
+        (docker_registries[default_gcr_registry.url].username is not defined and
+         docker_registries[default_gcr_registry.url].password is defined)
+
+- name: Check quay_registry credentials
+  fail:
+    msg: "quay registry username and password must both be specified or not at all"
+  when: (docker_registries[default_quay_registry.url].username is defined and
+         docker_registries[default_quay_registry.url].password is not defined) or
+        (docker_registries[default_quay_registry.url].username is not defined and
+         docker_registries[default_quay_registry.url].password is defined)
+
+- name: Check docker_registry credentials
+  fail:
+    msg: "docker registry username and password must both be specified or not at all"
+  when: (docker_registries[default_docker_registry.url].username is defined and
+         docker_registries[default_docker_registry.url].password is not defined) or
+        (docker_registries[default_docker_registry.url].username is not defined and
+         docker_registries[default_docker_registry.url].password is defined)
+
+- name: Check elastic_registry credentials
+  fail:
+    msg: "elastic registry username and password must both be specified or not at all"
+  when: (docker_registries[default_elastic_registry.url].username is defined and
+         docker_registries[default_elastic_registry.url].password is not defined) or
+        (docker_registries[default_elastic_registry.url].username is not defined and
+         docker_registries[default_elastic_registry.url].password is defined)
+
+- name: Check ghcr_registry credentials
+  fail:
+    msg: "ghcr registry username and password must both be specified or not at all"
+  when: (docker_registries[default_ghcr_registry.url].username is defined and
+         docker_registries[default_ghcr_registry.url].password is not defined) or
+        (docker_registries[default_ghcr_registry.url].username is not defined and
+         docker_registries[default_ghcr_registry.url].password is defined)
+
+- name: Check registryk8s_registry credentials
+  fail:
+    msg: "registryk8s registry username and password must both be specified or not at all"
+  when: (docker_registries[default_registryk8s_registry.url].username is defined and
+         docker_registries[default_registryk8s_registry.url].password is not defined) or
+        (docker_registries[default_registryk8s_registry.url].username is not defined and
+         docker_registries[default_registryk8s_registry.url].password is defined)
+
+- name: Check icr_registry credentials
+  fail:
+    msg: "icr registry username and password must both be specified or not at all"
+  when: (docker_registries[default_icr_registry.url].username is defined and
+         docker_registries[default_icr_registry.url].password is not defined) or
+        (docker_registries[default_icr_registry.url].username is not defined and
+         docker_registries[default_icr_registry.url].password is defined)
+
+- name: Check defaults registry credentials
+  fail:
+    msg: "defaults registry username and password must both be specified or not at all"
+  when: docker_registries['defaults'] is defined and
+        ((docker_registries['defaults'].username is defined and
+         docker_registries['defaults'].password is not defined) or
+        (docker_registries['defaults'].username is not defined and
+         docker_registries['defaults'].password is defined))
+
+# create a copy of docker_registries without passwords for debug logging
+- set_fact:
+    docker_registries_with_secrets: "{{ docker_registries }}"
+
+- set_fact:
+    docker_registries: "{{ docker_registries | combine(hide_pw, recursive=true) }}"
+  vars:
+    hide_pw: "{ '{{ item.key }}': { 'password': 'secret' } }"
+  with_dict: "{{ docker_registries }}"
+  no_log: true
+
+# Docker config validation
+- block:
+  - name: Validate http proxy urls
+    include_tasks: validate_url.yml
+    loop:
+      - "{{ docker_http_proxy }}"
+      - "{{ docker_https_proxy }}"
+    loop_control:
+      loop_var: input_url
+
+  - name: Validate no proxy addresses
+    include_role:
+      name: common/validate-addresses
+    vars:
+      address_list: "{{ docker_no_proxy }}"
+    when: docker_no_proxy|length > 0
+
+  - name: Add user defined no-proxy address list to default
+    set_fact:
+      docker_no_proxy_combined: "{{ default_no_proxy | union(docker_no_proxy) | ipwrap | unique }}"
+  when: use_docker_proxy
+
+- name: Set docker registry facts if not using default registries
+  block:
+  - name: Turn on use_defaults_registry flag
+    set_fact:
+      use_defaults_registry: true
+      k8s_registry: "{{ k8s_registry | combine(docker_registries_with_secrets['defaults'], recursive=true) }}"
+      gcr_registry: "{{ gcr_registry | combine(docker_registries_with_secrets['defaults'], recursive=true) }}"
+      quay_registry: "{{ quay_registry | combine(docker_registries_with_secrets['defaults'], recursive=true) }}"
+      docker_registry: "{{ docker_registry | combine(docker_registries_with_secrets['defaults'], recursive=true) }}"
+      elastic_registry: "{{ elastic_registry | combine(docker_registries_with_secrets['defaults'], recursive=true) }}"
+      ghcr_registry: "{{ ghcr_registry | combine(docker_registries_with_secrets['defaults'], recursive=true) }}"
+      registryk8s_registry: "{{ registryk8s_registry | combine(docker_registries_with_secrets['defaults'],
+                            recursive=true) }}"
+      icr_registry: "{{ icr_registry | combine(docker_registries_with_secrets['defaults'], recursive=true) }}"
+    when: docker_registries['defaults'] is defined and docker_registries['defaults'] is not none
+
+  - set_fact:
+      k8s_registry:
+        "{{ k8s_registry | combine(docker_registries_with_secrets[default_k8s_registry.url], recursive=true) }}"
+    when: (docker_registries[default_k8s_registry.url]['url'] is not defined or
+           (docker_registries[default_k8s_registry.url]['url'] is not none and
+           docker_registries[default_k8s_registry.url]['url'] != default_k8s_registry.url))
+
+  - set_fact:
+      gcr_registry:
+        "{{ gcr_registry | combine(docker_registries_with_secrets[default_gcr_registry.url], recursive=true) }}"
+    when: (docker_registries[default_gcr_registry.url]['url'] is not defined or
+           (docker_registries[default_gcr_registry.url]['url'] is not none and
+           docker_registries[default_gcr_registry.url]['url'] != default_gcr_registry.url))
+
+  - set_fact:
+      quay_registry:
+        "{{ quay_registry | combine(docker_registries_with_secrets[default_quay_registry.url], recursive=true) }}"
+    when: (docker_registries[default_quay_registry.url]['url'] is not defined or
+           (docker_registries[default_quay_registry.url]['url'] is not none and
+           docker_registries[default_quay_registry.url]['url'] != default_quay_registry.url))
+
+  - set_fact:
+      docker_registry:
+        "{{ docker_registry | combine(docker_registries_with_secrets[default_docker_registry.url], recursive=true) }}"
+    when: (docker_registries[default_docker_registry.url]['url'] is not defined or
+           (docker_registries[default_docker_registry.url]['url'] is not none and
+           docker_registries[default_docker_registry.url]['url'] != default_docker_registry.url))
+
+  - set_fact:
+      elastic_registry:
+        "{{ elastic_registry | combine(docker_registries_with_secrets[default_elastic_registry.url], recursive=true) }}"
+    when: (docker_registries[default_elastic_registry.url]['url'] is not defined or
+           (docker_registries[default_elastic_registry.url]['url'] is not none and
+           docker_registries[default_elastic_registry.url]['url'] != default_elastic_registry.url))
+
+  - set_fact:
+      ghcr_registry:
+        "{{ ghcr_registry | combine(docker_registries_with_secrets[default_ghcr_registry.url], recursive=true) }}"
+    when: (docker_registries[default_ghcr_registry.url]['url'] is not defined or
+           (docker_registries[default_ghcr_registry.url]['url'] is not none and
+           docker_registries[default_ghcr_registry.url]['url'] != default_ghcr_registry.url))
+
+  - set_fact:
+      registryk8s_registry:
+        "{{ registryk8s_registry | combine(docker_registries_with_secrets[default_registryk8s_registry.url],
+        recursive=true) }}"
+    when: (docker_registries[default_registryk8s_registry.url]['url'] is not defined or
+           (docker_registries[default_registryk8s_registry.url]['url'] is not none and
+           docker_registries[default_registryk8s_registry.url]['url'] != default_registryk8s_registry.url))
+
+  - set_fact:
+      icr_registry:
+        "{{ icr_registry | combine(docker_registries_with_secrets[default_icr_registry.url], recursive=true) }}"
+    when: (docker_registries[default_icr_registry.url]['url'] is not defined or
+           (docker_registries[default_icr_registry.url]['url'] is not none and
+           docker_registries[default_icr_registry.url]['url'] != default_icr_registry.url))
+
+  - name: Update use_default_registries flag
+    set_fact:
+      use_default_registries: false
+    when: use_defaults_registry or
+          docker_registries|length != 5 or
+          k8s_registry != default_k8s_registry or
+          gcr_registry != default_gcr_registry or
+          quay_registry != default_quay_registry or
+          docker_registry != default_docker_registry or
+          elastic_registry != default_elastic_registry or
+          ghcr_registry != default_ghcr_registry or
+          registryk8s_registry != default_registryk8s_registry or
+          icr_registry != default_icr_registry
+
+  - block:
+    - name: Validate registry type if specified
+      fail:
+        msg: "Registry type for {{ item.key }} is not supported. Valid value is either 'docker' or 'aws-ecr'."
+      with_dict: "{{ docker_registries }}"
+      when: (item.value.type is defined and
+            item.value.type not in ['docker', 'aws-ecr'])
+
+    - name: Fail if secure registry flag is misconfigured
+      fail:
+        msg: "'secure' parameter of registry {{ item.key }} is misconfigured. Valid value is either 'True' or 'False'."
+      with_dict: "{{ docker_registries }}"
+      when: (item.value.secure is defined and
+            not (item.value.secure|type_debug == 'bool'))
+
+    - name: Validate addresses of the registries addresses
+      include_role:
+        name: common/validate-addresses
+      vars:
+        address_list:
+          - "{{ k8s_registry.url }}"
+          - "{{ gcr_registry.url }}"
+          - "{{ quay_registry.url }}"
+          - "{{ docker_registry.url }}"
+          - "{{ elastic_registry.url }}"
+          - "{{ ghcr_registry.url }}"
+          - "{{ registryk8s_registry.url }}"
+          - "{{ icr_registry.url }}"
+
+    when: not use_default_registries

@@ -17,14 +17,3 @@ system_controller_floating_address: none
 system_controller_subnet: none
 system_controller_oam_floating_address: none
 system_controller_oam_subnet: none
-
-known_registry_keys:
-  - quay.io
-  - gcr.io
-  - k8s.gcr.io
-  - docker.io
-  - docker.elastic.co
-  - ghcr.io
-  - registry.k8s.io
-  - icr.io
-  - defaults

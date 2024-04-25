@@ -29,6 +29,34 @@
     controller_floating_address: "{{ management_start_address }}"
     external_oam_node_0_address: "{{ external_oam_node_0_address | default('derived') }}"
 
+- name: Set initial address facts if not defined. They will be updated later
+  set_fact:
+    pxeboot_start_address: "{{ pxeboot_start_address | default('derived') }}"
+    pxeboot_end_address: "{{ pxeboot_end_address | default('derived') }}"
+    management_start_address: "{{ management_start_address | default('derived') }}"
+    management_end_address: "{{ management_end_address | default('derived') }}"
+    cluster_host_start_address: "{{ cluster_host_start_address | default('derived') }}"
+    cluster_host_end_address: "{{ cluster_host_end_address | default('derived') }}"
+    cluster_pod_start_address: "{{ cluster_pod_start_address | default('derived') }}"
+    cluster_pod_end_address: "{{ cluster_pod_end_address | default('derived') }}"
+    cluster_service_start_address: "{{ cluster_service_start_address | default('derived') }}"
+    cluster_service_end_address: "{{ cluster_service_end_address | default('derived') }}"
+    external_oam_start_address: "{{ external_oam_start_address | default('derived') }}"
+    external_oam_end_address: "{{ external_oam_end_address | default('derived') }}"
+    management_multicast_start_address: "{{ management_multicast_start_address | default('derived') }}"
+    management_multicast_end_address: "{{ management_multicast_end_address | default('derived') }}"
+    external_oam_node_0_address: "{{ external_oam_node_0_address | default('derived') }}"
+    external_oam_node_1_address: "{{ external_oam_node_1_address | default('derived') }}"
+    admin_start_address: "{{ admin_start_address | default('derived') }}"
+    admin_end_address: "{{ admin_end_address | default('derived') }}"
+    controller_floating_address: "{{ management_start_address | default('derived') }}"
+
+- name: Set default values for docker proxies if not defined
+  set_fact:
+    docker_http_proxy: "{{ docker_http_proxy | default('undef') }}"
+    docker_https_proxy: "{{ docker_https_proxy | default('undef') }}"
+    docker_no_proxy: "{{ docker_no_proxy | default([]) }}"
+
 - name: Query system_mode
   shell: |
     source /etc/platform/openrc
@@ -54,8 +82,10 @@
                                         if admin_floating_address is defined }}"
       'controller_1_admin_address': "{{ admin_floating_address|ipmath(2)
                                         if admin_floating_address is defined}}"
-      'oam_start_address': "{{ external_oam_node_0_address if external_oam_node_0_address != 'derived'
+      'oam_node_0_address': "{{ external_oam_node_0_address if external_oam_node_0_address != 'derived'
                            else external_oam_floating_address | ipmath(1) }}"
+      'oam_node_1_address': "{{ external_oam_node_1_address if external_oam_node_1_address != 'derived'
+                           else external_oam_floating_address | ipmath(2) }}"
 
 - name: Set subcloud floating address
   set_fact:
@@ -69,27 +99,33 @@
     awk '($4 == "docker" && $8 == "no_proxy") {print $2}'
   register: existing_docker_no_proxy_result
 
-- block:
-  - name: Set subcloud docker no_proxy facts
-    set_fact:
-      subcloud_no_proxy:
-        - localhost
-        - 127.0.0.1
-        - registry.local
-        - "{{ (cluster_service_subnet | ipaddr(1)).split('/')[0] }}"
-        - "{{ controller_floating_address }}"
-        - "{{ derived_network_params.controller_0_address }}"
-        - "{{ external_oam_floating_address }}"
-        - "{{ derived_network_params.oam_start_address }}"
-        - registry.central
-        - "{{ system_controller_oam_floating_address }}"
-      docker_no_proxy_combined: []
+- name: Set subcloud docker no_proxy facts
+  set_fact:
+    default_no_proxy:
+      - localhost
+      - 127.0.0.1
+      - registry.local
+      - "{{ cluster_service_start_address if cluster_service_start_address != 'derived'
+          else (cluster_service_subnet | ipaddr(1)).split('/')[0]  }}"
+      - "{{ controller_floating_address }}"
+      - "{{ derived_network_params.controller_0_address }}"
+      - "{{ external_oam_floating_address }}"
+      - "{{ derived_network_params.oam_node_0_address }}"
+      - registry.central
+      - "{{ system_controller_oam_floating_address }}"
+    non_sx_proxy_addons:
+      - "{{ derived_network_params.controller_1_address }}"
+      - "{{ derived_network_params.oam_node_1_address }}"
+    docker_no_proxy_combined: []
 
-  - name: Add user defined no-proxy address list to subcloud no proxy list
-    set_fact:
-      docker_no_proxy_combined: "{{ subcloud_no_proxy | union(docker_no_proxy) | ipwrap | unique }}"
+- name: Set default no-proxy address list (non simplex)
+  set_fact:
+    default_no_proxy: "{{ default_no_proxy + non_sx_proxy_addons }}"
+  when: system_mode != 'simplex'
 
-  when: existing_docker_no_proxy_result.stdout | length > 0
+- name: Add user defined no-proxy address list to subcloud no proxy list
+  set_fact:
+    docker_no_proxy_combined: "{{ default_no_proxy | union(docker_no_proxy) | ipwrap | unique }}"
 
 - name: Get management interface of controller-0
   shell: >-

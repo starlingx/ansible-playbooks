@@ -18,7 +18,7 @@
     - common/recover-subcloud-certificates
     - rehome-subcloud/validate-before-rehome
     - common/check-services-status
-    - rehome-subcloud/prepare-env
+    - rehome-enroll-common/prepare-env
     - rehome-subcloud/update-ca-cert
     - common/update-sc-admin-endpoints
     - role: common/update-sc-cert

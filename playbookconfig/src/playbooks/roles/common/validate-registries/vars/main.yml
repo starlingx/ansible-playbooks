@@ -1,0 +1,11 @@
+---
+known_registry_keys:
+  - quay.io
+  - gcr.io
+  - k8s.gcr.io
+  - docker.io
+  - docker.elastic.co
+  - ghcr.io
+  - registry.k8s.io
+  - icr.io
+  - defaults

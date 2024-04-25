@@ -1,0 +1,155 @@
+---
+# timezone: UTC
+
+# At least one DNS server is required to and maximum 3 servers are allowed
+# dns_servers:
+#  - 8.8.8.8
+#  - 8.8.4.4
+
+# DOCKER PROXIES
+# ==============
+#
+# If the host OAM network is behind a proxy, Docker must be configured with
+# the same proxy. When an http and/or https proxy is provided, a no-proxy
+# address list can optionally be provided. This list will be added to the
+# default no-proxy list derived from localhost, loopback, management and oam
+# floating addresses at run time. Each address in the list must neither
+# contain a wildcard nor have subnet format.
+
+# docker_http_proxy: http://proxy.com:1234
+# docker_https_proxy: https://proxy.com:1234
+# docker_no_proxy:
+#   - 1.2.3.4
+#   - 5.6.7.8
+
+# DOCKER REGISTRIES
+# =================
+#
+# The docker_registries is a map of known registry keys and their
+# source attributes. Each key is a fully scoped registry name and the
+# same name is used as the default url attribute. Other attributes include
+# username and password for authenticated registries. For instance,
+# k8s.gcr.io registry which hosts Kubernetes related images, has
+# the default registry url value of k8s.gcr.io
+#
+# To overwrite a particular registry url, use the url of the original
+# registry value as the key followed by a custom IP address or domain
+# for the value.
+# If the registry is authenticated, specify username and password. The
+# optional key "type" is only relevant to authenticated registry, it
+# indicates the type of authenticated registry, supported values are
+# "docker" and "aws-ecr". If no type specified, the default type "docker"
+# will be used.
+# The optional key "secure" provides the ability to configure an insecure
+# registry, the default value is "True".
+#
+# e.g.
+#   docker_registries:
+#     k8s.gcr.io:
+#       url: my.k8sregistry.io
+#       type: docker
+#       username: k8sreguser
+#       password: K8sregPass*
+#       secure: True
+#
+# The "defaults" is registry key defines common values that to be applied
+# to all override-able public registries. The following example will apply
+# "url", "type", "username" and "password" to docker.io, gcr.io, k8s.gcr.io,
+# quay.io, ghcr.io, registryk8s, icr.io and docker.elastic.co registries.
+# e.g.
+#   docker_registries:
+#     defaults:
+#       url: unified.io
+#       type: docker
+#       username: adminUser
+#       password: adminPass
+#
+# The values under the specific registries, if specified, will take precedence
+# over the values under defaults registry. The following example will apply
+# "type", "username" and "password" from the defaults entry to other public
+# registries while the "url" is different for each public registry.
+# e.g.
+#   docker_registries:
+#     docker.io:
+#        url: my.dockerregistry.io
+#     gcr.io:
+#        url: my.gcrregistry.io
+#     quay.io:
+#       url: my.quayregistry.io
+#     k8s.gcr.io:
+#       url: my.k8sregistry.io
+#     docker.elastic.co:
+#       url: my.elasticregistry.io
+#     ghcr.io:
+#       url: my.ghcr.io
+#     registry.k8s.io:
+#       url: my.registryk8s.io
+#     icr.io:
+#       url: my.icrregistry.io
+#     defaults:
+#       type: docker
+#       username: adminUser
+#       password: adminPass
+#
+# The docker registries map can be extended with new custom keys in
+# the near future.
+#
+# The valid formats for a registry url value are:
+#   - domain (e.g. example.domain)
+#   - domain with port (e.g. example.domain:5000)
+#   - IPv4 address (e.g. 1.2.3.4)
+#   - IPv4 address with port (e.g. 1.2.3.4:5000)
+#   - IPv6 address (e.g. FD01::0100)
+#   - IPv6 address with port (e.g. [FD01::0100]:5000
+#
+
+docker_registries:
+  k8s.gcr.io:
+    url:
+  gcr.io:
+    url:
+  quay.io:
+    url:
+  docker.io:
+    url:
+  docker.elastic.co:
+    url:
+  ghcr.io:
+    url:
+  registry.k8s.io:
+    url:
+  icr.io:
+    url:
+
+# defaults:
+#   url: example.domain
+
+# User DNS host records entry
+# ===========================
+#
+# The value must have the following format:
+# <host-record-name>:<name>[,<name>....],[<IPv4-address>],[<IPv6-address>][,<TTL>]
+# where TTL can be optionally provided.
+# Ref: https://thekelleys.org.uk/dnsmasq/docs/dnsmasq-man.html
+# Example Entry:
+# user_dns_host_records:
+#   test-server: example.com,192.168.0.1,1234::100,300
+#   host1: host,example2.com,127.0.0.1
+# user_dns_host_records:
+
+# INITIAL PASSWORD CHANGE RESPONSE SEQUENCE
+# =========================================
+#
+# The following two parameters are only relevant when the target host is bootstrapped
+# remotely and the user wishes to change the initial sysadmin password as part of the
+# bootstrap.
+#
+# WARNING: It is strongly recommended to store this setting in Ansible vault
+# file named "secrets.yml" under override files directory. Configuration parameters
+# stored in vault must start with vault_ prefix (i.e. vault_password_change_responses)
+#
+password_change: false
+
+cluster_service_subnet: 10.96.0.0/12
+# cluster_service_start_address:
+# cluster_service_end_address:
