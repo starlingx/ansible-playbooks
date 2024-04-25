@@ -340,7 +340,7 @@
     command: psql -d keystone -c "update public.project set
            id='{{ system_controller_keystone_services_project_id }}' where name='services'"
   become_user: postgres
-  when: distributed_cloud_role == 'subcloud'
+  when: distributed_cloud_role == 'subcloud' and mode == 'bootstrap'
 
 - name: Import fm bootstrap tasks
   import_tasks: fm_bootstrap.yml
