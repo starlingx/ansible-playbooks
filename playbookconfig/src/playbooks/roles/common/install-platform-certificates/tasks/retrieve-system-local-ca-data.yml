@@ -58,7 +58,7 @@
 
     - name: Set system-local-ca data
       set_fact:
-        system_root_ca_cert: "{{ ca_cert_result.stdout | default(cert_result.stdout, true) }}"
+        system_root_ca_cert: "{{ ca_cert_result.stdout | default('', true) }}"
         system_local_ca_cert: "{{ cert_result.stdout }}"
         system_local_ca_key: "{{ key_result.stdout }}"
         system_local_ca_data_obtained: true
