@@ -1,0 +1,51 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# refer also to the 'shred' linux command
+
+shred_force: true
+    # Change file permissions to allow writing if necessary.
+    # boolean: implemented using -f/--force, default is to force (True)
+
+shred_iterations: 3
+    # The number of times to overwrite the file with random data.
+    # integer: implemented using -n/--iterations, default 3
+
+shred_remove: true
+    # Whether to delete the file/directory specified by shred_path after
+    # shredding.
+    #
+    # When shredding a file, the deletion is handled by shred option
+    # '-u'.  When shred_path is a directory, the files within that
+    # directory (and recursively the subdirectories) are removed by the
+    # shred command.  The directory is removed by ansible built-in file
+    # module with state "absent".
+    # boolean: implemented using -u, default True
+
+shred_zero: true
+    # Whether to write zeros to a file after shredding.
+    # boolean: implemented using -z/--zero, default True
+
+shred_args: []
+    # list: specific shred arguments; Optional: if specified then the
+    # other shred role options listed above are ignored.
+    #
+    # The shred command will be composed by appending the list items to
+    # the shred command line:
+    #   command={{ ["shred"] + shred_args }}
+    #
+    # Finally the shred_path is append to the list before running the
+    # command
+
+shred_path: ""
+    # The file or directory to shred. If a directory, then recursively
+    # shred all of the files in the directory.  Only regular files are
+    # shredded.
+    # string: the file or directory to shred; Required
+
+shred_command: "shred"
+    # The linux command
