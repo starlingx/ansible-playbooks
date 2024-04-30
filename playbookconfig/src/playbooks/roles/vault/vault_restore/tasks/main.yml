@@ -5,31 +5,46 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: Set backup file path
-  set_fact:
-    backup_filepath: "{{ vault_backup_dir }}/{{ backup_filename }}"
+- name: Unpackage the backup tarball
+  command: >-
+    tar --use-compress-program=pigz -C {{ vault_backup_dir }} -xpf {{ backup_filepath }}
+    --wildcards --transform='s,.*/,,'
+  args:
+    warn: false
 
-- name: Find snapshot
-  shell: |
-    ls {{ backup_filepath }}
-  register: snapshot_tar_name
+- name: Find the snapshot file
+  command: >-
+    find {{ vault_backup_dir }} -name "hc-vault-snapshot-*.tar"
+  register: backup_snapshot_file
 
-- name: Fail if vault snapshot tar not found
+- name: Fail if snapshot file was not found
   fail:
-    msg: "Vault snapshot tarball: {{ backup_filename }} was not found"
-  when: snapshot_tar_name.stdout | length == 0
+    msg: "Backup snapshot was not found in {{ backup_filepath }}"
+  when: backup_snapshot_file.stdout | length == 0
+
+- name: Change snapshot file permissions
+  file:
+    path: "{{ backup_snapshot_file.stdout }}"
+    mode: 0755
+
+- name: Find vault manager pod
+  shell: >-
+    kubectl get pods -n vault | grep "vault-manager" | cut -d " " -f 1
+  register: vault_manager_pod_name
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
 
 # call vault_restore.sh
 - name: Restore vault from the snapshot
   block:
     - name: Restore vault snapshot with default encryption
-      script: vault_restore.sh {{ backup_filepath }}
+      script: vault_restore.sh {{ backup_snapshot_file.stdout }}
       when: not vault_encrypt
       register: vault_restore_script
       failed_when: vault_restore_script.rc != 0
 
     - name: Restore vault snapshot with custom encryption
-      script: vault_restore.sh {{ backup_filepath }} '--decrypt' "custom_var"
+      script: vault_restore.sh {{ backup_snapshot_file.stdout }} '--decrypt' "custom_var"
       when: vault_encrypt
       register: vault_restore_script
       failed_when: vault_restore_script.rc != 0
@@ -41,3 +56,14 @@
       shell: >-
         kubectl exec -n "vault" "{{ vault_manager_pod_name.stdout }}" --
         bash -c "source /opt/script/init.sh; if [ -f $PAUSEFILE ]; then rm -f $PAUSEFILE; fi" 2>&1
+  rescue:
+    - name: Clean up vault subdir if in standalone mode
+      file:
+        path: "{{ vault_backup_dir }}"
+        state: absent
+      when: op_mode == "standalone"
+
+- name: Cleanup vault subdir
+  file:
+    path: "{{ vault_backup_dir }}"
+    state: absent

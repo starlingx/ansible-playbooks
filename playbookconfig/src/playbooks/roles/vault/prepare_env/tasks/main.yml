@@ -5,9 +5,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: Validate initial_backup_dir is supplied
+- name: Validate if initial_backup_dir is supplied
   fail:
-    msg: "--initial_backup_dir variable not provided"
+    msg: "initial_backup_dir variable not provided"
   when: not initial_backup_dir
 
 - name: Validate initial_backup_dir exists
@@ -22,29 +22,62 @@
 
 - name: Set vault backup directory fact
   set_fact:
-    vault_backup_dir: "{{ initial_backup_dir }}/vault"
+    vault_backup_dir: "{{ initial_backup_dir }}/hc_vault"
 
 - name: Create vault subdirectory in initial_backup_dir
   file:
     path: "{{ vault_backup_dir }}"
     state: directory
+    mode: 0755
 
 - name: Check if encrypt is enabled
   set_fact:
     vault_encrypt: true
   when: encrypt_hc_vault_secret | length > 0
 
-# check if vault is applied
-- name: Check if vault is applied
-  shell: |
-    source /etc/platform/openrc
-    system application-show vault --format value --column status
-  register: vault_applied_exists
+- name: Check vault apply for backup
+  block:
+  - name: Check if vault is applied
+    shell: |
+      source /etc/platform/openrc
+      system application-show vault --format value --column status
+    register: vault_applied_exists
 
-- name: Fail if vault is not applied
-  fail:
-    msg: "Vault application is not applied"
-  when: vault_applied_exists.stdout != "applied"
+  - name: Fail if vault is not applied
+    fail:
+      msg: "Vault application is not applied"
+    when: vault_applied_exists.stdout != "applied"
+  when: vault_mode == "backup"
+
+- name: Validate vault health for restore.
+  block:
+  - name: Set backup file path
+    set_fact:
+      backup_filepath: "{{ initial_backup_dir }}/{{ backup_filename }}"
+
+  - name: Find backup tarball
+    shell: |
+      ls {{ backup_filepath }}
+    register: backup_tarball
+
+  - name: Fail if vault backup tarball not found
+    fail:
+      msg: "Vault snapshot tarball: {{ backup_filename }} was not found"
+    when: backup_tarball.stdout | length == 0
+
+  - name: Validate if vault application is ready to be restored
+    script: validate_recover_vault.sh
+    environment:
+      KUBECONFIG: /etc/kubernetes/admin.conf
+    register: validate_vault_result
+    failed_when: validate_vault_result.rc != 0
+
+  rescue:
+    - name: Display vault validation script output if exists
+      debug:
+        msg: "{{ validate_vault_result.stdout }}"
+      when: validate_vault_result is defined
+  when: vault_mode == "restore"
 
 - name: Find vault manager pod
   shell: >-
@@ -57,17 +90,3 @@
   fail:
     msg: "Vault manager pod is not found"
   when: vault_manager_pod_name.stdout | length == 0
-
-# check vault system health
-- name: Check vault system health
-  shell: >-
-    kubectl exec -n "vault" "{{ vault_manager_pod_name.stdout }}" --
-    bash -c "source /opt/script/init.sh; snapshotPreCheck" 2>&1
-  register: vault_system_health
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-
-- name: Fail if vault health check returns error
-  fail:
-    msg: "Vault system health check returned error"
-  when: vault_system_health.rc != 0
