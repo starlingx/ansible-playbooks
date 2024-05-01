@@ -152,6 +152,14 @@
       - upgrade_in_progress
       - previous_software_version == '21.12'
 
+  - name: Add FluxCD image if optimized upgrading from 22.12
+    set_fact:
+      static_images: "{{ static_images + [flux_helm_controller_img_2212, flux_source_controller_img_2212] }}"
+    when:
+      - upgrade_in_progress is defined
+      - upgrade_in_progress
+      - previous_software_version == '22.12'
+
   - name: Append additional static images if provisioned
     set_fact:
       static_images: "{{ static_images }} + [ '{{item.value}}' ]"
