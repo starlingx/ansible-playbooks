@@ -1,0 +1,26 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# refer also to the 'gpg' linux command
+
+decrypt_passphrase: ""
+    # The passphrase with which to decrypt the file. Implemented with
+    # "--passphrase-fd 0", input from stdin
+    # string: the passphrase; Required
+
+decrypt_file: ""
+    # The file to decrypt. Decryption is accomplished with gpg command.
+    # Supports symmetric encrypted files only (passphrase)
+    # string: the file to decrypt; Required
+
+decrypt_output_file: ""
+    # Then name/path of the output file. The output file must
+    # not be pre-existing; the playbook does not support overwriting
+    # the output file.
+    # string: the name/path of the decrypted file; Required
+
+decrypt_command: "gpg"

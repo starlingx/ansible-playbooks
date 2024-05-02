@@ -1,0 +1,85 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   Decrypt the file specified by decrypt_file variable.
+#   Refer to vars/main.yml for options
+#
+
+- name: Assert that decrypt_command exists
+  command: "{{ decrypt_command }} --version"
+  changed_when: false
+
+- name: Assert that decrypt_file is provided
+  assert:
+    that:
+    - decrypt_file is string
+    - decrypt_file | length > 0
+
+- name: Get the file stat of decrypt_file
+  stat:
+    path: "{{ decrypt_file }}"
+  register: decrypt_internal_file
+
+- name: Fail if the input file does not exist
+  fail:
+    msg: "The path {{ decrypt_file }} does not exist"
+  when: not decrypt_internal_file.stat.exists
+
+- name: Fail if the input file is not a regular file
+  fail:
+    msg: "The path {{ decrypt_file }} is not a regular file"
+  when: not decrypt_internal_file.stat.isreg
+
+- name: Assert that decrypt_passphrase is provided
+  assert:
+    that:
+    - decrypt_passphrase is string
+    - decrypt_passphrase | length > 0
+
+- name: Assert that decrypt_output_file is provided
+  assert:
+    that:
+    - decrypt_output_file is string
+    - decrypt_output_file | length > 0
+
+- name: Get the file stat of decrypt_output_file
+  stat:
+    path: "{{ decrypt_output_file }}"
+  register: decrypt_internal_output_file
+
+- name: Fail if the output file exists
+  fail:
+    msg: "The output path {{ decrypt_output_file }} exists"
+  when: decrypt_internal_output_file.stat.exists
+
+- name: Run the decryption command
+  command:
+    argv:
+    - "{{ decrypt_command }}"
+    - "--no-symkey-cache"
+    - "-q"
+    - "-o"
+    - "{{ decrypt_output_file }}"
+    - "--passphrase-fd"
+    - "0"
+    - "--batch"
+    - "--pinentry-mode"
+    - "loopback"
+    - "--decrypt"
+    - "{{ decrypt_file }}"
+    stdin: "{{ decrypt_passphrase }}"
+  changed_when: true
+
+- name: Get the stat of decrypt_output_file
+  stat:
+    path: "{{ decrypt_output_file }}"
+  register: decrypt_internal_new_file
+
+- name: Fail if the output file does not exist
+  fail:
+    msg: "{{ decrypt_command }} did not create {{ decrypt_output_file }}"
+  when: not decrypt_internal_new_file.stat.exists
