@@ -29,9 +29,9 @@
   import_role:
     name: common/get-kube-version
 
-- name: Mount k8s bind mount
+- name: Create symlinks for current Kubernetes version
   import_role:
-    name: common/k8s-bind-mount
+    name: common/k8s-symlinks
 
 - name: Enable kubelet
   systemd:

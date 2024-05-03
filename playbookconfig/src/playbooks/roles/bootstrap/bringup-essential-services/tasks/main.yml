@@ -39,9 +39,9 @@
     when: last_config_file_exists and reconfigure_endpoints and
           (mgmt_virtual != prev_mgmt_virtual)
 
-  - name: Mount current Kubernetes version
+  - name: Create symlinks for current Kubernetes version
     import_role:
-      name: common/k8s-bind-mount
+      name: common/k8s-symlinks
 
   - name: Refresh local DNS (i.e. /etc/hosts)
     import_tasks: refresh_local_dns.yml
