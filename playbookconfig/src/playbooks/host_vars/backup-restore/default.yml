@@ -98,6 +98,18 @@ openstack_backup_filename_prefix: "{{ inventory_hostname }}_{{ openstack_app_nam
 #
 dc_vault_backup_filename_prefix: "{{ inventory_hostname }}_dc_vault_backup"
 
+# This is the default value for including Hashicorp vault into the platform backup process.
+# This value can be overridden by the user when calling for platform backup playbook,
+# to include or not include the Hashicorp vault backup.
+# If the Hashicorp vault application is either uploaded only or non-existent,
+# the backup process will be omitted regardless of what this value is.
+backup_hc_vault: false
+
+# The hashicorp vault backup tarball will be named in this format:
+# <dc_vault_backup_filename_prefix>_<timestamp>.tgz
+#
+hc_vault_backup_filename_prefix: "{{ inventory_hostname }}_hc_vault_backup"
+
 restore_cinder_glance_data: false
 
 # Default directory where the system backup tarballs fetched from the

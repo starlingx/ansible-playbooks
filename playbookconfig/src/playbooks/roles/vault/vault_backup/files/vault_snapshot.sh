@@ -222,7 +222,7 @@ fi
 
 rndtmp="$( get_unique_string )"
 secret="${K8S_SECRET_PREFIX}-$rndtmp"
-fname="${OUTPUTDIR}/snapshot-${rndtmp}.tar"
+fname="${OUTPUTDIR}/hc-vault-snapshot-${rndtmp}.tar"
 metaf="${fname}.metadata"
 
 # get the snapshot

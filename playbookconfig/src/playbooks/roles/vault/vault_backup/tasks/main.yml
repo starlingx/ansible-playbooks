@@ -5,6 +5,15 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+- name: Check vault system health
+  shell: >-
+    kubectl exec -n "vault" "{{ vault_manager_pod_name.stdout }}" --
+    bash -c "source /opt/script/init.sh; snapshotPreCheck" 2>&1
+  register: vault_system_health
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  failed_when: vault_system_health.rc != 0
+
 - name: Create vault snapshot
   block:
     - name: Create vault snapshot with default encryption
@@ -26,3 +35,80 @@
       shell: >-
         kubectl exec -n "vault" "{{ vault_manager_pod_name.stdout }}" --
         bash -c "source /opt/script/init.sh; if [ -f $PAUSEFILE ]; then rm -f $PAUSEFILE; fi" 2>&1
+  rescue:
+    - name: Clean up vault subdir if in standalone mode
+      file:
+        path: "{{ vault_backup_dir }}"
+        state: absent
+      when: op_mode == "standalone"
+
+
+- name: Package vault if running in standalone mode
+  block:
+  - name: Check if pigz package is installed
+    block:
+
+      - name: Issue command to pkg manager
+        command: "{{ 'rpm -q' if os_release == 'centos' else 'dpkg -l' }} pigz"
+        args:
+          warn: false
+        failed_when: false
+        register: check
+
+      - set_fact:
+          pigz_check: "{{ 'succeeded' if check.rc == 0 else 'failed' }}"
+
+    when: os_release in ["centos", "debian"]
+
+  - name: Check if pigz package is installed
+    package:
+      name: pigz
+      state: present
+    check_mode: true
+    register: pigz_check
+    when: os_release not in ["centos", "debian"]
+
+  - name: Check number of platform cores
+    shell: |
+      source /etc/platform/openrc
+      system host-cpu-list $(hostname) --nowrap | grep " Platform " | wc -l
+    register: num_platform_cores
+
+  - name: Set compress program for backup tarball
+    set_fact:
+      compress_program: >-
+        "{{ 'pigz' if num_platform_cores.stdout | int >= 4 and
+        pigz_check is succeeded else 'gzip' }}"
+
+  - name: Use current timestamp as backups timestamp
+    set_fact:
+      backup_timestamp: "{{ lookup('pipe', 'date +%Y_%m_%d_%H_%M_%S') }}"
+
+  - name: Attach timestamp to backups filename
+    set_fact:
+      hc_vault_backup_file: "{{ hc_vault_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
+
+  - name: Set backup files absolute path
+    set_fact:
+      hc_vault_backup_file_path: "{{ initial_backup_dir }}/{{ hc_vault_backup_file }}"
+
+  - name: Create a tgz archive for Hashicorp vault backup
+    shell: >-
+      tar
+      --use-compress-program={{ compress_program }}
+      -cf {{ hc_vault_backup_file_path }}
+      $(ls -d
+      {{ vault_backup_dir }}
+      2> /dev/null)
+    args:
+      warn: false
+    # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it", which
+    # makes tar return 1
+    register: tar_cmd
+    failed_when: tar_cmd.rc >= 2 or tar_cmd.rc < 0
+
+  - name: Cleanup vault subdir
+    file:
+      path: "{{ vault_backup_dir }}"
+      state: absent
+  when: op_mode == "standalone"

@@ -16,6 +16,8 @@
     ldap_schema_path: "{{ '/etc/openldap/schema' if os_release == 'centos' else '/etc/ldap/schema' }}"
     backup_registry_filesystem_required: "{{ backup_registry_filesystem | bool }}"
     should_use_old_image_backup: "{{ backup_user_images|bool == true }}"
+    include_hc_vault: "{{ backup_hc_vault | bool }}"
+    omit_hc_vault: false
 
 
 - name: Do StarlingX backup
@@ -63,6 +65,61 @@
       fail:
         msg: "default-registry-key not found. Platform backup cannot proceed without it."
       when: kube_system_default_registry_key.rc != 0
+
+    - name: Check Hashicorp vault status
+      block:
+      - name: Check if vault is applied
+        shell: |
+          source /etc/platform/openrc
+          system application-show vault --format value --column status
+        register: vault_applied_exists
+
+      - name: Omit vault if status is empty or uploaded
+        set_fact:
+          include_hc_vault: false
+          omit_hc_vault: true
+        when: >-
+          vault_applied_exists.stdout | length == 0 or
+          vault_applied_exists.stdout == "uploaded"
+
+      - name: Fail vault if status is not applied
+        fail:
+          msg: "Hashicorp vault application is {{ vault_applied_exists.stdout }}, not applied."
+        when: vault_applied_exists.stdout != "applied"
+      when: include_hc_vault | bool
+
+    - name: Indicate if Hashicorp vault is omitted from status check
+      debug:
+        msg: "Hashicorp vault backup will be omitted because vault is not applied."
+      when: omit_hc_vault | bool
+
+    - name: Hashicorp vault precheck
+      block:
+      - name: Find vault manager pod
+        shell: >-
+          kubectl get pods -n vault | grep "vault-manager" | cut -d " " -f 1
+        register: vault_manager_pod_name
+        environment:
+          KUBECONFIG: /etc/kubernetes/admin.conf
+
+      - name: Fail if vault manager pod is not found
+        fail:
+          msg: "Vault manager pod is not found"
+        when: vault_manager_pod_name.stdout | length == 0
+
+      - name: Check vault system health
+        shell: >-
+          kubectl exec -n "vault" "{{ vault_manager_pod_name.stdout }}" --
+          bash -c "source /opt/script/init.sh; snapshotPreCheck" 2>&1
+        register: vault_system_health
+        environment:
+          KUBECONFIG: /etc/kubernetes/admin.conf
+
+      - name: Fail if vault health check returns error
+        fail:
+          msg: "Vault system health check returned error"
+        when: vault_system_health.rc != 0
+      when: include_hc_vault | bool
 
     - name: Send application lifecycle notifications for pre-backup semantic check
       command: /usr/bin/sysinv-utils notify backup-semantic-check
@@ -142,6 +199,13 @@
         path: "{{ tempdir.path }}/postgres"
         state: directory
       register: postgres_dir
+
+    - name: Create hashicorp vault temp dir
+      file:
+        path: "{{ tempdir.path }}/hc_vault_dir"
+        state: directory
+      register: hc_vault_dir
+      when: include_hc_vault | bool
 
     - name: Backup roles, table spaces and schemas for databases.
       shell: >-
@@ -508,6 +572,33 @@
           {{ pre_etcd_backup_notification_result.stderr }}.
       when: pre_etcd_backup_notification_result.rc != 0
 
+    # Vault snapshot should be taken before the backup of etcd database.
+    # A k8s secret is created that is associated with the snapshot.
+    - name: Run hashicorp vault backupldap_schema_path
+      block:
+      - name: Include hashicorp vault backup role
+        include_role:
+          name: vault/vault_backup
+        vars:
+          vault_backup_dir: "{{ hc_vault_dir.path }}"
+          vault_encrypt: false
+          encrypt_hc_vault_secret: ""
+          op_mode: "platform"
+
+      - name: Find result files
+        find:
+          paths: "{{ hc_vault_dir.path }}"
+          patterns: "hc-vault-snapshot-*.tar*"
+        register: hc_vault_backup_result
+
+      - name: Fail if incorrect number of file created from Hashicorp vault backup
+        fail:
+          msg: >
+            There was an error with the Hashicorp vault backup process.
+            Incorrect number of files produced.
+        when: hc_vault_backup_result.matched != 2
+      when: include_hc_vault | bool
+
     - name: Create etcd snapshot temp dir
       file:
         path: "{{ tempdir.path }}/etcd-snapshot"
@@ -591,6 +682,7 @@
         user_images_backup_file: "{{ user_images_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
         openstack_backup_file: "{{ openstack_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
         dc_vault_backup_file: "{{ dc_vault_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
+        hc_vault_backup_file: "{{ hc_vault_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
 
     - name: Set backup files absolute path
       set_fact:
@@ -598,6 +690,7 @@
         user_images_backup_file_path: "{{ backup_dir }}/{{ user_images_backup_file }}"
         openstack_backup_file_path: "{{ backup_dir }}/{{ openstack_backup_file }}"
         dc_vault_backup_file_path: "{{ backup_dir }}/{{ dc_vault_backup_file }}"
+        hc_vault_backup_file_path: "{{ backup_dir }}/{{ hc_vault_backup_file }}"
 
     - name: Save user uploaded images from local registry to an archive
       include_tasks: export-user-local-registry-images.yml
@@ -695,6 +788,24 @@
       failed_when: tar_cmd.rc >= 2 or tar_cmd.rc < 0
       when: check_mariadb_pod.rc == 0 or openstack_status.stdout == "uploaded"
 
+    - name: Create a tgz archive for Hashicorp vault backup
+      shell: >-
+        tar
+        --use-compress-program={{ compress_program }}
+        --exclude {{ exclude_targets | map('regex_replace', '^/', '')
+        | list | join(' --exclude ') }}
+        -cf {{ hc_vault_backup_file_path }}
+        $(ls -d
+        {{ hc_vault_dir.path }}
+        2> /dev/null)
+      args:
+        warn: false
+      # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it", which
+      # makes tar return 1
+      register: tar_cmd
+      failed_when: tar_cmd.rc >= 2 or tar_cmd.rc < 0
+      when: include_hc_vault | bool
+
     - name: Notify the user backup tar file(s) are available
       debug:
         msg: >-
@@ -714,10 +825,18 @@
 
       - name: Transfer openstack backup tar files to the local machine if it exists
         fetch:
-          src: "{{ openstack_backup_file_path}}"
+          src: "{{ openstack_backup_file_path }}"
           dest: "{{ host_backup_dir }}/"
           flat: yes
         when: check_mariadb_pod.rc == 0 or openstack_status.stdout == "uploaded"
+        no_log: true
+
+      - name: Transfer for Hashicorp vault backup tar files to the local machine if it exists
+        fetch:
+          src: "{{ hc_vault_backup_file_path }}"
+          dest: "{{ host_backup_dir }}/"
+          flat: yes
+        when: include_hc_vault | bool
         no_log: true
 
       # TODO transfer docker image archive which may be very big during remote play.

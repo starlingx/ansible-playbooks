@@ -4,6 +4,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
+
+# requires one variable passed:
+# initial_backup_dir = The resulting backup package will be found here.
+
 - hosts: all
   gather_facts: no
 
@@ -13,7 +17,10 @@
   vars:
     password_change: false
     vault_encrypt: false
+    # override encrypt_hc_vault_secret when calling the playbook to enable extra encryption
     encrypt_hc_vault_secret: ""
+    vault_mode: "backup"
+    op_mode: "standalone"
 
   roles:
     - role: common/prepare-env
