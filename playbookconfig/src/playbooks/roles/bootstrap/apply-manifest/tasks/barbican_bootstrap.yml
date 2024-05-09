@@ -7,6 +7,7 @@
 # SUB-TASKS DESCRIPTION:
 #   Bootstrap Barbican:
 #     - Generate barbican.conf
+#     - Create Barbican user/service/endpoints
 #     - Configure Barbican DB/User
 #     - Set initial gunicorn-config.py worker value
 #     - Generate barbican-api-logrotate configuration
@@ -14,7 +15,16 @@
 #     - Enable barbican-api service
 
 - name: Read the required barbican var file contents
-  command: "egrep 'barbican::' {{ hieradata_workdir }}/secure_static.yaml"
+  shell: >-
+    grep -h 'barbican::' secure_static.yaml &&
+    grep -h 'barbican::keystone::authtoken::region_name' static.yaml &&
+    grep -h 'platform::amqp::params::auth_password' secure_static.yaml &&
+    grep -h 'platform::amqp::auth_user' global.yaml &&
+    grep -h 'platform::client::params::' static.yaml &&
+    grep -h 'platform::client::params::' secure_static.yaml &&
+    grep -h 'keystone::roles::admin::admin_tenant' personality.yaml
+  args:
+    chdir: /tmp/puppet/hieradata
   register: barbican_vars
   no_log: true
 
@@ -41,6 +51,15 @@
     owner: barbican
     group: barbican
     mode: 0600
+
+- name: Create barbican endpoints
+  script: >
+    create_barbican_endpoints.py {{ OS_USERNAME }} {{ OS_PASSWORD }} {{ barbican_password }} {{ admin_username }}
+  vars:
+    OS_USERNAME: "{{ barbican_var_dict['keystone::roles::admin::admin_tenant'] }}"
+    OS_PASSWORD: "{{ barbican_var_dict['platform::client::params::admin_password'] }}"
+    barbican_password: "{{ barbican_var_dict['barbican::keystone::auth::password'] }}"
+    admin_username: "{{ barbican_var_dict['platform::client::params::admin_username'] }}"
 
 - name: Ensure PostgreSQL barbican database and user is created
   become_user: postgres
