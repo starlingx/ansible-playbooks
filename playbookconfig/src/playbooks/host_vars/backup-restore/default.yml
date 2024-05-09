@@ -8,7 +8,7 @@
 # vault_admin_password).
 #
 admin_username: admin
-admin_password: St8rlingX*1234
+admin_password: St8rlingXCloud*
 
 # INITIAL PASSWORD CHANGE RESPONSE SEQUENCE
 # =========================================
@@ -31,8 +31,8 @@ password_change_responses:
   sysadmin*: 'sysadmin'
   \(current\) UNIX password: 'sysadmin'
   Current password: 'sysadmin'
-  (?i)New password: 'St8rlingX*1234'
-  (?i)Retype new password: 'St8rlingX*1234'
+  (?i)New password: 'St8rlingXCloud*'
+  (?i)Retype new password: 'St8rlingXCloud*'
 
 # OVERRIDE FILES DIRECTORY
 # ========================

@@ -20,8 +20,8 @@ password_change_responses:
   sysadmin*: 'sysadmin'
   \(current\) UNIX password: 'sysadmin'
   Current password: 'sysadmin'
-  (?i)New password: 'St8rlingX*'
-  (?i)Retype new password: 'St8rlingX*'
+  (?i)New password: 'St8rlingXCloud*'
+  (?i)Retype new password: 'St8rlingXCloud*'
 
 # OVERRIDE FILES DIRECTORY
 # ========================
