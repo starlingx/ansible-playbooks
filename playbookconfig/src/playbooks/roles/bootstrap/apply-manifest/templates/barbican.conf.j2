@@ -300,7 +300,7 @@ sql_connection={{ sql_connection }}
 # oslo_messaging.TransportURL at
 # https://docs.openstack.org/oslo.messaging/latest/reference/transport.html
 # (string value)
-#transport_url = rabbit://
+transport_url=rabbit://{{ barbican_var_dict['platform::amqp::auth_user'] }}:{{ barbican_var_dict['platform::amqp::params::auth_password'] }}@localhost:5672
 
 # The default exchange under which topics are scoped. May be
 # overridden by an exchange name specified in the transport_url
@@ -355,7 +355,7 @@ sql_connection={{ sql_connection }}
 #client_socket_timeout = 900
 
 bind_port=9311
-bind_host=
+bind_host=[::]
 
 [certificate]
 
@@ -546,7 +546,7 @@ www_authenticate_uri=http://localhost:5000
 #insecure = false
 
 # The region in which the identity server can be found. (string value)
-#region_name = <None>
+region_name={{ barbican_var_dict['barbican::keystone::authtoken::region_name'] }}
 
 # Optionally specify a list of memcached server(s) to use for caching.
 # If left undefined, tokens will instead be cached in-process. (list
@@ -648,7 +648,7 @@ password={{ barbican_var_dict['barbican::keystone::auth::password'] }}
 user_domain_name=Default
 project_name=services
 project_domain_name=Default
-auth_url=http://controller.internal:5000
+auth_url=http://localhost:5000
 
 [keystone_notifications]
 
@@ -1057,7 +1057,7 @@ enable=True
 
 # Connect over SSL. (boolean value)
 # Deprecated group/name - [oslo_messaging_rabbit]/rabbit_use_ssl
-ssl=false
+ssl=False
 
 # SSL version to use (valid only if SSL enabled). Valid values are
 # TLSv1 and SSLv23. SSLv2, SSLv3, TLSv1_1, and TLSv1_2 may be

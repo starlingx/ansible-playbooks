@@ -199,90 +199,7 @@
 
   when: replayed
 
-- name: Add section [KUBE_APISERVER]
-  set_fact:
-    sysinv_k8s_vars: "[KUBE_APISERVER]\n"
-
-- name: Populate k8s kube_apiserver section
-  set_fact:
-    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
-  loop: "{{ apiserver_extra_args|dict2items }}"
-
-- name: Add section [KUBE_CONTROLLER_MANAGER]
-  set_fact:
-    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_CONTROLLER_MANAGER]\n"
-
-- name: Populate k8s kube_controller_manager section
-  set_fact:
-    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
-  loop: "{{ controllermanager_extra_args|dict2items }}"
-
-- name: Add section [KUBE_SCHEDULER]
-  set_fact:
-    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_SCHEDULER]\n"
-
-- name: Populate k8s kube_scheduler section
-  set_fact:
-    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
-  loop: "{{ scheduler_extra_args|dict2items }}"
-
-- name: Add section [KUBE_APISERVER_EXTRA_VOLUMES]
-  set_fact:
-    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_APISERVER_EXTRA_VOLUMES]\n"
-
-- name: Populate k8s kube_apiserver extra_volumes section
-  set_fact:
-    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.name}}={{item | to_json}}\n"
-  loop: "{{ apiserver_extra_volumes }}"
-
-- name: Add section [KUBE_CONTROLLER_MANAGER_EXTRA_VOLUMES]
-  set_fact:
-    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_CONTROLLER_MANAGER_EXTRA_VOLUMES]\n"
-
-- name: Populate k8s kube_controller_manager extra_volumes section
-  set_fact:
-    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.name}}={{item | to_json}}\n"
-  loop: "{{ controllermanager_extra_volumes }}"
-
-- name: Add section [KUBE_SCHEDULER_EXTRA_VOLUMES]
-  set_fact:
-    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_SCHEDULER_EXTRA_VOLUMES]\n"
-
-- name: Populate k8s kube_scheduler extra_volumes section
-  set_fact:
-    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.name}}={{item | to_json}}\n"
-  loop: "{{ scheduler_extra_volumes }}"
-
-- name: Add section [KUBE_KUBELET]
-  set_fact:
-    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_KUBELET]\n"
-
-- name: Populate k8s kubelet section
-  set_fact:
-    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
-  loop: "{{ kubelet_configurations|dict2items }}"
-
-- block:
-  - name: Add section [USER_DNS_HOST_RECORDS]
-    set_fact:
-      sysinv_user_dns_host_records: "[USER_DNS_HOST_RECORDS]\n"
-
-  - name: Populate user dns host records section
-    set_fact:
-      sysinv_user_dns_host_records: "{{ sysinv_user_dns_host_records }}{{ item }}={{ user_dns_host_records[item] }}\n"
-    loop: "{{ user_dns_host_records.keys() }}"
-
-  when: user_dns_host_records
-
-- block:
-  - name: Generate config ini file for python sysinv db population script
-    template:
-      src: bootstrap_config.j2
-      dest: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
-
-  - include: update_sysinv_database.yml
-  when: save_config_to_db
-
+# need to do this here to get the barbican secret id for sysinv
 - block:
   - name: Create Barbican secret for k8s registry if credentials exist
     shell: "source /etc/platform/openrc; openstack secret store -n k8s-registry-secret
@@ -374,6 +291,90 @@
       icr_registry_secret: "{{ icr_registry_secret_output.stdout }}"
 
   when: icr_registry.username is defined
+
+- name: Add section [KUBE_APISERVER]
+  set_fact:
+    sysinv_k8s_vars: "[KUBE_APISERVER]\n"
+
+- name: Populate k8s kube_apiserver section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
+  loop: "{{ apiserver_extra_args|dict2items }}"
+
+- name: Add section [KUBE_CONTROLLER_MANAGER]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_CONTROLLER_MANAGER]\n"
+
+- name: Populate k8s kube_controller_manager section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
+  loop: "{{ controllermanager_extra_args|dict2items }}"
+
+- name: Add section [KUBE_SCHEDULER]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_SCHEDULER]\n"
+
+- name: Populate k8s kube_scheduler section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
+  loop: "{{ scheduler_extra_args|dict2items }}"
+
+- name: Add section [KUBE_APISERVER_EXTRA_VOLUMES]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_APISERVER_EXTRA_VOLUMES]\n"
+
+- name: Populate k8s kube_apiserver extra_volumes section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.name}}={{item | to_json}}\n"
+  loop: "{{ apiserver_extra_volumes }}"
+
+- name: Add section [KUBE_CONTROLLER_MANAGER_EXTRA_VOLUMES]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_CONTROLLER_MANAGER_EXTRA_VOLUMES]\n"
+
+- name: Populate k8s kube_controller_manager extra_volumes section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.name}}={{item | to_json}}\n"
+  loop: "{{ controllermanager_extra_volumes }}"
+
+- name: Add section [KUBE_SCHEDULER_EXTRA_VOLUMES]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_SCHEDULER_EXTRA_VOLUMES]\n"
+
+- name: Populate k8s kube_scheduler extra_volumes section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.name}}={{item | to_json}}\n"
+  loop: "{{ scheduler_extra_volumes }}"
+
+- name: Add section [KUBE_KUBELET]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_KUBELET]\n"
+
+- name: Populate k8s kubelet section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
+  loop: "{{ kubelet_configurations|dict2items }}"
+
+- block:
+  - name: Add section [USER_DNS_HOST_RECORDS]
+    set_fact:
+      sysinv_user_dns_host_records: "[USER_DNS_HOST_RECORDS]\n"
+
+  - name: Populate user dns host records section
+    set_fact:
+      sysinv_user_dns_host_records: "{{ sysinv_user_dns_host_records }}{{ item }}={{ user_dns_host_records[item] }}\n"
+    loop: "{{ user_dns_host_records.keys() }}"
+
+  when: user_dns_host_records
+
+- block:
+  - name: Generate config ini file for python sysinv db population script
+    template:
+      src: bootstrap_config.j2
+      dest: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
+
+  - include: update_sysinv_database.yml
+  when: save_config_to_db
 
 # Update docker and containerd config files and restart docker and containerd
 # if docker proxy is configured
