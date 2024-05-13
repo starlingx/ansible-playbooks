@@ -22,15 +22,11 @@
       include_tasks: check-for-management-alarms.yml
       when: ignore_alarms is undefined or ignore_alarms | bool == False
 
-    - name: Install Root CA certificate as trusted by the platform
+    - name: Verify 'system-local-ca' certs
       include_role:
         name: common/verify-and-install-system-local-ca-certs
       vars:
-        - install_rca: true
-
-    - name: Restart kube-apiserver to pick the new certificate
-      include_role:
-        name: common/restart-kube-apiserver
+        - install_rca: false
 
     - name: Check certificates to be installed
       include_tasks: check-certificates-to-be-installed.yml
@@ -65,6 +61,12 @@
       retries: 3
       delay: 30
 
+    - name: Generate kubernetes yaml for cert-manager resources
+      include_role:
+        name: common/generate-platform-certificates-template
+      vars:
+        destination: "{{ cert_manager_spec_file }}"
+
     - name: Retrieve certificates that may own system-local-ca secret
       shell: >-
         kubectl get certificates -A
@@ -75,6 +77,13 @@
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: cert_to_remove
+
+    - name: Dump system-local-ca secret (to recover if necessary)
+      command: kubectl get secret -n cert-manager system-local-ca -o yaml --ignore-not-found=true
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: system_local_ca_dump
+      no_log: true
 
     - name: Delete certificate that owns the secret 'system-local-ca' if it exists
       include_role:
@@ -89,20 +98,20 @@
         - { name: system-local-ca, namespace: cert-manager, type: clusterissuer }
         - { name: system-local-ca, namespace: cert-manager, type: secret }
 
-    - name: Generate kubernetes yaml for cert-manager resources
-      include_role:
-        name: common/generate-platform-certificates-template
-      vars:
-        destination: "{{ cert_manager_spec_file }}"
-
-    - name: Remove default leaf certificates (plus OIDC)
+    - name: Remove default leaf certificates
       include_role:
         name: common/delete-kubernetes-resources
       with_items:
         - { name: system-openldap-local-certificate, namespace: deployment, type: certificate }
         - { name: system-registry-local-certificate, namespace: deployment, type: certificate }
         - { name: system-restapi-gui-certificate, namespace: deployment, type: certificate }
+
+    - name: Remove OIDC certificate if we are recreating it
+      include_role:
+        name: common/delete-kubernetes-resources
+      with_items:
         - { name: oidc-auth-apps-certificate, namespace: kube-system, type: certificate }
+      when: install_oidc_auth_apps_certificate
 
     # This list is composed of other certificates issued by the cluster issuer
     # (i.e. not local REST API/GUI, OpenLDAP, Docker Registry or OIDC)
@@ -128,12 +137,6 @@
       retries: 10
       delay: 30
 
-    - name: Delete kubernetes yaml with certificate spec
-      file:
-        path: "{{ cert_manager_spec_file }}"
-        state: absent
-      become: yes
-
     - name: Force certificate renewals by deleting their secrets
       include_role:
         name: common/delete-kubernetes-resources
@@ -145,6 +148,17 @@
         --for=condition=Ready --timeout=90s
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
+      when: install_system_open_ldap_certificate
+
+    - name: Install Root CA certificate as trusted by the platform
+      include_role:
+        name: common/verify-and-install-system-local-ca-certs
+      vars:
+        - install_rca: true
+
+    - name: Restart kube-apiserver to pick the new certificate
+      include_role:
+        name: common/restart-kube-apiserver
 
     - name: Update oidc-auth-apps in order to use new certificate
       include_tasks: reapply-oidc-auth-app.yml
@@ -179,6 +193,7 @@
         copy:
           dest: "{{ item.path }}"
           content: "{{ item.secret | b64decode }}"
+        no_log: true
         loop:
           - path: "{{ root_ca_cert.path }}"
             secret: "{{ system_root_ca_cert }}"
@@ -205,6 +220,25 @@
             - "{{ local_ca_cert.path }}"
 
   rescue:
+    - name: Check if system-local-ca is in place
+      command: >-
+        kubectl get secret -n cert-manager system-local-ca --ignore-not-found=true --no-headers=true
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: system_local_ca_get
+      no_log: true
+
+    - name: Recover previous system-local-ca secret
+      shell: kubectl apply -f <(echo '{{ system_local_ca_dump.stdout }}')
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: create_k8_apply_ep
+      until: create_k8_apply_ep is not failed
+      retries: 10
+      delay: 30
+      no_log: true
+      when: system_local_ca_get.stdout == ""
+
     - block:
       - debug:
           msg: >-
@@ -222,6 +256,13 @@
           msg: "Error occurred. Please check failed steps."
 
       when: backup_directory is defined
+
+  always:
+    - name: Delete kubernetes yaml with certificate spec
+      file:
+        path: "{{ cert_manager_spec_file }}"
+        state: absent
+      become: yes
 
   when: mode == 'update'
 
