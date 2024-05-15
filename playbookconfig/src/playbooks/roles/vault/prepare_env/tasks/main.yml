@@ -5,14 +5,27 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: Validate if initial_backup_dir is supplied
-  fail:
-    msg: "initial_backup_dir variable not provided"
-  when: not initial_backup_dir
+- name: Set default target where backup tarball inspection takes place
+  set_fact:
+    inspection_target: "{{ inventory_hostname }}"
+
+# Set inspection target to Ansible control machine if the backup tarball
+# is off-box.
+- name: Update target if backup data are off-box
+  set_fact:
+    inspection_target: localhost
+  when: on_box_data|bool == false
+
+- name: Set initial_backup_dir if running on target and no value was supplied
+  set_fact:
+    initial_backup_dir: /opt/platform-backup
+  when: (initial_backup_dir is not defined or initial_backup_dir is none) and
+        (on_box_data|bool == true)
 
 - name: Validate initial_backup_dir exists
   stat:
     path: "{{ initial_backup_dir }}"
+  delegate_to: "{{ inspection_target }}"
   register: initial_backup_dir_exists
 
 - name: Fail if initial_backup_dir does not exists
@@ -20,9 +33,15 @@
     msg: "Directory initial_backup_dir: {{ initial_backup_dir }} does not exist"
   when: not initial_backup_dir_exists.stat.exists
 
-- name: Set vault backup directory fact
+- name: Set vault backup directory fact for on box
   set_fact:
     vault_backup_dir: "{{ initial_backup_dir }}/hc_vault"
+  when: on_box_data|bool == true
+
+- name: Set vault backup directory fact for off box
+  set_fact:
+    vault_backup_dir: "{{ target_backup_dir }}/hc_vault"
+  when: on_box_data|bool == false
 
 - name: Create vault subdirectory in initial_backup_dir
   file:
@@ -51,9 +70,24 @@
 
 - name: Validate vault health for restore.
   block:
-  - name: Set backup file path
+  - name: Transfer backup tarball to {{ target_backup_dir }} on controller-0
+    copy:
+      src: "{{ initial_backup_dir }}/{{ backup_filename }}"
+      dest: "{{ target_backup_dir }}"
+      owner: root
+      group: root
+      mode: 0755
+    when: on_box_data | bool == false
+
+  - name: Set backup file path for on box
     set_fact:
       backup_filepath: "{{ initial_backup_dir }}/{{ backup_filename }}"
+    when: on_box_data | bool == true
+
+  - name: Set backup file path for off box
+    set_fact:
+      backup_filepath: "{{ target_backup_dir }}/{{ backup_filename }}"
+    when: on_box_data | bool == false
 
   - name: Find backup tarball
     shell: |
