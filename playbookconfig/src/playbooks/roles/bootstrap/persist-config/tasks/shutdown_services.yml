@@ -30,9 +30,45 @@
       path: /etc/kubernetes/admin.conf
     register: k8s_admin_conf
 
-  - name: Shut down and remove Kubernetes components
-    command: kubeadm --kubeconfig=/etc/kubernetes/admin.conf reset -f --cri-socket /var/run/containerd/containerd.sock
-    register: reset_info
+  - block:
+    # kubeadm reset command executes slowly (takes ~25mins) if etcd is not
+    # running. To prevent this, temporarily start etcdserver and delete stale
+    # kube-apiserver pod so that new certificates are used when
+    # kube-apiserver is restarted.
+    - name: Copy kube-apiserver etcd client cert file to kubeadm_pki_dir
+      copy:
+        src: "/etc/etcd/apiserver-etcd-client.crt"
+        dest: "{{ kubeadm_pki_dir }}/apiserver-etcd-client.crt"
+        remote_src: yes
+        force: yes
+        mode: '0644'
+
+    - name: Copy kube-apiserver etcd client key file to kubeadm_pki_dir
+      copy:
+        src: "/etc/etcd/apiserver-etcd-client.key"
+        dest: "{{ kubeadm_pki_dir }}/apiserver-etcd-client.key"
+        remote_src: yes
+        force: yes
+        mode: '0600'
+
+    - name: Start etcd server
+      systemd:
+        name: etcd
+        state: started
+
+    - name: Get kube-apiserver pod ID
+      shell: crictl pods --name kube-apiserver --state Ready --quiet
+      register: kube_apiserver_pod_id
+
+    - name: Delete stale kube-apiserver pod to ensure new one picks up new etcd client certs
+      shell: "{{ item }}"
+      with_items:
+        - "crictl stopp {{ kube_apiserver_pod_id.stdout }}"
+        - "crictl rmp {{ kube_apiserver_pod_id.stdout }}"
+
+    - name: Shut down and remove Kubernetes components
+      command: kubeadm --kubeconfig=/etc/kubernetes/admin.conf reset -f --cri-socket /var/run/containerd/containerd.sock
+      register: reset_info
     when: k8s_admin_conf.stat.exists
 
   - debug: var=reset_info.stdout_lines
