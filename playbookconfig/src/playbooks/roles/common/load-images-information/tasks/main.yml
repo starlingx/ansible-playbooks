@@ -133,6 +133,11 @@
           - "{{ cert_manager_controller_img_2212 }}"
           - "{{ cert_manager_webhook_img_2212 }}"
           - "{{ cert_manager_ctl_img_2212 }}"
+          - "{{ cert_manager_acmesolver_img_171 }}"
+          - "{{ cert_manager_cainjector_img_171 }}"
+          - "{{ cert_manager_controller_img_171 }}"
+          - "{{ cert_manager_webhook_img_171 }}"
+          - "{{ cert_manager_ctl_img_171 }}"
 
     - name: Merge security images list for upgrade
       set_fact:
