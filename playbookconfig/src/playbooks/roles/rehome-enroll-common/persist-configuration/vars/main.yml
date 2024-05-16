@@ -1,0 +1,3 @@
+---
+system_config_file: "{{ mode }}_config.yml"
+sysinv_user_dns_host_records: ""
