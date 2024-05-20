@@ -27,6 +27,16 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        - name: GOMAXPROCS
+          valueFrom:
+            resourceFieldRef:
+              containerName: manager
+              resource: limits.cpu
+        - name: GOMEMLIMIT
+          valueFrom:
+            resourceFieldRef:
+              containerName: manager
+              resource: limits.memory
         image: "{{ local_registry }}/{{ flux_helm_controller_img }}"
         imagePullPolicy: IfNotPresent
         livenessProbe:
@@ -118,6 +128,16 @@ spec:
               fieldPath: metadata.namespace
         - name: TUF_ROOT
           value: /tmp/.sigstore
+        - name: GOMAXPROCS
+          valueFrom:
+            resourceFieldRef:
+              containerName: manager
+              resource: limits.cpu
+        - name: GOMEMLIMIT
+          valueFrom:
+            resourceFieldRef:
+              containerName: manager
+              resource: limits.memory
         image: "{{ local_registry }}/{{ flux_source_controller_img }}"
         imagePullPolicy: IfNotPresent
         livenessProbe:
@@ -172,8 +192,10 @@ spec:
         - key: "node-role.kubernetes.io/control-plane"
           operator: "Exists"
           effect: "NoSchedule"
+      priorityClassName: system-cluster-critical
       securityContext:
         fsGroup: 1337
+      serviceAccountName: default
       terminationGracePeriodSeconds: 10
       volumes:
       - emptyDir: {}

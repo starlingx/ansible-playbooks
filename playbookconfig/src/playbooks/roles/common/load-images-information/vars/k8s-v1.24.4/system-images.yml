@@ -36,7 +36,7 @@ snapshot_controller_img: registry.k8s.io/sig-storage/snapshot-controller:v4.0.0
 pause_img: k8s.gcr.io/pause:3.4.1
 
 # FluxCD Images for next & current release.
-flux_helm_controller_img: docker.io/fluxcd/helm-controller:v0.35.0
-flux_source_controller_img: docker.io/fluxcd/source-controller:v1.0.1
+flux_helm_controller_img: docker.io/fluxcd/helm-controller:v1.0.1
+flux_source_controller_img: docker.io/fluxcd/source-controller:v1.3.0
 flux_helm_controller_img_2212: docker.io/fluxcd/helm-controller:v0.27.0
 flux_source_controller_img_2212: docker.io/fluxcd/source-controller:v0.32.1
