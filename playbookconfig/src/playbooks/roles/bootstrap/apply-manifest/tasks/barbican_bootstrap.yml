@@ -104,7 +104,7 @@
     group: root
     mode: 0644
 
-- name: Exec keystone-manage credential_setup
+- name: Exec barbican-manage upgrade
   command: /usr/bin/barbican-manage db upgrade
 
 - name: Exec barbican-db-manage sync secret stores
