@@ -19,6 +19,33 @@
     include_hc_vault: "{{ backup_hc_vault | bool }}"
     omit_hc_vault: false
 
+# The feature is enabled by backup_encryption_enabled variable.
+# The backup tarballs are included in the feature by
+# backup_encyption_include variable.
+# The user's decision to encrypt is registered with the supplied
+# passphrase, backup_encryption_passphrase.
+#
+# The defaults were set in host_vars/backup-restore/default.yml
+- name: Interpret variables for enabling encryption
+  block:
+  - name: Fail when a passphrase is omitted
+    fail:
+      msg: >
+        A passphrase is required for encryption; set variable override
+        backup_encryption_passphrase.  To disable encryption set
+        override backup_encryption_enabled=false
+    when: backup_encryption_passphrase | length == 0
+
+  - name: Set platform tar encryption enabled
+    set_fact:
+      platform_tarball_encrypted: true
+    when: '"platform" in backup_encyption_include'
+
+  - name: Set HC Vault tar encryption enabled
+    set_fact:
+      hc_vault_tarball_encrypted: true
+    when: '"hc_vault" in backup_encyption_include'
+  when: backup_encryption_enabled|bool
 
 - name: Do StarlingX backup
   block:
@@ -581,8 +608,8 @@
           name: vault/vault_backup
         vars:
           vault_backup_dir: "{{ hc_vault_dir.path }}"
-          vault_encrypt: false
-          encrypt_hc_vault_secret: ""
+          vault_encrypt: "{{ hc_vault_tarball_encrypted|bool }}"
+          encrypt_hc_vault_secret: "{{ backup_encryption_passphrase }}"
           op_mode: "platform"
 
       - name: Find result files
@@ -814,16 +841,41 @@
       failed_when: tar_cmd.rc >= 2 or tar_cmd.rc < 0
       when: include_hc_vault | bool
 
-    - name: Notify the user backup tar file(s) are available
+    - name: Set default backup files absolute path
+      set_fact:
+        platform_backup_file_path_final: "{{ platform_backup_file_path }}"
+
+    - name: Encrypt the platform tar file
+      block:
+      - name: Set platform backup file final path with gpg extension
+        set_fact:
+          platform_backup_file_path_final: "{{ platform_backup_file_path }}.gpg"
+
+      - name: Import encrypt for platform
+        import_role:
+          name: encrypt
+        vars:
+          encrypt_file: "{{ platform_backup_file_path }}"
+          encrypt_output_file: "{{ platform_backup_file_path_final }}"
+          encrypt_passphrase: "{{ backup_encryption_passphrase }}"
+          encrypt_shred: true
+      when: platform_tarball_encrypted|bool
+
+    # The sensitive data of HC vault is encrypted by the included
+    # vault/vault_backup role. This is done such that the sensitive data
+    # is encrypted before reaching the disk. For this reason we omit
+    # encrypting the tarball at hc_vault_backup_file_path
+
+    - name: Notify the user backup file(s) are available
       debug:
         msg: >-
-          Backup tar file(s) are now available in {{ backup_dir }} on the active controller.
+          Backup file(s) are now available in {{ backup_dir }} on the active controller.
 
     - block:
-      - name: Transfer platform backup tar file to the local machine
+      - name: Transfer platform backup file to the local machine
         synchronize:
           mode: pull
-          src: "{{ platform_backup_file_path }}"
+          src: "{{ platform_backup_file_path_final }}"
           dest: "{{ host_backup_dir }}/"
         register: backup_transfer
         until: backup_transfer.rc == 0
@@ -852,19 +904,19 @@
       # Maybe use synchronize module after upgrading ansible, backup-restore/transfer-file
       # role shows a github issue regarding why it can't be used now.
 
-      - name: Notify the user where the backup tar file(s) can be found
+      - name: Notify the user where the backup file(s) can be found
         debug:
           msg: >-
-            Backup tar file(s) have been transferred to {{ host_backup_dir }} on Ansible control host.
+            Backup file(s) have been transferred to {{ host_backup_dir }} on Ansible control host.
       when: inventory_hostname != 'localhost'
 
-    - name: Find the backup tar files
+    - name: Find the backup files
       find:
         paths: "{{ backup_dir }}"
-        patterns: '*backup_*.tgz'
+        patterns: '*backup_*.tgz,*backup_*.tgz.gpg'
       register: backup_files_perm_change
 
-    - name: change permission of backup tar files
+    - name: change permission of backup files
       file:
         path: "{{ item.path }}"
         owner: root
@@ -873,10 +925,11 @@
       with_items: "{{ backup_files_perm_change.files }}"
 
   always:
-    - name: Remove the temp dir
-      file:
-        path: "{{ tempdir.path }}"
-        state: absent
+    - name: Shred and remove the temp dir
+      import_role:
+        name: shred
+      vars:
+        shred_path: "{{ tempdir.path }}"
       when: tempdir is defined and tempdir.path is defined
 
     - name: Remove the backup in progress flag file

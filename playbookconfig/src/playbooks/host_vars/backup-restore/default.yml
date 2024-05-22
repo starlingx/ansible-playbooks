@@ -61,6 +61,26 @@ backup_dir: /opt/backups
 # regardless of where the restore playbook is executed (locally vs remotely)
 target_backup_dir: /opt/platform-backup
 
+# Enable encryption of backup files.  The default is false until this
+# feature is activated.
+backup_encryption_enabled: false
+
+# A passphrase with which to encrypt.  Required when
+# backup_encryption_enabled is true
+backup_encryption_passphrase: ""
+
+# A list of identifiers indicating which backup files to encrypt:
+#   [platform, openstack, user_images, dc_vault, registry, hc_vault]
+backup_encyption_include:
+  - platform
+  - hc_vault
+
+# Internal boolean variables for encryption to simplify logic.  These
+# will be adjusted later when the overriden parameters above are
+# considered.
+platform_tarball_encrypted: false
+hc_vault_tarball_encrypted: false
+
 # The platform backup tarball will be named in this format:
 # <platform_backup_filename_prefix>_<timestamp>.tgz
 #

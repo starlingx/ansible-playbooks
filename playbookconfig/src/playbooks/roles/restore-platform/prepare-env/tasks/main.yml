@@ -15,28 +15,105 @@
 #     5. Create restore_in_progress flag.
 #
 
-- block:
+- name: Set default local file path
+  set_fact:
+    local_backup_file_path: "{{ initial_backup_dir }}/{{ backup_filename }}"
+
+- name: Set default local file extraction command
+  set_fact:
+    extract_command_method: "cat '{{ local_backup_file_path }}'"
+
+- name: Set default filename for restore procedure
+  set_fact:
+    decrypted_backup_filename: "{{ backup_filename }}"
+    decrypted_backup_filepath: "{{ target_backup_dir }}/{{ backup_filename }}"
+
+- name: Encryption variables
+  block:
+  - name: retrieve backup file type
+    command: "file {{ local_backup_file_path }}"
+    register: local_backup_file_type
+
+  - name: Assert that backup_filename is an encrypted file
+    assert:
+      that:
+      - '"GPG symmetrically encrypted data" in local_backup_file_type.stdout'
+      fail_msg: >
+        Platform backup file {{ local_backup_file_path }} is not encrypted
+
+  - name: Set platform tarball is encrypted boolean
+    set_fact:
+      platform_tarball_encrypted: true
+
+  - name: Copy name of encrypted platform file
+    set_fact:
+      encrypted_backup_filename: "{{ backup_filename }}"
+      encrypted_backup_filepath: "{{ local_backup_file_path }}"
+
+  - name: adjust filename for restore procedure
+    set_fact:
+      decrypted_backup_filename: "{{ backup_filename }}.tar.gz"
+      decrypted_backup_filepath: "{{ target_backup_dir }}/{{ backup_filename }}.tar.gz"
+
+  - name: Set encrypted file extraction command
+    set_fact:
+      extract_command_method: >-
+          gpg --no-symkey-cache -q
+          --passphrase-fd 0 --batch --pinentry-mode loopback
+          --decrypt '{{ local_backup_file_path }}'
+  when:
+    - backup_encryption_enabled|bool
+    - '"platform" in backup_encyption_include'
+
+- name: Inspect the platform backup file locally
+  block:
+  - name: Get the file stat of backup_filename
+    stat:
+      path: "{{ local_backup_file_path }}"
+    register: local_backup_file_stat
+
+  - name: Assert that backup_filename exists
+    assert:
+      that: local_backup_file_stat.stat.exists
+      fail_msg: >
+        Platform backup_filename {{ local_backup_file_path }} does not exist
+
   - name: Look for override backup file in the backup tarball
-    shell: "tar --use-compress-program=pigz -tf {{ initial_backup_dir }}/{{ backup_filename }} | grep '_override_backup.yml'"
+    shell:
+      cmd: >-
+          {{ extract_command_method }}
+          | tar --use-compress-program=pigz -t
+          | grep '_override_backup.yml'
+      stdin: "{{ backup_encryption_passphrase }}"
     args:
       warn: false
     failed_when: false
     register: search_result
 
   - name: Fail if override file is missing
-    fail:
-      msg: >
-        Cannot find {{ initial_backup_dir }}/{{ backup_filename }}
-        or the override file is missing in the backup tarball!
-    when: search_result.rc != 0
-  delegate_to: "{{ inspection_target }}"
+    block:
+    - name: Fail with default message
+      fail:
+        msg: >
+          The override file is missing in the backup tarball
+          {{ local_backup_file_path }}!
+      when: not platform_tarball_encrypted|bool
 
-- block:
+    - name: Fail with encryption message
+      fail:
+        msg: >
+          Cannot decrypt {{ local_backup_file_path }}
+          or the override file is missing in the backup tarball!
+      when: platform_tarball_encrypted|bool
+    when: search_result.rc != 0
+
   - name: Extract kubeadm version from the backup tarball
     # Match kube_cmd_versions VALUES from sysinv database table.
-    command: >-
-        zgrep -aE '^INSERT INTO .*kube_cmd_versions VALUES'
-        {{ initial_backup_dir }}/{{ backup_filename }}
+    shell:
+      cmd: >-
+        {{ extract_command_method }}
+        | zgrep -aE '^INSERT INTO .*kube_cmd_versions VALUES'
+      stdin: "{{ backup_encryption_passphrase }}"
     args:
       warn: false
     failed_when: false
@@ -45,8 +122,8 @@
   - name: Fail if kube_cmd_versions table is missing
     fail:
       msg: >
-        Cannot find {{ initial_backup_dir }}/{{ backup_filename }}
-        or the kube_cmd_versions table is missing in the backup tarball!
+        The kube_cmd_versions table is missing in the backup tarball
+        {{ local_backup_file_path }}!
     when: kube_cmd_search.rc != 0
 
   - name: Set restore kubernetes version for bootstrap
@@ -85,7 +162,7 @@
 
   - name: Set restore file parameter
     set_fact:
-      restore_data_file: "{{ target_backup_dir }}/{{ backup_filename }}"
+      restore_data_file: "{{ decrypted_backup_filepath }}"
 
   - name: Stage backup tarballs
     include_role:
@@ -94,7 +171,7 @@
   - name: Extract override file from backup tarball
     command: >
       tar --use-compress-program=pigz -C {{ target_backup_dir }}
-      -xf {{ target_backup_dir }}/{{ backup_filename }} --transform='s,.*/,,'
+      -xf {{ decrypted_backup_filepath }} --transform='s,.*/,,'
       {{ search_result.stdout_lines[0] }}
     register: extract_result
     failed_when: false
