@@ -28,7 +28,11 @@
       - { port: "18003", service: "fm" }
       - { port: "9312", service: "barbican" }
       - { port: "8220/v1.0", service: "dcdbsync" }
-      - { port: "5498", service: "usm" }
+
+- name: Add USM service to endpoint list for software_version > 22.12
+  set_fact:
+    service_list: "{{ service_list + [{ 'port': '5498', 'service': 'usm' }] }}"
+  when: software_version is version('22.12', '>')
 
 - name: Check and update admin endpoints
   include_tasks: check_and_update_endpoint.yml
