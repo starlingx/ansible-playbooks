@@ -26,6 +26,17 @@
     msg: "central_backup_dir must be specified if 'local' parameter is set to false."
   when: central_backup_dir is undefined and not local
 
+- name: Query system_mode
+  shell: |
+    source /etc/platform/openrc
+    system show | awk '$2 == "system_mode" { print $4 }'
+  register: current_system_mode
+
+- name: Set system mode based on the current config
+  set_fact:
+    system_mode: "{{ current_system_mode.stdout }}"
+
+
 - name: Create temp file for modified backup overrides
   tempfile:
     state: file
@@ -56,6 +67,7 @@
   set_fact:
     optimized_bnr_supported: false
   when: software_version is version('22.12', '<') or
+        (system_mode == 'duplex') or
         (test_mode is defined and test_mode == 'legacy')
 
 - block:
@@ -105,7 +117,7 @@
     with_items:
       - "backup_user_images: true"
       - "backup_user_local_registry: true"
-      - "docker_local_registry_backup_filename_prefix: {{ default_user_images_backup_prefix }}"
+      - "default_user_images_backup_prefix: {{ default_user_images_backup_prefix }}"
     connection: local
     when: not optimized_bnr_supported
 
