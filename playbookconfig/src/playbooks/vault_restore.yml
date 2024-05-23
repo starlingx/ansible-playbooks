@@ -28,6 +28,4 @@
   roles:
     - role: common/prepare-env
     - role: vault/prepare_env
-      become: yes
     - role: vault/vault_restore
-      become: yes
