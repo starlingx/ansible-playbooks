@@ -6,17 +6,20 @@
 #
 
 """
-Configure keystone by adding the services project, _member_ role and updating
-the admin user to the correct e-mail address.
+Configure keystone by adding the services project, _member_ role, updating
+the admin user to the correct e-mail address, creating the identity service and
+creating the initial (RegionOne) endpoints for keystone.
 """
 
 import os
+from subprocess import PIPE
+from subprocess import Popen
 import sys
-from subprocess import Popen, PIPE
 
 from sysinv.common import openstack_config_endpoints
 
-from keystoneauth1 import loading, session
+from keystoneauth1 import loading
+from keystoneauth1 import session
 from keystoneclient.v3 import client
 
 
@@ -36,10 +39,25 @@ ROLES_TO_CREATE = [
     }
 ]
 
-USERS_TO_UPDATE = [
+USERS_TO_UPDATE = [{"name": "admin", "email": "admin@localhost"}]
+
+SERVICES_TO_CREATE = [
     {
-        "name": "admin",
-        "email": "admin@localhost"
+        "name": "keystone",
+        "description": "KeystoneService",
+        "type": "identity",
+    }
+]
+
+ENDPOINTS_TO_CREATE = [
+    {
+        "service": "keystone",
+        "region": "RegionOne",
+        "endpoints": {
+            "admin": "http://127.0.0.1:5000",
+            "internal": "http://127.0.0.1:5000",
+            "public": "http://127.0.0.1:5000",
+        },
     }
 ]
 
@@ -100,3 +118,5 @@ if __name__ == "__main__":
     openstack_config_endpoints.create_projects(keystone, PROJECTS_TO_CREATE)
     openstack_config_endpoints.create_roles(keystone, ROLES_TO_CREATE)
     openstack_config_endpoints.update_users(keystone, USERS_TO_UPDATE)
+    openstack_config_endpoints.create_services(keystone, SERVICES_TO_CREATE)
+    openstack_config_endpoints.create_endpoints(keystone, ENDPOINTS_TO_CREATE)
