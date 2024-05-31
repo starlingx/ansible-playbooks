@@ -27,3 +27,6 @@
     - role: rehome-subcloud/update-keystone-data
       become: yes
     - rehome-subcloud/validate-after-rehome
+
+  vars:
+    mode: 'rehoming'

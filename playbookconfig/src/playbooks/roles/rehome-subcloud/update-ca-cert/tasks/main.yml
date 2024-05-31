@@ -13,5 +13,4 @@
     name: common/install-platform-certificates
   vars:
     kubeadm_pki_dir: /etc/kubernetes/pki
-    mode: 'rehoming'
     system_local_ca_overrides: false

@@ -31,10 +31,10 @@
     # - common/recover-subcloud-certificates
     - rehome-enroll-common/prepare-env
     - enroll-subcloud/validate-before-enroll
-    # - rehome-subcloud/update-ca-cert
+    - rehome-subcloud/update-ca-cert
     # - common/update-sc-admin-endpoints
-    # - role: common/update-sc-cert
-    #   when: subcloud_dc_admin_ep_cert_chain_recovered is undefined
+    - role: common/update-sc-cert
+      when: subcloud_dc_admin_ep_cert_chain_recovered is undefined
     # - rehome-subcloud/update-network-config
     # - role: rehome-subcloud/update-keystone-data
     #   become: yes
