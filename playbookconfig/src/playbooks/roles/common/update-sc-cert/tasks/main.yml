@@ -40,39 +40,58 @@
   vars:
     ansible_become: yes
 
-- name: Check admin-ep-cert.pem updated
-  command: stat -c %Y "/etc/ssl/private/{{ sc_adminep_cert }}"
-  register: adminep_cert_modify_time
-  until: adminep_cert_modify_time.stdout|int > (start_time.stdout|int + 1)
-  retries: 63
-  delay: 10
+- block:
+  - name: Get admin endpoint certificate
+    shell: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret
+      sc-adminep-certificate -n sc-cert
+      -o jsonpath='{.data.tls\.key}{.data.tls\.crt}'
+      | base64 -d
+    register: get_admin_ep_cert
 
-- name: Check haproxy service restarted
-  shell: >-
-    date --date="$(ps -p $(ps -eo pid,cmd | grep haproxy |
-    awk 'NR==1{print $1}') -o lstart=)" '+%s'
-  register: haproxy_start_time
-  until: haproxy_start_time.stdout > start_time.stdout
-  retries: 6
-  delay: 10
+  - name: Create DC admin endpoint root CA certificate
+    copy:
+      dest: "/etc/ssl/private/{{ sc_adminep_cert }}"
+      content: "{{ get_admin_ep_cert.stdout }}"
+      mode: 0400
+  when: mode == "enroll"
 
-- name: Check manifest applied and alarm cleared
-  shell: |
-    source /etc/platform/openrc;
-    fm alarm-list --query alarm_id=250.001
-  register: alarm_count
-  retries: 6
-  delay: 30
-  until: alarm_count.stdout == ""
-  # set as false to allow for a better error message in the fail task below
-  failed_when: false
+- block:
+  - name: Check admin-ep-cert.pem updated
+    command: stat -c %Y "/etc/ssl/private/{{ sc_adminep_cert }}"
+    register: adminep_cert_modify_time
+    until: adminep_cert_modify_time.stdout|int > (start_time.stdout|int + 1)
+    retries: 63
+    delay: 10
 
-- name: Failed when the manifest apply times out
-  fail:
-    msg: >-
-      Timed out to update DC subcloud cert. Check the cert-mon.log on the
-      subcloud controller for the reason.
-  when: alarm_count.stdout != ""
+  - name: Check haproxy service restarted
+    shell: >-
+      date --date="$(ps -p $(ps -eo pid,cmd | grep haproxy |
+      awk 'NR==1{print $1}') -o lstart=)" '+%s'
+    register: haproxy_start_time
+    until: haproxy_start_time.stdout > start_time.stdout
+    retries: 6
+    delay: 10
+
+  - name: Check manifest applied and alarm cleared
+    shell: |
+      source /etc/platform/openrc;
+      fm alarm-list --query alarm_id=250.001
+    register: alarm_count
+    retries: 6
+    delay: 30
+    until: alarm_count.stdout == ""
+    # set as false to allow for a better error message in the fail task below
+    failed_when: false
+
+  - name: Failed when the manifest apply times out
+    fail:
+      msg: >-
+        Timed out to update DC subcloud cert. Check the cert-mon.log on the
+        subcloud controller for the reason.
+    when: alarm_count.stdout != ""
+
+  when: mode != "enroll"
 
 - name: Restart sysinv-conductor
   command: sm-restart service sysinv-conductor
