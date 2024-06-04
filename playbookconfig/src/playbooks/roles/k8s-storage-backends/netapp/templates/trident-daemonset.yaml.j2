@@ -14,6 +14,8 @@ spec:
     metadata:
       labels:
         app: node.csi.trident.netapp.io
+        # STX_change: add label component
+        app.starlingx.io/component: platform
     spec:
       serviceAccount: trident-node-linux
       hostNetwork: true

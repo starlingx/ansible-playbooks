@@ -83,7 +83,7 @@
 - name: Install trident services
   command: tridentctl -n {{ trident_namespace }} install --use-custom-yaml {{ trident_install_extra_params }}
   args:
-    chdir: "{{ trident_setup_dir }}/setup"
+    chdir: "{{ trident_setup_dir }}"
   environment:
     KUBECONFIG: "/etc/kubernetes/admin.conf"
   when: (tridentctl_rest_response.rc is defined and
