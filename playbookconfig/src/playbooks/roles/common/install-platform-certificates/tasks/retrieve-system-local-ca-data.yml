@@ -63,7 +63,7 @@
         system_local_ca_cert: "{{ cert_result.stdout }}"
         system_local_ca_key: "{{ key_result.stdout }}"
         system_local_ca_data_obtained: true
-        install_rca_as_trusted: "{{ mode == 'bootstrap' or mode == 'rehoming' }}"
+        install_rca_as_trusted: "{{ mode == 'bootstrap' }}"
       no_log: true
 
     when: system_local_ca_exists.stdout | bool
