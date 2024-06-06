@@ -341,6 +341,20 @@
       - { name: 'management_multicast_subnet', address: "{{ network_params.management_multicast_subnet_primary }}" }
       - { name: 'management_multicast_subnet', address: "{{ network_params.management_multicast_subnet_secondary }}" }
 
+  - name: Validate cluster subnets (pod, host, and service) are all dual-stack if used
+    fail:
+      msg: "To have dual-stack, cluster networks (pod, host, and service) must have IPv4 and IPv6 subnets defined"
+    when: |
+      ((cluster_pod_subnet.split(',') | length == 2)
+        and (cluster_service_subnet.split(',') | length == 1 or
+              cluster_host_subnet.split(',') | length == 1)) or
+      ((cluster_service_subnet.split(',') | length == 2)
+        and (cluster_pod_subnet.split(',') | length == 1 or
+              cluster_host_subnet.split(',') | length == 1)) or
+      ((cluster_host_subnet.split(',') | length == 2)
+        and (cluster_service_subnet.split(',') | length == 1 or
+              cluster_pod_subnet.split(',') | length == 1))
+
   # The provided subnets have passed validation, set the default addresses
   # for pxeboot_subnet (single stack)
   - name: Set default start and end addresses based on provided pxeboot subnet
