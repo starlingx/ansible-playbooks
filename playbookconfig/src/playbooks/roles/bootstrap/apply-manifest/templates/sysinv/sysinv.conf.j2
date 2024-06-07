@@ -1,5 +1,5 @@
 [lldp]
-drivers=ldpd
+drivers=lldpd
 
 [DEFAULT]
 control_exchange=openstack
@@ -14,7 +14,8 @@ logging_default_format_string=sysinv %(asctime)s.%(msecs)03d %(process)d %(level
 sysinv_api_bind_ip=::
 auth_strategy=keystone
 sysinv_api_pxeboot_ip=
-sysinv_api_workers=1
+sysinv_api_workers=2
+use_syslog=True
 
 [database]
 connection={{ database_connection }}
