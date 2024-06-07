@@ -2,11 +2,11 @@
 # System images that are pre-pulled and pushed to local registry
 n3000_opae_img: docker.io/starlingx/n3000-opae:stx.8.0-v1.0.2
 kubernetes_entrypoint_img: quay.io/stackanetes/kubernetes-entrypoint:v0.3.1
-calico_cni_img: quay.io/calico/cni:v3.26.4
-calico_node_img: quay.io/calico/node:v3.26.4
-calico_kube_controllers_img: quay.io/calico/kube-controllers:v3.26.4
+calico_cni_img: quay.io/calico/cni:v3.28.0
+calico_node_img: quay.io/calico/node:v3.28.0
+calico_kube_controllers_img: quay.io/calico/kube-controllers:v3.28.0
 multus_img: ghcr.io/k8snetworkplumbingwg/multus-cni:v3.9.3
-sriov_cni_img: ghcr.io/k8snetworkplumbingwg/sriov-cni:v2.7.0
+sriov_cni_img: ghcr.io/k8snetworkplumbingwg/sriov-cni:v2.8.0
 sriov_network_device_img: ghcr.io/k8snetworkplumbingwg/sriov-network-device-plugin:v3.6.2
 intel_qat_plugin_img: docker.io/intel/intel-qat-plugin:0.26.0
 intel_gpu_plugin_img: docker.io/intel/intel-gpu-plugin:0.26.0
