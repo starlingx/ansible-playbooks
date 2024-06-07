@@ -36,7 +36,10 @@ items:
     - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain, true) }}"
     duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
     ipAddresses:
-    - "{{ oam_ip.stdout }}"
+    - "{{ oam_ip_primary }}"
+{% if oam_ip_secondary | bool %}
+    - "{{ oam_ip_secondary }}"
+{% endif %}
     issuerRef:
       kind: ClusterIssuer
       name: system-local-ca
@@ -62,8 +65,14 @@ items:
 {% endif %}
     duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
     ipAddresses:
-    - "{{ oam_ip.stdout }}"
-    - "{{ management_floating_ip.stdout }}"
+    - "{{ oam_ip_primary }}"
+    - "{{ management_floating_ip_primary }}"
+{% if oam_ip_secondary | bool %}
+    - "{{ oam_ip_secondary }}"
+{% endif %}
+{% if management_floating_ip_secondary | bool %}
+    - "{{ management_floating_ip_secondary }}"
+{% endif %}
     issuerRef:
       kind: ClusterIssuer
       name: system-local-ca
@@ -85,12 +94,24 @@ items:
     - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain, true) }}"
     duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
     ipAddresses:
-    - "{{ oam_ip.stdout }}"
+    - "{{ oam_ip_primary }}"
+{% if oam_ip_secondary | bool %}
+    - "{{ oam_ip_secondary }}"
+{% endif %}
     # Add kubernetes cluster ip to make sure certificate has issuer ip in san list
     # https://bugs.launchpad.net/starlingx/+bug/1971500
-    - "{{ kubernetes_cluster_floating_ip.stdout }}"
-    - "{{ kubernetes_cluster_c0_ip.stdout }}"
-    - "{{ kubernetes_cluster_c1_ip.stdout }}"
+    - "{{ kubernetes_cluster_floating_ip_primary }}"
+    - "{{ kubernetes_cluster_c0_ip_primary }}"
+    - "{{ kubernetes_cluster_c1_ip_primary }}"
+{% if kubernetes_cluster_floating_ip_secondary | bool %}
+    - "{{ kubernetes_cluster_floating_ip_secondary }}"
+{% endif %}
+{% if kubernetes_cluster_c0_ip_secondary | bool %}
+    - "{{ kubernetes_cluster_c0_ip_secondary }}"
+{% endif %}
+{% if kubernetes_cluster_c1_ip_secondary | bool %}
+    - "{{ kubernetes_cluster_c1_ip_secondary }}"
+{% endif %}
     issuerRef:
       kind: ClusterIssuer
       name: system-local-ca
@@ -115,9 +136,18 @@ items:
     - controller-1
     duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
     ipAddresses:
-    - "{{ management_floating_ip.stdout }}"
-    - "{{ management_c0_ip.stdout }}"
-    - "{{ management_c1_ip.stdout }}"
+    - "{{ management_floating_ip_primary }}"
+    - "{{ management_c0_ip_primary }}"
+    - "{{ management_c1_ip_primary }}"
+{% if management_floating_ip_secondary | bool %}
+    - "{{ management_floating_ip_secondary }}"
+{% endif %}
+{% if management_c0_ip_secondary | bool %}
+    - "{{ management_c0_ip_secondary }}"
+{% endif %}
+{% if management_c1_ip_secondary | bool %}
+    - "{{ management_c1_ip_secondary }}"
+{% endif %}
     issuerRef:
       kind: ClusterIssuer
       name: system-local-ca

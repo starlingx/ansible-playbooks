@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -54,14 +54,35 @@
 
   when: inventory_hostname != 'localhost'
 
+# cluster_pod_subnet is comma separated dual-stack read from sysinv.
+# calico-cni.yaml.j2 now could have both pools: cluster_network_ipv4
+# and cluster_network_ipv6
+# cluster_host_floating_address and cluster_host_node_0_address are also
+# comma separated dual-stack read from sysinv
 - name: Set networking facts
   set_fact:
     kubelet_cni_bin_dir: "/var/opt/cni/bin"
     kubelet_vol_plugin_dir: "/var/opt/libexec/kubernetes/kubelet-plugins/volume/exec/"
-    cluster_network_ipv4: "{{ cluster_pod_subnet | ipv4 }}"
-    cluster_network_ipv6: "{{ cluster_pod_subnet | ipv6 }}"
-    cluster_floating_address: "{{ cluster_host_floating_address }}"
-    controller_0_cluster_host: "{{ cluster_host_node_0_address }}"
+    cluster_network_ipv4: "{{ cluster_pod_subnet.split(',')[0] | ipv4
+                            if cluster_pod_subnet.split(',')[0] | ipv4
+                            else  cluster_pod_subnet.split(',')[-1] | ipv4
+                          }}"
+    cluster_network_ipv6: "{{ cluster_pod_subnet.split(',')[0] | ipv6
+                            if cluster_pod_subnet.split(',')[0] | ipv6
+                            else  cluster_pod_subnet.split(',')[-1] | ipv6
+                          }}"
+    cluster_floating_address: "{{ cluster_host_floating_address.split(',')[0] }}"
+    controller_0_cluster_host: "{{ cluster_host_node_0_address.split(',')[0] }}"
+
+- name: Set secondary cluster_floating_address
+  set_fact:
+    cluster_floating_address_secondary: "{{ cluster_host_floating_address.split(',')[1] }}"
+  when: cluster_host_floating_address.split(',') | length == 2
+
+- name: Set secondary controller_0_cluster_host
+  set_fact:
+    controller_0_cluster_host_secondary: "{{ cluster_host_node_0_address.split(',')[1] }}"
+  when: cluster_host_node_0_address.split(',') | length == 2
 
 - name: Upgrade k8s networking images
   import_role:
@@ -144,7 +165,7 @@
     command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf delete ippool.crd.projectcalico.org/default-ipv4-ippool"
     when: check_ipv4_pools.rc == 0
 
-  when: cluster_network_ipv6 == cluster_pod_subnet
+  when: not cluster_network_ipv4
 
 - block:
   - name: Restore mode variable

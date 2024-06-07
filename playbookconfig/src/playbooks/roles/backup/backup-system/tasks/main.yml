@@ -609,15 +609,23 @@
       set_fact:
         etcd_snapshot_file: "{{ etcd_snapshot_dir.path }}/etcd-snapshot.db"
 
-    - name: Get etcd endpoints
-      shell: |
-        source /etc/platform/openrc
-        system addrpool-list --nowrap | awk '/cluster-host-subnet/{print$14}'
-      register: etcd_endpoint
+    - block:
+      - name: Get etcd endpoints -- primary cluster-host floating ip address
+        include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+        vars:
+          network_type: cluster-host
+          network_stack: primary
+
+      - debug:
+          msg: primary cluster-host addresses {{ addresses }}
+
+      - name: Assign primary cluster-host ip addresses
+        set_fact:
+          etcd_endpoint: "{{ addresses.floating_address }}"
 
     - name: Wrap etcd_endpoint in [] brackets if it's an ipv6 address
       set_fact:
-        etcd_endpoint_parsed: "{{ etcd_endpoint.stdout | ipwrap }}"
+        etcd_endpoint_parsed: "{{ etcd_endpoint | ipwrap }}"
 
     - name: Create etcd snapshot
       command: "etcdctl --endpoints https://{{ etcd_endpoint_parsed }}:2379 --cert=/etc/etcd/etcd-client.crt

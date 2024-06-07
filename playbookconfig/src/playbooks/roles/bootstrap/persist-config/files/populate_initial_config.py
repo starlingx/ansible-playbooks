@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #
-# Copyright (c) 2019-2023 Wind River Systems, Inc.
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -120,6 +120,10 @@ def touch(fname):
         os.utime(fname, None)
 
 
+def get_version_text(ip_network):
+    return "ipv4" if ip_network.version == 4 else "ipv6"
+
+
 def is_subcloud():
     cloud_role = CONF.get('BOOTSTRAP_CONFIG', 'DISTRIBUTED_CLOUD_ROLE')
     return cloud_role == SUBCLOUD_ROLE
@@ -128,6 +132,41 @@ def is_subcloud():
 def has_admin_network():
     admin_subnet = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_SUBNET')
     return admin_subnet != 'undef'
+
+
+def has_mgmt_network_secondary():
+    mgmt_subnet_secondary = CONF.get('BOOTSTRAP_CONFIG', 'MANAGEMENT_SUBNET_SECONDARY')
+    return mgmt_subnet_secondary != 'undef'
+
+
+def has_admin_network_secondary():
+    admin_subnet_secondary = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_SUBNET_SECONDARY')
+    return admin_subnet_secondary != 'undef'
+
+
+def has_oam_network_secondary():
+    oam_subnet_secondary = CONF.get('BOOTSTRAP_CONFIG', 'EXTERNAL_OAM_SUBNET_SECONDARY')
+    return oam_subnet_secondary != 'undef'
+
+
+def has_multicast_network_secondary():
+    multicast_subnet_secondary = CONF.get('BOOTSTRAP_CONFIG', 'MANAGEMENT_MULTICAST_SUBNET_SECONDARY')
+    return multicast_subnet_secondary != 'undef'
+
+
+def has_cluster_host_network_secondary():
+    cluster_host_subnet_secondary = CONF.get('BOOTSTRAP_CONFIG', 'CLUSTER_HOST_SUBNET_SECONDARY')
+    return cluster_host_subnet_secondary != 'undef'
+
+
+def has_cluster_pod_network_secondary():
+    cluster_pod_subnet_secondary = CONF.get('BOOTSTRAP_CONFIG', 'CLUSTER_POD_SUBNET_SECONDARY')
+    return cluster_pod_subnet_secondary != 'undef'
+
+
+def has_cluster_service_network_secondary():
+    cluster_service_subnet_secondary = CONF.get('BOOTSTRAP_CONFIG', 'CLUSTER_SERVICE_SUBNET_SECONDARY')
+    return cluster_service_subnet_secondary != 'undef'
 
 
 def wait_system_config(client):
@@ -233,7 +272,7 @@ def populate_load_config(client):
     print("Load config completed.")
 
 
-def create_addrpool(client, addrpool_data, network_name):
+def create_addrpool(client, addrpool_data):
     try:
         pool = client.sysinv.address_pool.create(**addrpool_data)
         return pool
@@ -245,7 +284,7 @@ def create_addrpool(client, addrpool_data, network_name):
             pools = client.sysinv.address_pool.list()
             if pools:
                 for pool in pools:
-                    if network_name in pool.name:
+                    if addrpool_data['name'] == pool.name:
                         return pool
         raise e
 
@@ -261,6 +300,30 @@ def create_network(client, network_data, network_name):
             networks = client.sysinv.network.list()
             for network in networks:
                 if network.name == network_name:
+                    return
+        raise e
+
+
+def get_network(client, network_name):
+    networks = client.sysinv.network.list()
+    for network in networks:
+        if network.name == network_name:
+            return network
+    raise ValueError(f'No {network_name} network found.')
+
+
+def create_network_addrpool(client, network_addrpool_data):
+    try:
+        client.sysinv.network_addrpool.assign(**network_addrpool_data)
+    except Exception as e:
+        if INCOMPLETE_BOOTSTRAP:
+            # The previous bootstrap might have been interrupted while
+            # it was in the middle of persisting this network config data
+            # and the controller host has not been created.
+            network_addrpools = client.sysinv.network_addrpool.list()
+            for network_addrpool in network_addrpools:
+                if network_addrpool.network_uuid == network_addrpool_data['network_uuid'] \
+                        and network_addrpool.address_pool_uuid == network_addrpool_data['address_pool_uuid']:
                     return
         raise e
 
@@ -287,13 +350,22 @@ def populate_kube_cmd_version(client):
         raise e
 
 
+def get_addrpools_uuid(client, network_uuid):
+    addrpools_uuid = []
+    network_addresspools = client.sysinv.network_addrpool.list()
+    if network_addresspools:
+        for network_addresspool in network_addresspools:
+            if network_uuid == network_addresspool.network_uuid:
+                addrpools_uuid.append(network_addresspool.address_pool_uuid)
+    return addrpools_uuid
+
+
 def delete_network_and_addrpool(client, network_name):
     networks = client.sysinv.network.list()
-    network_uuid = addrpool_uuid = None
+    network_uuid = None
     for network in networks:
         if network.name == network_name:
             network_uuid = network.uuid
-            addrpool_uuid = network.pool_uuid
     if network_uuid:
         print("Deleting network, routes, addresses, and address pool for network %s..." %
               network_name)
@@ -305,7 +377,8 @@ def delete_network_and_addrpool(client, network_name):
         for addr in host_addresses:
             client.sysinv.address.delete(addr.uuid)
         client.sysinv.network.delete(network_uuid)
-        client.sysinv.address_pool.delete(addrpool_uuid)
+        for addrpool_uuid in get_addrpools_uuid(client, network_uuid):
+            client.sysinv.address_pool.delete(addrpool_uuid)
 
 
 def populate_mgmt_network(client):
@@ -329,7 +402,7 @@ def populate_mgmt_network(client):
 
     # create the address pool
     values = {
-        'name': 'management',
+        'name': f'management-{get_version_text(management_subnet)}',
         'network': str(management_subnet.network),
         'prefix': management_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
@@ -338,7 +411,7 @@ def populate_mgmt_network(client):
         values.update({
             'gateway_address': subcloud_gateway,
         })
-    pool = create_addrpool(client, values, 'management')
+    pool = create_addrpool(client, values)
 
     # create the network for the pool
     values = {
@@ -348,6 +421,35 @@ def populate_mgmt_network(client):
         'pool_uuid': pool.uuid,
     }
     create_network(client, values, network_name)
+
+
+def populate_mgmt_network_secondary(client):
+    management_subnet = IPNetwork(
+        CONF.get('BOOTSTRAP_CONFIG', 'MANAGEMENT_SUBNET_SECONDARY'))
+    start_address = CONF.get('BOOTSTRAP_CONFIG',
+                             'MANAGEMENT_START_ADDRESS_SECONDARY')
+    end_address = CONF.get('BOOTSTRAP_CONFIG',
+                           'MANAGEMENT_END_ADDRESS_SECONDARY')
+
+    network_name = sysinv_constants.NETWORK_TYPE_MGMT
+
+    print("Populating secondary management network...")
+
+    # create the address pool
+    values = {
+        'name': f'management-{get_version_text(management_subnet)}',
+        'network': str(management_subnet.network),
+        'prefix': management_subnet.prefixlen,
+        'ranges': [(start_address, end_address)],
+    }
+    pool = create_addrpool(client, values)
+
+    # add the pool to the network
+    values = {
+        'network_uuid': get_network(client, network_name).uuid,
+        'address_pool_uuid': pool.uuid,
+    }
+    create_network_addrpool(client, values)
 
 
 def populate_admin_network(client):
@@ -368,7 +470,7 @@ def populate_admin_network(client):
 
     # create the address pool
     values = {
-        'name': 'admin',
+        'name': f'admin-{get_version_text(admin_subnet)}',
         'network': str(admin_subnet.network),
         'prefix': admin_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
@@ -377,7 +479,7 @@ def populate_admin_network(client):
         values.update({
             'gateway_address': subcloud_gateway,
         })
-    pool = create_addrpool(client, values, 'admin')
+    pool = create_addrpool(client, values)
 
     # create the network for the pool
     values = {
@@ -387,6 +489,34 @@ def populate_admin_network(client):
         'pool_uuid': pool.uuid,
     }
     create_network(client, values, network_name)
+
+
+def populate_admin_network_secondary(client):
+    admin_subnet = IPNetwork(
+        CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_SUBNET_SECONDARY'))
+    start_address = CONF.get('BOOTSTRAP_CONFIG',
+                             'ADMIN_START_ADDRESS_SECONDARY')
+    end_address = CONF.get('BOOTSTRAP_CONFIG',
+                           'ADMIN_END_ADDRESS_SECONDARY')
+    network_name = sysinv_constants.NETWORK_TYPE_ADMIN
+
+    print("Populating secondary admin network...")
+
+    # create the address pool
+    values = {
+        'name': f'admin-{get_version_text(admin_subnet)}',
+        'network': str(admin_subnet.network),
+        'prefix': admin_subnet.prefixlen,
+        'ranges': [(start_address, end_address)],
+    }
+    pool = create_addrpool(client, values)
+
+    # add the pool to the network
+    values = {
+        'network_uuid': get_network(client, network_name).uuid,
+        'address_pool_uuid': pool.uuid,
+    }
+    create_network_addrpool(client, values)
 
 
 def populate_pxeboot_network(client):
@@ -410,7 +540,7 @@ def populate_pxeboot_network(client):
         'prefix': pxeboot_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
-    pool = create_addrpool(client, values, network_name)
+    pool = create_addrpool(client, values)
 
     # create the network for the pool
     values = {
@@ -439,7 +569,7 @@ def populate_oam_network(client):
 
     # create the address pool
     values = {
-        'name': 'oam',
+        'name': f'oam-{get_version_text(external_oam_subnet)}',
         'network': str(external_oam_subnet.network),
         'prefix': external_oam_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
@@ -459,7 +589,7 @@ def populate_oam_network(client):
         'gateway_address': CONF.get(
             'BOOTSTRAP_CONFIG', 'EXTERNAL_OAM_GATEWAY_ADDRESS'),
     })
-    pool = create_addrpool(client, values, network_name)
+    pool = create_addrpool(client, values)
 
     # create the network for the pool
     values = {
@@ -469,6 +599,49 @@ def populate_oam_network(client):
         'pool_uuid': pool.uuid,
     }
     create_network(client, values, network_name)
+
+
+def populate_oam_network_secondary(client):
+    external_oam_subnet = IPNetwork(CONF.get(
+        'BOOTSTRAP_CONFIG', 'EXTERNAL_OAM_SUBNET_SECONDARY'))
+    start_address = CONF.get('BOOTSTRAP_CONFIG',
+                             'EXTERNAL_OAM_START_ADDRESS_SECONDARY')
+    end_address = CONF.get('BOOTSTRAP_CONFIG',
+                           'EXTERNAL_OAM_END_ADDRESS_SECONDARY')
+    network_name = sysinv_constants.NETWORK_TYPE_OAM
+
+    print("Populating secondary oam network...")
+
+    # create the address pool
+    values = {
+        'name': f'oam-{get_version_text(external_oam_subnet)}',
+        'network': str(external_oam_subnet.network),
+        'prefix': external_oam_subnet.prefixlen,
+        'ranges': [(start_address, end_address)],
+        'floating_address': CONF.get(
+            'BOOTSTRAP_CONFIG', 'EXTERNAL_OAM_FLOATING_ADDRESS_SECONDARY'),
+    }
+
+    system_mode = CONF.get('BOOTSTRAP_CONFIG', 'SYSTEM_MODE')
+    if system_mode != sysinv_constants.SYSTEM_MODE_SIMPLEX:
+        values.update({
+            'controller0_address': CONF.get(
+                'BOOTSTRAP_CONFIG', 'EXTERNAL_OAM_0_ADDRESS_SECONDARY'),
+            'controller1_address': CONF.get(
+                'BOOTSTRAP_CONFIG', 'EXTERNAL_OAM_1_ADDRESS_SECONDARY'),
+        })
+    values.update({
+        'gateway_address': CONF.get(
+            'BOOTSTRAP_CONFIG', 'EXTERNAL_OAM_GATEWAY_ADDRESS_SECONDARY'),
+    })
+    pool = create_addrpool(client, values)
+
+    # add the pool to the network
+    values = {
+        'network_uuid': get_network(client, network_name).uuid,
+        'address_pool_uuid': pool.uuid,
+    }
+    create_network_addrpool(client, values)
 
 
 def populate_multicast_network(client):
@@ -488,12 +661,12 @@ def populate_multicast_network(client):
 
     # create the address pool
     values = {
-        'name': 'multicast-subnet',
+        'name': f'multicast-subnet-{get_version_text(management_multicast_subnet)}',
         'network': str(management_multicast_subnet.network),
         'prefix': management_multicast_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
-    pool = create_addrpool(client, values, network_name)
+    pool = create_addrpool(client, values)
 
     # create the network for the pool
     values = {
@@ -503,6 +676,34 @@ def populate_multicast_network(client):
         'pool_uuid': pool.uuid,
     }
     create_network(client, values, network_name)
+
+
+def populate_multicast_network_secondary(client):
+    management_multicast_subnet = IPNetwork(CONF.get(
+        'BOOTSTRAP_CONFIG', 'MANAGEMENT_MULTICAST_SUBNET_SECONDARY'))
+    start_address = CONF.get('BOOTSTRAP_CONFIG',
+                             'MANAGEMENT_MULTICAST_START_ADDRESS_SECONDARY')
+    end_address = CONF.get('BOOTSTRAP_CONFIG',
+                           'MANAGEMENT_MULTICAST_END_ADDRESS_SECONDARY')
+    network_name = sysinv_constants.NETWORK_TYPE_MULTICAST
+
+    print("Populating secondary multicast network...")
+
+    # create the address pool
+    values = {
+        'name': f'multicast-subnet-{get_version_text(management_multicast_subnet)}',
+        'network': str(management_multicast_subnet.network),
+        'prefix': management_multicast_subnet.prefixlen,
+        'ranges': [(start_address, end_address)],
+    }
+    pool = create_addrpool(client, values)
+
+    # add the pool to the network
+    values = {
+        'network_uuid': get_network(client, network_name).uuid,
+        'address_pool_uuid': pool.uuid,
+    }
+    create_network_addrpool(client, values)
 
 
 def populate_cluster_host_network(client):
@@ -524,12 +725,12 @@ def populate_cluster_host_network(client):
 
     # create the address pool
     values = {
-        'name': 'cluster-host-subnet',
+        'name': f'cluster-host-subnet-{get_version_text(cluster_host_subnet)}',
         'network': str(cluster_host_subnet.network),
         'prefix': cluster_host_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
-    pool = create_addrpool(client, values, network_name)
+    pool = create_addrpool(client, values)
 
     # create the network for the pool
     values = {
@@ -539,6 +740,34 @@ def populate_cluster_host_network(client):
         'pool_uuid': pool.uuid,
     }
     create_network(client, values, network_name)
+
+
+def populate_cluster_host_network_secondary(client):
+    cluster_host_subnet = IPNetwork(CONF.get(
+        'BOOTSTRAP_CONFIG', 'CLUSTER_HOST_SUBNET_SECONDARY'))
+    start_address = CONF.get('BOOTSTRAP_CONFIG',
+                             'CLUSTER_HOST_START_ADDRESS_SECONDARY')
+    end_address = CONF.get('BOOTSTRAP_CONFIG',
+                           'CLUSTER_HOST_END_ADDRESS_SECONDARY')
+    network_name = sysinv_constants.NETWORK_TYPE_CLUSTER_HOST
+
+    print("Populating secondary cluster host network...")
+
+    # create the address pool
+    values = {
+        'name': f'cluster-host-subnet-{get_version_text(cluster_host_subnet)}',
+        'network': str(cluster_host_subnet.network),
+        'prefix': cluster_host_subnet.prefixlen,
+        'ranges': [(start_address, end_address)],
+    }
+    pool = create_addrpool(client, values)
+
+    # add the pool to the network
+    values = {
+        'network_uuid': get_network(client, network_name).uuid,
+        'address_pool_uuid': pool.uuid,
+    }
+    create_network_addrpool(client, values)
 
 
 def populate_system_controller_network(client):
@@ -568,7 +797,7 @@ def populate_system_controller_network(client):
         'prefix': system_controller_subnet.prefixlen,
         'floating_address': str(system_controller_floating_ip),
     }
-    mgmt_pool = create_addrpool(client, values, network_name_mgmt)
+    mgmt_pool = create_addrpool(client, values)
 
     values = {
         'name': 'system-controller-oam-subnet',
@@ -576,7 +805,7 @@ def populate_system_controller_network(client):
         'prefix': system_controller_oam_subnet.prefixlen,
         'floating_address': str(system_controller_oam_floating_ip),
     }
-    oam_pool = create_addrpool(client, values, network_name_oam)
+    oam_pool = create_addrpool(client, values)
 
     # create the network for the pool
     values = {
@@ -613,12 +842,12 @@ def populate_cluster_pod_network(client):
 
     # create the address pool
     values = {
-        'name': 'cluster-pod-subnet',
+        'name': f'cluster-pod-subnet-{get_version_text(cluster_pod_subnet)}',
         'network': str(cluster_pod_subnet.network),
         'prefix': cluster_pod_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
-    pool = create_addrpool(client, values, network_name)
+    pool = create_addrpool(client, values)
 
     # create the network for the pool
     values = {
@@ -628,6 +857,34 @@ def populate_cluster_pod_network(client):
         'pool_uuid': pool.uuid,
     }
     create_network(client, values, network_name)
+
+
+def populate_cluster_pod_network_secondary(client):
+    cluster_pod_subnet = IPNetwork(CONF.get(
+        'BOOTSTRAP_CONFIG', 'CLUSTER_POD_SUBNET_SECONDARY'))
+    start_address = CONF.get('BOOTSTRAP_CONFIG',
+                             'CLUSTER_POD_START_ADDRESS_SECONDARY')
+    end_address = CONF.get('BOOTSTRAP_CONFIG',
+                           'CLUSTER_POD_END_ADDRESS_SECONDARY')
+    network_name = sysinv_constants.NETWORK_TYPE_CLUSTER_POD
+
+    print("Populating secondary cluster pod network...")
+
+    # create the address pool
+    values = {
+        'name': f'cluster-pod-subnet-{get_version_text(cluster_pod_subnet)}',
+        'network': str(cluster_pod_subnet.network),
+        'prefix': cluster_pod_subnet.prefixlen,
+        'ranges': [(start_address, end_address)],
+    }
+    pool = create_addrpool(client, values)
+
+    # add the pool to the network
+    values = {
+        'network_uuid': get_network(client, network_name).uuid,
+        'address_pool_uuid': pool.uuid,
+    }
+    create_network_addrpool(client, values)
 
 
 def populate_cluster_service_network(client):
@@ -647,12 +904,12 @@ def populate_cluster_service_network(client):
 
     # create the address pool
     values = {
-        'name': 'cluster-service-subnet',
+        'name': f'cluster-service-subnet-{get_version_text(cluster_service_subnet)}',
         'network': str(cluster_service_subnet.network),
         'prefix': cluster_service_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
-    pool = create_addrpool(client, values, network_name)
+    pool = create_addrpool(client, values)
 
     # create the network for the pool
     values = {
@@ -664,20 +921,69 @@ def populate_cluster_service_network(client):
     create_network(client, values, network_name)
 
 
+def populate_cluster_service_network_secondary(client):
+    cluster_service_subnet = IPNetwork(CONF.get(
+        'BOOTSTRAP_CONFIG', 'CLUSTER_SERVICE_SUBNET_SECONDARY'))
+    start_address = CONF.get('BOOTSTRAP_CONFIG',
+                             'CLUSTER_SERVICE_START_ADDRESS_SECONDARY')
+    end_address = CONF.get('BOOTSTRAP_CONFIG',
+                           'CLUSTER_SERVICE_END_ADDRESS_SECONDARY')
+    network_name = sysinv_constants.NETWORK_TYPE_CLUSTER_SERVICE
+
+    print("Populating secondary cluster service network...")
+
+    # create the address pool
+    values = {
+        'name': f'cluster-service-subnet-{get_version_text(cluster_service_subnet)}',
+        'network': str(cluster_service_subnet.network),
+        'prefix': cluster_service_subnet.prefixlen,
+        'ranges': [(start_address, end_address)],
+    }
+    pool = create_addrpool(client, values)
+
+    # add the pool to the network
+    values = {
+        'network_uuid': get_network(client, network_name).uuid,
+        'address_pool_uuid': pool.uuid,
+    }
+    create_network_addrpool(client, values)
+
+
 def populate_network_config(client):
     if not INITIAL_POPULATION and not RECONFIGURE_NETWORK:
         return
     populate_mgmt_network(client)
+    if has_mgmt_network_secondary():
+        populate_mgmt_network_secondary(client)
+
     populate_pxeboot_network(client)
+
     populate_oam_network(client)
+    if has_oam_network_secondary():
+        populate_oam_network_secondary(client)
+
     populate_multicast_network(client)
+    if has_multicast_network_secondary():
+        populate_multicast_network_secondary(client)
+
     populate_cluster_host_network(client)
+    if has_cluster_host_network_secondary():
+        populate_cluster_host_network_secondary(client)
+
     populate_cluster_pod_network(client)
+    if has_cluster_pod_network_secondary():
+        populate_cluster_pod_network_secondary(client)
+
     populate_cluster_service_network(client)
+    if has_cluster_service_network_secondary():
+        populate_cluster_service_network_secondary(client)
+
     if is_subcloud():
         populate_system_controller_network(client)
         if has_admin_network():
             populate_admin_network(client)
+        if has_admin_network_secondary():
+            populate_admin_network_secondary(client)
 
     print("Network config completed.")
 

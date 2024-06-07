@@ -12,18 +12,26 @@
 
 # We may need to update /etc/hosts because registry.central will not be
 # available on system controllers or subclouds because dnsmasq is not brought up.
-- name: Check if registry.central is present in sysinv
-  shell: |-
-    source /etc/platform/openrc
-    system addrpool-list --nowrap | grep system-controller-oam-subnet | cut -d'|' -f8
-  register: sc_oam_vip
+- block:
+  - name: Get primary system-controller-oam floating ip address
+    include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: system-controller-oam
+      network_stack: primary
+
+  - debug:
+      msg: primary system-controller-oam addresses {{ addresses }}
+
+  - name: Assign primary system-controller-oam ip addresses
+    set_fact:
+      sc_oam_vip: "{{ addresses.floating_address }}"
 
 - name: Add host route to registry.central if present
   lineinfile:
     path: /etc/hosts
     insertafter: EOF
-    line: "{{ sc_oam_vip.stdout_lines[0].strip() }} registry.central"
-  when: sc_oam_vip.stdout
+    line: "{{ sc_oam_vip }} registry.central"
+  when: sc_oam_vip
 
 - name: Get Kubernetes version
   import_role:
