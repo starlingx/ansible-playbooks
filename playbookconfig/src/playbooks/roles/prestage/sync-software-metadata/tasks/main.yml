@@ -1,0 +1,209 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#
+#   This role synchronizes the system controller /opt/software/metadata
+#   directory to the subcloud.
+#
+#   Note: much of the work is done by the ostree-metadata-sync.sh script, which
+#   has two targets: get-commits and sync-subcloud
+#
+#   Procedure:
+#   - On system controller, run ostree-metadata-sync.sh --sw-version 24.09 get-commits
+#       - Creates /opt/software/tmp/metadata-sync/ostree-metadata-commits.central
+#         which contains list of sw_version:ostree commit for all
+#         software updates matching prestaging software release
+#          - this file is transferred to subcloud for use during the sync-subcloud stage
+#   - On subcloud, run ostree-metadata-sync.sh --sw-version 24.09 get-commits
+#       - Creates /opt/software/tmp/metadata-sync/ostree-metadata-commits.subcloud
+#         which contains list of sw_version:ostree commit for all software
+#         updates matching prestaging software release
+#   - Set software_sync_required:
+#       - The above two get-commits script calls output its list to stdout
+#       - Based on the stdout diff of the above two script calls, we determine
+#         if a sync is required
+#   - Is software_sync_required?
+#       - Transfer the following from system controller to subcloud at /opt/software/tmp/metadata-sync:
+#           - /opt/software/tmp/metadata-sync/ostree-metadata-commits.central
+#           - the full /opt/software/metadata hierarchy
+#       - The above data is used on the subcloud to synchronize the commits on the subcloud
+#         by invoking: ostree-metadata-sync.sh --sw-version 24.09 sync-subcloud
+#           - operates on the data in /opt/software/tmp/metadata-sync
+#             plus the state on subcloud to run the sync algorithm for each commit
+#
+
+- name: Set software metadata synchronization facts for {{ software_version }}
+  set_fact:
+    software_sync_required: false
+    ostree_feed_repo_dir: /var/www/pages/feed/rel-{{ software_major_release }}/ostree_repo
+    ostree_sysroot_repo_dir: /sysroot/ostree/repo
+    ostree_rev: starlingx
+    usm_software_dir: /opt/software
+    usm_metadata_dir: /opt/software/metadata
+    tmp_metadata_sync_dir: /opt/software/tmp/metadata-sync
+    ostree_metadata_commits_central: /opt/software/tmp/metadata-sync/ostree-metadata-commits.central
+    ostree_metadata_commits_subcloud: /opt/software/tmp/metadata-sync/ostree-metadata-commits.subcloud
+
+- name: Gather system controller ostree commit
+  command: ostree --repo={{ ostree_feed_repo_dir }} rev-parse {{ ostree_rev }}
+  register: ostree_commit_system_controller
+  delegate_to: localhost
+
+- name: Gather subcloud ostree commit
+  command: ostree --repo={{ ostree_feed_repo_dir }} rev-parse {{ ostree_rev }}
+  register: ostree_commit_subcloud
+
+- name: Gather system controller software list
+  shell: software list --release {{ software_major_release }} | grep {{ software_version }} | grep -E '(available|deploy)'
+  register: system_controller_software_list
+  failed_when: false
+  delegate_to: localhost
+
+- name: Show system controller software list for release {{ software_version }}
+  debug:
+    var: system_controller_software_list.stdout
+
+- name: Gather subcloud software list
+  shell: software list --release {{ software_major_release }} | grep {{ software_version }} | grep -E '(available|deploy)'
+  register: subcloud_software_list
+  failed_when: false
+  become: true
+
+- name: Show subcloud software list for release {{ software_version }}
+  debug:
+    var: subcloud_software_list.stdout
+
+- name: Ensure system controller {{ tmp_metadata_sync_dir }} exists (sysadmin)
+  file:
+    path: "{{ tmp_metadata_sync_dir }}"
+    owner: sysadmin
+    group: root
+    state: directory
+    mode: 0755
+    recurse: yes
+  become: true
+  delegate_to: localhost
+
+- name: Ensure subcloud {{ tmp_metadata_sync_dir }} exists (sysadmin)
+  file:
+    path: "{{ tmp_metadata_sync_dir }}"
+    owner: sysadmin
+    group: root
+    state: directory
+    mode: 0755
+    recurse: yes
+  become: true
+
+- name: Gather system controller metadata commits
+  #
+  # Use the existing ostree_metadata_commits_central file if:
+  # 1) It exists, and
+  # 2) There are no new commits. Compare last line of the ostree_metadata_commits_central
+  #    file against current ostree repo commit.
+  # Otherwise, we generate a new ostree_metadata_commits_central file using the
+  # get-commits target to our script.
+  #
+  # Parallel operations (for orchestration):
+  # We use flock here because there may be many prestaging operations running
+  # in parallel on system controller. flock behaviour:
+  #   - acquire lock on /tmp/ostree_metadata_commits_central.lock
+  #   - the timeout is long just to ensure we never deadlock for any reason
+  shell: |
+    exec 3>/tmp/ostree_metadata_commits_central.lock
+    flock --exclusive --timeout 180 3 || echo "ERROR: flock failed: $?"
+    if [ ! -f "{{ ostree_metadata_commits_central }}" ] \
+      || diff -q <(ostree --repo="{{ ostree_feed_repo_dir }}" rev-parse "{{ ostree_rev }}") \
+                 <(tail --lines=1 "{{ ostree_metadata_commits_central }}" | awk -F':' '{ print $2; }'); then
+      /usr/share/ansible/stx-ansible/playbooks/roles/prestage/sync-software-metadata/files/ostree-metadata-sync.sh \
+      --sw-version "{{ software_version }}" --output "{{ ostree_metadata_commits_central }}" get-commits
+    else
+      cat "{{ ostree_metadata_commits_central }}"
+    fi
+    exec 3>&-  # release the lock
+  register: system_controller_software_metadata_commits
+  delegate_to: localhost
+
+- name: Show ostree metadata commits on system controller
+  debug:
+    var: system_controller_software_metadata_commits
+
+- name: Gather subcloud metadata commits
+  command: >-
+    /usr/share/ansible/stx-ansible/playbooks/roles/prestage/sync-software-metadata/files/ostree-metadata-sync.sh
+    --sw-version "{{ software_version }}" --output "{{ ostree_metadata_commits_subcloud }}" get-commits
+  register: subcloud_software_metadata_commits
+
+- name: Show ostree metadata commits on subcloud
+  debug:
+    var: subcloud_software_metadata_commits
+
+- name: Decide if software metadata synchronization is required
+  set_fact:
+    software_sync_required: true
+  when: (system_controller_software_metadata_commits.stdout != subcloud_software_metadata_commits.stdout)
+        or (system_controller_software_list.stdout != subcloud_software_list.stdout)
+
+- debug:
+    msg:
+      - "Software sync required: {{ software_sync_required }}"
+      - "ostree revision from {{ ostree_feed_repo_dir }}:"
+      - "system controller: {{ ostree_commit_system_controller.stdout }}"
+      - "subcloud:          {{ ostree_commit_subcloud.stdout }}"
+      - "Software list:"
+      - "system controller:"
+      - "{{ system_controller_software_list.stdout }}"
+      - "{{ system_controller_software_metadata_commits.stdout }}"
+      - "subcloud:"
+      - "{{ subcloud_software_list.stdout }}"
+      - "{{ subcloud_software_metadata_commits.stdout }}"
+
+- block:
+  - name: Copy system controller {{ usm_metadata_dir }} to subcloud {{ tmp_metadata_sync_dir }}
+    copy:
+      src: "{{ usm_metadata_dir }}"
+      dest: "{{ tmp_metadata_sync_dir }}"
+      force: true
+
+  - name: Copy system controller {{ ostree_metadata_commits_central }} to subcloud {{ tmp_metadata_sync_dir }}
+    copy:
+      src: "{{ ostree_metadata_commits_central }}"
+      dest: "{{ tmp_metadata_sync_dir }}"
+      force: true
+
+  - name: Synchronizing system controller ostree commits on subcloud
+    command: >-
+      /usr/share/ansible/stx-ansible/playbooks/roles/prestage/sync-software-metadata/files/ostree-metadata-sync.sh
+      --sw-version "{{ software_version }}" sync-subcloud 2>&1 | tee /tmp/sync-ostree-commits.log
+    register: sync_software_commits
+    become: true
+
+  - name: Show sync output
+    debug:
+      msg:
+        - "sync_software_commits:"
+        - "rc: {{ sync_software_commits.rc }}"
+        - "start: {{ sync_software_commits.start }}"
+        - "end: {{ sync_software_commits.end }}"
+        - "stderr: {{ sync_software_commits.stderr }}"
+        - "stdout: {{ sync_software_commits.stdout }}"
+
+  # Restart the software controller and agent to pickup the changes
+  - name: Restart the software controller and agent
+    systemd:
+      name: "{{ item }}"
+      state: restarted
+    with_items:
+      - software-controller-daemon
+      - software-agent
+    become: true
+
+  when: software_sync_required
+
+- debug:
+    msg:
+      - "Skipping software metadata synchronization."
+  when: not software_sync_required

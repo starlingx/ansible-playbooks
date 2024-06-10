@@ -49,7 +49,7 @@
 
 - name: Delete those patch metadata files not belonging to the prestage software version
   shell: >
-          grep -L "<sw_version>{{ prestage_software_version }}</sw_version>"
+          grep -L "<sw_version>{{ software_major_release }}</sw_version>"
           {{ item }} 2>/dev/null | xargs rm -f
   loop:
     - "{{ patches_prestage_dir }}/metadata/applied/*"

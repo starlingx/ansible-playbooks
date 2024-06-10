@@ -29,8 +29,8 @@
 
 - name: Extract and sort version numbers
   set_fact:
-    prestege_versions: "{{ parent_dirs | sort | join(',') }}"
+    prestage_versions: "{{ parent_dirs | sort | join(',') }}"
 
 - name: Print prestage versions
   debug:
-    msg: "prestage_versions: {{ prestege_versions }}"
+    msg: "prestage_versions: {{ prestage_versions }}"
