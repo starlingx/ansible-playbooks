@@ -114,7 +114,8 @@
     import_tasks: configure_dockerd.yml
 
   - name: Configure containerd to use local registry
-    import_tasks: configure_containerd.yml
+    import_role:
+      name: common/configure-containerd
 
   - name: Populate image registry data to /var/lib/docker-distribution
     shell: pigz -dc {{ bootstrap_registry_filesystem_fqpn }} | tar -C / --overwrite -xpf - var/lib/docker-distribution

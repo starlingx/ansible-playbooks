@@ -1,0 +1,9 @@
+# explicitly use v2 config format for identification
+version = 2
+
+server = "{{ registry_central }}"
+[host."{{ registry_central }}"]
+  capabilities = ["pull", "resolve", "push"]
+  ca = "/etc/docker/certs.d/{{ registry_central }}/registry-cert.crt"
+  [host."{{ registry_central }}".header]
+    authorization = "Basic {{ registry_auth }}"

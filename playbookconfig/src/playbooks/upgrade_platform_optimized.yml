@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -43,6 +43,8 @@
     - role: optimized-restore/restore-data
       become: yes
     - role: common/install-platform-certificates
+      become: yes
+    - role: common/configure-containerd
       become: yes
     - role: optimized-restore/complete-restore
       become: yes
