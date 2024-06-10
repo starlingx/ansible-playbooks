@@ -72,6 +72,7 @@
   # for mode=check the output is too messy with free strategy
   strategy: "{{ 'linear' if mode == 'check' else 'free' }}"
   roles:
+    - common/check-connectivity
     - update-platform-certificates
 
 # Ensures ICA is also installed in system controller
