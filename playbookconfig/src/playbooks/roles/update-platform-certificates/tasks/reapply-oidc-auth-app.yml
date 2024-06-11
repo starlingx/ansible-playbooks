@@ -24,25 +24,14 @@
   with_items:
     - { name: system-local-ca-oidc-secret, namespace: kube-system, type: secret }
 
-- name: Create new dex-client secret based of system-local-ca
-  shell: >-
-    {% raw %}
-    kubectl -n cert-manager get secret system-local-ca
-    --template='{{ index .data "tls.crt" | base64decode }}' > /tmp/dex-ca.pem ;
-    kubectl -n kube-system create secret generic
-    system-local-ca-oidc-secret --from-file=/tmp/dex-ca.pem
-    {% endraw %}
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-
 - name: Create override file for oidc-client helm chart
   copy:
     dest: "/tmp/oidc-client-override.yaml"
     content: |
       tlsName: oidc-auth-apps-certificate
       config:
-        issuer_root_ca: /home/dex-ca.pem
-        issuer_root_ca_secret: system-local-ca-oidc-secret
+        issuer_root_ca: /home/ca.crt
+        issuer_root_ca_secret: oidc-auth-apps-certificate
 
 - block:
   - name: Merge new volume and volumeMounts overrides with existing ones
@@ -87,7 +76,7 @@
     dest: "/tmp/secret-observer-override.yaml"
     content: |
       observedSecrets:
-        - secretName: "system-local-ca-oidc-secret"
+        - secretName: "oidc-auth-apps-certificate"
           filename: "ca.crt"
           deploymentToRestart: "stx-oidc-client"
         - secretName: "oidc-auth-apps-certificate"
