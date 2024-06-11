@@ -467,7 +467,7 @@
   - name: Check for existing ssl_ca certificates
     shell: |
       source /etc/platform/openrc
-      system ca-certificate-list | awk '{ print $2 }' | awk 'NR>3 && NF'
+      system ca-certificate-list --nowrap | awk '{ print $2 }' | awk 'NR>3 && NF'
     register: existing_ssl_ca_certificates_uuid
 
   - name: Delete existing ssl_ca certificates
