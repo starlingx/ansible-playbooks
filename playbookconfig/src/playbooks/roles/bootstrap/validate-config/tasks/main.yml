@@ -8,6 +8,22 @@
 #   This role is to validate and save host (non secure) config.
 #
 
+- block:
+  - name: Generate a new UUID4 for region_name
+    vars:
+      script_content: |
+        import uuid
+        print(str(uuid.uuid4()).replace('-', ''))
+    shell: "{{ script_content }}"
+    args:
+      executable: /usr/bin/python
+    register: uuid_output
+
+  - name: Set the generated UUID4 as a region_name
+    set_fact:
+      region_name: "{{ uuid_output.stdout | trim }}"
+  when: distributed_cloud_role != 'systemcontroller'
+
 - debug:
     msg:
       - System mode is {{ system_mode }}

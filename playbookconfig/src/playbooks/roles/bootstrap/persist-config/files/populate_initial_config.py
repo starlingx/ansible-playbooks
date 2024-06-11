@@ -129,6 +129,11 @@ def is_subcloud():
     return cloud_role == SUBCLOUD_ROLE
 
 
+def is_system_controller():
+    cloud_role = CONF.get('BOOTSTRAP_CONFIG', 'DISTRIBUTED_CLOUD_ROLE')
+    return cloud_role == 'systemcontroller'
+
+
 def has_admin_network():
     admin_subnet = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_SUBNET')
     return admin_subnet != 'undef'
@@ -209,19 +214,25 @@ def populate_system_config(client):
     if is_subcloud():
         capabilities.update({'region_config': True})
 
+    REGION_ONE_NAME = 'RegionOne'
     values = {
         'system_mode': CONF.get('BOOTSTRAP_CONFIG', 'SYSTEM_MODE'),
         'capabilities': capabilities,
         'timezone': CONF.get('BOOTSTRAP_CONFIG', 'TIMEZONE'),
-        'region_name': 'RegionOne',
         'service_project_name': 'services',
         'distributed_cloud_role': dc_role
     }
 
-    if is_subcloud():
+    if is_system_controller():
         values.update(
-            {'region_name': CONF.get('BOOTSTRAP_CONFIG', 'REGION_NAME'),
-             'name': CONF.get('BOOTSTRAP_CONFIG', 'REGION_NAME')}
+            {'region_name': REGION_ONE_NAME,
+             'name': REGION_ONE_NAME}
+        )
+    else:
+        region_name = CONF.get('BOOTSTRAP_CONFIG', 'REGION_NAME')
+        values.update(
+            {'region_name': region_name,
+             'name': region_name}
         )
 
     if INITIAL_POPULATION:
