@@ -18,13 +18,14 @@
 - name: Set distributed_cloud_role value
   set_fact:
     distributed_cloud_role: "{{ dc_role.stdout }}"
+  when: mode != "enroll"
 
 # For subclouds, in normal restore the ca cert must be restored from backup,
 # so we are only recreating it in upgrades.
 - name: Define whether 'system-local-ca' secret should be created in the subcloud
   set_fact:
     subcloud_local_ca_should_be_altered: >-
-      "{{ mode == 'bootstrap' or mode == 'rehoming' or upgrade_in_progress }}"
+      "{{ mode == 'bootstrap' or mode == 'rehoming' or mode == 'enroll' or upgrade_in_progress }}"
   when: distributed_cloud_role == 'subcloud'
 
 - name: Retrieve local CA data
