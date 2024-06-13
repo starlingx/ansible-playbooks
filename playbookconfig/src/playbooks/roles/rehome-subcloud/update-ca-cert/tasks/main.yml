@@ -1,11 +1,12 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
-#   This role updates root CA certificate in secret for the subcloud.
+#   This role update the CA certificates inside system-local-ca secret
+#   in the subcloud and reissue the leaf certificates.
 #
 
 - name: Update root CA certificate in secret
@@ -14,3 +15,20 @@
   vars:
     kubeadm_pki_dir: /etc/kubernetes/pki
     system_local_ca_overrides: false
+
+- name: Compose a list with secrets from certs issued by 'system-local-ca'
+  shell: |
+    {(kubectl get certificates -A \
+    -o=custom-columns='SECRET:spec.secretName','NAMESPACE:metadata.namespace','ISSUER:spec.issuerRef.name' \
+    --no-headers=true |
+    awk '$3 == "system-local-ca"' |
+    awk '{ print "{name: "$1", namespace: "$2", type: secret}" }' |
+    awk NF)}
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: certs_to_renew
+
+- name: Force cert-manager to reissue the leaf certs by deleting their secrets
+  include_role:
+    name: common/delete-kubernetes-resources
+  loop: "{{ certs_to_renew.stdout_lines | map('from_yaml') | unique | list }}"
