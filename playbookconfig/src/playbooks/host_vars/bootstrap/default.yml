@@ -449,7 +449,7 @@ scheduler_extra_volumes: []
 # vault_admin_password).
 #
 admin_username: admin
-admin_password: St8rlingX*
+admin_password: St8rlingXCloud*
 
 # INITIAL PASSWORD CHANGE RESPONSE SEQUENCE
 # =========================================
