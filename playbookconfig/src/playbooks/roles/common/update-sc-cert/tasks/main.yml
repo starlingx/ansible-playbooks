@@ -54,7 +54,7 @@
       dest: "/etc/ssl/private/{{ sc_adminep_cert }}"
       content: "{{ get_admin_ep_cert.stdout }}"
       mode: 0400
-  when: mode == "enroll"
+  when: mode is defined and mode == "enroll"
 
 - block:
   - name: Check admin-ep-cert.pem updated
@@ -91,7 +91,7 @@
         subcloud controller for the reason.
     when: alarm_count.stdout != ""
 
-  when: mode != "enroll"
+  when: mode is not defined or mode != "enroll"
 
 - name: Restart sysinv-conductor
   command: sm-restart service sysinv-conductor
