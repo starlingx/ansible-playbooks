@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2023 Wind River Systems, Inc.
+# Copyright (c) 2021-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -94,9 +94,9 @@
 
       - name: Install Root CA certificate as trusted by the platform
         include_role:
-          name: common/verify-and-install-system-local-ca-certs
+          name: common/install-rca-as-trusted
         vars:
-          - install_rca: true
+          rca_cert: "{{ system_root_ca_cert }}"
 
       - name: Restart kube-apiserver to pick the new certificates
         include_role:

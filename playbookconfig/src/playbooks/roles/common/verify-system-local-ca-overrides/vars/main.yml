@@ -1,0 +1,10 @@
+---
+#
+# Copyright (c) 2023-2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+enforce_ica: false
+def_rca_duration: 3
+def_ica_duration: 3
