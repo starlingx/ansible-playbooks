@@ -11,20 +11,8 @@
 # scenarios).
 #
 
-- name: Verify if system_local_ca_cert and system_local_ca_key match
-  shell: >-
-    diff <(echo "{{ system_local_ca_cert | b64decode }}" | openssl x509 -noout -modulus)
-    <(echo "{{ system_local_ca_key | b64decode }}" | openssl rsa -noout -modulus)
-  register: diff_return
-  failed_when: false
-  no_log: true
-
-- name: Fail if system_local_ca_cert and system_local_ca_key doesn't match
-  fail:
-    msg: system_local_ca_cert and system_local_ca_key should be a TLS cert/key pair.
-  when:
-  - diff_return.stdout != ""
-  - diff_return.stderr != ""
+- name: Verify certificate and key pair match
+  include_tasks: verify-certificate-and-key-pair.yml
 
 - name: Retrieve the number of certificates in RCA file
   shell: expr $(openssl storeutl -noout -certs "{{ system_local_ca_rca.path }}" | wc -l) - 1
