@@ -100,8 +100,8 @@
 
 - name: Install system_root_ca_cert as Trusted CA
   include_role:
-    name: common/verify-and-install-system-local-ca-certs
+    name: common/install-rca-as-trusted
   vars:
-    - install_rca: true
+    rca_cert: "{{ system_root_ca_cert }}"
   when:
     - install_rca_as_trusted

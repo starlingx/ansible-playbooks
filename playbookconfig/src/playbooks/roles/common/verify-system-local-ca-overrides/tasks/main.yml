@@ -1,0 +1,65 @@
+---
+#
+# Copyright (c) 2021-2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# These tasks provide the functionality to validate the CA certificates
+# provided for the local platform issuer (system-local-ca).
+# system_root_ca_cert - RCA cert (b64)
+# system_local_ca_cert - ICA cert issued by 'system_root_ca_cert' (b64)
+# system_local_ca_key - system_local_ca_cert matching private key (b64)
+# enforce_ica - If true, providing RCA data instead of ICA is not allowed
+
+- name: Create local CA pem temporary file
+  tempfile:
+    state: file
+    prefix: ca_
+    suffix: .pem
+    path: /tmp/
+  register: local_ca_file
+
+- name: Create root CA pem temporary file
+  tempfile:
+    state: file
+    prefix: root_
+    suffix: .pem
+    path: /tmp/
+  register: root_ca_file
+
+- name: Save system_local_ca_cert certificate to a file
+  copy:
+    dest: "{{ local_ca_file.path }}"
+    content: "{{ system_local_ca_cert | b64decode }}"
+    mode: 0640
+    owner: root
+    group: root
+  become: yes
+
+- name: Save system_root_ca_cert to a file
+  copy:
+    dest: "{{ root_ca_file.path }}"
+    content: "{{ system_root_ca_cert | b64decode }}"
+    mode: 0640
+    owner: root
+    group: root
+  become: yes
+
+- name: Set temporary files to required variables
+  set_fact:
+    system_local_ca_rca: "{{ root_ca_file }}"
+    system_local_ca_ica: "{{ local_ca_file }}"
+
+- name: Verify RCA cert and ICA cert/key
+  include_tasks: verify-system-local-ca-certificates.yml
+
+- name: Delete temporary .pem files
+  file:
+    path: "{{ file_item }}"
+    state: absent
+  with_items:
+    - "{{ local_ca_file.path }}"
+    - "{{ root_ca_file.path }}"
+  loop_control:
+    loop_var: file_item
+  become: yes

@@ -1,0 +1,183 @@
+---
+#
+# Copyright (c) 2021-2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# These tasks deal with miscelaneous operations related to installing
+# a Root CA certificate as trusted.
+
+- name: Create root CA pem temporary file
+  tempfile:
+    state: file
+    prefix: root_
+    suffix: .pem
+    path: /tmp/
+  register: root_ca_file
+
+- name: Save the RCA cert to a file
+  copy:
+    dest: "{{ root_ca_file.path }}"
+    content: "{{ rca_cert | b64decode }}"
+    mode: 0640
+    owner: root
+    group: root
+  become: yes
+
+# ignore_alarms flag can be set to avoid waiting. Defaults to false.
+- name: Initialize flag ignore_alarms
+  set_fact:
+    ignore_alarms: "{{ false if ignore_alarms is not defined else ignore_alarms | bool }}"
+
+- name: Verify if there are 250.001 (config out-of-date) alarms before installing certificate
+  block:
+  - name: Check if an 250.001 alarm exists and wait it to be cleared
+    shell: |
+      source /etc/platform/openrc;
+      fm alarm-list --query alarm_id=250.001
+    register: alarm_subcloud
+    retries: 15
+    delay: 20
+    until: alarm_subcloud.stdout == ""
+    failed_when: false
+
+  - name: Fail when the alarm remains
+    fail:
+      msg: >-
+        Timed out waiting 250.001 alarm to clear out.
+    when: alarm_subcloud.stdout != ""
+
+  - name: Register stat of .config_applied file
+    stat:
+      path: /etc/platform/.config_applied
+    register: prev_config_applied_stat
+  when: not ignore_alarms
+
+- name: Install RCA as Trusted CA
+  block:
+  - name: Install rca_cert as a Trusted CA certificate
+    shell: >-
+      source /etc/platform/openrc &&
+      system ca-certificate-install "{{ root_ca_file.path }}"
+    register: install_cert_output
+    until: install_cert_output is not failed
+    retries: 3
+    delay: 60
+
+  - name: Register if a new certificate was installed
+    set_fact:
+      new_cert_installed: "{{ true if (install_cert_output is search('uuid') and
+                                      install_cert_output is search('certtype') and
+                                      install_cert_output is search('signature') and
+                                      install_cert_output is search('start_date') and
+                                      install_cert_output is search('expiry_date') and
+                                      install_cert_output is search('subject'))
+                              else false }}"
+      error_certs_not_installed: "{{ true if install_cert_output is
+                                              search('WARNING: Some certificates were not installed.')
+                                      else false }}"
+
+  - name: Fail if some certificates aren't installed
+    fail:
+      msg: "{{ install_cert_output.stdout }}"
+    when: error_certs_not_installed
+
+- name: Delete temporary .pem files
+  file:
+    path: "{{ root_ca_file.path }}"
+    state: absent
+  become: yes
+
+# If a new trusted CA is installed, sysinv conductor will apply
+# platform::config::runtime puppet manifest. This will cause the
+# current config to change. We will monitor it through the file
+# .config_applied, which is created/changed when a manifest is
+# applied.
+- name: Wait while the new config is applied by puppet
+  block:
+  - name: Initialize fail control variable
+    set_fact:
+      puppet_config_apply_failed: false
+
+  # If the .config_applied file doesn't exist, we wait for it to be created.
+  - block:
+    - name: Wait for .config_applied file to be created
+      stat:
+        path: /etc/platform/.config_applied
+      register: current_config_applied_stat
+      until: current_config_applied_stat.stat.exists
+      retries: 10
+      delay: 20
+      failed_when: false
+
+    - name: Set fail control variable
+      set_fact:
+        puppet_config_apply_failed: true
+      when: not current_config_applied_stat.stat.exists
+    when: not prev_config_applied_stat.stat.exists
+
+  # If the .config_applied file exists, we wait for it to change.
+  - block:
+    - name: Wait for .config_applied file stat to change
+      stat:
+        path: /etc/platform/.config_applied
+      register: current_config_applied_stat
+      until: current_config_applied_stat.stat.checksum != prev_config_applied_stat.stat.checksum
+      retries: 60
+      delay: 10
+      failed_when: false
+
+    - name: Set fail control variable
+      set_fact:
+        puppet_config_apply_failed: true
+      when: current_config_applied_stat.stat.checksum == prev_config_applied_stat.stat.checksum
+    when: prev_config_applied_stat.stat.exists
+
+  - name: Fail when the manifest apply times out
+    fail:
+      msg: >-
+        Timed out applying puppet runtime manifest. Check sysinv and puppet logs
+        for more information and solve any 250.001 alarms before retrying.
+    when: puppet_config_apply_failed
+
+  - name: Check if an 250.001 alarm was raised and wait it to be cleared
+    shell: |
+      source /etc/platform/openrc;
+      fm alarm-list --query alarm_id=250.001
+    register: alarm_subcloud
+    retries: 5
+    delay: 20
+    until: alarm_subcloud.stdout == ""
+    failed_when: false
+
+  - name: Fail when the alarm remains
+    fail:
+      msg: >-
+        Timed out waiting 250.001 alarm to clear out. Check sysinv and puppet logs
+        for more information and solve any 250.001 alarms before retrying.
+    when: alarm_subcloud.stdout != ""
+  when: new_cert_installed and not ignore_alarms
+
+# Also, when RCA is installed as trusted during subcloud's bootstrap, we have issues
+# to pull images from 'registry.central' after puppet changes /etc/hosts file, since
+# dnsmasq isn't running yet. Fix by temporarily adding the entry.
+- name: Temporarily add central OAM as registry.central in /etc/hosts
+  block:
+  - name: Set central registry for subcloud
+    set_fact:
+      # For virtual subcloud set 'registry.central' to system controller's MGMT IP
+      registry_central_address:
+        "{{ system_controller_floating_address
+            if (virtual_system is defined and virtual_system | bool)
+            else system_controller_oam_floating_address }}"
+
+  - name: Update /etc/hosts for subcloud
+    lineinfile:
+      path: /etc/hosts
+      line: "{{ registry_central_address }}\tregistry.central"
+      insertbefore: EOF
+
+  when:
+    - new_cert_installed
+    - mode is defined and mode == 'bootstrap'
+    - distributed_cloud_role is defined and distributed_cloud_role == 'subcloud'

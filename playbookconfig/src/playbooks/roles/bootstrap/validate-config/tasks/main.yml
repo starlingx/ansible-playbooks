@@ -1180,11 +1180,10 @@
                 system_local_ca_overrides: true
               no_log: true
 
-        - name: Verify 'system-local-ca' certs
+        - name: Verify CA overrides provided for 'system-local-ca' issuer
           include_role:
-            name: common/verify-and-install-system-local-ca-certs
+            name: common/verify-system-local-ca-overrides
           vars:
-            - install_rca: false
             - enforce_ica: true
 
       when: system_local_ca_cert | length > 0

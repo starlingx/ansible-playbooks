@@ -22,11 +22,9 @@
       include_tasks: check-for-management-alarms.yml
       when: ignore_alarms is undefined or ignore_alarms | bool == False
 
-    - name: Verify 'system-local-ca' certs
+    - name: Verify CA overrides provided for 'system-local-ca' issuer
       include_role:
-        name: common/verify-and-install-system-local-ca-certs
-      vars:
-        - install_rca: false
+        name: common/verify-system-local-ca-overrides
 
     - name: Check certificates to be installed
       include_tasks: check-certificates-to-be-installed.yml
@@ -152,9 +150,9 @@
 
     - name: Install Root CA certificate as trusted by the platform
       include_role:
-        name: common/verify-and-install-system-local-ca-certs
+        name: common/install-rca-as-trusted
       vars:
-        - install_rca: true
+        rca_cert: "{{ system_root_ca_cert }}"
 
     - name: Restart kube-apiserver to pick the new certificate
       include_role:
