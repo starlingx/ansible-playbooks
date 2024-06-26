@@ -31,6 +31,7 @@
     # - common/recover-subcloud-certificates
     - rehome-enroll-common/prepare-env
     - enroll-subcloud/validate-before-enroll
+    - enroll-subcloud/migrate-keystone-data
     - rehome-subcloud/update-ca-cert
     # - common/update-sc-admin-endpoints
     - role: common/update-sc-cert

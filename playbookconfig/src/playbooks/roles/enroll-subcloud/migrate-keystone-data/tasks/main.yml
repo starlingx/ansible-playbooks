@@ -1,0 +1,34 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#   This playbook creates keystone resources if
+#   they are missing during enrollment
+
+- name: Get dcmanager user
+  shell: source /etc/platform/openrc; openstack user show dcmanager
+  register: dcmanager_user_show_output
+  failed_when: false
+
+- block:
+  - name: Get dcmanager password from keyring
+    shell: keyring get dcmanager services
+    register: keyring_dcmanager_pw_output
+    no_log: true
+
+  - name: Create dcmanager user
+    shell: |
+      source /etc/platform/openrc
+      openstack user create --project services --password "{{ keyring_dcmanager_pw_output.stdout }}" dcmanager
+    no_log: true
+
+  - name: Add admin role for dcmanager to services and admin project
+    shell: |
+      source /etc/platform/openrc
+      openstack role add --user dcmanager --project services admin
+      openstack role add --user dcmanager --project admin admin
+
+  # rc 1 is when the user show command fails because the user doesn't exist
+  when: dcmanager_user_show_output.rc == 1
