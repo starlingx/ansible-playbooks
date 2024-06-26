@@ -122,7 +122,7 @@
         - "{{ cert_manager_cainjector_img }}"
         - "{{ cert_manager_controller_img }}"
         - "{{ cert_manager_webhook_img }}"
-        - "{{ cert_manager_ctl_img }}"
+        - "{{ cert_manager_startupapicheck_img }}"
 
   - block:
     - name: Change security images if upgrading from 22.12
