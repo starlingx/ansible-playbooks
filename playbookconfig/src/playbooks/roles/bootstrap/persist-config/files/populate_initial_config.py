@@ -27,6 +27,7 @@ from sysinv.common import constants as sysinv_constants
 
 COMBINED_LOAD = 'All-in-one'
 SUBCLOUD_ROLE = 'subcloud'
+SYSTEMCONTROLLER_ROLE = 'systemcontroller'
 RECONFIGURE_SYSTEM = False
 RECONFIGURE_NETWORK = False
 RECONFIGURE_SERVICE = False
@@ -991,10 +992,10 @@ def populate_network_config(client):
 
     if is_subcloud():
         populate_system_controller_network(client)
-        if has_admin_network():
-            populate_admin_network(client)
-        if has_admin_network_secondary():
-            populate_admin_network_secondary(client)
+    if has_admin_network() and not is_system_controller():
+        populate_admin_network(client)
+    if has_admin_network_secondary() and not is_system_controller():
+        populate_admin_network_secondary(client)
 
     print("Network config completed.")
 

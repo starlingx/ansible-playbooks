@@ -87,10 +87,10 @@
   when: bootstrap_finalized_flag.stat.exists or initial_config_complete.stat.exists
 
 - block:
-  - name: Fail if admin network parameters are defined for non-subcloud host
+  - name: Fail if admin network parameters are defined for system controller host
     fail:
-      msg: "Admin network parameters can only be specified for a subcloud."
-    when: distributed_cloud_role != 'subcloud'
+      msg: "Admin network parameters cannot be specified for a system controller host."
+    when: distributed_cloud_role == 'systemcontroller'
 
   - name: Turn on admin_network flag
     set_fact:
