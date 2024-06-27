@@ -47,6 +47,20 @@ ELASTIC_REGISTRY_SECRET={{ elastic_registry_secret | default('none') }}
 GHCR_REGISTRY_SECRET={{ ghcr_registry_secret | default('none') }}
 REGISTRYK8S_REGISTRY_SECRET={{ registryk8s_registry_secret | default('none') }}
 ICR_REGISTRY_SECRET={{ icr_registry_secret | default('none') }}
+
+ADMIN_SUBNET={{ admin_subnet }}
+ADMIN_START_ADDRESS={{ admin_start_address }}
+ADMIN_END_ADDRESS={{ admin_end_address }}
+ADMIN_GATEWAY_ADDRESS={{ admin_gateway_address }}
+
+SYSTEM_CONTROLLER_OAM_SUBNET={{ system_controller_oam_subnet }}
+SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS={{ system_controller_oam_floating_address }}
+SYSTEM_CONTROLLER_SUBNET={{ system_controller_subnet }}
+SYSTEM_CONTROLLER_FLOATING_ADDRESS={{ system_controller_floating_address }}
+
+# TODO(glyraper): Check with controller-1 variable enabled
+CONTROLLER_0_ADMIN_NETWORK_IF={{ controller_0_admin_network_if.stdout }}
+
 {# -- Check user_dns_host_records to include dns_host_records #}
 {% if user_dns_host_records is defined | default(false) %}
 {{ sysinv_user_dns_host_records }}

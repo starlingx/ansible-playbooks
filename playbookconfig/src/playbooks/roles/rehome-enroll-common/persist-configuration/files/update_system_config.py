@@ -12,9 +12,9 @@ import os
 import subprocess
 import sys
 
-
 from cgtsclient import client as cgts_client
 from sysinv.common import constants as sysinv_constants
+from sysinv.common import exception as e
 
 
 # Configuration parser setup
@@ -273,17 +273,167 @@ def edit_dc_role_to_subcloud(client):
     isystem_list = client.sysinv.isystem.list()
     isystem = isystem_list[0]
     current_dc_role = isystem.distributed_cloud_role
+    capabilities = {'region_config': True,
+                    'vswitch_type': 'none',
+                    'shared_services': '[]',
+                    'sdn_enabled': False,
+                    'https_enabled': True}
     patch = [
         {
             'op': 'replace',
             'path': '/distributed_cloud_role',
             'value': sysinv_constants.DISTRIBUTED_CLOUD_ROLE_SUBCLOUD
+        },
+        {
+            'op': 'replace',
+            'path': '/capabilities',
+            'value': capabilities
         }
     ]
     isystem = client.sysinv.isystem.update(isystem.uuid, patch)
     updated_dc_role = isystem.distributed_cloud_role
     print(f"Distributed Cloud Role updated: "
           f"'{current_dc_role}' -> '{updated_dc_role}'")
+
+
+def delete_network_and_addrpool(client, network_name):
+
+    addresspools = client.sysinv.address_pool.list()
+
+    for addrpool in addresspools:
+        if str(addrpool.name).startswith(network_name):
+            print(f"Deleting addrpool {addrpool.uuid}...")
+            client.sysinv.address_pool.delete(addrpool.uuid)
+
+
+def create_system_controller_addr_network(client, section_name, network_type):
+
+    if network_type == "sc_subnet":
+        sc_values = {
+            'name': 'system-controller-subnet',
+            'network': CONF.get(section_name, "SYSTEM_CONTROLLER_SUBNET").split("/")[0],
+            'prefix': CONF.get(section_name, "SYSTEM_CONTROLLER_SUBNET").split("/")[1],
+            'floating_address': CONF.get(section_name, "SYSTEM_CONTROLLER_FLOATING_ADDRESS")
+        }
+
+        print(f"Creating addrpool with name {sc_values['name']}...")
+        sc_pool = client.sysinv.address_pool.create(**sc_values)
+
+        sc_network_data = {
+            'type': 'system-controller',
+            'name': 'system-controller',
+            'dynamic': False,
+            'pool_uuid': sc_pool.uuid,
+        }
+
+        print(f"Creating network with name {sc_network_data['name']}...")
+        client.sysinv.network.create(**sc_network_data)
+
+    elif network_type == "sc_oam":
+        sc_oam_values = {
+            'name': 'system-controller-oam-subnet',
+            'network': CONF.get(section_name, "SYSTEM_CONTROLLER_OAM_SUBNET").split("/")[0],
+            'prefix': CONF.get(section_name, "SYSTEM_CONTROLLER_OAM_SUBNET").split("/")[1],
+            'floating_address': CONF.get(section_name, "SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS")
+        }
+
+        print(f"Creating addrpool with name {sc_oam_values['name']}...")
+        sc_oam_pool = client.sysinv.address_pool.create(**sc_oam_values)
+
+        sc_oam_network_data = {
+            'type': 'system-controller-oam',
+            'name': 'system-controller-oam',
+            'dynamic': False,
+            'pool_uuid': sc_oam_pool.uuid,
+        }
+
+        print(f"Creating network with name {sc_oam_network_data['name']}...")
+        client.sysinv.network.create(**sc_oam_network_data)
+
+
+def update_system_controller_subnets(client, section_name):
+
+    pools = client.sysinv.address_pool.list()
+
+    for addr in pools:
+
+        addr_uuid = addr.uuid
+        if addr.name == "system-controller-subnet":
+            print(f"Deleting address pool {addr_uuid}...")
+            client.sysinv.address_pool.delete(addr_uuid)
+
+    create_system_controller_addr_network(client, section_name, "sc_subnet")
+
+    for addrpool in pools:
+
+        pool_uuid = addrpool.uuid
+        if addrpool.name == "system-controller-oam-subnet":
+            print(f"Deleting address pool {pool_uuid}...")
+            client.sysinv.address_pool.delete(pool_uuid)
+
+    create_system_controller_addr_network(client, section_name, "sc_oam")
+
+
+def update_admin_network(client, section_name):
+
+    admin_start_address = CONF.get(section_name, "ADMIN_START_ADDRESS")
+    admin_end_address = CONF.get(section_name, "ADMIN_END_ADDRESS")
+
+    values = {
+        'name': 'admin',
+        'network': CONF.get(section_name, "ADMIN_SUBNET").split("/")[0],
+        'prefix': CONF.get(section_name, "ADMIN_SUBNET").split("/")[1],
+        'ranges': [(admin_start_address, admin_end_address)],
+        'gateway_address': CONF.get(section_name, "ADMIN_GATEWAY_ADDRESS"),
+        }
+
+    print(f"Creating addrpool with name {values['name']}...")
+    pool = client.sysinv.address_pool.create(**values)
+
+    network_data = {
+        'type': 'admin',
+        'name': 'admin',
+        'dynamic': False,
+        'pool_uuid': pool.uuid,
+    }
+
+    print(f"Creating network with name {network_data['name']}...")
+    client.sysinv.network.create(**network_data)
+
+    assign_if_network(client,
+                      CONF.get(section_name, "CONTROLLER_0_ADMIN_NETWORK_IF"),
+                      "admin")
+
+    # TODO (glyraper): Add controller-1 option
+    # if CONF.get(section_name, "CONTROLLER_1_ADMIN_NETWORK_IF") != 'undef':
+    #     assign_if_network(client,
+    #                       CONF.get(section_name, "CONTROLLER_1_ADMIN_NETWORK_IF"),
+    #                       "admin")
+
+
+def assign_if_network(client, host_interface_name, network_name):
+
+    print(f"Assigning network interface {host_interface_name} for {network_name}")
+
+    if_uuid = ""
+    net_uuid = ""
+
+    networks = client.sysinv.network.list()
+    host_interfaces = client.sysinv.iinterface.list('controller-0')
+    for interface in host_interfaces:
+        if interface.ifname == host_interface_name:
+            if_uuid = interface.uuid
+
+    for network in networks:
+        if str(network.name).startswith(network_name):
+            net_uuid = network.uuid
+
+    values = {
+        'interface_uuid': if_uuid,
+        'network_uuid': net_uuid
+    }
+
+    client.sysinv.interface_network.assign(**values)
 
 
 # Main function to execute based on command-line input
@@ -308,6 +458,12 @@ def main():
     client = CgtsClient()
     populate_dns_config(client, section_name)
     populate_service_parameter_config(client, section_name)
+    update_system_controller_subnets(client, section_name)
+    try:
+        delete_network_and_addrpool(client, 'admin')
+    except e.NetworkTypeNotFound:
+        print("No admin address found in pool, adding...")
+    update_admin_network(client, section_name)
     edit_dc_role_to_subcloud(client)
 
 

@@ -34,11 +34,10 @@
     - rehome-enroll-common/prepare-env
     - enroll-subcloud/validate-before-enroll
     - rehome-enroll-common/update-ca-cert
-    # - common/update-sc-admin-endpoints
     - role: common/update-sc-cert
       when: subcloud_dc_admin_ep_cert_chain_recovered is undefined
-    # - rehome-subcloud/update-network-config
     - role: rehome-enroll-common/update-keystone-data
       become: yes
     - rehome-enroll-common/persist-configuration
+    - common/update-sc-admin-endpoints
     # - enroll-subcloud/complete-enrollment
