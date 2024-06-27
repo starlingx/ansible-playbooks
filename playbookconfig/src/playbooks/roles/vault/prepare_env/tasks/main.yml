@@ -43,12 +43,6 @@
     vault_backup_dir: "{{ target_backup_dir }}/hc_vault"
   when: on_box_data|bool == false
 
-- name: Create vault subdirectory in initial_backup_dir
-  file:
-    path: "{{ vault_backup_dir }}"
-    state: directory
-    mode: 0755
-
 - name: Fail if passphrase is omitted
   fail:
     msg: >
@@ -82,6 +76,7 @@
       owner: root
       group: root
       mode: 0755
+    become: yes
     when: on_box_data | bool == false
 
   - name: Set backup file path for on box
@@ -129,3 +124,10 @@
   fail:
     msg: "Vault manager pod is not found"
   when: vault_manager_pod_name.stdout | length == 0
+
+- name: Create vault subdirectory in initial_backup_dir
+  file:
+    path: "{{ vault_backup_dir }}"
+    state: directory
+    mode: 0755
+  become: yes
