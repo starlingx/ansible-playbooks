@@ -49,10 +49,15 @@
     state: directory
     mode: 0755
 
-- name: Check if encrypt is enabled
-  set_fact:
-    vault_encrypt: true
-  when: encrypt_hc_vault_secret | length > 0
+- name: Fail if passphrase is omitted
+  fail:
+    msg: >
+      A passphrase is required for encryption; set variable override
+      backup_encryption_passphrase.  To disable encryption set
+      override backup_encryption_enabled=false
+  when:
+  - vault_encrypt|bool
+  - encrypt_hc_vault_secret | length == 0
 
 - name: Check vault apply for backup
   block:

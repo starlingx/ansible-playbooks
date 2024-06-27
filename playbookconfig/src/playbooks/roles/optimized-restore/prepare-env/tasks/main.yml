@@ -47,14 +47,23 @@
 
 - name: Set image backup filename
   block:
+    - name: Copy backup_filename
+      set_fact:
+        tmp_filename: "{{ backup_filename }}"
+
+    - name: Strip gpg extension when the backup_filename is encrypted
+      set_fact:
+        tmp_filename: "{{ tmp_filename | regex_replace('[.]gpg$') }}"
+      when: backup_encryption_enabled|bool
+
     - name: Set image backup filename for user images method
       set_fact:
-        registry_backup_filename: "{{ backup_filename.replace(default_backup_mark, default_user_images_backup_mark) }}"
+        registry_backup_filename: "{{ tmp_filename.replace(default_backup_mark, default_user_images_backup_mark) }}"
       when: restore_user_images
 
     - name: Set image backup filename for registry backup method
       set_fact:
-        registry_backup_filename: "{{ backup_filename.replace(default_backup_mark, default_registry_backup_mark) }}"
+        registry_backup_filename: "{{ tmp_filename.replace(default_backup_mark, default_registry_backup_mark) }}"
       when: restore_registry_filesystem
 
   when: not registry_backup_filename|default(none)

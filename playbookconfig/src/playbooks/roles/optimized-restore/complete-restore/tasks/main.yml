@@ -21,6 +21,18 @@
       - "{{ registry_backup_fqpn|default('') }}"
   when: initial_backup_dir != target_backup_dir
 
+- block:
+  - set_fact:
+      _encrypted_remove_items:
+        - "{{ encrypted_backup_filepath }}"
+    when: not on_box_data|bool
+
+  - set_fact:
+      _decrypted_remove_items:
+        - "{{ decrypted_backup_filepath }}"
+    when: initial_backup_dir == target_backup_dir
+  when: platform_tarball_encrypted|bool
+
 - set_fact:
     _upgrade_remove_items:
       - "{{ temp_upgrade_platform_dir }}"
@@ -34,7 +46,10 @@
     state: absent
   loop: >
     {{
-      _remove_items + _restore_remove_items|default([]) + _upgrade_remove_items|default([])
+      _remove_items + _restore_remove_items|default([])
+      + _upgrade_remove_items|default([])
+      + _encrypted_remove_items|default([])
+      + _decrypted_remove_items|default([])
       | reject('equalto', '')
     }}
 

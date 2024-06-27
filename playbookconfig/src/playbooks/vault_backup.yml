@@ -11,14 +11,16 @@
 - hosts: all
   gather_facts: no
 
+  # Specify defaults including:
+  #   backup_encryption_enabled
+  #   backup_encryption_passphrase
   vars_files:
     - host_vars/backup-restore/default.yml
 
   vars:
     password_change: false
-    vault_encrypt: false
-    # override encrypt_hc_vault_secret when calling the playbook to enable extra encryption
-    encrypt_hc_vault_secret: ""
+    vault_encrypt: "{{ backup_encryption_enabled|bool }}"
+    encrypt_hc_vault_secret: "{{ backup_encryption_passphrase | default('') }}"
     vault_mode: "backup"
     op_mode: "standalone"
 

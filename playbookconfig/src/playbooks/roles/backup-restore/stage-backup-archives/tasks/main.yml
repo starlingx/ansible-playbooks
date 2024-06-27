@@ -8,20 +8,73 @@
 #   This role stages the backup archives for later usage.
 
 - name: Transfer backup tarballs to target if the file is off-box
-  include_role:
-    name: backup-restore/transfer-file
+  block:
+  - name: Transfer backup tarballs to target
+    include_role:
+      name: backup-restore/transfer-file
+
+  - name: Record the new location of encrypted file
+    set_fact:
+      encrypted_backup_filepath: "{{ target_backup_dir }}/{{ encrypted_backup_filename }}"
+    when: platform_tarball_encrypted|bool
+
   when: on_box_data|bool == false
+
+- name: Decrypt the file
+  block:
+  # we already know the file can be decrypted when this is running
+  - name: Ensure the decrypted file is absent
+    file:
+      path: "{{ decrypted_backup_filepath }}"
+      state: absent
+
+  - name: Set the transferred encrypted file's location
+    # when off_box_data or initial_backup_dir == target_backup_dir
+    set_fact:
+      encrypted_file_location: "{{ target_backup_dir }}"
+
+  - name: Set the original encrypted file's location
+    set_fact:
+      encrypted_file_location: "{{ initial_backup_dir }}"
+    when:
+    - on_box_data|bool
+    - initial_backup_dir != target_backup_dir
+
+  - name: decrypt the file
+    import_role:
+      name: decrypt
+    vars:
+      decrypt_file: "{{ encrypted_file_location }}/{{ backup_filename }}"
+      decrypt_output_file: "{{ decrypted_backup_filepath }}"
+      decrypt_passphrase: "{{ backup_encryption_passphrase }}"
+
+  - name: change ownership of the tarball
+    file:
+      path: "{{ decrypted_backup_filepath }}"
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: Set image platform backup fqpn
+    set_fact:
+      platform_backup_fqpn: "{{ decrypted_backup_filepath }}"
+  when: platform_tarball_encrypted|bool
 
 - name: Link the backup tarballs to {{ target_backup_dir }} if the file is already on-box
   block:
-    - file:
-        path: "{{ target_backup_dir }}/{{ backup_filename }}"
-        state: absent
+    - name: Link the platform tarball if it was not decrypted
+      block:
+      - name: Ensure the link file doesn't exist
+        file:
+          path: "{{ target_backup_dir }}/{{ backup_filename }}"
+          state: absent
 
-    - file:
-        src: "{{ initial_backup_dir }}/{{ backup_filename }}"
-        dest: "{{ target_backup_dir }}/{{ backup_filename }}"
-        state: link
+      - name: Link the platform file
+        file:
+          src: "{{ initial_backup_dir }}/{{ backup_filename }}"
+          dest: "{{ target_backup_dir }}/{{ backup_filename }}"
+          state: link
+      when: not platform_tarball_encrypted|bool
 
     - file:
         path: "{{ target_backup_dir }}/{{ registry_backup_filename }}"
@@ -39,6 +92,7 @@
 - name: Set image platform backup fqpn
   set_fact:
     platform_backup_fqpn: "{{ target_backup_dir }}/{{ backup_filename }}"
+  when: not platform_tarball_encrypted|bool
 
 - name: Set image registry backup fqpn
   set_fact:
