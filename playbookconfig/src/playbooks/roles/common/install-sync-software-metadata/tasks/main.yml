@@ -1,0 +1,141 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is for install only. It synchronizes the system controller
+#   /opt/software/metadata directory to the subcloud. This is only done if the
+#   system controller and subcloud are at the same ostree commit.
+#
+
+- name: Retrieve software version number
+  shell: source /etc/build.info; echo $SW_VERSION
+  register: sw_version
+
+- name: Set software metadata synchronization facts
+  set_fact:
+    software_sync_required: false
+    ostree_feed_repo_dir: /var/www/pages/feed/rel-{{ sw_version.stdout }}/ostree_repo
+    ostree_sysroot_repo_dir: /sysroot/ostree/repo
+    ostree_rev: starlingx
+    software_dir: /opt/software
+
+- block:
+
+  - name: Gather system controller ostree commit
+    command: ostree --repo={{ ostree_feed_repo_dir }} rev-parse {{ ostree_rev }}
+    register: ostree_commit_system_controller
+    delegate_to: localhost
+
+  - name: Gather subcloud ostree commit
+    command: ostree --repo={{ ostree_feed_repo_dir }} rev-parse {{ ostree_rev }}
+    register: ostree_commit_subcloud
+
+  - name: Gather system controller updates list
+    shell: software list | grep {{ sw_version.stdout }} | grep -E '(available|deployed|committed)'
+    register: system_controller_software_list
+    failed_when: false
+    delegate_to: localhost
+
+  - name: Gather subcloud software list
+    shell: software list | grep {{ sw_version.stdout }} | grep -E '(available|deployed|committed)'
+    register: subcloud_software_list
+    failed_when: false
+
+  - name: Decide if software metadata synchronization is required
+    # Conditions:
+    # 1) the system controller and subcloud have different results from 'software list'
+    # or
+    # 2) The subcloud is not be at the same ostree commit level as the system controller.
+    # This can happen if the subcloud is installed from ISO (release or prestage).
+    set_fact:
+      software_sync_required: true
+    when: (system_controller_software_list.stdout != subcloud_software_list.stdout)
+        and (ostree_commit_system_controller.stdout == ostree_commit_subcloud.stdout)
+
+  - debug:
+      msg:
+        - "Software sync required: {{ software_sync_required }}"
+        - "ostree revision from {{ ostree_feed_repo_dir }}:"
+        - "system controller: {{ ostree_commit_system_controller.stdout }}"
+        - "subcloud:          {{ ostree_commit_subcloud.stdout }}"
+        - "Software list:"
+        - "system controller:"
+        - "{{ system_controller_software_list.stdout }}"
+        - "subcloud:"
+        - "{{ subcloud_software_list.stdout }}"
+
+  - debug:
+      msg:
+        - "Skipping software metadata synchronization."
+    when: not software_sync_required
+
+  - block:
+    - debug:
+        msg: "Synchronizing {{ software_dir }} metadata to subcloud..."
+
+    - name: Ensure subcloud {{ software_dir }} exists (sysadmin)
+      file:
+        path: "{{ software_dir }}"
+        owner: sysadmin
+        group: root
+        state: directory
+        mode: 0755
+        recurse: yes
+      become: true
+
+    - name: Synchronize software dir from system controller to subcloud
+      synchronize:
+        mode: push
+        src: "{{ software_dir }}/"
+        dest: "{{ software_dir }}/"
+        rsync_opts: "--delete"
+      register: software_transfer
+      retries: 2
+      delay: 5
+      until: software_transfer.rc == 0
+
+    - name: Restore root ownership to subcloud {{ software_dir }}
+      file:
+        path: "{{ software_dir }}"
+        state: directory
+        owner: root
+        recurse: yes
+      become: true
+
+    # TODO(kmacleod) This has to change.  We'll have different versions for
+    # the upgrades in USM
+    # - name: Delete patch metadata files not belonging to the current software version
+    #         ({{ sw_version.stdout }})
+    #   shell: >
+    #     grep -L "<sw_version>{{ sw_version.stdout }}</sw_version>" {{ item }}
+    #     | xargs -I {} sh -c 'echo "$1"; rm -f "$1"' sh {}
+    #   loop:
+    #     - "{{ software_dir }}/metadata/available/*"
+    #     - "{{ software_dir }}/metadata/deployed/*"
+    #     - "{{ software_dir }}/metadata/committed/*"
+    #   register: deleted_metadata_files
+    #   become: true
+    #
+    # - name: Print deleted software metadata files
+    #   debug:
+    #     msg: "{{ deleted_metadata_files.results | map(attribute='stdout_lines')
+    #           | flatten | join('\n') }}"
+    #   when: deleted_metadata_files.results | map(attribute='stdout_lines')
+    #         | flatten | length > 0
+
+    # Restart the software controller and agent to pickup the changes
+    - name: Restart the software controller and agent
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+      with_items:
+        - software-controller-daemon
+        - software-agent
+      become: true
+
+    when: software_sync_required
+
+  when: sync_software_metadata and sw_version.stdout is version('24.03', '>=')

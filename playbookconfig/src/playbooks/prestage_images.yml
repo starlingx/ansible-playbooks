@@ -11,13 +11,13 @@
 #
 # Usage:
 #   ansible-playbook prestage_images.yml -i <inventory-file> \
-#      -e "software_version=<release-number> image_list_file=<images-file>"
+#      -e "software_version=<MM.YY.nn> software_major_release=<MM.YY> image_list_file=<images-file>"
 #
 # Images file is mandatory if the specified software version is greater
 # than the current software version of the subcloud.
 
 - hosts: all
-  gather_facts: no
+  gather_facts: false
 
   vars:
     prestage_type: "images"
@@ -28,4 +28,4 @@
 
   roles:
     - prestage/prepare-env
-    - { role: prestage/prestage-images, become: yes }
+    - { role: prestage/prestage-images, become: true }

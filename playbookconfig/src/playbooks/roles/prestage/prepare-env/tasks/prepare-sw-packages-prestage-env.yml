@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -9,23 +9,27 @@
 #   packages/ostree_repo prestaging.
 #
 
+# When is prestage_source local vs. remote?
+# - local: if we are prestaging the same software version as currently running on system controller
+# - remote: if we are prestaging a different software version than currently running on system controller
+
 - block:
   - name: Set feed and patch directories to /www/pages/... (Centos and local source)
     set_fact:
-      release_feed: "/www/pages/feed/rel-{{ prestage_software_version }}"
-      host_patch_repo: "/www/pages/updates/rel-{{ prestage_software_version }}"
+      release_feed: "/www/pages/feed/rel-{{ software_major_release }}"
+      host_patch_repo: "/www/pages/updates/rel-{{ software_major_release }}"
     when: prestage_source == 'local'
 
   - name: Set feed and patch directories to /var/www/pages/... (Centos and remote source)
     set_fact:
-      release_feed: "/var/www/pages/feed/rel-{{ prestage_software_version }}"
-      host_patch_repo: "/var/www/pages/updates/rel-{{ prestage_software_version }}"
+      release_feed: "/var/www/pages/feed/rel-{{ software_major_release }}"
+      host_patch_repo: "/var/www/pages/updates/rel-{{ software_major_release }}"
     when: prestage_source == 'remote'
   when: prestage_os_type == 'centos'
 
 - name: Set the feed directory to /var/www/pages/feed (Debian)
   set_fact:
-    release_feed: "/var/www/pages/feed/rel-{{ prestage_software_version }}"
+    release_feed: "/var/www/pages/feed/rel-{{ software_major_release }}"
   when: prestage_os_type == 'debian'
 
 - name: Prepare prestage packages for Centos
@@ -101,6 +105,30 @@
       ostree_repo_release_feed: "{{ release_feed }}/ostree_repo"
 
   - block:
+    - name: Check if {{ host_software_metadata_dir }} exists on {{ inventory_hostname }}
+      stat:
+        path: "{{ host_software_metadata_dir }}"
+      register: host_software_dir_result
+
+    - name: Set flag to indicate if the host software dir exist
+      set_fact:
+        host_software_exist: "{{ host_software_dir_result.stat.exists }}"
+      when: host_software_dir_result is not skipped
+    - name: Check if {{ host_software_metadata_dir }} exists on {{ inventory_hostname }}
+      stat:
+        path: "{{ host_software_metadata_dir }}"
+      register: host_software_dir_result
+
+    - name: Check if any minor upgrades have been applied
+      shell: software list --release {{ software_major_release }} | tail +4 | grep -c -E '^\| '
+      register: system_controller_software_num_releases
+      delegate_to: localhost
+
+    - name: Set flag to indicate if minor upgrades have been applied
+      set_fact:
+        prestage_sync_software_metadata_required: >-
+          "{{ true if system_controller_software_num_releases.stdout != '1' else false }}"
+
     - name: Check if {{ host_patch_metadata_dir }} exists on {{ inventory_hostname }}
       stat:
         path: "{{ host_patch_metadata_dir }}"
@@ -124,6 +152,17 @@
         msg: "Directory {{ ostree_repo_release_feed }} does not exist on the system controller."
       when: not ostree_repo_release_feed_remote.stat.exists
 
+    - name: Check if {{ host_software_metadata_dir }} exists on the system controller
+      stat:
+        path: "{{ host_software_metadata_dir }}"
+      register: host_software_dir_result
+      delegate_to: localhost
+
+    - name: Set flag to indicate if the host software dir exist
+      set_fact:
+        host_software_dir_exist: "{{ host_software_dir_result.stat.exists }}"
+      when: host_software_dir_result is not skipped
+
     - name: Check if {{ host_patch_metadata_dir }} exists on the system controller
       stat:
         path: "{{ host_patch_metadata_dir }}"
@@ -140,6 +179,8 @@
 - debug:
     msg: |
       Prestaging type: {{ prestage_type }}
+      Prestaging install: {{ prestage_install }}
       Prestaging source: {{ prestage_source }}
       Prestaging os type: {{ prestage_os_type }}
       Release feed directory (on target): {{ release_feed|default('N/A') }}
+      prestage_sync_software_metadata_required: {{ prestage_sync_software_metadata_required }}

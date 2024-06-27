@@ -1,0 +1,27 @@
+<patch>
+  <id>starlingx-24.03.1</id>
+  <sw_version>24.03.1</sw_version>
+  <component>starlingx</component>
+  <summary>Sample inservice test patch</summary>
+  <description>This patch DOESN'T require reboot.
+        This patch should include 1 packages:
+        - logmgmt</description>
+  <install_instructions>Sample instructions</install_instructions>
+  <warnings>Sample warning</warnings>
+  <status>DEV</status>
+  <unremovable>N</unremovable>
+  <reboot_required>N</reboot_required>
+  <semantics />
+  <requires>
+    <req_patch_id>starlingx-24.03.0</req_patch_id>
+  </requires>
+  <pre_install>pre-install.sh</pre_install>
+  <post_install>post-install.sh</post_install>
+  <deploy_precheck>deploy-precheck.sh</deploy_precheck>
+  <packages>
+    <deb>logmgmt_1.0-1.stx.9_all.deb</deb>
+  </packages>
+  <number_of_commits>1</number_of_commits>
+  <previous_commit>895ea56dd33882a91a872871f6989c7978ff1413404e2574693380186dbb09a7</previous_commit>
+  <commit>db313865837f9512b024a2356bd76106140ebcea783f8183e5fcc8d5cd28783b</commit>
+</patch>

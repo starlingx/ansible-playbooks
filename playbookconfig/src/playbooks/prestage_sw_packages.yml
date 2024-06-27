@@ -13,29 +13,35 @@
 #
 # Usage:
 #   ansible-playbook prestage_sw_packages.yml -i <inventory-file> \
-#      -e "software_version=<release-number>"
+#      -e "software_version=<MM.YY.nn> software_major_release=<MM.YY> prestage_install=<for_install|for_sw_deploy>"
 
 - hosts: all
-  gather_facts: no
+  gather_facts: false
 
   vars:
     prestage_type: "packages"
+    prestage_install: for_install
     platform_backup_dir: /opt/platform-backup
 
   roles:
     - role: prestage/prepare-env
 
+    - role: prestage/sync-software-metadata
+      when: prestage_install == 'for_sw_deploy' and prestage_sync_software_metadata_required
+      vars:
+        ansible_become_pass: "{{ ansible_ssh_pass }}"
+
     - role: prestage/prestage-sw-packages
-      when: prestage_os_type == 'debian'
-      become: yes
+      when: prestage_install == 'for_install' and prestage_os_type == 'debian'
+      become: true
 
     - role: prestage/prestage-sw-packages-centos
-      when: prestage_os_type == 'centos'
-      become: yes
+      when: prestage_install == 'for_install' and prestage_os_type == 'centos'
+      become: true
 
     - role: prestage/prestage-patches
-      when: host_patches_exist
-      become: yes
+      when: software_major_release is version('24.09', '<') and prestage_install == 'for_install' and host_patches_exist
+      become: true
 
     - role: prestage/get-prestage-versions
-      become: yes
+      become: true
