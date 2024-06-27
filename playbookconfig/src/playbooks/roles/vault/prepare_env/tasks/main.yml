@@ -69,7 +69,7 @@
 
 - name: Validate vault health for restore.
   block:
-  - name: Transfer backup tarball to {{ target_backup_dir }} on controller-0
+  - name: Transfer backup tarball to {{ target_backup_dir }} on the target
     copy:
       src: "{{ initial_backup_dir }}/{{ backup_filename }}"
       dest: "{{ target_backup_dir }}"
@@ -99,15 +99,16 @@
       msg: "Vault snapshot tarball: {{ backup_filename }} was not found"
     when: backup_tarball.stdout | length == 0
 
-  - name: Validate if vault application is ready to be restored
-    script: validate_recover_vault.sh
-    environment:
-      KUBECONFIG: /etc/kubernetes/admin.conf
-    register: validate_vault_result
-    failed_when: validate_vault_result.rc != 0
-
-  rescue:
-    - name: Display vault validation script output if exists
+  - name: Run application validation
+    block:
+    - name: Validate if vault application is ready to be restored
+      script: validate_recover_vault.sh
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: validate_vault_result
+      failed_when: validate_vault_result.rc != 0
+    always:
+    - name: Display vault validation script output if it exists
       debug:
         msg: "{{ validate_vault_result.stdout }}"
       when: validate_vault_result is defined
