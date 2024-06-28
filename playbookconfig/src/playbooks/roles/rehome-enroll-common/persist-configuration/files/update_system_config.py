@@ -267,6 +267,25 @@ def populate_service_parameter_config(client, section_name):
         print("Skipping Populating/Updating user dns host-records...")
 
 
+def edit_dc_role_to_subcloud(client):
+    """Changes Distributed Cloud Role to 'subcloud'
+    """
+    isystem_list = client.sysinv.isystem.list()
+    isystem = isystem_list[0]
+    current_dc_role = isystem.distributed_cloud_role
+    patch = [
+        {
+            'op': 'replace',
+            'path': '/distributed_cloud_role',
+            'value': sysinv_constants.DISTRIBUTED_CLOUD_ROLE_SUBCLOUD
+        }
+    ]
+    isystem = client.sysinv.isystem.update(isystem.uuid, patch)
+    updated_dc_role = isystem.distributed_cloud_role
+    print(f"Distributed Cloud Role updated: "
+          f"'{current_dc_role}' -> '{updated_dc_role}'")
+
+
 # Main function to execute based on command-line input
 def main():
     if len(sys.argv) < 2:
@@ -289,6 +308,7 @@ def main():
     client = CgtsClient()
     populate_dns_config(client, section_name)
     populate_service_parameter_config(client, section_name)
+    edit_dc_role_to_subcloud(client)
 
 
 if __name__ == '__main__':
