@@ -1,0 +1,83 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   This task execute initial-auth operation to configure IPsec on
+#   each host of environment.
+#
+- block:
+  - name: List of pending hosts to be configured with IPsec
+    debug:
+      msg:
+        - "{{ pending_hosts }}"
+
+  - name: Run ipsec-client for initial-auth operation on each host
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "ipsec-client pxecontroller --opcode 1" -b -e
+      "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+    loop: "{{ pending_hosts }}"
+    async: 120
+    poll: 0
+    register: initial_auth_exec
+
+  - name: Check on async tasks
+    async_status:
+      jid: "{{ item.ansible_job_id }}"
+    loop: "{{ initial_auth_exec.results }}"
+    register: hosts_initial_auth
+    until: hosts_initial_auth.finished
+    retries: 12
+    delay: 10
+    failed_when: false
+
+  - name: Get PXEBoot network addresses list of pending hosts
+    script: get_ipsec_disabled_addr_list.py
+    register: pending_hosts
+    become_user: postgres
+
+  - set_fact:
+      pending_hosts: "{{ pending_hosts.stdout }}"
+
+  - name: Fail if there are remaining hosts to configure
+    fail:
+      msg:
+        - Failed to enable IPsec on all hosts.
+    when: 'pending_hosts | length > 0'
+
+  - name: Enable strongswan and ipsec-server services on nodes
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "systemctl enable ipsec.service
+      ipsec-server.service --now " -b -e "ansible_ssh_user={{ ansible_ssh_user }}
+      ansible_ssh_pass={{ ansible_ssh_pass }} ansible_become_pass={{ ansible_become_pass }}"
+    loop: "{{ pxeboot_addrs }}"
+    async: 30
+    poll: 0
+    when: 'pending_hosts | length == 0'
+
+  rescue:
+    - set_fact:
+        retry_count: "{{ retry_count|int + 1 }}"
+        failures_list: "{{ results | map('json_query', filter_query) | list }}"
+      vars:
+        results: "{{ hosts_initial_auth.results }}"
+        filter_query: "{host_ip: item.item, rc: rc, stderr: stderr, stdout: stdout}"
+
+    - name: Failed to enable IPsec on hosts after 3 attempts
+      fail:
+        msg: |
+          "Failed to configure IPsec on at least one of the hosts of the environment.
+           Please see /var/log/ipsec-auth.log on the listed addresses below for more
+           details.
+           Failed hosts: {{ pending_hosts }}
+           Error: {{ failures_list }}"
+      when: 'retry_count|int == 3'
+
+    - name: Pause for 10 seconds before next retry.
+      pause:
+        seconds: 10
+
+    - include_tasks: execute-initial-auth-operation.yml

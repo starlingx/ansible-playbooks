@@ -1,0 +1,65 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to enable and configure IPSec on all hosts
+#   per the execution of initial-auth operation.
+#
+
+- name: Get system mode
+  shell: source /etc/platform/platform.conf; echo $system_mode
+  register: system_mode
+
+- block:
+  - name: Get PXEBoot network addresses list of pending hosts
+    script: get_ipsec_disabled_addr_list.py
+    register: pending_hosts
+    become_user: postgres
+
+  - name: Get PXEBoot network list addresses
+    script: roles/common/files/get_pxeboot_addr_list.py
+    register: ip_addrs_list
+
+  - set_fact:
+      retry_count: 0
+      failures_list: []
+      pending_hosts: "{{ pending_hosts.stdout }}"
+      pxeboot_addrs: "{{ ip_addrs_list.stdout }}"
+
+  - name: Execute initial-auth operation on hosts
+    include_tasks: execute-initial-auth-operation.yml
+    when: 'pending_hosts | length > 0'
+
+  - name: Get MGMT network addresses list
+    script: get_all_mgmt_addrs.py
+    register: all_hosts
+    become_user: postgres
+
+  - set_fact:
+      all_hosts: "{{ all_hosts.stdout }}"
+
+  # Wait a maximum time of 3 minutes until hosts are reachable,
+  # i.e. IPsec SAs are established between hosts.
+  - name: Wait until hosts are online and reachable
+    shell: "ping -c 1 -w 5 {{ item }} | grep ' 0% packet loss'"
+    register: host_is_reachable
+    loop: "{{ all_hosts }}"
+    until: host_is_reachable is not failed
+    retries: 18
+    delay: 10
+
+  - name: Start and provision ipsec-config service on controllers
+    command: >-
+      ansible all -i "{{ item }}," --become-user root -m command -a "sm-provision
+      service-group-member controller-services ipsec-config --apply" -b -e
+      "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+    with_items:
+      - controller-0
+      - controller-1
+    become_user: root
+
+  when: system_mode != "simplex"
