@@ -20,6 +20,13 @@
         - ip addr add {{ pxe_virtual }} dev lo scope host
         - ip addr add {{ cluster_floating_virtual }} dev lo scope host
 
+  - name: Add admin IP for loopback interface if configured
+    set_fact:
+      add_items: "{{ add_items + [item] }}"
+    with_items:
+      - ip addr add {{ admin_virtual }} dev lo scope host
+    when: admin_virtual is defined
+
   # add secondary addresses for loopback interface
   - block:
     - name: Add secondary cluster on the loopback interface
@@ -35,6 +42,13 @@
       with_items:
         - "ip addr add {{ cluster_floating_virtual_secondary }} dev lo scope host"
       when: cluster_floating_virtual_secondary is defined
+
+    - name: Add admin secondary IP for loopback interface if configured
+      set_fact:
+        add_items: "{{ add_items + [item] }}"
+      with_items:
+        - "ip addr add {{ admin_virtual_secondary }} dev lo scope host"
+      when: admin_virtual_secondary is defined
 
   - name: Add loopback interface
     # Use shell instead of command module as source is an internal shell command
