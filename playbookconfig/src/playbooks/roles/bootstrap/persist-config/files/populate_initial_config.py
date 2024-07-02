@@ -23,6 +23,7 @@ import six.moves.configparser as configparser
 from netaddr import IPNetwork
 from cgtsclient import client as cgts_client
 from sysinv.common import constants as sysinv_constants
+from sysinv.common import utils as cutils
 
 
 COMBINED_LOAD = 'All-in-one'
@@ -1384,10 +1385,42 @@ def populate_user_dns_host_records(client):
         print("Populating/Updating user dns host-records completed.")
 
 
+def populate_platform_drbd(client):
+    # Get rid of the drbdconfig entries that might have
+    # been created in the previous failed run.
+    parameters = client.sysinv.service_parameter.list()
+    for parameter in parameters:
+        if (parameter.name == sysinv_constants.SERVICE_PARAM_NAME_DRBD_HMAC or
+                parameter.name == sysinv_constants.SERVICE_PARAM_NAME_DRBD_SECRET or
+                parameter.name == sysinv_constants.SERVICE_PARAM_NAME_DRBD_SECURE):
+            client.sysinv.service_parameter.delete(parameter.uuid)
+
+    parameters = {}
+
+    parameters[sysinv_constants.SERVICE_PARAM_NAME_DRBD_HMAC] = "sha256"
+    secret = cutils.generate_random_password()
+    parameters[sysinv_constants.SERVICE_PARAM_NAME_DRBD_SECRET] = secret
+    parameters[sysinv_constants.SERVICE_PARAM_NAME_DRBD_SECURE] = "True"
+
+    values = {
+        'service': sysinv_constants.SERVICE_TYPE_PLATFORM,
+        'section':
+            sysinv_constants.SERVICE_PARAM_SECTION_PLATFORM_DRBD,
+        'personality': None,
+        'resource': None,
+        'parameters': parameters
+    }
+
+    print("Populating/Updating service parameter platform drbd...")
+    client.sysinv.service_parameter.create(**values)
+    print("Service parameter system platform drbd completed.")
+
+
 def populate_service_parameter_config(client):
     if not INITIAL_POPULATION and not RECONFIGURE_SERVICE:
         return
     populate_platform_config(client)
+    populate_platform_drbd(client)
     populate_docker_kube_config(client)
     if CONF.has_section("USER_DNS_HOST_RECORDS"):
         populate_user_dns_host_records(client)
