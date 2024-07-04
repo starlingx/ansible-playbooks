@@ -25,6 +25,7 @@
           - { username: 'fm', password: "{{ users['fm'] }}", service: 'fm-mgr' }
           - { username: 'mtce', password: "{{ users['mtce'] }}", service: 'mtc-agent' }
           - { username: 'patching', password: "{{ users['patching'] }}", service: 'sw-patch-controller-daemon' }
+          - { username: 'usm', password: "{{ users['usm'] }}", service: 'software-controller-daemon' }
           - { username: 'vim', password: "{{ users['vim'] }}", service: 'vim' }
 
     - name: Update keystone passwords in secure hieradata
