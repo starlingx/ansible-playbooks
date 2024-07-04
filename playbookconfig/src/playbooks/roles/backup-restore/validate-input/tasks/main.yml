@@ -161,3 +161,19 @@
     when: ssl_ca_certificate_file is defined and ssl_ca_certificate_file is not none
 
   delegate_to: "{{ inspection_target }}"
+
+- name: Extract OS_REGION_NAME from openrc file
+  shell: |
+    os_region_name=$(tar -xOzf {{ backup_stat_result.stat.path }} etc/platform/openrc | grep 'OS_REGION_NAME=')
+    echo "$os_region_name"
+  register: os_region_name_search
+
+- name: Ensure OS_REGION_NAME is found
+  fail:
+    msg: "OS_REGION_NAME not found in openrc file."
+  when: os_region_name_search.stdout == ""
+
+- name: Parse OS_REGION_NAME
+  set_fact:
+    region_name: "{{ os_region_name_search.stdout.split('=')[1] | trim }}"
+  when: os_region_name_search.stdout != ""

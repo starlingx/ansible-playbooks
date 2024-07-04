@@ -22,7 +22,7 @@
   - name: Set the generated UUID4 as a region_name
     set_fact:
       region_name: "{{ uuid_output.stdout | trim }}"
-  when: distributed_cloud_role != 'systemcontroller'
+  when: distributed_cloud_role != 'systemcontroller' and mode != 'restore'
 
 - debug:
     msg:
