@@ -272,7 +272,9 @@ get_commit_hashes_from_metadata() {
     local commit
     while IFS= read -r commit; do
         commit=$(trim "${commit}")
-        from_metadata_commit_hashes+=( "${commit}" )
+        if [ ! -z "$commit" ]; then
+            from_metadata_commit_hashes+=( "${commit}" )
+        fi
     done < <(sed --quiet 's|<commit[0-9]*>\(.*\)</commit[0-9]*>|\1|p' "${meta_file}")
 }
 
