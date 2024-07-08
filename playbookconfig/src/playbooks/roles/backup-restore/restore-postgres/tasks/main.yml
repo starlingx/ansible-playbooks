@@ -101,6 +101,11 @@
     become_user: postgres
     when: ssl_ca_certificate_file is defined and ssl_ca_certificate_file is not none
 
+  - name: Clear mgmt_ipsec flags from other nodes
+    script: roles/common/files/clear-mgmt-ipsec-flag.py -r
+    become_user: postgres
+    when: system_mode != 'simplex'
+
   - import_tasks: restore-postgres-dc.yml
 
   - import_tasks: aio-sx-node-replacement.yml
