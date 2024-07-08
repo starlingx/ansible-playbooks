@@ -17,6 +17,23 @@
     retries: 3
     delay: 5
 
+  # Check if IPsec config files exist.
+  - name: Check if IPsec configuration files exist
+    stat:
+      path: "{{ item }}"
+    with_items:
+      - /etc/swanctl/swanctl_active.conf
+      - /etc/swanctl/swanctl_standby.conf
+    register: files_output
+
+  # Clear mgmt_ipsec flag in sysinv i_host able if config files exist (for replay).
+  - name: Clear mgmt_ipsec flag in sysinv i_host table
+    script: clear-mgmt-ipsec-flag.py
+    when:
+      - files_output.results[0].stat.exists
+      - files_output.results[1].stat.exists
+    become_user: postgres
+
   # Invoke ipsec-auth client to config and enable IPSec
   - name: Config and enable IPSec on mgmt
     command: /usr/bin/ipsec-client pxecontroller
