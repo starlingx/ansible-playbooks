@@ -14,9 +14,18 @@
 # If user provided in the bootstrap, we already have the data set in the variables.
 # We must install the RCA provided as a Trusted CA.
 - name: Use user provided overrides for 'system-local-ca'
-  set_fact:
-    system_local_ca_data_obtained: true
-    install_rca_as_trusted: true
+  block:
+  - set_fact:
+      system_local_ca_data_obtained: true
+      install_rca_as_trusted: true
+
+  - name: Signal that user provided the CA data for system-local-ca
+    file:
+      path: "{{ platform_config_dir }}/{{ system_local_ca_data_provided_flag_filename }}"
+      mode: 0644
+      state: touch
+    become: yes
+
   when:
     - system_local_ca_overrides
     - not upgrade_in_progress

@@ -217,6 +217,23 @@
             - "{{ root_ca_cert.path }}"
             - "{{ local_ca_cert.path }}"
 
+    - name: Signal that user provided the CA data for system-local-ca
+      block:
+      - name: Retrieve software version number
+        shell: source /etc/build.info; echo $SW_VERSION
+        register: sw_version_result
+
+      - set_fact:
+          software_version: "{{ sw_version_result.stdout }}"
+
+      - name: Create flag in config dir
+        file:
+          path: "{{ base_platform_config_dir }}/{{software_version }}/\
+                 {{ system_local_ca_data_provided_flag_filename }}"
+          mode: 0644
+          state: touch
+        become: yes
+
   rescue:
     - name: Check if system-local-ca is in place
       command: >-
