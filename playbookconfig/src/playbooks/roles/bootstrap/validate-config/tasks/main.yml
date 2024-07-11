@@ -141,7 +141,8 @@
   lineinfile:
     path: /etc/resolv.conf
     line: "nameserver {{ item }}"
-  with_items: "{{ dns_servers }}"
+    insertbefore: BOF
+  with_items: "{{ dns_servers |reverse }}"
 
 # Networks config validation
 - block:
