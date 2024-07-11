@@ -1,0 +1,48 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Task to identify certificate and key pair type and verifies if the certificate
+# and key match.
+#
+- name: Get the certificate key type
+  community.crypto.x509_certificate_info:
+    path: "{{ local_ca_file.path }}"
+  register: cert_info
+
+- name: Get the private key type
+  community.crypto.openssl_privatekey_info:
+    path: "{{ local_ca_key_file.path }}"
+  register: key_info
+
+# TODO: replace this shell call once we upversion community.crypto module
+- name: Verify if the certificate matches the RSA key
+  block:
+    - name: Verify if system_local_ca_cert and system_local_ca_key match
+      shell: >-
+        diff <(echo "{{ system_local_ca_cert | b64decode }}" | openssl x509 -noout -modulus)
+        <(echo "{{ system_local_ca_key | b64decode }}" | openssl rsa -noout -modulus)
+      register: diff_return
+      failed_when: false
+      no_log: true
+
+    - name: Check if the public keys match
+      assert:
+        that:
+          - diff_return.stdout == ""
+          - diff_return.stderr == ""
+        fail_msg: "The certificate does not match the RSA key"
+        success_msg: "The certificate matches the RSA key"
+  when: key_info.type == "RSA"
+
+- name: Verify if the certificate matches the ECC key
+  block:
+    - name: Check if the public keys match
+      assert:
+        that:
+          - cert_info.public_key == key_info.public_key
+        fail_msg: "The certificate does not match the ECC key"
+        success_msg: "The certificate matches the ECC key"
+  when: key_info.type == "ECC"
