@@ -1,0 +1,23 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role restores the keystone lockout configurations
+#
+
+- name: Restore keystone original config
+  copy:
+    src: "/tmp/keystone.conf"
+    dest: "{{ keystone_conf }}"
+    owner: "{{ keystone_conf_facts.stat.uid }}"
+    group: "{{ keystone_conf_facts.stat.gid }}"
+    mode: preserve
+    remote_src: yes
+
+- name: Remove backup keystone config
+  file:
+    path: "/tmp/keystone.conf"
+    state: absent

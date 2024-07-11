@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2022 Wind River Systems, Inc.
+# Copyright (c) 2021-2022,2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -51,7 +51,8 @@
   shell: echo flush_all > /dev/tcp/{{ derived_network_params.controller_0_address }}/11211
 
 - name: Restart keystone service
-  import_tasks: restart_keystone.yml
+  import_role:
+    name: rehome-enroll-common/restart-keystone-service
 
 - name: Restart affected services using sm
   command: "sm-restart service {{ item }}"

@@ -1,0 +1,68 @@
+---
+#
+# Copyright (c) 2021-2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role updates the openstack keystone data(Ids, passwords)
+#   in database, reloads the configurations of related services and
+#   restarts these services
+#
+
+- name: Disable keystone lockout
+  import_role:
+    name: rehome-enroll-common/disable-keystone-lockout
+
+- name: Update keystone passwords post disabling lockout
+  block:
+    - name: Prepare user list
+      set_fact:
+        user_list:
+          - { username: 'barbican', password: "{{ users['barbican'] }}", service: 'barbican-keystone-listener' }
+          # dcmanager related services are not running on the subcloud.
+          - { username: 'dcmanager', password: "{{ users['dcmanager'] }}", service: 'dcmanager' }
+          - { username: 'fm', password: "{{ users['fm'] }}", service: 'fm-mgr' }
+          - { username: 'mtce', password: "{{ users['mtce'] }}", service: 'mtc-agent' }
+          - { username: 'patching', password: "{{ users['patching'] }}", service: 'sw-patch-controller-daemon' }
+          - { username: 'vim', password: "{{ users['vim'] }}", service: 'vim' }
+
+    - name: Update keystone passwords in secure hieradata
+      import_tasks: update_secure_hieradata.yml
+
+    - name: Migrate keystone passwords for subcloud rehoming
+      import_tasks: migrate_keystone_passwords_for_rehome.yml
+      when: mode == "rehome"
+
+    - name: Migrate keystone passwords for subcloud enrollment
+      import_tasks: migrate_keystone_passwords_for_enroll.yml
+      when: mode == "enroll"
+
+    - name: Migrate keystone IDs
+      import_tasks: migrate_keystone_ids.yml
+
+  rescue:
+    - name: Fail the playbook with message
+      fail:
+        msg: >-
+          Failed to update the keystone data, check the reason of the failure
+          and retry.
+
+  always:
+    - name: Restore keystone lockout after updating keystone data
+      import_role:
+        name: rehome-enroll-common/restore-keystone-lockout
+
+- name: Restart keystone service post config update
+  import_role:
+    name: rehome-enroll-common/restart-keystone-service
+
+- name: Restart vim service
+  command: "sm-restart service vim"
+
+- name: Check vim enabled after restart
+  shell: sm-query service vim | grep -c enabled-active
+  register: service_status
+  until: service_status.stdout == '1'
+  retries: 12
+  delay: 10

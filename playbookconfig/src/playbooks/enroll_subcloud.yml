@@ -29,15 +29,16 @@
     - common/prepare-env
     - common/validate-target
     - common/recover-subcloud-certificates
+    - role: rehome-enroll-common/recover-essential-services
+      become: yes
     - rehome-enroll-common/prepare-env
     - enroll-subcloud/validate-before-enroll
-    - enroll-subcloud/migrate-keystone-data
-    - rehome-subcloud/update-ca-cert
+    - rehome-enroll-common/update-ca-cert
     # - common/update-sc-admin-endpoints
     - role: common/update-sc-cert
       when: subcloud_dc_admin_ep_cert_chain_recovered is undefined
     # - rehome-subcloud/update-network-config
-    # - role: rehome-subcloud/update-keystone-data
-    #   become: yes
+    - role: rehome-enroll-common/update-keystone-data
+      become: yes
     - rehome-enroll-common/persist-configuration
     # - enroll-subcloud/complete-enrollment

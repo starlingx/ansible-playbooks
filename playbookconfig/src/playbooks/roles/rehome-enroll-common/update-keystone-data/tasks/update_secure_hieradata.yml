@@ -1,0 +1,93 @@
+---
+#
+# Copyright (c) 2021, 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Create a temporary directory on the local machine to fetch secure_static.yaml
+  tempfile:
+    state: directory
+    suffix: puppet
+  delegate_to: localhost
+  register: tempdir
+
+# The lineinfile in loop cause significant time consumption if network in high
+# delay, fetch the file and update it in localhost.
+- name: Fetch the remote secure_static.yaml file to local
+  fetch:
+    src: "/opt/platform/puppet/{{ software_version }}/hieradata/secure_static.yaml"
+    dest: "{{ tempdir.path }}/secure_static.yaml"
+    flat: yes
+    mode: preserve
+
+# The hieradata must be changed before the keystone_listener is notified to apply
+# the password change runtime puppet, because the puppet will use the new passwords
+# in the hieradata to replace those in each service configuration file and restart
+# the corresponding service.
+- name: Update services' passwords in hieradata secure_static.yaml
+  lineinfile:
+    path: "{{ tempdir.path }}/secure_static.yaml"
+    regexp: "{{ item.From }}"
+    line: "{{ item.To }}"
+  loop:
+    - { From: "^barbican::keystone::auth::password",
+        To: "barbican::keystone::auth::password: !!python/unicode '{{ users['barbican'] }}'" }
+    - { From: "^barbican::keystone::authtoken::password",
+        To: "barbican::keystone::authtoken::password: !!python/unicode '{{ users['barbican'] }}'" }
+    - { From: "^dcmanager::api::keystone_password",
+        To: "dcmanager::api::keystone_password: !!python/unicode '{{ users['dcmanager'] }}'" }
+    - { From: "^dcmanager::keystone::auth::password",
+        To: "dcmanager::keystone::auth::password: !!python/unicode '{{ users['dcmanager'] }}'" }
+    - { From: "^dcorch::api_proxy::dcmanager_keystone_password",
+        To: "dcorch::api_proxy::dcmanager_keystone_password: !!python/unicode '{{ users['dcmanager'] }}'" }
+    - { From: "^fm::auth::auth_password",
+        To: "fm::auth::auth_password: !!python/unicode '{{ users['fm'] }}'" }
+    - { From: "^fm::keystone::auth::password",
+        To: "fm::keystone::auth::password: !!python/unicode '{{ users['fm'] }}'" }
+    - { From: "^fm::keystone::authtoken::password",
+        To: "fm::keystone::authtoken::password: !!python/unicode '{{ users['fm'] }}'" }
+    - { From: "^nfv::keystone::auth::password",
+        To: "nfv::keystone::auth::password: !!python/unicode '{{ users['vim'] }}'" }
+    - { From: "^patching::api::keystone_password",
+        To: "patching::api::keystone_password: !!python/unicode '{{ users['patching'] }}'" }
+    - { From: "^patching::keystone::auth::password",
+        To: "patching::keystone::auth::password: !!python/unicode '{{ users['patching'] }}'" }
+    - { From: "^patching::keystone::authtoken::password",
+        To: "patching::keystone::authtoken::password: !!python/unicode '{{ users['patching'] }}'" }
+    - { From: "^platform::mtce::params::auth_pw",
+        To: "platform::mtce::params::auth_pw: !!python/unicode '{{ users['mtce'] }}'" }
+    - { From: "^sysinv::api::keystone_password",
+        To: "sysinv::api::keystone_password: !!python/unicode '{{ users['sysinv'] }}'" }
+    - { From: "^sysinv::certalarm::dc_keystone_password",
+        To: "sysinv::certalarm::dc_keystone_password: !!python/unicode '{{ users['dcmanager'] }}'" }
+    - { From: "^sysinv::certalarm::local_keystone_password",
+        To: "sysinv::certalarm::local_keystone_password: !!python/unicode '{{ users['sysinv'] }}'" }
+    - { From: "^sysinv::certmon::dc_keystone_password",
+        To: "sysinv::certmon::dc_keystone_password: !!python/unicode '{{ users['dcmanager'] }}'" }
+    - { From: "^sysinv::certmon::local_keystone_password",
+        To: "sysinv::certmon::local_keystone_password: !!python/unicode '{{ users['sysinv'] }}'" }
+    - { From: "^sysinv::keystone::auth::password",
+        To: "sysinv::keystone::auth::password: !!python/unicode '{{ users['sysinv'] }}'" }
+  no_log: true
+  delegate_to: localhost
+
+- name: Copy the secure_static.yaml back to the remote host
+  copy:
+    src: "{{ tempdir.path }}/secure_static.yaml"
+    dest: "/opt/platform/puppet/{{ software_version }}/hieradata/secure_static.yaml"
+    mode: preserve
+    backup: yes
+
+- name: Clean up the temporary directory
+  file:
+    path: "{{ tempdir.path }}"
+    state: absent
+  delegate_to: localhost
+
+- name: Update registry password in hieradata secure_system.yaml
+  lineinfile:
+    path: "/opt/platform/puppet/{{ software_version }}/hieradata/secure_system.yaml"
+    regexp: "^platform::dockerdistribution::params::registry_password"
+    line: "platform::dockerdistribution::params::registry_password: !!python/unicode '{{ users['sysinv'] }}'"
+  no_log: true

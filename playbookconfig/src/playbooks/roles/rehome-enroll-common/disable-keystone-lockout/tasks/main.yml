@@ -1,0 +1,35 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role disables the keystone lockout temporarily
+#
+
+
+- name: Gather facts of keystone.conf
+  stat:
+    path: "{{ keystone_conf }}"
+  register: keystone_conf_facts
+
+- name: Backup keystone config
+  copy:
+    src: "{{ keystone_conf }}"
+    dest: "/tmp/keystone.conf"
+    mode: preserve
+    remote_src: yes
+
+- name: Temporarily disable lockout in keystone
+  lineinfile:
+    path: "{{ keystone_conf }}"
+    regexp: "^{{ item }}"
+    state: absent
+  loop:
+    - "lockout_failure_attempts"
+    - "lockout_duration"
+
+- name: Restart keystone service
+  include_role:
+    name: rehome-enroll-common/restart-keystone-service
