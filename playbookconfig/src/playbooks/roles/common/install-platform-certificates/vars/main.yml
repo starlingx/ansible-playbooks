@@ -8,6 +8,7 @@
 cert_manager_spec_file: /tmp/platform_certificates.yaml
 platform_config_dir: /opt/platform/config/{{ software_version }}
 create_platform_certificates_flag_filename: .create_platform_certificates
+system_local_ca_data_provided_flag_filename: .system_local_ca_data_provided
 
 system_local_ca_data_obtained: false
 install_rca_as_trusted: false

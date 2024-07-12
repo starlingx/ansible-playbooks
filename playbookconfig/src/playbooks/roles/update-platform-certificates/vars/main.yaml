@@ -1,2 +1,4 @@
 ---
 cert_manager_spec_file: /tmp/platform_certificates.yaml
+base_platform_config_dir: /opt/platform/config
+system_local_ca_data_provided_flag_filename: .system_local_ca_data_provided
