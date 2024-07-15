@@ -22,6 +22,10 @@
 
     - name: Set facts for enroll_init
       set_fact:
+        # ansible_port is waited on for an open connection,
+        # set it to sysinv_api_port to ensure that endpoints have
+        # reconfigured before marking the playbook as complete.
+        ansible_port: 6385
         operation_string: "enroll-init"
         host_to_check: "{{ enroll_reconfigured_oam }}"
         boot_wait_time: "{{ enroll_boot_wait_time | default(150) }}"
