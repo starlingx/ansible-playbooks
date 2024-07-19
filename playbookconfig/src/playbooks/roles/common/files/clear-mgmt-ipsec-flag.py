@@ -8,6 +8,7 @@
 
 import json
 import sys
+import argparse
 
 from psycopg2.extras import RealDictCursor
 import psycopg2
@@ -16,19 +17,32 @@ from sysinv.common import constants
 
 
 def main():
-    clear_mgmt_ipsec()
+    restore_mode = False
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-r", "--restore-mode", action="store_true",
+                        help="Restore mode")
+    args = parser.parse_args()
+
+    if args.restore_mode:
+        restore_mode = args.restore_mode
+
+    clear_mgmt_ipsec(restore_mode)
 
 
-def clear_mgmt_ipsec():
+def clear_mgmt_ipsec(restore_mode):
     """This function remove mgmt_ipsec in capabilities of sysinv i_host table.
     """
 
     conn = psycopg2.connect("dbname='sysinv' user='postgres'")
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("select uuid, capabilities from i_host;")
+            cur.execute("select uuid,hostname,capabilities from i_host;")
             rows = cur.fetchall()
             for record in rows:
+                if restore_mode and record['hostname'] == 'controller-0':
+                    continue
+
                 capabilities = json.loads(record['capabilities'])
                 if capabilities.get(constants.MGMT_IPSEC_FLAG) is not None:
                     capabilities.pop(constants.MGMT_IPSEC_FLAG)
