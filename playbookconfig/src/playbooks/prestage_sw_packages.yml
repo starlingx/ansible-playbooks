@@ -40,7 +40,7 @@
       become: true
 
     - role: prestage/prestage-patches
-      when: software_version is version('24.09', '<') and prestage_reason == 'for_install' and host_patches_exist
+      when: prestage_reason == 'for_install' and host_patches_exist
       become: true
 
     - role: prestage/get-prestage-versions

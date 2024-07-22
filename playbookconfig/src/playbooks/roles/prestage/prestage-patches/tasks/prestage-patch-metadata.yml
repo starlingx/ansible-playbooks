@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -40,17 +40,19 @@
       state: directory
       owner: root
       recurse: yes
-  when: prestage_source == 'remote'
+  when: prestage_source == 'remote' or software_version is version('24.09', '>=')
 
-- name: Remove available patch metadata
-  file:
-    path: "{{ patches_prestage_dir }}/metadata/available"
-    state: absent
+- block:
+    - name: Remove available patch metadata
+      file:
+        path: "{{ patches_prestage_dir }}/metadata/available"
+        state: absent
 
-- name: Delete those patch metadata files not belonging to the prestage software version
-  shell: >
-          grep -L "<sw_version>{{ software_version }}</sw_version>"
-          {{ item }} 2>/dev/null | xargs rm -f
-  loop:
-    - "{{ patches_prestage_dir }}/metadata/applied/*"
-    - "{{ patches_prestage_dir }}/metadata/committed/*"
+    - name: Delete those patch metadata files not belonging to the prestage software version
+      shell: >
+              grep -L "<sw_version>{{ software_version }}</sw_version>"
+              {{ item }} 2>/dev/null | xargs rm -f
+      loop:
+        - "{{ patches_prestage_dir }}/metadata/applied/*"
+        - "{{ patches_prestage_dir }}/metadata/committed/*"
+  when: software_version is version('24.09', '<')
