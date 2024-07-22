@@ -360,7 +360,7 @@ configure_ostree_repo_for_central_pull() {
 
     # Get system controller management IP (run from system controller):
     local system_controller_ip
-    system_controller_ip=$(system addrpool-list | awk '/system-controller-subnet/ { print $14; }')
+    system_controller_ip=$(system addrpool-list --nowrap | awk '/system-controller-subnet/ { print $14; }')
 
     local is_https_enabled
     is_https_enabled=$(system show | awk '/https_enabled/ { print $4; }')
@@ -369,6 +369,11 @@ configure_ostree_repo_for_central_pull() {
         "system_controller_ip: ${system_controller_ip}"\
         "is_https_enabled: ${is_https_enabled}"\
         "OSTREE_REPO: ${OSTREE_REPO}"
+
+    # Adapts to IPv6 format if necessary
+    if [[ $system_controller_ip =~ : && ! $system_controller_ip =~ \[ ]]; then
+        system_controller_ip="["$system_controller_ip"]"
+    fi
 
     if [ "${is_https_enabled}" = True ]; then
         sed -i.bak 's|^url=.*|url=https://'"${system_controller_ip}:${OSTREE_HTTPS_PORT}/iso/${MAJOR_SW_VERSION}/ostree_repo"'|' "${OSTREE_REPO}/config"
