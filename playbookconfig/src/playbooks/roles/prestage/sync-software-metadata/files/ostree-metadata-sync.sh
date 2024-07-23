@@ -265,6 +265,10 @@ get_simple_xml_attrib_from_metadata() {
 }
 
 get_commit_hashes_from_metadata() {
+    # Retrieves the commit hashes of given metadata file.
+    # The base commit and empty commits are ignored.
+    # Only package commits are taken into account.
+    #
     # Using a nameref to update the passed-in array,
     # see https://mywiki.wooledge.org/BashProgramming?highlight=%28nameref%29#Functions
     local -n from_metadata_commit_hashes=$1
@@ -275,7 +279,7 @@ get_commit_hashes_from_metadata() {
         if [ ! -z "$commit" ]; then
             from_metadata_commit_hashes+=( "${commit}" )
         fi
-    done < <(sed --quiet 's|<commit[0-9]*>\(.*\)</commit[0-9]*>|\1|p' "${meta_file}")
+    done < <(sed '/<base>/,/<\/base>/d' "${meta_file}" | sed --quiet 's|<commit[0-9]*>\(.*\)</commit[0-9]*>|\1|p')
 }
 
 get_usm_state_from_path() {
@@ -408,39 +412,29 @@ find_all_ostree_commits_for_release() {
     # Returns a list of: <metadata_file>:<ostree_commit_hash>
     # for the local metadata tree.
     #
-    # If the metadata does not specify a commit-id then we use '-'
     # The list is sorted by version, from lowest to highest.
     # This ensures that versions can be processed in the correct numerical order.
     #
     local sw_version=${1:-$SW_VERSION}
     local metadata_dir=${2:-$METADATA_DIR}
     local number_of_commits metadata_file
+
     for metadata_file in $(find_metadata_files_for_release_sorted "${sw_version}" "${metadata_dir}"); do
         if [ ! -f "${metadata_file}" ]; then
             return
         fi
-        number_of_commits=$(get_simple_xml_attrib_from_metadata "${metadata_file}" "number_of_commits")
 
-        # TODO Testing with multiple commits in an update is incomplete
-        # remove this when fully tested:
-        if [ -n "${number_of_commits}" ] && [ "${number_of_commits}" -gt 1 ]; then
-            log_warn "Update has ${number_of_commits} commits: not tested yet"
-        fi
+        release_state=$(get_usm_state_from_path "${metadata_file}")
+        if [ "$release_state" = "deployed" ]; then
+            number_of_commits=$(get_simple_xml_attrib_from_metadata "${metadata_file}" "number_of_commits")
 
-        local commit_hashes=()
-        get_commit_hashes_from_metadata commit_hashes "${metadata_file}"
-        if [ "${#commit_hashes[@]}" -eq 0 ]; then
-            echo "${metadata_file}:-"
-        else
-            if [ "${number_of_commits}" -ne "${#commit_hashes[@]}" ]; then
-                # Unexpected, and we should fail here
-                die "Update has number_of_commits=${number_of_commits} but only found ${#commit_hashes[@]} commits"
+            local commit_hashes=()
+            get_commit_hashes_from_metadata commit_hashes "${metadata_file}"
+            if [ "${#commit_hashes[@]}" -gt 0 ]; then
+                # We only need to supply the first commit here.
+                # See how the sync_subcloud_metadata algorithm works - it only uses the first commit
+                echo "${metadata_file}:${commit_hashes[0]}"
             fi
-
-            # We only need to supply the first commit here.
-            # See how the sync_subcloud_metadata algorithm works - it only uses the first commit
-            # TODO: do we actually need to supply the commit at all?
-            echo "${metadata_file}:${commit_hashes[0]}"
         fi
     done
 }

@@ -39,7 +39,7 @@
 - name: Set software metadata synchronization facts for {{ software_version }}
   set_fact:
     software_sync_required: false
-    ostree_feed_repo_dir: /var/www/pages/feed/rel-{{ software_major_release }}/ostree_repo
+    ostree_feed_repo_dir: /var/www/pages/feed/rel-{{ software_version }}/ostree_repo
     ostree_sysroot_repo_dir: /sysroot/ostree/repo
     ostree_rev: starlingx
     usm_software_dir: /opt/software
@@ -57,23 +57,25 @@
   command: ostree --repo={{ ostree_feed_repo_dir }} rev-parse {{ ostree_rev }}
   register: ostree_commit_subcloud
 
-- name: Gather system controller software list
-  shell: software list --release {{ software_major_release }} | grep {{ software_version }} | grep -E '(available|deploy)'
+- name: Gather system controller deployed software list
+  shell: software list --release {{ software_version }} --state deployed | \
+         grep {{ software_version }} | \ sed 's/ //g;'
   register: system_controller_software_list
   failed_when: false
   delegate_to: localhost
 
-- name: Show system controller software list for release {{ software_version }}
+- name: Show system controller deployed software list for release {{ software_version }}
   debug:
     var: system_controller_software_list.stdout
 
-- name: Gather subcloud software list
-  shell: software list --release {{ software_major_release }} | grep {{ software_version }} | grep -E '(available|deploy)'
+- name: Gather subcloud deployed software list
+  shell: software list --release {{ software_version }} --state deployed | \
+         grep {{ software_version }} | sed 's/ //g;'
   register: subcloud_software_list
   failed_when: false
   become: true
 
-- name: Show subcloud software list for release {{ software_version }}
+- name: Show subcloud deployed software list for release {{ software_version }}
   debug:
     var: subcloud_software_list.stdout
 
@@ -116,9 +118,9 @@
     exec 3>/tmp/ostree_metadata_commits_central.lock
     flock --exclusive --timeout 180 3 || echo "ERROR: flock failed: $?"
     if [ ! -f "{{ ostree_metadata_commits_central }}" ] \
-      || diff -q <(ostree --repo="{{ ostree_feed_repo_dir }}" rev-parse "{{ ostree_rev }}") \
-                 <(tail --lines=1 "{{ ostree_metadata_commits_central }}" | awk -F':' '{ print $2; }'); then
-      /usr/share/ansible/stx-ansible/playbooks/roles/prestage/sync-software-metadata/files/ostree-metadata-sync.sh \
+      || ! diff -q <(ostree --repo="{{ ostree_feed_repo_dir }}" rev-parse "{{ ostree_rev }}") \
+      <(tail --lines=1 "{{ ostree_metadata_commits_central }}" | awk -F':' '{ print $2; }') > /dev/null 2>&1 ; then
+      {{ role_path }}/files/ostree-metadata-sync.sh \
       --sw-version "{{ software_version }}" --output "{{ ostree_metadata_commits_central }}" get-commits
     else
       cat "{{ ostree_metadata_commits_central }}"
@@ -141,7 +143,7 @@
   debug:
     var: subcloud_software_metadata_commits
 
-- name: Decide if software metadata synchronization is required
+- name: Decide if software metadata synchronization is required for sw deploy
   set_fact:
     software_sync_required: true
   when: (system_controller_software_metadata_commits.stdout != subcloud_software_metadata_commits.stdout)
