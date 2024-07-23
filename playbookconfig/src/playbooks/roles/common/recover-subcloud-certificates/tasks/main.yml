@@ -55,6 +55,9 @@
   - block:
     - name: Recover dc admin endpoint Root CA, subcloud ICA and leaf certificates
       import_tasks: recover-dc-admin-ep-certificate-chain.yml
+      # dc certificates are set up later in the enrollment playbook, so there's
+      # nothing to recover at the moment if running from the enrollment playbook
+      when: mode is not defined or mode != "enroll"
 
     - name: Validate rest-api / docker registry certificates
       import_tasks: validate-restapi-and-registry-certificates.yml
@@ -213,6 +216,8 @@
     when:
       - system_mode_result.stdout == 'duplex'
       - is_active_controller
+      # when running from enrollment playbook, only 1 node is provisioned
+      - mode is not defined or mode != "enroll"
 
   - block:
     - name: Restart cert-mon and cert-alarm to clear up certificate related alarms

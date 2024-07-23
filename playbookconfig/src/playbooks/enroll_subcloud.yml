@@ -28,7 +28,7 @@
   roles:
     - common/prepare-env
     - common/validate-target
-    # - common/recover-subcloud-certificates
+    - common/recover-subcloud-certificates
     - rehome-enroll-common/prepare-env
     - enroll-subcloud/validate-before-enroll
     - enroll-subcloud/migrate-keystone-data
