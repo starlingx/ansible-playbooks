@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2023 Wind River Systems, Inc.
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -28,12 +28,13 @@
     decrypted_backup_filename: "{{ backup_filename }}"
     decrypted_backup_filepath: "{{ target_backup_dir }}/{{ backup_filename }}"
 
+- name: Retrieve backup file type
+  command: "file {{ local_backup_file_path }}"
+  register: local_backup_file_type
+  delegate_to: "{{ inspection_target }}"
+
 - name: Encryption variables
   block:
-  - name: retrieve backup file type
-    command: "file {{ local_backup_file_path }}"
-    register: local_backup_file_type
-
   - name: Assert that backup_filename is an encrypted file
     assert:
       that:
@@ -65,18 +66,37 @@
     - backup_encryption_enabled|bool
     - '"platform" in backup_encyption_include'
 
+- name: Assert that backup_filename is not encrypted
+  assert:
+    that:
+    - '"GPG symmetrically encrypted data" not in local_backup_file_type.stdout'
+    fail_msg: >
+      Platform backup file {{ local_backup_file_path }} is encrypted
+  when: not platform_tarball_encrypted|bool
+
 - name: Inspect the platform backup file locally
   block:
-  - name: Get the file stat of backup_filename
-    stat:
-      path: "{{ local_backup_file_path }}"
-    register: local_backup_file_stat
+  - name: Extract OS_REGION_NAME from openrc file
+    shell:
+      cmd: >-
+        {{ extract_command_method }}
+        | tar --use-compress-program=pigz -xO etc/platform/openrc
+        | grep 'OS_REGION_NAME='
+      stdin: "{{ backup_encryption_passphrase }}"
+    args:
+      warn: false
+    failed_when: false
+    register: os_region_name_search
 
-  - name: Assert that backup_filename exists
-    assert:
-      that: local_backup_file_stat.stat.exists
-      fail_msg: >
-        Platform backup_filename {{ local_backup_file_path }} does not exist
+  - name: Ensure OS_REGION_NAME is found
+    fail:
+      msg: "OS_REGION_NAME not found in openrc file."
+    when: os_region_name_search.stdout == ""
+
+  - name: Parse OS_REGION_NAME
+    set_fact:
+      region_name: "{{ os_region_name_search.stdout.split('=')[1] | trim }}"
+    when: os_region_name_search.stdout != ""
 
   - name: Look for override backup file in the backup tarball
     shell:
