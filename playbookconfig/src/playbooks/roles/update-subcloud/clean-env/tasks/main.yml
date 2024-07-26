@@ -13,19 +13,3 @@
     source /etc/platform/openrc; system addrpool-delete
     {{ admin_addrpool }}
   when: admin_addrpool and target_net == mgmt_net
-
-- name: Delete old routes on controller-0
-  shell: >-
-    source /etc/platform/openrc; system host-route-delete
-    {{ item }}
-  with_items: "{{ existing_routes_c0.stdout_lines }}"
-  when: existing_routes_c0.stdout_lines | length > 0
-
-- block:
-  - name: Delete old routes on controller-1
-    shell: >-
-      source /etc/platform/openrc; system host-route-delete
-      {{ item }}
-    with_items: "{{ existing_routes_c1.stdout_lines }}"
-    when: existing_routes_c1.stdout_lines | length > 0
-  when: system_mode != "simplex"
