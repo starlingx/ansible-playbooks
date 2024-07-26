@@ -79,6 +79,7 @@
       name: common/generate-registry-filesystem-archive
     vars:
       registry_archive_fqpn: "{{ prestage_dir }}/local_registry_filesystem.tgz"
+    when: prestage_reason == 'for_install'
 
   always:
     - name: Clear docker cache

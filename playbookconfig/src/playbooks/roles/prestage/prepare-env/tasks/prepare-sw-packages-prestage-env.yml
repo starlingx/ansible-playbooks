@@ -179,7 +179,7 @@
 - debug:
     msg: |
       Prestaging type: {{ prestage_type }}
-      Prestaging install: {{ prestage_install }}
+      Prestaging reason: {{ prestage_reason }}
       Prestaging source: {{ prestage_source }}
       Prestaging os type: {{ prestage_os_type }}
       Release feed directory (on target): {{ release_feed|default('N/A') }}
