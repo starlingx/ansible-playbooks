@@ -29,6 +29,11 @@
   set_fact:
     ignore_alarms: "{{ false if ignore_alarms is not defined else ignore_alarms | bool }}"
 
+- name: Ignore alarms when subcloud rehoming/enrollment
+  set_fact:
+    ignore_alarms: true
+  when: mode is defined and ( mode == "enroll" or mode == "rehoming")
+
 - name: Verify if there are 250.001 (config out-of-date) alarms before installing certificate
   block:
   - name: Check if an 250.001 alarm exists and wait it to be cleared
