@@ -389,8 +389,9 @@ def delete_network_and_addrpool(client, network_name):
         host_addresses = client.sysinv.address.list_by_host(host.uuid)
         for addr in host_addresses:
             client.sysinv.address.delete(addr.uuid)
+        addrpools_uuid = get_addrpools_uuid(client, network_uuid)
         client.sysinv.network.delete(network_uuid)
-        for addrpool_uuid in get_addrpools_uuid(client, network_uuid):
+        for addrpool_uuid in addrpools_uuid:
             client.sysinv.address_pool.delete(addrpool_uuid)
 
 
