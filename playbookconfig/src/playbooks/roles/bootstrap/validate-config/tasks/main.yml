@@ -358,6 +358,33 @@
       - { name: 'management_multicast_subnet', address: "{{ network_params.management_multicast_subnet_primary }}" }
       - { name: 'management_multicast_subnet', address: "{{ network_params.management_multicast_subnet_secondary }}" }
 
+  - name: Fail if IP family is not the same for cluster, oam and mgmt
+    fail:
+      msg: "Cluster, oam and mgmt must have same family address type: {{ item.net_ref }} and {{ item.net_param }}"
+    when: |
+      ((item.net_ref|ipv4 != False and item.net_param|ipv6 != False) or
+        (item.net_ref|ipv6 != False and item.net_param|ipv4 != False))
+    with_items:
+      - { net_ref: "{{ network_params.management_subnet_primary }}",
+          net_param: "{{ network_params.management_multicast_subnet_primary }}" }
+      - { net_ref: "{{ network_params.management_subnet_primary }}",
+          net_param: "{{ network_params.cluster_host_subnet_primary }}" }
+      - { net_ref: "{{ network_params.management_subnet_primary }}",
+          net_param: "{{ network_params.cluster_pod_subnet_primary }}" }
+      - { net_ref: "{{ network_params.management_subnet_primary }}",
+          net_param: "{{ network_params.cluster_service_subnet_primary }}" }
+      - { net_ref: "{{ network_params.management_subnet_primary }}",
+          net_param: "{{ network_params.external_oam_subnet_primary }}" }
+
+  - name: Validate same IP family on admin subnet and platform network parameters
+    fail:
+      msg: "Admin subnet must have same IP family of platform network parameters"
+    when: |
+      admin_network is defined and ((network_params.management_subnet_primary|ipv4 != False and
+        network_params.admin_subnet_primary|ipv6 != False) or
+        (network_params.management_subnet_primary|ipv6 != False and
+        network_params.admin_subnet_primary|ipv4 != False))
+
   - name: Validate cluster subnets (pod, host, and service) are all dual-stack if used
     fail:
       msg: "To have dual-stack, cluster networks (pod, host, and service) must have IPv4 and IPv6 subnets defined"
