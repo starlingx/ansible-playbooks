@@ -87,6 +87,7 @@
 - debug:
     msg: |
       Prestaging type: {{ prestage_type }}
+      Prestaging reason: {{ prestage_reason }}
       Prestaging source: {{ prestage_source }}
       Images list file: {{ image_list_file|default('not provided') }}
       Image list: {{ image_list }}
