@@ -16,20 +16,20 @@
 - block:
   - name: Set feed and patch directories to /www/pages/... (Centos and local source)
     set_fact:
-      release_feed: "/www/pages/feed/rel-{{ software_major_release }}"
-      host_patch_repo: "/www/pages/updates/rel-{{ software_major_release }}"
+      release_feed: "/www/pages/feed/rel-{{ software_version }}"
+      host_patch_repo: "/www/pages/updates/rel-{{ software_version }}"
     when: prestage_source == 'local'
 
   - name: Set feed and patch directories to /var/www/pages/... (Centos and remote source)
     set_fact:
-      release_feed: "/var/www/pages/feed/rel-{{ software_major_release }}"
-      host_patch_repo: "/var/www/pages/updates/rel-{{ software_major_release }}"
+      release_feed: "/var/www/pages/feed/rel-{{ software_version }}"
+      host_patch_repo: "/var/www/pages/updates/rel-{{ software_version }}"
     when: prestage_source == 'remote'
   when: prestage_os_type == 'centos'
 
 - name: Set the feed directory to /var/www/pages/feed (Debian)
   set_fact:
-    release_feed: "/var/www/pages/feed/rel-{{ software_major_release }}"
+    release_feed: "/var/www/pages/feed/rel-{{ software_version }}"
   when: prestage_os_type == 'debian'
 
 - name: Prepare prestage packages for Centos
@@ -120,7 +120,8 @@
       register: host_software_dir_result
 
     - name: Check if any minor upgrades have been applied
-      shell: software list --release {{ software_major_release }} | tail +4 | grep -c -E '^\| '
+      shell: software list --release {{ software_version }} --state deployed | \
+             tail +4 | grep -c -E '^\| '
       register: system_controller_software_num_releases
       delegate_to: localhost
 

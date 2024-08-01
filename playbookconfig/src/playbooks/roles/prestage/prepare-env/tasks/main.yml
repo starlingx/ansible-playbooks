@@ -14,11 +14,6 @@
     msg: "Please specify software version for prestaging."
   when: software_version is not defined
 
-- name: Fail if software major release for prestaging is not specified
-  fail:
-    msg: "Please specify software major version for prestaging."
-  when: software_major_release is not defined
-
 - name: Get minimum supported release version
   import_role:
     name: common/minimum-upgradable-release
@@ -26,25 +21,25 @@
 - name: Fail if software major release is not supported for prestaging
   fail:
     msg: >-
-      The specified software major release {{ software_major_release }} is not supported.
+      The specified software major release {{ software_version }} is not supported.
       Minimum supported release versions for prestage: {{ minimum_supported_release_version }}
-  when: software_major_release is version(minimum_supported_release_version, "<")
+  when: software_version is version(minimum_supported_release_version, "<")
 
 - name: Set prestage software version and cleanup directores fact
   set_fact:
-    cleanup_dirs: "{{ cleanup_dirs|default([]) + [software_major_release] }}"
+    cleanup_dirs: "{{ cleanup_dirs|default([]) + [software_version] }}"
 
 - name: Set prestage_os_type
   set_fact:
-    prestage_os_type: "{{ 'debian' if software_major_release is version('22.12', '>=') else 'centos' }}"
+    prestage_os_type: "{{ 'debian' if software_version is version('22.12', '>=') else 'centos' }}"
 
 - name: Set prestage dir and subdirectory facts
   set_fact:
     prestage_source: remote
-    prestage_dir: "{{ platform_backup_dir }}/{{ software_major_release }}"
+    prestage_dir: "{{ platform_backup_dir }}/{{ software_version }}"
     host_software_metadata_dir: "/opt/software/metadata"
     prestage_sync_software_metadata_required: false
-    patches_prestage_dir: "{{ platform_backup_dir }}/{{ software_major_release }}/patches"
+    patches_prestage_dir: "{{ platform_backup_dir }}/{{ software_version }}/patches"
     host_patch_metadata_dir: "/opt/patching/metadata"
 
 - name: Retrieve current software version of the host
@@ -59,7 +54,7 @@
 - name: Change prestage_source to local
   set_fact:
     prestage_source: local
-  when: software_major_release == host_software_version
+  when: software_version == host_software_version
 
 - name: Prepare prestaging packages
   include_tasks: prepare-sw-packages-prestage-env.yml

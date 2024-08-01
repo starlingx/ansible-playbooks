@@ -13,15 +13,14 @@
 #
 # Usage:
 #   ansible-playbook prestage_sw_packages.yml -i <inventory-file> \
-#      -e "software_version=<MM.YY.nn> software_major_release=<MM.YY>" \
-#      -e "prestage_reason=<for_install|for_sw_deploy>"
+#      -e "software_version=<MM.mm> prestage_reason=<for_install|for_sw_deploy>"
 
 - hosts: all
   gather_facts: false
 
   vars:
-    prestage_type: 'packages'
-    prestage_reason: 'for_install'
+    prestage_type: "packages"
+    prestage_reason: for_install
     platform_backup_dir: /opt/platform-backup
 
   roles:
@@ -41,7 +40,7 @@
       become: true
 
     - role: prestage/prestage-patches
-      when: software_major_release is version('24.09', '<') and prestage_reason == 'for_install' and host_patches_exist
+      when: software_version is version('24.09', '<') and prestage_reason == 'for_install' and host_patches_exist
       become: true
 
     - role: prestage/get-prestage-versions
