@@ -24,11 +24,6 @@
     admin_network: true
   when: (admin_subnet is defined and admin_gateway_address is defined)
 
-- name: Set network facts
-  set_fact:
-    controller_floating_address: "{{ management_start_address }}"
-    external_oam_node_0_address: "{{ external_oam_node_0_address | default('derived') }}"
-
 - name: Set initial address facts if not defined. They will be updated later
   set_fact:
     pxeboot_start_address: "{{ pxeboot_start_address | default('derived') }}"
@@ -49,7 +44,116 @@
     external_oam_node_1_address: "{{ external_oam_node_1_address | default('derived') }}"
     admin_start_address: "{{ admin_start_address | default('derived') }}"
     admin_end_address: "{{ admin_end_address | default('derived') }}"
-    controller_floating_address: "{{ management_start_address | default('derived') }}"
+
+# Network config validation
+- block:
+  - name: Validate and parse provided comma separated dual-stack subnets (IPv4 & IPv6 notations)
+    include_tasks: roles/common/validate-addresses/tasks/validate_and_parse_dual_stack.yml
+    with_dict:
+      external_oam_subnet: "{{ external_oam_subnet }}"
+      management_subnet: "{{ management_subnet }}"
+      admin_subnet: "{{ admin_subnet | default([]) }}"
+      cluster_service_subnet: "{{ cluster_service_subnet }}"
+    loop_control:
+      loop_var: network_param
+    when: network_param.value != "undef"
+
+  - name: Validate and parse provided comma separated dual-stack addresses (IPv4 & IPv6 notations)
+    include_tasks: roles/common/validate-addresses/tasks/validate_and_parse_dual_stack.yml
+    with_dict:
+      external_oam_node_0_address: "{{ external_oam_node_0_address }}"
+      external_oam_node_1_address: "{{ external_oam_node_1_address }}"
+      external_oam_floating_address: "{{ external_oam_floating_address }}"
+      management_start_address: "{{ management_start_address }}"
+      admin_start_address: "{{ admin_start_address }}"
+      cluster_service_start_address: "{{ cluster_service_start_address }}"
+    loop_control:
+      loop_var: network_param
+    when: network_param.value != "undef" and network_param.value != "derived"
+
+  # validate dual-stack address respective to subnet, sequence of ip family (primary and secondary) should
+  # match between address and subnet. Both address and respective subnet either should be single-stack or dual-stack.
+  - name: Validate same sequence and number (single or dual-stack) of IP family on subnet and address
+    include_tasks: roles/common/validate-addresses/tasks/validate_dual_stack_address_vs_subnet.yml
+    with_dict:
+      external_oam_node_0_address:
+        address: "{{ external_oam_node_0_address }}"
+        subnet:
+          name: external_oam_subnet
+          value: "{{ external_oam_subnet }}"
+      external_oam_node_1_address:
+        address: "{{ external_oam_node_1_address }}"
+        subnet:
+          name: external_oam_subnet
+          value: "{{ external_oam_subnet }}"
+      external_oam_floating_address:
+        address: "{{ external_oam_floating_address }}"
+        subnet:
+          name: external_oam_subnet
+          value: "{{ external_oam_subnet }}"
+      management_start_address:
+        address: "{{ management_start_address }}"
+        subnet:
+          name: management_subnet
+          value: "{{ management_subnet }}"
+      cluster_service_start_address:
+        address: "{{ cluster_service_start_address }}"
+        subnet:
+          name: cluster_service_subnet
+          value: "{{ cluster_service_subnet }}"
+    when: item.value.address != "derived"
+
+  - name: Validate same sequence and number (single or dual-stack) of IP family on admin subnet and address
+    include_tasks: roles/common/validate-addresses/tasks/validate_dual_stack_address_vs_subnet.yml
+    with_dict:
+      admin_start_address:
+        address: "{{ admin_start_address }}"
+        subnet:
+          name: admin_subnet
+          value: "{{ admin_subnet }}"
+    when: admin_network is defined and item.value.address != "derived"
+
+  - name: Assign dual_stack_network_params to network_params
+    set_fact:
+      network_params: >-
+                  {{ dual_stack_network_params }}
+      dual_stack_network_params: { }
+
+  - debug:
+      msg:
+        - dual-stack parsed {{ network_params }}
+
+  # The provided subnets have passed validation, set the primary default addresses
+  # based on the primary subnet values
+  - name: Set default start primary addresses based on provided primary subnets
+    set_fact:
+      default_external_oam_start_address_primary: "{{ (network_params.external_oam_subnet_primary | ipaddr(1))
+                                                      .split('/')[0] }}"
+      default_management_start_address_primary: "{{ (network_params.management_subnet_primary | ipaddr(1)).split('/')[0] }}"
+      default_cluster_service_start_address_primary: "{{ (network_params.cluster_service_subnet_primary |
+                                                         ipaddr(1)).split('/')[0] }}"
+
+  # The provided subnets have passed validation, set the secondary default addresses
+  # based on the secondary subnet values, if present.
+  - name: Set default start secondary addresses based on provided secondary subnets
+    set_fact:
+      default_external_oam_start_address_secondary: "{{ False if (not network_params.external_oam_subnet_secondary)
+                                                              else (network_params.external_oam_subnet_secondary |
+                                                                    ipaddr(1)).split('/')[0] }}"
+      default_management_start_address_secondary: "{{ False if (not network_params.management_subnet_secondary)
+                                                            else (network_params.management_subnet_secondary |
+                                                                  ipaddr(1)).split('/')[0] }}"
+      default_cluster_service_start_address_secondary: "{{ False if (not network_params.cluster_service_subnet_secondary)
+                                                            else (network_params.cluster_service_subnet_secondary |
+                                                                  ipaddr(1)).split('/')[0] }}"
+
+  - name: Set default start admin network addresses based on provided subnets
+    set_fact:
+      default_admin_start_address_primary: "{{ (network_params.admin_subnet_primary | ipaddr(1)).split('/')[0] }}"
+      default_admin_start_address_secondary: "{{ False if (not network_params.admin_subnet_secondary)
+                                                       else (network_params.admin_subnet_secondary | ipaddr(1))
+                                                            .split('/')[0] }}"
+    when: admin_network is defined
 
 - name: Set default values for docker proxies if not defined
   set_fact:
@@ -67,9 +171,17 @@
   set_fact:
     system_mode: "{{ current_system_mode.stdout }}"
 
+- name: Set network facts
+  set_fact:
+    controller_floating_address: "{{ network_params.management_start_address_primary
+                                     if management_start_address != 'derived'
+                                     else default_management_start_address_primary }}"
+
 - name: Set admin network facts
   set_fact:
-    admin_floating_address: "{{ admin_start_address }}"
+    admin_floating_address: "{{ network_params.admin_start_address_primary
+                                if admin_start_address != 'derived'
+                                else default_admin_start_address_primary }}"
     admin_gateway_address: "{{ admin_gateway_address }}"
   when: admin_network is defined
 
@@ -82,10 +194,59 @@
                                         if admin_floating_address is defined }}"
       'controller_1_admin_address': "{{ admin_floating_address|ipmath(2)
                                         if admin_floating_address is defined}}"
-      'oam_node_0_address': "{{ external_oam_node_0_address if external_oam_node_0_address != 'derived'
-                           else external_oam_floating_address | ipmath(1) }}"
-      'oam_node_1_address': "{{ external_oam_node_1_address if external_oam_node_1_address != 'derived'
-                           else external_oam_floating_address | ipmath(2) }}"
+      'oam_node_0_address': "{{ network_params.external_oam_node_0_address_primary
+                           if external_oam_node_0_address != 'derived'
+                           else network_params.external_oam_floating_address_primary | ipmath(1) }}"
+      'oam_node_1_address': "{{ network_params.external_oam_node_1_address_primary
+                           if external_oam_node_1_address != 'derived'
+                           else network_params.external_oam_floating_address_primary | ipmath(2) }}"
+
+# Add secondary network addresses when defined
+- block:
+  - name: Set network secondary facts
+    set_fact:
+      controller_floating_address_secondary: "{{ network_params.management_start_address_secondary
+                                                if management_start_address != 'derived'
+                                                else default_management_start_address_secondary }}"
+    when: network_params.management_subnet_secondary
+
+  - name: Set admin secondary network facts
+    set_fact:
+      admin_floating_address_secondary: "{{ network_params.admin_start_address_secondary
+                                            if admin_start_address != 'derived'
+                                  else default_admin_start_address_secondary }}"
+    when: admin_network is defined and network_params.admin_subnet_secondary
+
+  - name: Set secondary controller address in derived facts for subsequent tasks/roles
+    set_fact:
+      derived_network_params: >-
+        {{ derived_network_params | combine({
+        "controller_0_address_secondary": controller_floating_address_secondary|ipmath(1),
+        "controller_1_address_secondary": controller_floating_address_secondary|ipmath(2)
+        }) }}
+    when: controller_floating_address_secondary is defined
+
+  - name: Set secondary admin address in derived facts for subsequent tasks/roles
+    set_fact:
+      derived_network_params: >-
+        {{ derived_network_params | combine({
+        "controller_0_admin_address_secondary": admin_floating_address_secondary|ipmath(1),
+        "controller_1_admin_address_secondary": admin_floating_address_secondary|ipmath(2)
+        }) }}
+    when: admin_floating_address_secondary is defined
+
+  - name: Set secondary oam node address in derived facts for subsequent tasks/roles
+    set_fact:
+      derived_network_params: >-
+        {{ derived_network_params | combine({
+        "oam_node_0_address_secondary": network_params.external_oam_node_0_address_secondary
+                                        if external_oam_node_0_address != 'derived'
+                                        else network_params.external_oam_floating_address_secondary | ipmath(1),
+        "oam_node_1_address_secondary": network_params.external_oam_node_1_address_secondary
+                                        if external_oam_node_1_address != 'derived'
+                                        else network_params.external_oam_floating_address_secondary | ipmath(2)
+        }) }}
+    when: network_params.external_oam_subnet_secondary
 
 - name: Set subcloud floating address
   set_fact:
@@ -105,11 +266,11 @@
       - localhost
       - 127.0.0.1
       - registry.local
-      - "{{ cluster_service_start_address if cluster_service_start_address != 'derived'
-          else (cluster_service_subnet | ipaddr(1)).split('/')[0]  }}"
+      - "{{ network_params.cluster_service_start_address_primary if cluster_service_start_address != 'derived'
+          else default_cluster_service_start_address_primary }}"
       - "{{ controller_floating_address }}"
       - "{{ derived_network_params.controller_0_address }}"
-      - "{{ external_oam_floating_address }}"
+      - "{{ network_params.external_oam_floating_address_primary }}"
       - "{{ derived_network_params.oam_node_0_address }}"
       - registry.central
       - "{{ system_controller_oam_floating_address }}"
@@ -117,6 +278,44 @@
       - "{{ derived_network_params.controller_1_address }}"
       - "{{ derived_network_params.oam_node_1_address }}"
     docker_no_proxy_combined: []
+
+# Add respective secondary when defined in default_no_proxy
+- block:
+  - set_fact:
+      default_no_proxy: "{{ default_no_proxy + [
+                                            network_params.cluster_service_start_address_secondary
+                                            if cluster_service_start_address != 'derived'
+                                            else default_cluster_service_start_address_secondary
+                        ]}}"
+    when: network_params.cluster_service_subnet_secondary
+
+  - set_fact:
+      default_no_proxy: "{{ default_no_proxy + [ controller_floating_address_secondary ]}}"
+    when: controller_floating_address_secondary is defined
+
+  - set_fact:
+      default_no_proxy: "{{ default_no_proxy + [ derived_network_params.controller_0_address_secondary ]}}"
+    when: controller_floating_address_secondary is defined
+
+  - set_fact:
+      default_no_proxy: "{{ default_no_proxy + [ network_params.external_oam_floating_address_secondary ]}}"
+    when: network_params.external_oam_floating_address_secondary
+
+  - set_fact:
+      default_no_proxy: "{{ default_no_proxy + [ derived_network_params.oam_node_0_address_secondary ]}}"
+    when: network_params.external_oam_subnet_secondary
+
+# Add respective secondary when defined in non_sx_proxy_addons
+- block:
+  - set_fact:
+      non_sx_proxy_addons: "{{ non_sx_proxy_addons + [ derived_network_params.controller_1_address_secondary
+                        ]}}"
+    when: controller_floating_address_secondary is defined
+
+  - set_fact:
+      non_sx_proxy_addons: "{{ non_sx_proxy_addons + [ derived_network_params.oam_node_1_address_secondary
+                        ]}}"
+    when: network_params.external_oam_subnet_secondary
 
 - name: Set default no-proxy address list (non simplex)
   set_fact:

@@ -80,23 +80,43 @@
 #       msg: "Admin_subnet or admin_gateway_address is not defined in bootstrap values."
 #     when: admin_network is not defined
 #
-#  - name: Set default start and end admin network addresses based on provided subnets
+#  - name: Set default end admin network addresses based on provided subnets
 #    set_fact:
-#      default_admin_start_address: "{{ (admin_subnet | ipaddr(1)).split('/')[0] }}"
-#      default_admin_end_address: "{{ (admin_subnet | ipaddr(-2)).split('/')[0] }}"
+#      default_admin_end_address_primary: "{{ (network_params.admin_subnet_primary | ipaddr(-2)).split('/')[0] }}"
+#      default_admin_end_address_secondary: "{{ False if (not network_params.admin_subnet_secondary)
+#                                                     else (network_params.admin_subnet_secondary | ipaddr(-2))
+#                                                           .split('/')[0] }}"
 #    when: admin_network is defined
 #
-#  - name: Build admin address pairs for validation
+#  - name: Build admin address primary pairs for validation
 #    set_fact:
 #      address_pairs:
 #        admin:
 #          start:
-#            "{{ admin_start_address if admin_start_address is defined
-#            else default_admin_start_address }}"
+#            "{{ network_params.admin_start_address_primary if admin_start_address != 'derived'
+#            else default_admin_start_address_primary }}"
 #          end:
-#            "{{ admin_end_address if admin_end_address is defined
-#            else default_admin_end_address }}"
-#          subnet: "{{ admin_subnet }}"
+#            "{{ network_params.admin_end_address_primary if admin_end_address != 'derived'
+#            else default_admin_end_address_primary }}"
+#          subnet: "{{ network_params.admin_subnet_primary }}"
 #
 #  - include_tasks: roles/common/validate-addresses/tasks/validate_address_range.yml
 #    with_dict: "{{ address_pairs }}"
+#
+## admin secondary pairs validation if defined
+#  - block:
+#    - name: Build admin address secondary pairs for validation
+#      set_fact:
+#        address_pairs_secondary:
+#          admin:
+#            start:
+#              "{{ network_params.admin_start_address_secondary if admin_start_address != 'derived'
+#              else default_admin_start_address_secondary }}"
+#            end:
+#              "{{ network_params.admin_end_address_secondary if admin_end_address != 'derived'
+#              else default_admin_end_address_secondary }}"
+#            subnet: "{{ network_params.admin_subnet_secondary }}"
+#
+#    - include_tasks: roles/common/validate-addresses/tasks/validate_address_range.yml
+#      with_dict: "{{ address_pairs_secondary }}"
+#    when: network_params.admin_subnet_secondary
