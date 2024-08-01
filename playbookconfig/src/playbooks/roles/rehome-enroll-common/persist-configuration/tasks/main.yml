@@ -66,3 +66,7 @@
   fail:
     msg: "Failed to update system configuration."
   when: update_result.rc != 0
+
+- name: Copy central registy cert
+  import_tasks: copy_central_registry_cert.yml
+  become: yes
