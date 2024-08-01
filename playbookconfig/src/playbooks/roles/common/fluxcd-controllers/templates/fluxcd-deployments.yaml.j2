@@ -17,6 +17,7 @@ spec:
         prometheus.io/scrape: "true"
       labels:
         app: helm-controller
+        app.starlingx.io/component: platform
     spec:
       containers:
       - name: manager
@@ -116,6 +117,7 @@ spec:
         prometheus.io/scrape: "true"
       labels:
         app: source-controller
+        app.starlingx.io/component: platform
     spec:
       containers:
       - name: manager

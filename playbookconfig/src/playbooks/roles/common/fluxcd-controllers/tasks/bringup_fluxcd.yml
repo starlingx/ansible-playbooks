@@ -41,6 +41,7 @@
     # Label FluxCD namespace with PSAC labels
     - name: Label namespace for FluxCD with PSAC labels
       command: kubectl label --overwrite namespaces {{ fluxcd_namespace }}
+               app.starlingx.io/component=platform
                pod-security.kubernetes.io/audit-version=latest
                pod-security.kubernetes.io/enforce-version=latest
                pod-security.kubernetes.io/warn-version=latest
