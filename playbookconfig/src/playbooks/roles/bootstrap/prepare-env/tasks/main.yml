@@ -617,6 +617,20 @@
       - name: If replayed, don't change K8S and ETCD CA filepaths if content doesn't change
         include_tasks: verify_k8s_etcd_certs_changed.yml
 
+      - name: Remove 'password' keys from prev_docker_registries before comparing with docker_registries
+        set_fact:
+          prev_docker_registries: >-
+            {{
+              prev_docker_registries
+              | combine({item.key: item.value
+                | combine({
+                  'password': omit
+                })
+              },
+              recursive=True)
+            }}
+        with_dict: "{{ prev_docker_registries }}"
+
       - name: Turn on docker reconfiguration flag if docker config is changed
         set_fact:
           docker_config_update: true
