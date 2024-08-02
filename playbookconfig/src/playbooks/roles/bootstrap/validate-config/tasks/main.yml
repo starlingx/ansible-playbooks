@@ -399,6 +399,13 @@
         and (cluster_service_subnet.split(',') | length == 1 or
               cluster_pod_subnet.split(',') | length == 1))
 
+  - name: Validate OAM subnet is also dual-stack when cluster pod subnet is dual-stack
+    fail:
+      msg: "To have dual-stack cluster pod network, OAM must have IPv4 and IPv6 subnets defined"
+    when: |
+      ((cluster_pod_subnet.split(',') | length == 2)
+        and (external_oam_subnet.split(',') | length == 1))
+
   # The provided subnets have passed validation, set the default addresses
   # for pxeboot_subnet (single stack)
   - name: Set default start and end addresses based on provided pxeboot subnet
