@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2021-2023 Wind River Systems, Inc.
+# Copyright (c) 2021-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -14,6 +14,8 @@
 #             Upstream reports of this:
 #             - https://github.com/ansible/ansible/issues/70092
 sleep 2
+
+CEPH_BIN=/usr/bin/ceph
 
 FS_NAME=kube-cephfs
 DATA_POOL_NAME=kube-cephfs-data
@@ -29,13 +31,13 @@ set -x
 /etc/init.d/ceph stop mds
 
 # Check if the filesystem for the system RWX provisioner is present
-ceph fs ls | grep ${FS_NAME}
+${CEPH_BIN} fs ls | grep ${FS_NAME}
 if [ $? -ne 0 ]; then
     # Use existing metadata/data pools to recover cephfs
-    ceph fs new ${FS_NAME} ${METADATA_POOL_NAME} ${DATA_POOL_NAME} --force
+    ${CEPH_BIN} fs new ${FS_NAME} ${METADATA_POOL_NAME} ${DATA_POOL_NAME} --force
 
     # Recover MDS state from filesystem
-    ceph fs reset ${FS_NAME} --yes-i-really-mean-it
+    ${CEPH_BIN} fs reset ${FS_NAME} --yes-i-really-mean-it
 
     # Try to recover from some common errors
     cephfs-journal-tool --rank=${FS_NAME}:0 event recover_dentries summary
