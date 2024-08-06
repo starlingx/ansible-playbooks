@@ -55,6 +55,12 @@
         To: "patching::keystone::auth::password: !!python/unicode '{{ users['patching'] }}'" }
     - { From: "^patching::keystone::authtoken::password",
         To: "patching::keystone::authtoken::password: !!python/unicode '{{ users['patching'] }}'" }
+    - { From: "^usm::api::keystone_password",
+        To: "usm::api::keystone_password: !!python/unicode '{{ users['usm'] }}'" }
+    - { From: "^usm::keystone::auth::password",
+        To: "usm::keystone::auth::password: !!python/unicode '{{ users['usm'] }}'" }
+    - { From: "^usm::keystone::authtoken::password",
+        To: "usm::keystone::authtoken::password: !!python/unicode '{{ users['usm'] }}'" }
     - { From: "^platform::mtce::params::auth_pw",
         To: "platform::mtce::params::auth_pw: !!python/unicode '{{ users['mtce'] }}'" }
     - { From: "^sysinv::api::keystone_password",
