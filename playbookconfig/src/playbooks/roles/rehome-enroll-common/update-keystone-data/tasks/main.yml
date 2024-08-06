@@ -32,7 +32,7 @@
 
     - name: Migrate keystone passwords for subcloud rehoming
       import_tasks: migrate_keystone_passwords_for_rehome.yml
-      when: mode == "rehome"
+      when: mode == "rehoming"
 
     - name: Migrate keystone passwords for subcloud enrollment
       import_tasks: migrate_keystone_passwords_for_enroll.yml
