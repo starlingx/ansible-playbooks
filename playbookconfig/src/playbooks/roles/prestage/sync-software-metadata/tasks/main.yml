@@ -135,8 +135,8 @@
 
 - name: Gather subcloud metadata commits
   command: >-
-    /usr/share/ansible/stx-ansible/playbooks/roles/prestage/sync-software-metadata/files/ostree-metadata-sync.sh
-    --sw-version "{{ software_version }}" --output "{{ ostree_metadata_commits_subcloud }}" get-commits
+    {{ role_path }}/files/ostree-metadata-sync.sh --sw-version "{{ software_version }}"
+    --output "{{ ostree_metadata_commits_subcloud }}" get-commits
   register: subcloud_software_metadata_commits
 
 - name: Show ostree metadata commits on subcloud
@@ -164,22 +164,59 @@
       - "{{ subcloud_software_metadata_commits.stdout }}"
 
 - block:
+  - name: Gather system controller deployed minor release list
+    shell: |
+      while IFS= read -r line; do
+        echo "$line" | awk -F'|' '{split($2,p,"-"); if (p[2] !~ /\.0$/) print p[2]}'
+      done <<< "{{ system_controller_software_list.stdout }}"
+    register: minor_releases_list
+    delegate_to: localhost
+
+  # It's necessary to temporarily change the owner to sysadmin so that
+  # the system controller can push the files to the subcloud, since the files
+  # are in the folders only the root can access but the synchronize only
+  # support passwordless sysadmin to execute ssh and rsync.
+  - name: Temporarily change the ownership of {{ usm_software_dir }}
+    file:
+      path: "{{ usm_software_dir }}"
+      state: directory
+      owner: sysadmin
+      recurse: yes
+    become: yes
+
+  - name: Copy system controller minor release directory to subcloud
+    synchronize:
+      mode: "push"
+      src: "{{ usm_software_dir }}/rel-{{ item }}"
+      dest: "{{ usm_software_dir }}"
+    with_items: "{{ minor_releases_list.stdout_lines }}"
+    failed_when: false
+
+  - name: Copy system controller {{ usm_software_dir }}/software-scripts to subcloud
+    synchronize:
+      mode: "push"
+      src: "{{ usm_software_dir }}/software-scripts"
+      dest: "{{ usm_software_dir }}"
+    failed_when: false
+
   - name: Copy system controller {{ usm_metadata_dir }} to subcloud {{ tmp_metadata_sync_dir }}
     copy:
       src: "{{ usm_metadata_dir }}"
       dest: "{{ tmp_metadata_sync_dir }}"
       force: true
+    become: yes
 
   - name: Copy system controller {{ ostree_metadata_commits_central }} to subcloud {{ tmp_metadata_sync_dir }}
     copy:
       src: "{{ ostree_metadata_commits_central }}"
       dest: "{{ tmp_metadata_sync_dir }}"
       force: true
+    become: yes
 
   - name: Synchronizing system controller ostree commits on subcloud
     command: >-
-      /usr/share/ansible/stx-ansible/playbooks/roles/prestage/sync-software-metadata/files/ostree-metadata-sync.sh
-      --sw-version "{{ software_version }}" sync-subcloud 2>&1 | tee /tmp/sync-ostree-commits.log
+      {{ role_path }}/files/ostree-metadata-sync.sh --sw-version "{{ software_version }}"
+      sync-subcloud 2>&1 | tee /tmp/sync-ostree-commits.log
     register: sync_software_commits
     become: true
 
@@ -202,6 +239,15 @@
       - software-controller-daemon
       - software-agent
     become: true
+
+  always:
+    - name: Restore the ownership of {{ usm_software_dir }}
+      file:
+        path: "{{ usm_software_dir }}"
+        state: directory
+        owner: root
+        recurse: yes
+      become: yes
 
   when: software_sync_required
 
