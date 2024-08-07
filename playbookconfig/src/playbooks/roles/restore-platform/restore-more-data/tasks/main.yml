@@ -253,6 +253,32 @@
     warn: false
   when: not upgrade_in_progress
 
+# The grub.cfg used during the first boot is /boot/grub2/grub.cfg.
+# After the first boot, the grub.cfg becomes /boot/efi/EFI/BOOT/grub.cfg.
+# Instead of using grub-install to change now, we copy the config
+# And use it from the temporary location for first boot.
+- name: Create temporary bootloader configuration
+  copy:
+    src: /boot/efi/EFI/BOOT/grub.cfg
+    dest: /boot/grub2/grub.cfg
+    remote_src: true
+
+- name: Check if /boot is present in the backup
+  command:
+    cmd: "tar --use-compress-program=pigz -tf '{{ platform_backup_fqpn }}' boot/"
+  args:
+    warn: false
+  failed_when: false
+  register: boot_backup_found
+
+- name: Restore /boot from the backup
+  command:
+    cmd: "tar --use-compress-program=pigz -C / -xpf '{{ platform_backup_fqpn }}' boot/"
+  args:
+    warn: false
+  when:
+    - boot_backup_found.rc == 0
+
 - name: Stop openldap service
   shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap stop"
 
