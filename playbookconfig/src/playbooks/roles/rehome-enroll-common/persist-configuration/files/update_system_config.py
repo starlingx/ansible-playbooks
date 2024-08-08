@@ -12,7 +12,11 @@ import os
 import subprocess
 import sys
 
+from barbicanclient import client as barbican_client
+from barbicanclient import exceptions as barbican_exceptions
 from cgtsclient import client as cgts_client
+from keystoneclient.auth.identity import v3
+from keystoneclient import session
 from sysinv.common import constants as sysinv_constants
 from sysinv.common import exception as e
 
@@ -73,6 +77,95 @@ class CgtsClient(object):
         return self._sysinv
 
 
+class OpenStackClient:
+    """Client to interact with OpenStack Barbican."""
+
+    def __init__(self) -> None:
+        self.conf = {}
+        self._session = None
+        self._barbican = None
+
+        # Loading credentials and configurations from environment variables
+        # typically set in OpenStack
+        source_command = 'source /etc/platform/openrc && env'
+
+        with open(os.devnull, "w") as fnull:
+            proc = subprocess.Popen(
+                ['bash', '-c', source_command],
+                stdout=subprocess.PIPE,
+                stderr=fnull,
+                universal_newlines=True,
+            )
+
+        # Strip the configurations starts with 'OS_' and change the value to lower
+        for line in proc.stdout:
+            key, _, value = line.partition("=")
+            if key.startswith("OS_"):
+                self.conf[key[3:].lower()] = value.strip()
+
+        proc.communicate()
+
+    def _get_new_keystone_session(self, conf):
+        """Create a new keystone session."""
+        try:
+            auth = v3.Password(
+                auth_url=conf["auth_url"],
+                username=conf["username"],
+                password=conf["password"],
+                user_domain_name=conf["user_domain_name"],
+                project_name=conf["project_name"],
+                project_domain_name=conf["project_domain_name"],
+            )
+        except KeyError as e:
+            print(f"Configuration key missing: {e}")
+            sys.exit(1)
+        return session.Session(auth=auth)
+
+    @property
+    def barbican(self):
+        """Return the barbican client."""
+        if not self._barbican:
+            if not self._session:
+                self._session = self._get_new_keystone_session(self.conf)
+            self._barbican = barbican_client.Client(session=self._session)
+        return self._barbican
+
+    def list_secrets(self, secret_name):
+        """List all secrets with the specified name."""
+        secrets = []
+        try:
+            for secret in self.barbican.secrets.list(name=secret_name):
+                secrets.append(secret)
+        except barbican_exceptions.HTTPClientError as e:
+            print(f"Failed to list secrets: {e}")
+            sys.exit(1)
+        return secrets
+
+    def delete_secret(self, secret_id):
+        """Delete a secret by ID."""
+        try:
+            self.barbican.secrets.delete(secret_id)
+            print(f"Secret {secret_id} deleted successfully.")
+        except barbican_exceptions.HTTPClientError as e:
+            print(f"Failed to delete secret {secret_id}: {e}")
+            sys.exit(1)
+
+    def create_secret(self, name, payload):
+        """Create a new secret."""
+        try:
+            secret = self.barbican.secrets.create(
+                name=name,
+                payload=payload,
+                payload_content_type='text/plain'
+            )
+            secret.store()
+            print(f"Secret {name} created successfully.")
+            return secret
+        except barbican_exceptions.HTTPClientError as e:
+            print(f"Failed to create secret {name}: {e}")
+            sys.exit(1)
+
+
 def dict_to_patch(values, install_action=False):
     # install default action
     if install_action:
@@ -121,6 +214,19 @@ def update_docker_proxy_config(client, section_name):
         print("Docker proxy config completed.")
 
 
+def update_barbican_secrets(client, registry_name, username, password):
+    """Update barbican secrets for a registry"""
+    secret_name = f"{registry_name}-registry-secret"
+    secrets = client.list_secrets(secret_name)
+    for secret in secrets:
+        client.delete_secret(secret.secret_ref)
+    # Create a new secret
+    secret_payload = f"username:{username} password:{password}"
+    new_secret = client.create_secret(secret_name, secret_payload)
+    print(f"New secret created: {new_secret.secret_ref} for registry: {registry_name}")
+    return new_secret.secret_ref
+
+
 def update_docker_registry_config(client, section_name):
     """Handle Docker registry configurations."""
     use_default_registries = CONF.getboolean(
@@ -154,12 +260,20 @@ def update_docker_registry_config(client, section_name):
         }
 
         registries = {}
+        openstack_client = OpenStackClient()
         for registry, value in registries_map.items():
+            #  Update barbican secrets
+            registry_secret = update_barbican_secrets(
+                openstack_client,
+                value.lower(),
+                CONF.get(section_name, value + '_REGISTRY_USERNAME'),
+                CONF.get(section_name, value + '_REGISTRY_PASSWORD')
+            )
+            # Update registry related service parameters
             registries[registry] = {
                 sysinv_constants.SERVICE_PARAM_NAME_DOCKER_URL: CONF.get(
                     section_name, value + '_REGISTRY'),
-                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_AUTH_SECRET: CONF.get(
-                    section_name, value + '_REGISTRY_SECRET'),
+                sysinv_constants.SERVICE_PARAM_NAME_DOCKER_AUTH_SECRET: registry_secret,
                 sysinv_constants.SERVICE_PARAM_NAME_DOCKER_TYPE: CONF.get(
                     section_name, value + '_REGISTRY_TYPE'),
                 sysinv_constants.SERVICE_PARAM_NAME_DOCKER_SECURE_REGISTRY: CONF.getboolean(
