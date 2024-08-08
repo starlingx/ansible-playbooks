@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -37,6 +37,11 @@
   set_fact:
     service_list: "{{ service_list + [{ 'port': '8220/v1.0', 'service': 'dcdbsync' }] }}"
   when: mode is not defined or mode != "enroll"
+
+- name: Add dcagent service to endpoint list for software_version > 22.12 and not enroll
+  set_fact:
+    service_list: "{{ service_list + [{ 'port': '8326', 'service': 'dcagent' }] }}"
+  when: software_version is version('22.12', '>') and (mode is not defined or mode != "enroll")
 
 - name: Check and update admin endpoints
   include_tasks: check_and_update_endpoint.yml

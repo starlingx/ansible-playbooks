@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -15,27 +15,29 @@
     - "sm-api"
     - "fm-api"
 
+- name: Set list of services to be restarted
+  set_fact:
+    services_restart_list:
+      - "sysinv-inv"
+      - "sysinv-conductor"
+      - "cert-mon"
+      - "cert-alarm"
+      - "fm-mgr"
+      - "dcdbsync-api"
+      - "barbican-keystone-listener"
+
+- name: Add dcagent in services to be restarted list for software_version > 22.12
+  set_fact:
+    services_restart_list: "{{ services_restart_list + ['dcagent-api'] }}"
+  when: software_version is version('22.12', '>')
+
 - name: Restart sm managed services
   command: sm-restart-safe service {{ item }}
-  with_items:
-    - "sysinv-inv"
-    - "sysinv-conductor"
-    - "cert-mon"
-    - "cert-alarm"
-    - "fm-mgr"
-    - "dcdbsync-api"
-    - "barbican-keystone-listener"
+  with_items: "{{ services_restart_list }}"
 
 - name: Wait until services are restarted
   shell: sm-query service {{ item }} | grep -c enabled-active
-  loop:
-    - "sysinv-inv"
-    - "sysinv-conductor"
-    - "cert-mon"
-    - "cert-alarm"
-    - "fm-mgr"
-    - "dcdbsync-api"
-    - "barbican-keystone-listener"
+  loop: "{{ services_restart_list }}"
   register: service_status
   until: service_status.stdout == '1'
   retries: 10
