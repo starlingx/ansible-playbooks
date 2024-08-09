@@ -165,7 +165,7 @@
     - name: Update ipsec certificates
       block:
       - name: Get PXEBoot network list addresses
-        script: get_pxeboot_addr_list.py
+        script: roles/common/files/get_pxeboot_addr_list.py
         register: ip_addrs_list_result
 
       - set_fact:
