@@ -1,0 +1,19 @@
+---
+general_deploy_fail_message: |
+  Manual rollback of the software update is required.
+  Please resolve the patch error before retrying.
+  For more details, see /var/log/software.log.
+
+# Unlike the other deploy commands, 'software deploy' 'start' and
+# 'activate' are asynchronous requests. Periodic checks using
+# 'deploy show' are performed to ensure that the deployment
+# commands have completed before continuing. The periodic checks
+# make use of the retry and delay vars below.
+deploy_start_retries: 30
+deploy_start_delay: 60
+
+# Delay/retries for all deploy commands, except deploy start
+deploy_retries: 10
+deploy_delay: 60
+
+restart_required: false

@@ -31,6 +31,7 @@
     - common/recover-subcloud-certificates
     - role: rehome-enroll-common/recover-essential-services
       become: yes
+    - enroll-subcloud/patch-before-enroll
     - rehome-enroll-common/prepare-env
     - enroll-subcloud/validate-before-enroll
     - rehome-enroll-common/update-ca-cert

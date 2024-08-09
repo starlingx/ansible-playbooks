@@ -29,6 +29,7 @@
         operation_string: "enroll-init"
         host_to_check: "{{ enroll_reconfigured_oam }}"
         boot_wait_time: "{{ enroll_boot_wait_time | default(150) }}"
+        wait_for_timeout: "{{ enroll_wait_for_timeout | default(900) }}"
       when: enroll_init
 
     # The following block is executed locally

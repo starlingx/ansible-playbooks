@@ -1,0 +1,192 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#   This role applies software updates (release deployment) on a
+#   target host using USM local installation. Key steps include:
+#     - Set restart_required flag (check releases for RR)
+#     - Execute USM local installation CLI procedure to deploy patches
+#       - RUN Software [install-local, upload, precheck]
+#       - RUN Software deploy [precheck, start, host, activate, complete,
+#         delete]
+#       * For each deploy command, periodically execute deploy show to
+#         validate state and ensure the step completes before proceeding
+#       * For RR: Lock the controller before deploy host and unlock after
+#         deploy host
+#
+
+- name: Check if reboot is required
+  shell: software show {{ item }} | grep 'reboot_required' | awk '{print $4}'
+  register: reboot_check
+  with_items: "{{ releases }}"
+  delegate_to: localhost
+  failed_when: false
+
+- name: Set restart_required to true if any release requires a reboot
+  set_fact:
+    restart_required: true
+  with_items: "{{ reboot_check.results }}"
+  when: item.stdout == "True"
+
+# TODO(srana): Running source /etc/platform/openrc for each command could be time
+# consuming due to the keyring lookup. We should look into optimizing this.
+
+- name: Enable local installation mode
+  shell: |
+    source /etc/platform/openrc
+    software install-local
+
+- name: Software upload patches
+  shell: |
+    source /etc/platform/openrc
+    software upload "{{ patches_dir }}/{{ item }}.patch"
+  with_items: "{{ releases }}"
+
+- name: Deploy precheck
+  shell: |
+    source /etc/platform/openrc
+    software deploy precheck "{{ release_id }}"
+  #TODO(srana): Must be removed once pre-check is fixed for multi-patch deploy with dependencies
+  ignore_errors: yes
+
+- name: Deploy start
+  shell: |
+    source /etc/platform/openrc
+    software deploy start "{{ release_id }}"
+
+- name: Wait for deploy start
+  shell: |
+    source /etc/platform/openrc
+    software deploy show | grep "{{ release_version }}" | awk '{print $8}'
+  register: check_deploy_start
+  retries: "{{ deploy_start_retries }}"
+  delay: "{{ deploy_start_delay }}"
+  until: >
+    check_deploy_start.stdout == "deploy-start-done" or
+    check_deploy_start.stdout == "deploy-start-failed"
+  failed_when: false
+
+- name: Fail if deploy start did not succeed
+  fail:
+    msg: |
+      Deploy start failed or did not complete.
+      Status: {{ check_deploy_start.stdout }}
+      Expected Status: deploy-start-done
+      {{ general_deploy_fail_message }}
+  when: check_deploy_start.stdout != "deploy-start-done"
+
+- name: Lock host if any patch is reboot required
+  include_role:
+    name: common/host-lock
+  vars:
+    target_host: 'controller-0'
+  when: restart_required
+
+- name: Deploy host
+  shell: |
+    source /etc/platform/openrc
+    software deploy host controller-0
+
+- name: Wait for deploy host
+  shell: |
+    source /etc/platform/openrc
+    software deploy show | grep "{{ release_version }}" | awk '{print $8}'
+  register: check_deploy_host
+  retries: "{{ deploy_retries }}"
+  delay: "{{ deploy_delay }}"
+  until: >
+    check_deploy_host.stdout == "deploy-host-done" or
+    check_deploy_host.stdout == "deploy-host-failed"
+  failed_when: false
+
+- name: Fail if deploy host did not succeed
+  fail:
+    msg: |
+      Deploy host failed or did not complete.
+      Status: {{ check_deploy_host.stdout }}
+      Expected Status: deploy-host-done
+      {{ general_deploy_fail_message }}
+  when: check_deploy_host.stdout != "deploy-host-done"
+
+- name: Perform host unlock if reboot required
+  include_role:
+    name: common/host-unlock
+  vars:
+    target_host: 'controller-0'
+    wait_for_unlock: true
+    distributed_cloud_role: 'subcloud'
+  when: restart_required
+
+- name: Deploy activate
+  shell: |
+    source /etc/platform/openrc
+    software deploy activate
+
+- name: Wait for deploy activate
+  shell: |
+    source /etc/platform/openrc
+    software deploy show | grep "{{ release_version }}" | awk '{print $8}'
+  register: check_deploy_activate
+  retries: "{{ deploy_retries }}"
+  delay: "{{ deploy_delay }}"
+  until: >
+    check_deploy_activate.stdout == 'deploy-activate-done' or
+    check_deploy_activate.stdout == 'deploy-activate-failed'
+  failed_when: false
+
+- name: Fail if deploy activate did not succeed
+  fail:
+    msg: |
+      Deploy activate failed to start or did not complete.
+      Status: {{ check_deploy_activate.stdout }}
+      Expected Status: deploy-activate-done
+      {{ general_deploy_fail_message }}
+  when: check_deploy_activate.stdout != 'deploy-activate-done'
+
+- name: Issue software deploy complete
+  shell: |
+    source /etc/platform/openrc
+    software deploy complete
+
+- name: Wait for deploy complete
+  shell: |
+    source /etc/platform/openrc
+    software deploy show | grep "{{ release_version }}" | awk '{print $8}'
+  register: check_deploy_complete
+  retries: "{{ deploy_retries }}"
+  delay: "{{ deploy_delay }}"
+  until: >
+    check_deploy_complete.stdout == "deploy-completed" or
+    check_deploy_complete.stdout == "deploy-failed"
+  failed_when: false
+
+- name: Fail if deploy complete did not succeed
+  fail:
+    msg: |
+      Deploy complete failed to start or did not complete.
+      Status: {{ check_deploy_complete.stdout }}
+      Expected Status: deploy-completed
+      {{ general_deploy_fail_message }}
+  when: check_deploy_complete.stdout != "deploy-completed"
+
+- name: Delete deployment
+  shell: |
+    source /etc/platform/openrc
+    software deploy delete
+  register: check_deploy_delete
+  failed_when: '"Deploy deleted with success" not in check_deploy_delete.stdout'
+
+- name: Gather release deploy states
+  shell: |
+    source /etc/platform/openrc
+    software show {{ item }} | grep 'state' | awk '{print $4}'
+  register: applied_releases_deploy_state
+  with_items: "{{ releases }}"
+  failed_when: false
+
+- name: Verify all releases deployed
+  fail:
+    msg: "{{ item.stdout }} failed to deploy "
+  with_items: "{{ applied_releases_deploy_state.results }}"
+  when: item.stdout != "deployed"
