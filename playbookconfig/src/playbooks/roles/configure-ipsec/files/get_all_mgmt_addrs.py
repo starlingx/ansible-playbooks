@@ -4,6 +4,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
+import ipaddr
 import psycopg2
 
 from psycopg2.extras import RealDictCursor
@@ -14,11 +15,15 @@ def get_hostnames_list():
     conn = psycopg2.connect("dbname='sysinv' user='postgres'")
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("select network from address_pools where name='management';")
+            cur.execute("select network from address_pools where name like 'management%';")
             ret = cur.fetchall()
-            if ret is None:
+            if ret is None or len(ret) == 0:
                 return ip_addr_list
-            network = ret[0]['network'].rstrip('0')
+
+            if ipaddr.IPAddress(ret[0]['network']).version == 4:
+                network = ret[0]['network'].rstrip('0')
+            elif ipaddr.IPAddress(ret[0]['network']).version == 6:
+                network = ret[0]['network']
 
             cur.execute("select address from addresses;")
             rows = cur.fetchall()

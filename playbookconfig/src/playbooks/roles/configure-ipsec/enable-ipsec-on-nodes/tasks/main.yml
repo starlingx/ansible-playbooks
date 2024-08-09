@@ -15,7 +15,7 @@
 
 - block:
   - name: Get PXEBoot network addresses list of pending hosts
-    script: get_ipsec_disabled_addr_list.py
+    script: roles/configure-ipsec/files/get_ipsec_disabled_addr_list.py
     register: pending_hosts
     become_user: postgres
 
@@ -34,7 +34,7 @@
     when: 'pending_hosts | length > 0'
 
   - name: Get MGMT network addresses list
-    script: get_all_mgmt_addrs.py
+    script: roles/configure-ipsec/files/get_all_mgmt_addrs.py
     register: all_hosts
     become_user: postgres
 

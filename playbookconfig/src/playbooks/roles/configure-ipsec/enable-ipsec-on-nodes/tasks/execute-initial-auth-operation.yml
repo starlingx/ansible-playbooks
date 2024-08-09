@@ -8,6 +8,7 @@
 #   This task execute initial-auth operation to configure IPsec on
 #   each host of environment.
 #
+
 - block:
   - name: List of pending hosts to be configured with IPsec
     debug:
@@ -35,7 +36,7 @@
     failed_when: false
 
   - name: Get PXEBoot network addresses list of pending hosts
-    script: get_ipsec_disabled_addr_list.py
+    script: roles/configure-ipsec/files/get_ipsec_disabled_addr_list.py
     register: pending_hosts
     become_user: postgres
 
