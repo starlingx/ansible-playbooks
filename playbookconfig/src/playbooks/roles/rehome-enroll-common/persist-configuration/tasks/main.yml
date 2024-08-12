@@ -10,30 +10,6 @@
   set_fact:
     last_system_config_file: "{{ config_permdir }}/{{ system_config_file }}"
 
-- name: Initialize registry credentials
-  set_fact:
-    registry_credentials:
-      k8s: "{{ k8s_registry }}"
-      gcr: "{{ gcr_registry }}"
-      quay: "{{ quay_registry }}"
-      docker: "{{ docker_registry }}"
-      elastic: "{{ elastic_registry }}"
-      ghcr: "{{ ghcr_registry }}"
-      registryk8s: "{{ registryk8s_registry }}"
-      icr: "{{ icr_registry }}"
-
-- name: Create Barbican secrets for each registry
-  include_tasks: create_barbican_secrets.yml
-  loop: "{{ lookup('dict', registry_credentials) }}"
-  loop_control:
-    loop_var: item
-  when: item.value.username is defined and item.value.username | length > 0
-  vars:
-    registry_name: "{{ item.key }}"
-    registry_username: "{{ item.value.username }}"
-    registry_password: "{{ item.value.password }}"
-  no_log: true
-
 - block:
   - name: Add section [USER_DNS_HOST_RECORDS]
     set_fact:
