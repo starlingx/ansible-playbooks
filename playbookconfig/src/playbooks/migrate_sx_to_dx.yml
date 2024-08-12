@@ -69,6 +69,8 @@
             admin_if.stdout == 'lo'
 
     - set_fact:
+        ansible_port: "{{ ansible_port | default(22) }}"
+        ansible_host: "{{ inventory_hostname }}"
         duplex_mode: "{{ duplex_mode | default('duplex') }}"
         kubernetes_duplex_migration_flag: '/var/run/.kubernetes_duplex_migration_complete'
 
@@ -124,6 +126,16 @@
           name: common/host-unlock
         vars:
           target_host: 'controller-0'
+          wait_for_unlock: true
+          distributed_cloud_role: 'subcloud'
+
+      - name: Config and enable IPsec
+        command: /usr/bin/ipsec-client pxecontroller
+        register: result
+        until: result.rc == 0
+        retries: 3
+        delay: 5
+        become: yes
 
       when: current_system_mode.stdout == 'simplex' or
             current_oam_c0_ip.stdout != external_oam_node_0_address or
