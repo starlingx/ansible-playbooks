@@ -46,20 +46,18 @@
   - name: Wait until hosts are online and reachable
     shell: "ping -c 1 -w 5 {{ item }} | grep ' 0% packet loss'"
     register: host_is_reachable
-    loop: "{{ all_hosts }}"
+    loop: "{{ all_hosts | list }}"
     until: host_is_reachable is not failed
     retries: 18
     delay: 10
 
   - name: Start and provision ipsec-config service on controllers
     command: >-
-      ansible all -i "{{ item }}," --become-user root -m command -a "sm-provision
-      service-group-member controller-services ipsec-config --apply" -b -e
-      "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
-      ansible_become_pass={{ ansible_become_pass }}"
+      ansible all -i "{{ item }}," -m command -a "sm-provision service-group-member
+      controller-services ipsec-config --apply" -b -e "ansible_ssh_user={{ ansible_ssh_user }}
+      ansible_ssh_pass={{ ansible_ssh_pass }} ansible_become_pass={{ ansible_become_pass }}"
     with_items:
       - controller-0
       - controller-1
-    become_user: root
 
-  when: system_mode != "simplex"
+  when: system_mode.stdout != "simplex"
