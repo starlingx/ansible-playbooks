@@ -8,7 +8,13 @@
 #   in the post network reconfiguration
 #
 
-- name: Delete the admin address pool if the target network is mgmt
+- name: Delete the secondary admin address pool if the target network is mgmt
+  shell: >-
+    source /etc/platform/openrc; system addrpool-delete
+    {{ admin_addrpool_secondary }}
+  when: admin_addrpool_secondary is defined and target_net == mgmt_net
+
+- name: Delete the primary admin address pool if the target network is mgmt
   shell: >-
     source /etc/platform/openrc; system addrpool-delete
     {{ admin_addrpool }}

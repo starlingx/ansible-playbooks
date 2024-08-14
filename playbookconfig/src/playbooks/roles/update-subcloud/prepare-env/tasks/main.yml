@@ -14,8 +14,10 @@
   register: controller_name
 
 - name: Set subcloud floating address fact
+  # Interested only in primary address in case of dual-stack,
+  # as subcloud to system controller route is through primary.
   set_fact:
-    sc_floating_address: "{{ sc_floating_address }}"
+    sc_floating_address: "{{ sc_floating_address.split(',')[0] }}"
 
 - name: Retrieve software version number
   # lookup module does not work with /etc/build.info as it does not have ini
@@ -107,6 +109,42 @@
 - name: Set admin_addrpool fact
   set_fact:
     admin_addrpool: "{{ admin_addrpool_uuid.stdout }}"
+
+# set_fact for admin secondary addrpool uuid
+# when subcloud software_version >= 24.09
+- block:
+  - name: Get admin network's primary address pool name
+    shell: >-
+      source /etc/platform/openrc; system addrpool-list |
+      awk '$2 == "{{ admin_addrpool }}" { print $4 }'
+    register: admin_primary_pool_name
+
+  - name: Get admin network name
+    shell: >-
+      source /etc/platform/openrc; system network-list |
+      awk '$8 == "admin" { print $6 }'
+    register: admin_network_name
+
+  - name: Get admin network secondary address pool name
+    shell: >-
+      source /etc/platform/openrc; system network-addrpool-list |
+      awk '$4 == "{{ admin_network_name.stdout }}" && $6 != "{{
+      admin_primary_pool_name.stdout }}" { print $6 }'
+    register: admin_secondary_pool_name
+    when: admin_network_name.stdout | length > 0
+
+  - block:
+    - name: Get admin network's secondary address pool uuid
+      shell: >-
+        source /etc/platform/openrc; system addrpool-list |
+        awk '$4 == "{{ admin_secondary_pool_name.stdout }}" { print $2 }'
+      register: admin_pool_uuid_secondary
+
+    - name: Set admin_addrpool_secondary fact
+      set_fact:
+        admin_addrpool_secondary: "{{ admin_pool_uuid_secondary.stdout }}"
+    when: admin_secondary_pool_name.stdout | length > 0
+  when: software_version is version('24.09', '>=') and admin_addrpool | length > 0
 
 - block:
   - name: Get ifname of the existing subcloud network of controller-1
