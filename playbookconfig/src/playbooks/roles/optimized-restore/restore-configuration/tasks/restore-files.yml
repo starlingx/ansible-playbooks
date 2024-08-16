@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -19,10 +19,14 @@
 
   when: upgrade_in_progress
 
+- name: Add extra items to restore
+  set_fact:
+    full_restore_items: "{{ restore_items + restore_extra_items }}"
+
 - name: Restore configuration files
   command: >-
     tar --use-compress-program=pigz -C / -xvpf {{ platform_backup_fqpn }} --overwrite
-    {{ ' '.join(restore_items) }}
+    {{ ' '.join(full_restore_items) }}
     {% for v in restore_exclude_items %}
     --exclude {{ v | quote }}
     {% endfor %}
