@@ -95,6 +95,12 @@ __wipe_if_ceph_disk() {
         fi
     done
 
+    fs_type=$(blkid -o value -s TYPE $__dev)
+    if [ "${fs_type}" == "ceph_bluestore" ]; then
+        sgdisk --zap-all "${__dev}"
+        ceph_disk="true"
+    fi
+
     # Wipe the entire disk, including GPT signatures
     if [ "${ceph_disk}" = "true" ]; then
         echo "Wiping Ceph disk ${__dev} signatures."

@@ -59,15 +59,47 @@
       The restore must have failed already.
   when: check_openstack.stdout != "uploaded"
 
-- name: Check if platform-integ-apps was applied successfully during controller-0 unlock
+- name: Look for the flag indicating that Ceph is configured
   shell: >-
-    source /etc/platform/openrc; system application-show platform-integ-apps --column status --format value
-  register: check_platform_integ
+    tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |
+    grep 'etc/platform/.node_ceph_configured'
+  args:
+    warn: false
+  failed_when: false
+  register: ceph_backend
 
-- name: Fail if platform-integ-apps was not applied successfully
-  fail:
-    msg: Application platform-integ-apps was not applied successfully during controller-0 unlock
-  when: check_platform_integ.stdout not in ['applied', 'completed']
+- name: Look for the flag indicating that Rook is configured
+  shell: >-
+    tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |
+    grep 'etc/platform/.node_rook_configured'
+  args:
+    warn: false
+  failed_when: false
+  register: rook_backend
+
+- block:
+  - name: Check if platform-integ-apps was applied successfully during controller-0 unlock
+    shell: >-
+      source /etc/platform/openrc; system application-show platform-integ-apps --column status --format value
+    register: check_platform_integ
+
+  - name: Fail if platform-integ-apps was not applied successfully
+    fail:
+      msg: Application platform-integ-apps was not applied successfully during controller-0 unlock
+    when: check_platform_integ.stdout not in ['applied', 'completed']
+  when: ceph_backend.rc == 0
+
+- block:
+  - name: Check if rook-ceph was applied successfully during controller-0 unlock
+    shell: >-
+      source /etc/platform/openrc; system application-show rook-ceph --column status --format value
+    register: check_rook_ceph
+
+  - name: Fail if rook-ceph was not applied successfully
+    fail:
+      msg: Application rook-ceph was not applied successfully during controller-0 unlock
+    when: check_rook_ceph.stdout not in ['applied', 'completed']
+  when: rook_ceph.rc == 0
 
 - name: Transfer backup tarball to target if the file is off-box
   include_role:

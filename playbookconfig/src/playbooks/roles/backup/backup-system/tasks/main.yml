@@ -550,13 +550,14 @@
 
       when: ldap_config.stat.exists
 
-    - block:
-      - name: Create ceph temp dir
-        file:
-          path: "{{ tempdir.path }}/ceph"
-          state: directory
-        register: ceph_dir
+    - name: Create ceph temp dir
+      file:
+        path: "{{ tempdir.path }}/ceph"
+        state: directory
+      register: ceph_dir
 
+    # ceph bare-metal
+    - block:
       - name: Name ceph crushmap backup
         set_fact:
           crushmap_file: "{{ ceph_dir.path }}/crushmap.bin.backup"
@@ -585,7 +586,18 @@
 
         when: (system_mode == 'duplex') and (local_hostname == "controller-1")
 
-      when: ceph_backend.stat.exists
+      when: ceph_backend_configured_flag.stat.exists
+
+    # rook-ceph
+    - block:
+      - name: Name ceph monmap backup
+        set_fact:
+          monmap_file: "{{ ceph_dir.path }}/monmap.bin"
+
+      - name: Create ceph monmap backup
+        command: "ceph mon getmap -o {{ monmap_file }}"
+
+      when: rook_backend_configured_flag.stat.exists
 
     - name: Send application lifecycle notifications for pre-etcd-backup action
       command: /usr/bin/sysinv-utils notify pre-etcd-backup-action
@@ -757,12 +769,14 @@
           helm_overrides_sqldump_dir.path,
           override_backup_file,
           ldap_db_backup_,
+          monmap_file_,
           crushmap_file_,
           ceph_conf_ctrl_0_,
           system_image_list_path,
           crictl_image_cache_list_path,
           ]) | reject('equalto', '') | list }}"  # rejecting vars that might be empty
       vars:
+        monmap_file_: "{{ monmap_file | default(\"\") }}"
         crushmap_file_: "{{ crushmap_file | default(\"\") }}"
         ceph_conf_ctrl_0_: "{{ ceph_conf_ctrl_0 | default(\"\") }}"
         ldap_db_backup_: "{{ ldap_db_backup | default(\"\") }}"

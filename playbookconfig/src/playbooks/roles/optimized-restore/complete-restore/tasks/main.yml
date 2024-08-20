@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -78,18 +78,28 @@
   delay: "{{ system_online_retry_delay }}"
   until: check_online.stdout == "online"
 
-# When controller unlock occurs there is a chance platform-integ-apps
+# When controller unlock occurs there is a chance platform-integ-apps or rook-ceph
 # has not yet been completely removed. This causes the running removal to abort
 # and sets the state from removing to remove-failed. This removal is necessary
-# to ensure that the platform-integ-apps will be reapplied after the unlock.
+# to ensure that the platform-integ-apps or rook-ceph will be reapplied after the unlock.
 # This new task will be executed only if the wipe_ceph_osds is set to true.
+- block:
+  - set_fact:
+      app_name: "{{ 'rook-ceph' if rook_backend.rc == 0 else 'platform-integ-apps' }}"
 
-- name: Check if platform-integ-apps is in uploaded state
-  shell: |
-    source /etc/platform/openrc
-    system application-show platform-integ-apps --column status --format value
-  register: check_uploaded
-  retries: "{{ application_check_retries }}"
-  delay: "{{ application_check_retry_delay }}"
-  until: check_uploaded.stdout == "uploaded"
-  when: wipe_ceph_osds|bool and ceph_backend.rc == 0
+  - name: Check if {{ app_name }} is in uploaded state
+    shell: |
+      source /etc/platform/openrc
+      system application-show {{ app_name }} --column status --format value
+    register: check_uploaded
+    retries: "{{ application_check_retries }}"
+    delay: "{{ application_check_retry_delay }}"
+    until: check_uploaded.stdout == "uploaded"
+
+  - name: Remove content from ceph data directory
+    shell: rm -rf /var/lib/ceph/data/*
+    args:
+      warn: false
+    when: rook_backend.rc == 0
+
+  when: wipe_ceph_osds|bool and (ceph_backend.rc == 0 or rook_backend.rc == 0)

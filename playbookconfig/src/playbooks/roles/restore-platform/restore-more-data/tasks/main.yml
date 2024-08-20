@@ -28,6 +28,7 @@
   set_fact:
     archive_platform_conf_path: "{{ platform_conf_path | regex_replace('^\\/', '') }}"
     archive_ceph_backend_flag: "{{ ceph_backend_flag | regex_replace('^\\/', '') }}"
+    archive_rook_backend_flag: "{{ rook_backend_flag | regex_replace('^\\/', '') }}"
     archive_fernet_keys_permdir: "{{ fernet_keys_permdir | regex_replace('^\\/', '') }}"
 
 - name: Set parameters for ldap different paths by OS
@@ -398,6 +399,13 @@
   failed_when: false
   register: ceph_backend
 
+- name: Look for the flag indicating that rook is configured
+  shell: "tar -tf {{ restore_data_file }} | grep '{{ archive_rook_backend_flag }}'"
+  args:
+    warn: false
+  failed_when: false
+  register: rook_backend
+
 # Restore ceph crushmap if ceph backend is configured and Ceph cluster is being restored
 - block:
   # Can't store ceph crushmap at sysinv_config_permdir (/opt/platform/sysinv/)
@@ -431,7 +439,8 @@
       awk /osd/'{print $NF}' |
       xargs -i crushtool -i {{ ceph_crushmap_dir }}/{{ crushmap_file }} --remove-item {}
       -o {{ ceph_crushmap_dir }}/{{ crushmap_file_tmp }} &&
-      mv {{ ceph_crushmap_dir }}/{{ crushmap_file_tmp }} {{ ceph_crushmap_dir }}/{{ crushmap_file }}
+      mv {{ ceph_crushmap_dir }}/{{ crushmap_file_tmp }}
+      {{ ceph_crushmap_dir }}/{{ crushmap_file }}
 
   when: not wipe_ceph_osds|bool and ceph_backend.rc == 0
 
@@ -526,14 +535,16 @@
       psql -c "update i_host set administrative='locked', operational='disabled',
       availability='offline'" sysinv
     become_user: postgres
-    when: wipe_ceph_osds|bool and ceph_backend.rc == 0 or ceph_backend.rc != 0
+    when: >-
+      wipe_ceph_osds|bool and (ceph_backend.rc == 0 or rook_backend.rc == 0) or
+      (ceph_backend.rc != 0 or rook_backend.rc != 0)
 
   - name: Set all the hosts, except storage nodes to locked/disabled/offline state
     shell: >-
       psql -c "update i_host set administrative='locked', operational='disabled',
       availability='offline' where personality!='storage'" sysinv
     become_user: postgres
-    when: not wipe_ceph_osds|bool and ceph_backend.rc == 0
+    when: not wipe_ceph_osds|bool and (ceph_backend.rc == 0 or rook_backend.rc == 0)
 
   # Container images will not be present after restore. Inform sysinv so it
   # can download the images. Kubernetes will then start the apps.
@@ -542,11 +553,18 @@
     become_user: postgres
 
   - name: Set platform-integ-apps to applied state when set to wipe osds disks
-    shell: >-
+    command: >-
       psql -c "update kube_app set status='applied' where name='platform-integ-apps'
       and status='restore-requested'" sysinv
     become_user: postgres
     when: wipe_ceph_osds|bool and ceph_backend.rc == 0
+
+  - name: Set rook-ceph to applied state when set to wipe osds disks
+    command: >-
+      psql -c "update kube_app set status='applied' where name='rook-ceph'
+      and status='restore-requested'" sysinv
+    become_user: postgres
+    when: wipe_ceph_osds|bool and rook_backend.rc == 0
 
   - name: Get current resolv.conf permissions
     stat:
@@ -627,7 +645,6 @@
     loop: "{{ ids_and_personalities.stdout_lines }}"
     when: (item.split(' ')[1] | lower) == 'none'
 
-  # Restore ceph-mon data if ceph backend is configured
   - block:
     - block:
       # Recover procedure for systems with storage nodes is different from
@@ -661,51 +678,148 @@
         when: restore_system_mode != 'simplex'
 
       # Recover ceph data for systems with controller storage
-      - include_role:
-          name: recover-ceph-data
-        when: node_personalities.stdout is not search('storage')
+      - block:
+        # bare-metal
+        - block:
+          - include_role:
+              name: recover-ceph-data
+            when: node_personalities.stdout is not search('storage')
 
-      - name: Mark crushmap as restored
-        file:
-          path: "{{ sysinv_config_permdir }}/.crushmap_applied"
-          owner: root
-          group: root
-          mode: 644
-          state: touch
+          - name: Mark crushmap as restored
+            file:
+              path: "{{ sysinv_config_permdir }}/.crushmap_applied"
+              owner: root
+              group: root
+              mode: 644
+              state: touch
 
-      - name: Mark ceph backend as configured
-        file:
-          path: "{{ ceph_backend_flag }}"
-          owner: root
-          group: root
-          mode: 644
-          state: touch
+          - name: Mark ceph backend as configured
+            file:
+              path: "{{ ceph_backend_flag }}"
+              owner: root
+              group: root
+              mode: 644
+              state: touch
+
+          when: ceph_backend.rc == 0
+
+        # rook-ceph
+        - block:
+          - name: Set Ceph variables
+            set_fact:
+              ceph_temp_dir: /tmp/ceph/
+              ceph_monmap_file: monmap.bin
+
+          - name: Create {{ ceph_temp_dir }} dir
+            file:
+              path: "{{ ceph_temp_dir }}"
+              state: directory
+            become: yes
+
+          - name: Get {{ ceph_monmap_file }} file path
+            shell: >-
+              tar --use-compress-program=pigz -tf {{ restore_data_file }} |
+              grep {{ ceph_monmap_file }}
+            register: ceph_monmap_backup_path_tgz
+
+          - name: Restore {{ ceph_monmap_file }} file
+            command: >-
+              tar --use-compress-program=pigz -C {{ ceph_temp_dir }} --transform='s,.*/,,'
+              -xpf {{ platform_backup_fqpn }} {{ ceph_monmap_backup_path_tgz.stdout_lines[0] }}
+            args:
+              warn: false
+
+          - include_role:
+              name: recover-rook-ceph-data
+            when: node_personalities.stdout is not search('storage')
+
+          when: rook_backend.rc == 0
 
       when: not wipe_ceph_osds|bool
 
     - block:
-      # The application platform-integ-apps is being removed when the flag
+      - set_fact:
+          app_name: "{{ 'rook-ceph' if rook_backend.rc == 0 else 'platform-integ-apps' }}"
+
+      # The application platform-integ-apps or rook-ceph is being removed when the flag
       # wipe_ceph_osds is set to true because this application needs to be
       # reapplied, but helm will not reapply the charts if the version is not bumped.
       #
       # The application is removed here to be applied after host is unlocked and
       # ceph is correctly configured after a wipe. This app is automatically
       # applied by conductor when there is ceph backend configured.
-      - name: Remove platform-integ-apps
-        shell: source /etc/platform/openrc; system application-remove platform-integ-apps
+      - name: Remove {{ app_name }}
+        shell: source /etc/platform/openrc; system application-remove {{ app_name }} --force
 
-      # When controller unlock occurs there is a chance platform-integ-apps
+      - name: Delete resources that block rook-ceph remove
+        shell: |
+          kubectl delete deployments -n rook-ceph --all --force
+          kubectl delete daemonsets -n rook-ceph --all --force
+
+          kubectl patch -n rook-ceph cephblockpools $(kubectl get cephblockpools -n rook-ceph \
+            -o custom-columns=:metadata.name) --type merge -p '{"metadata":{"finalizers": []}}'
+          kubectl delete -n rook-ceph cephblockpools --all --force
+
+          kubectl patch -n rook-ceph cephfilesystemsubvolumegroups $(kubectl get \
+            cephfilesystemsubvolumegroups -n rook-ceph -o custom-columns=:metadata.name) \
+            --type merge -p '{"metadata":{"finalizers": []}}'
+          kubectl delete -n rook-ceph cephfilesystemsubvolumegroups --all --force
+
+          kubectl patch -n rook-ceph cephfilesystems $(kubectl get cephfilesystems -n rook-ceph \
+            -o custom-columns=:metadata.name) --type merge -p '{"metadata":{"finalizers": []}}'
+          kubectl delete -n rook-ceph cephfilesystems --all --force
+
+          kubectl patch -n rook-ceph cephcluster rook-ceph --type merge \
+            -p '{"metadata":{"finalizers": []}}'
+          kubectl delete -n rook-ceph cephcluster rook-ceph --force
+
+          kubectl patch -n rook-ceph helmreleases $(kubectl get helmreleases -n rook-ceph \
+            -o custom-columns=:metadata.name) --type merge -p '{"metadata":{"finalizers": []}}'
+          kubectl delete -n rook-ceph helmreleases --all --force
+
+          kubectl patch -n rook-ceph helmcharts $(kubectl get helmcharts -n rook-ceph \
+            -o custom-columns=:metadata.name) --type merge -p '{"metadata":{"finalizers": []}}'
+          kubectl delete -n rook-ceph helmcharts --all --force
+
+          kubectl patch -n rook-ceph helmrepository stx-platform --type merge \
+            -p '{"metadata":{"finalizers": []}}'
+          kubectl delete -n rook-ceph helmrepository stx-platform --force
+        environment:
+          KUBECONFIG: /etc/kubernetes/admin.conf
+        when: rook_backend.rc == 0
+
+      # When controller unlock occurs there is a chance platform-integ-apps or rook-ceph
       # has not yet been completely removed. This causes the running removal to abort
       # and sets the state from removing to remove-failed. This removal is necessary
-      # to ensure that the platform-integ-apps will be reapplied after the unlock.
-      - name: Check if platform-integ-apps is in uploaded state
+      # to ensure that the platform-integ-apps or rook-ceph will be reapplied after the unlock.
+      - name: Check if {{ app_name }} is in uploaded state
         shell: |
           source /etc/platform/openrc
-          system application-show platform-integ-apps --column status --format value
+          system application-show {{ app_name }} --column status --format value
         register: check_uploaded
         retries: "{{ application_check_retries }}"
         delay: "{{ application_check_retry_delay }}"
         until: check_uploaded.stdout == "uploaded"
+
+      - block:
+        - name: Delete all resources from the rook-ceph namespace
+          shell: |
+            CRDS=$(kubectl api-resources --namespaced=true --verbs=delete -o name | \
+              grep -v "event" | tr "\n" "," | sed -e 's/,$//')
+            kubectl patch -n rook-ceph $(kubectl get -n rook-ceph $CRDS -o name) \
+              --type merge -p '{"metadata":{"finalizers": []}}'
+            kubectl delete -n rook-ceph "$CRDS" --all --force
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+        - name: Remove content from ceph data directory
+          shell: |
+            rm -rf /var/lib/ceph/data/*
+            rm -rf /var/lib/ceph/mon-float/*
+          args:
+            warn: false
+
+        when: rook_backend.rc == 0
 
       - name: Recover Ceph PVCs when OSDs are wiped
         script: recover_ceph_pvcs.sh
@@ -718,7 +832,7 @@
 
       when: wipe_ceph_osds|bool
 
-    when: check_online.stdout == "online" and ceph_backend.rc == 0
+    when: check_online.stdout == "online" and (ceph_backend.rc == 0 or rook_backend.rc == 0)
 
   - name: Apply kube-apiserver parameters
     block:
