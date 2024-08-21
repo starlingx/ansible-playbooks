@@ -1,0 +1,21 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to do cleanup after IPsec is disabled on all hosts
+#   in the system.
+#
+
+- name: Get system mode
+  shell: source /etc/platform/platform.conf; echo $system_mode
+  register: system_mode
+
+- block:
+  - name: Clear mgmt_ipsec flag in sysinv i_host table
+    script: roles/common/files/clear-mgmt-ipsec-flag.py
+    become_user: postgres
+
+  when: system_mode != "simplex"

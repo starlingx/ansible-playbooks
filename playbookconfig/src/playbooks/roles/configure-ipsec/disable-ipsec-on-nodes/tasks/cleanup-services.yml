@@ -26,13 +26,19 @@
 
   - name: Disable strongswan service
     command: >-
-      ansible all -i "{{ item }}," -m command -a "systemctl disable ipsec.service --now" -b
-      -e "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible all -i "{{ item }}," -m command -a "systemctl disable strongswan-starter.service
+      --now" -b -e "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
       ansible_become_pass={{ ansible_become_pass }}"
 
   - name: Flush IPsec policies
     command: >-
       ansible all -i "{{ item }}," -m command -a "ip xfrm policy flush" -b -e
+      "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+
+  - name: Flush IPsec states
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "ip xfrm state flush" -b -e
       "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
       ansible_become_pass={{ ansible_become_pass }}"
 
