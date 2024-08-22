@@ -1,10 +1,10 @@
-# SRIOV-CNI Version v2.8.0
+# SRIOV-CNI Version v2.8.1
 # Based on:
-# https://raw.githubusercontent.com/k8snetworkplumbingwg/sriov-cni/v2.8.0/images/
+# https://raw.githubusercontent.com/k8snetworkplumbingwg/sriov-cni/v2.8.1/images/
 #              sriov-cni-daemonset.yaml
 #
 # This file is licensed under Apache 2.0.  You can obtain a copy of the license at:
-# https://github.com/k8snetworkplumbingwg/sriov-cni/blob/v2.8.0/LICENSE
+# https://github.com/k8snetworkplumbingwg/sriov-cni/blob/v2.8.1/LICENSE
 #
 # The following modifications have been made:
 #
@@ -25,7 +25,7 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: kube-sriov-cni-ds-amd64
+  name: kube-sriov-cni-ds
   namespace: kube-system
   labels:
     tier: node
@@ -46,8 +46,6 @@ spec:
         tier: node
         app: sriov-cni
     spec:
-      nodeSelector:
-        kubernetes.io/arch: amd64
       tolerations:
       - operator: Exists
         effect: NoSchedule
