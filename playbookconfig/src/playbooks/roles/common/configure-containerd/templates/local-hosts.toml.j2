@@ -5,5 +5,3 @@ server = "{{ registry_local }}"
 [host."{{ registry_local }}"]
   capabilities = ["pull", "resolve", "push"]
   ca = "/etc/docker/certs.d/{{ registry_local }}/registry-cert.crt"
-  [host."{{ registry_local }}".header]
-    authorization = "Basic {{ registry_auth }}"
