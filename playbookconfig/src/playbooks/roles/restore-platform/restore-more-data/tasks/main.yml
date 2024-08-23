@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2023 Wind River Systems, Inc.
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -381,6 +381,13 @@
   command: >-
     tar -C /etc/systemd/coredump.conf.d -xpf {{ restore_data_file }} --wildcards
     --overwrite --transform='s,.*/,,' etc/systemd/coredump.conf.d/*
+  args:
+    warn: false
+
+- name: Restore extra configuration files
+  command: >-
+    tar --use-compress-program=pigz -C / -xvpf {{ restore_data_file }} --overwrite
+    {{ ' '.join(restore_extra_items) }}
   args:
     warn: false
 
