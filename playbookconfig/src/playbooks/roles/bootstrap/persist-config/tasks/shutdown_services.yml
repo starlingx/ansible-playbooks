@@ -158,8 +158,11 @@
       prev_controller_admin_floating_address:
         "{{ default_prev_admin_start_address_primary
         if prev_admin_start_address == 'derived' else prev_network_params.prev_admin_start_address_primary }}"
-      # TODO: where prev_admin_controller_floating_address, should it be prev_controller_admin_floating_address ?
-      prev_admin_floating_virtual: "{{ prev_admin_controller_floating_address }}/{{ prev_admin_subnet_prefix }}"
+    when: (admin_network is defined and (prev_admin_network|bool == true))
+
+  - name: Set CIDR fact derived from previous admin network configuration
+    set_fact:
+      prev_admin_floating_virtual: "{{ prev_controller_admin_floating_address }}/{{ prev_admin_subnet_prefix }}"
     when: (admin_network is defined and (prev_admin_network|bool == true))
 
   # set facts for secondary if defined/exists
@@ -170,6 +173,12 @@
         prev_controller_admin_floating_address_secondary:
           "{{ default_prev_admin_start_address_secondary
           if prev_admin_start_address == 'derived' else prev_network_params.prev_admin_start_address_secondary }}"
+      when: (admin_network is defined and
+             (prev_admin_network|bool == true) and
+             prev_network_params.prev_admin_subnet_secondary)
+
+    - name: Set CIDR fact derived from previous secondary admin network configuration
+      set_fact:
         prev_admin_floating_virtual_secondary: "{{ prev_controller_admin_floating_address_secondary
                                                 }}/{{ prev_admin_subnet_prefix_secondary }}"
       when: (admin_network is defined and
