@@ -3,7 +3,11 @@ fluxcd_namespace: flux-helm
 fluxcd_secret_name: default-registry-key
 fluxcd_resource_dir: /tmp/fluxcd
 flux_helm_controller_img: docker.io/fluxcd/helm-controller:v1.0.1
+flux_helm_controller_liveness_timeout: 5
+flux_helm_controller_readiness_timeout: 10
 flux_source_controller_img: docker.io/fluxcd/source-controller:v1.3.0
+flux_source_controller_liveness_timeout: 5
+flux_source_controller_readiness_timeout: 10
 local_registry: registry.local:9001
 async_timeout: 240
 async_retries: 80

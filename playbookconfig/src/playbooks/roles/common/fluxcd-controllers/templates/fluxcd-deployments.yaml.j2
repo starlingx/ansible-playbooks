@@ -44,6 +44,7 @@ spec:
           httpGet:
             path: /healthz
             port: healthz
+          timeoutSeconds: {{ flux_helm_controller_liveness_timeout }}
         ports:
         - containerPort: 8080
           name: http-prom
@@ -55,6 +56,7 @@ spec:
           httpGet:
             path: /readyz
             port: healthz
+          timeoutSeconds: {{ flux_helm_controller_readiness_timeout }}
         resources:
           limits:
             cpu: 1000m
@@ -146,6 +148,7 @@ spec:
           httpGet:
             path: /healthz
             port: healthz
+          timeoutSeconds: {{ flux_source_controller_liveness_timeout }}
         ports:
         - containerPort: 9090
           name: http
@@ -160,6 +163,7 @@ spec:
           httpGet:
             path: /
             port: http
+          timeoutSeconds: {{ flux_source_controller_readiness_timeout }}
         resources:
           limits:
             cpu: 1000m
