@@ -1,0 +1,73 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- block:
+  - name: Stop ipsec-server process
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "pmon-stop ipsec-server" -b -e
+      "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+
+  - name: Disable ipsec-server service
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "systemctl disable ipsec-server.service
+      --now" -b -e "ansible_ssh_user={{ ansible_ssh_user }}
+      ansible_ssh_pass={{ ansible_ssh_pass }} ansible_become_pass={{ ansible_become_pass }}"
+
+  - name: Stop strongswan process
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "pmon-stop charon" -b -e
+      "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+
+  - name: Disable strongswan service
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "systemctl disable ipsec.service --now" -b
+      -e "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+
+  - name: Flush IPsec policies
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "ip xfrm policy flush" -b -e
+      "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+
+  - name: Fail if strongswan remains active
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "systemctl is-active ipsec.service" -b -e
+      "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+    register: check_strongswan_service
+    retries: 3
+    delay: 5
+    failed_when: check_strongswan_service.rc == 0
+
+  - name: Fail if ipsec-server remains active
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "systemctl is-active ipsec-server.service" -b
+      -e "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+    register: check_ipsec_server_service
+    retries: 3
+    delay: 5
+    failed_when: check_ipsec_server_service.rc == 0
+
+  - set_fact:
+      config_files: "/etc/swanctl/swanctl_active.conf /etc/swanctl/swanctl_standby.conf
+                     /etc/swanctl/swanctl.conf /etc/pmon.d/strongswan-starter.conf
+                     /etc/pmon.d/ipsec-server.conf /etc/logrotate.d/charon.conf
+                     /etc/systemd/system/strongswan-starter.service.d/"
+      cert_files: "/etc/swanctl/x509/* /etc/swanctl/x509ca/*"
+      key_files: "/etc/swanctl/private/*"
+
+  - name: Remove IPsec configuration, certificate and key files
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "rm -rf {{ config_files }} {{ cert_files }}
+      {{ key_files }}" -b -e "ansible_ssh_user={{ ansible_ssh_user }}
+      ansible_ssh_pass={{ ansible_ssh_pass }} ansible_become_pass={{ ansible_become_pass }}"
+
+  no_log: true
