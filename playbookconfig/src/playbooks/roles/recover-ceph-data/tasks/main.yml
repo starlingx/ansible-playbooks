@@ -10,56 +10,23 @@
 
 - name: Restore Ceph cluster data
   block:
-
-    # Check if Ceph osd partitions are present
-    - name: Run ceph-disk cmd
-      command: ceph-disk list --format=json
-      register: ceph_disk_out
-
-    - name: Parse output of ceph-disk
-      set_fact:
-        ceph_disk_parsed: "{{ ceph_disk_out.stdout | from_json | selectattr('partitions', 'defined') | list }}"
-
-    - name: Get Ceph partitions
-      set_fact:
-        ceph_osd_parts: "{% for e in ceph_disk_parsed if 'cluster' in e.partitions.0
-                         and e.partitions.0.cluster == 'ceph' and e.partitions.0.type == 'data' %}{{ e }}{% endfor %}"
-
-    - name: Fail if there are no Ceph osd partitions
-      fail:
-        msg: "No Ceph osd partition found, aborting restore operation"
-      when: not ceph_osd_parts
-
-    - block:
-      - name: Restore ceph.conf file
-        command: >-
-          tar -C / -xpf {{ restore_data_file }}
-          '{{ ceph_conf[1:] }}'
-        args:
-          warn: false
-
-      - name: Get list of OSDs defined in {{ ceph_conf }}
-        shell: grep "\[osd\.[0-9]*\]" {{ ceph_conf }} | grep -oh "osd\.[0-9]*"
-        register: ceph_conf_osd_list
-        failed_when: false
-
-      # Allow starting ceph with a ceph.conf from a backup done on controller-1
-      # w/o this it will try to initialize OSDs that are not configured on controller-0.
-      - name: Remove "[osd.*]" sections from {{ ceph_conf }}
-        ini_file:
-          path: "{{ ceph_conf }}"
-          section: "{{ item }}"
-          state: absent
-        with_items: "{{ ceph_conf_osd_list.stdout_lines }}"
-
+    - name: Restore ceph.conf file
+      command: >-
+        tar -C /
+        --use-compress-program=pigz
+        -xpf {{ restore_data_file }}
+        '{{ ceph_conf[1:] }}'
+      args:
+        warn: false
       when: backup_taken_from != 'controller-1'
 
-      # Restore ceph.conf from controller-0 if backup was taken on controller-1
+    # Restore ceph.conf from controller-0 if backup was taken on controller-1
     - block:
-
       - name: Restore ceph_controller-0.conf from controller-0
         command: >-
-          tar -C {{ ceph_conf | dirname }} -xpf {{ restore_data_file }} --wildcards
+          tar -C {{ ceph_conf | dirname }}
+          --use-compress-program=pigz
+          -xpf {{ restore_data_file }} --wildcards
           --transform='s,.*/,,' '*/{{ ceph_conf_controller_0 | basename }}'
         args:
           warn: false
@@ -77,6 +44,48 @@
           state: absent
 
       when: (system_mode == 'duplex') and (backup_taken_from == 'controller-1')
+
+    # Check if Ceph osd partitions are present
+    - name: Run ceph-disk cmd
+      command: ceph-disk list --format=json
+      register: ceph_disk_out
+
+    - name: Parse output of ceph-disk
+      set_fact:
+        ceph_disk_parsed: "{{ ceph_disk_out.stdout | from_json | selectattr('partitions', 'defined') | list }}"
+
+    - name: Get Ceph partitions
+      set_fact:
+        ceph_osd_parts: "{% for e in ceph_disk_parsed if 'cluster' in e.partitions.0
+                         and e.partitions.0.cluster == 'ceph' and e.partitions.0.type == 'data' %}{{ e }}{% endfor %}"
+    - block:
+      # Print out the ceph-disk list command if no Ceph partitions were detected
+      - name: Display ceph-disk list output
+        debug:
+          var: ceph_disk_out
+
+      - name: Fail if there are no Ceph osd partitions
+        fail:
+          msg: "No Ceph osd partition found, aborting restore operation"
+
+      when: not ceph_osd_parts
+
+    - block:
+      - name: Get list of OSDs defined in {{ ceph_conf }}
+        shell: grep "\[osd\.[0-9]*\]" {{ ceph_conf }} | grep -oh "osd\.[0-9]*"
+        register: ceph_conf_osd_list
+        failed_when: false
+
+      # Allow starting ceph with a ceph.conf from a backup done on controller-1
+      # w/o this it will try to initialize OSDs that are not configured on controller-0.
+      - name: Remove "[osd.*]" sections from {{ ceph_conf }}
+        ini_file:
+          path: "{{ ceph_conf }}"
+          section: "{{ item }}"
+          state: absent
+        with_items: "{{ ceph_conf_osd_list.stdout_lines }}"
+
+      when: backup_taken_from != 'controller-1'
 
     - name: Set initial ceph-mon name
       set_fact:
