@@ -22,11 +22,7 @@
 #       - Creates /opt/software/tmp/metadata-sync/ostree-metadata-commits.subcloud
 #         which contains list of sw_version:ostree commit for all software
 #         updates matching prestaging software release
-#   - Set software_sync_required:
-#       - The above two get-commits script calls output its list to stdout
-#       - Based on the stdout diff of the above two script calls, we determine
-#         if a sync is required
-#   - Is software_sync_required?
+#   - As long as the patch level of the system controller is higher than that of the subcloud
 #       - Transfer the following from system controller to subcloud at /opt/software/tmp/metadata-sync:
 #           - /opt/software/tmp/metadata-sync/ostree-metadata-commits.central
 #           - the full /opt/software/metadata hierarchy
@@ -34,11 +30,11 @@
 #         by invoking: ostree-metadata-sync.sh --sw-version 24.09 sync-subcloud
 #           - operates on the data in /opt/software/tmp/metadata-sync
 #             plus the state on subcloud to run the sync algorithm for each commit
+#   - Otherwise, the prestage should not be executed.
 #
 
 - name: Set software metadata synchronization facts for {{ software_version }}
   set_fact:
-    software_sync_required: false
     ostree_feed_repo_dir: /var/www/pages/feed/rel-{{ software_version }}/ostree_repo
     ostree_sysroot_repo_dir: /sysroot/ostree/repo
     ostree_rev: starlingx
@@ -59,7 +55,7 @@
 
 - name: Gather system controller deployed software list
   shell: software list --release {{ software_version }} --state deployed | \
-         grep {{ software_version }} | \ sed 's/ //g;'
+         grep {{ software_version }} | sed 's/ //g;'
   register: system_controller_software_list
   failed_when: false
   delegate_to: localhost
@@ -113,13 +109,19 @@
 - name: Verify patch levels between system controller and subcloud
   debug:
     msg: >
-      {% if subcloud_releases | length == system_controller_releases | length %}
-        The subcloud has the same patch level as the system controller
-      {% elif system_controller_releases | length > subcloud_releases | length %}
+      {% if system_controller_releases | length > subcloud_releases | length %}
         The system controller has a patch level higher than the subcloud
+      {% elif system_controller_releases | length == subcloud_releases | length %}
+        Skipping for software deploy prestage as the subcloud has the same patch level
+        than the system controller.
       {% else %}
-        The subcloud has a patch level higher than the system controller
+        Skipping for software deploy prestage as the subcloud has a higher patch level
+        than the system controller.
       {% endif %}
+
+- name: "Subcloud does not require software prestage. Exiting..."
+  meta: end_play
+  when: subcloud_releases | length >= system_controller_releases | length
 
 - block:
   - name: Gather system controller metadata commits
@@ -165,14 +167,8 @@
     debug:
       var: subcloud_software_metadata_commits
 
-  - name: Decide if software metadata synchronization is required for sw deploy
-    set_fact:
-      software_sync_required: true
-    when: (system_controller_software_metadata_commits.stdout != subcloud_software_metadata_commits.stdout)
-
   - debug:
       msg:
-        - "Software sync required: {{ software_sync_required }}"
         - "ostree revision from {{ ostree_feed_repo_dir }}:"
         - "system controller: {{ ostree_commit_system_controller.stdout }}"
         - "subcloud:          {{ ostree_commit_subcloud.stdout }}"
@@ -183,9 +179,7 @@
         - "subcloud:"
         - "{{ subcloud_software_list.stdout }}"
         - "{{ subcloud_software_metadata_commits.stdout }}"
-  when: system_controller_releases | length > subcloud_releases | length
 
-- block:
   - name: Gather system controller deployed minor release list
     shell: |
       while IFS= read -r line; do
@@ -278,10 +272,3 @@
         owner: sysadmin
         recurse: yes
       become: yes
-
-  when: software_sync_required
-
-- debug:
-    msg:
-      - "Skipping software metadata synchronization."
-  when: not software_sync_required
