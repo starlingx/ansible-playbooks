@@ -467,13 +467,6 @@ def populate_mgmt_network_secondary(client):
 
 
 def populate_admin_network(client):
-    admin_subnet = IPNetwork(
-        CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_SUBNET'))
-    start_address = CONF.get('BOOTSTRAP_CONFIG',
-                             'ADMIN_START_ADDRESS')
-    end_address = CONF.get('BOOTSTRAP_CONFIG',
-                           'ADMIN_END_ADDRESS')
-    subcloud_gateway = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_GATEWAY_ADDRESS')
     network_name = 'admin'
 
     if RECONFIGURE_NETWORK:
@@ -481,6 +474,17 @@ def populate_admin_network(client):
         print("Updating admin network...")
     else:
         print("Populating admin network...")
+
+    if not has_admin_network():
+        return
+
+    admin_subnet = IPNetwork(
+        CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_SUBNET'))
+    start_address = CONF.get('BOOTSTRAP_CONFIG',
+                             'ADMIN_START_ADDRESS')
+    end_address = CONF.get('BOOTSTRAP_CONFIG',
+                           'ADMIN_END_ADDRESS')
+    subcloud_gateway = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_GATEWAY_ADDRESS')
 
     # create the address pool
     values = {
@@ -994,7 +998,7 @@ def populate_network_config(client):
 
     if is_subcloud():
         populate_system_controller_network(client)
-    if has_admin_network() and not is_system_controller():
+    if not is_system_controller():
         populate_admin_network(client)
     if has_admin_network_secondary() and not is_system_controller():
         populate_admin_network_secondary(client)

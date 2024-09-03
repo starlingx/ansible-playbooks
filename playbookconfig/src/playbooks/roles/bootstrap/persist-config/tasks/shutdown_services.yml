@@ -159,12 +159,13 @@
       prev_controller_admin_floating_address:
         "{{ default_prev_admin_start_address_primary
         if prev_admin_start_address == 'derived' else prev_network_params.prev_admin_start_address_primary }}"
-    when: (admin_network is defined and (prev_admin_network|bool == true))
+      prev_admin_broadcast: "{{ prev_network_params.prev_admin_subnet_primary | ipaddr('broadcast') }}"
+    when: (prev_admin_network|bool == true)
 
   - name: Set CIDR fact derived from previous admin network configuration
     set_fact:
       prev_admin_floating_virtual: "{{ prev_controller_admin_floating_address }}/{{ prev_admin_subnet_prefix }}"
-    when: (admin_network is defined and (prev_admin_network|bool == true))
+    when: (prev_admin_network|bool == true)
 
   # set facts for secondary if defined/exists
   - block:
@@ -174,16 +175,15 @@
         prev_controller_admin_floating_address_secondary:
           "{{ default_prev_admin_start_address_secondary
           if prev_admin_start_address == 'derived' else prev_network_params.prev_admin_start_address_secondary }}"
-      when: (admin_network is defined and
-             (prev_admin_network|bool == true) and
+        prev_admin_broadcast_secondary: "{{ prev_network_params.prev_admin_subnet_secondary | ipaddr('broadcast') }}"
+      when: ((prev_admin_network|bool == true) and
              prev_network_params.prev_admin_subnet_secondary)
 
     - name: Set CIDR fact derived from previous secondary admin network configuration
       set_fact:
         prev_admin_floating_virtual_secondary: "{{ prev_controller_admin_floating_address_secondary
                                                 }}/{{ prev_admin_subnet_prefix_secondary }}"
-      when: (admin_network is defined and
-             (prev_admin_network|bool == true) and
+      when: ((prev_admin_network|bool == true) and
              prev_network_params.prev_admin_subnet_secondary)
 
   - name: Set facts derived from previous floating addresses
@@ -252,8 +252,8 @@
     set_fact:
       remove_items: "{{ remove_items + [item] }}"
     with_items:
-      - "ip addr delete {{ prev_admin_floating_virtual }} brd {{ admin_broadcast }} dev lo:8 scope host"
-    when: (admin_network is defined and (prev_admin_network|bool == true))
+      - "ip addr delete {{ prev_admin_floating_virtual }} brd {{ prev_admin_broadcast }} dev lo:8 scope host"
+    when: (prev_admin_network|bool == true)
 
   # add secondary addresses for removal
   - block:
@@ -277,10 +277,10 @@
         remove_items: "{{ remove_items + [item] }}"
       with_items:
         - "ip addr delete {{ prev_admin_floating_virtual_secondary }} brd {{
-          admin_broadcast_secondary }} dev lo:8 scope host"
-      when: (admin_network is defined and (prev_admin_network|bool == true)
+          prev_admin_broadcast_secondary }} dev lo:8 scope host"
+      when: ((prev_admin_network|bool == true)
               and prev_admin_floating_virtual_secondary is defined
-              and admin_broadcast_secondary is defined)
+              and prev_admin_broadcast_secondary is defined)
 
   - name: Remove loopback interface in sysinv db and associated addresses
     shell: "{{ item }}"
