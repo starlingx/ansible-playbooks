@@ -63,7 +63,7 @@ spec:
             memory: 1Gi
           requests:
             cpu: 0
-            memory: 64Mi
+            memory: {{ flux_helm_controller_memory_request }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -170,7 +170,7 @@ spec:
             memory: 1Gi
           requests:
             cpu: 0
-            memory: 64Mi
+            memory: {{ flux_source_controller_memory_request }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
