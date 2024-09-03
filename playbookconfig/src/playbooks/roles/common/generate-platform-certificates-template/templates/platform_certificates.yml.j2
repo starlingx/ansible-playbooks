@@ -37,7 +37,7 @@ items:
     duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
     ipAddresses:
     - "{{ oam_ip_primary }}"
-{% if oam_ip_secondary | bool %}
+{% if oam_ip_secondary is truthy %}
     - "{{ oam_ip_secondary }}"
 {% endif %}
     issuerRef:
@@ -67,10 +67,10 @@ items:
     ipAddresses:
     - "{{ oam_ip_primary }}"
     - "{{ management_floating_ip_primary }}"
-{% if oam_ip_secondary | bool %}
+{% if oam_ip_secondary is truthy %}
     - "{{ oam_ip_secondary }}"
 {% endif %}
-{% if management_floating_ip_secondary | bool %}
+{% if management_floating_ip_secondary is truthy %}
     - "{{ management_floating_ip_secondary }}"
 {% endif %}
     issuerRef:
@@ -95,7 +95,7 @@ items:
     duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
     ipAddresses:
     - "{{ oam_ip_primary }}"
-{% if oam_ip_secondary | bool %}
+{% if oam_ip_secondary is truthy %}
     - "{{ oam_ip_secondary }}"
 {% endif %}
     # Add kubernetes cluster ip to make sure certificate has issuer ip in san list
@@ -103,13 +103,13 @@ items:
     - "{{ kubernetes_cluster_floating_ip_primary }}"
     - "{{ kubernetes_cluster_c0_ip_primary }}"
     - "{{ kubernetes_cluster_c1_ip_primary }}"
-{% if kubernetes_cluster_floating_ip_secondary | bool %}
+{% if kubernetes_cluster_floating_ip_secondary is truthy %}
     - "{{ kubernetes_cluster_floating_ip_secondary }}"
 {% endif %}
-{% if kubernetes_cluster_c0_ip_secondary | bool %}
+{% if kubernetes_cluster_c0_ip_secondary is truthy %}
     - "{{ kubernetes_cluster_c0_ip_secondary }}"
 {% endif %}
-{% if kubernetes_cluster_c1_ip_secondary | bool %}
+{% if kubernetes_cluster_c1_ip_secondary is truthy %}
     - "{{ kubernetes_cluster_c1_ip_secondary }}"
 {% endif %}
     issuerRef:
@@ -139,13 +139,13 @@ items:
     - "{{ management_floating_ip_primary }}"
     - "{{ management_c0_ip_primary }}"
     - "{{ management_c1_ip_primary }}"
-{% if management_floating_ip_secondary | bool %}
+{% if management_floating_ip_secondary is truthy %}
     - "{{ management_floating_ip_secondary }}"
 {% endif %}
-{% if management_c0_ip_secondary | bool %}
+{% if management_c0_ip_secondary is truthy %}
     - "{{ management_c0_ip_secondary }}"
 {% endif %}
-{% if management_c1_ip_secondary | bool %}
+{% if management_c1_ip_secondary is truthy %}
     - "{{ management_c1_ip_secondary }}"
 {% endif %}
     issuerRef:
