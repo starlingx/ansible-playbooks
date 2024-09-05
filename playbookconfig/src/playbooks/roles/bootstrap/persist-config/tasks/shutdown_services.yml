@@ -140,6 +140,7 @@
         prev_controller_floating_address_secondary:
           "{{ default_prev_management_start_address_secondary
           if prev_management_start_address == 'derived' else prev_network_params.prev_management_start_address_secondary }}"
+        prev_mgmt_broadcast_secondary: "{{ prev_network_params.prev_management_subnet_secondary | ipaddr('broadcast') }}"
       when: prev_network_params.prev_management_subnet_secondary
 
     - name: Set secondary cluster-host facts derived from previous network configurations

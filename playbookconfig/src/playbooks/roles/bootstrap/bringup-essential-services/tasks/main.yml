@@ -77,16 +77,20 @@
   - block:
     - name: Remove previous secondary management floating address if management network config has changed
       command: ip addr delete {{ prev_mgmt_floating_virtual_secondary }} dev lo scope host
-      when: last_config_file_exists and reconfigure_endpoints and
-            prev_mgmt_floating_virtual_secondary is defined and
-            (mgmt_floating_virtual_secondary != prev_mgmt_floating_virtual_secondary)
+      when: (last_config_file_exists and reconfigure_endpoints and
+            prev_mgmt_floating_virtual_secondary is defined) and
+            (mgmt_floating_virtual_secondary is not defined or
+            (mgmt_floating_virtual_secondary is defined and
+            (mgmt_floating_virtual_secondary != prev_mgmt_floating_virtual_secondary)))
 
     - name: Remove previous secondary management virtual address if management network config has changed
-      command: ip addr delete {{ prev_mgmt_virtual_secondary }} brd {{ management_broadcast_secondary }} dev lo:1 scope host
-      when: last_config_file_exists and reconfigure_endpoints and
+      command: ip addr delete {{ prev_mgmt_virtual_secondary }} brd {{ prev_mgmt_broadcast_secondary }} dev lo:1 scope host
+      when: (last_config_file_exists and reconfigure_endpoints and
             prev_mgmt_virtual_secondary is defined and
-            management_broadcast_secondary is defined and
-            (mgmt_virtual_secondary != prev_mgmt_virtual_secondary)
+            prev_mgmt_broadcast_secondary is defined) and
+            (mgmt_virtual_secondary is not defined or
+            (mgmt_virtual_secondary is defined and
+            (mgmt_virtual_secondary != prev_mgmt_virtual_secondary)))
 
   - name: Create symlinks for current Kubernetes version
     import_role:
