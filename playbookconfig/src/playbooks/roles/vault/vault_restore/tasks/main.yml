@@ -59,16 +59,8 @@
       shell: >-
         kubectl exec -n "vault" "{{ vault_manager_pod_name.stdout }}" --
         bash -c "source /opt/script/init.sh; if [ -f $PAUSEFILE ]; then rm -f $PAUSEFILE; fi" 2>&1
-  rescue:
-    - name: Clean up vault subdir if in standalone mode
+    - name: Clean up vault subdir
       file:
         path: "{{ vault_backup_dir }}"
         state: absent
-      when: op_mode == "standalone"
       become: yes
-
-- name: Cleanup vault subdir
-  file:
-    path: "{{ vault_backup_dir }}"
-    state: absent
-  become: yes
