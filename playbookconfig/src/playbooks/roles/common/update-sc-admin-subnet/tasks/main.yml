@@ -8,54 +8,17 @@
 #   These tasks update the subcloud's admin network configurations.
 #
 
-- name: Get previous subcloud admin network's primary address pool uuid
+- name: Delete previous subcloud admin network's secondary address pool
   shell: >-
-    source /etc/platform/openrc; system network-list |
-    awk '$8 == "admin" { print $12 }'
-  register: subcloud_admin_primary_pool_uuid
-
-# Delete previous subcloud admin network's secondary address pool uuid
-- block:
-  - name: Get previous subcloud admin network's primary address pool name
-    shell: >-
-      source /etc/platform/openrc; system addrpool-list |
-      awk '$2 == "{{ subcloud_admin_primary_pool_uuid.stdout }}" { print $4 }'
-    register: subcloud_admin_primary_pool_name
-
-  - name: Get previous subcloud admin network name
-    shell: >-
-      source /etc/platform/openrc; system network-list |
-      awk '$8 == "admin" { print $6 }'
-    register: subcloud_admin_network_name
-
-  - name: Get previous subcloud admin network secondary address pool name
-    shell: >-
-      source /etc/platform/openrc; system network-addrpool-list |
-      awk '$4 == "{{ subcloud_admin_network_name.stdout }}" && $6 != "{{
-      subcloud_admin_primary_pool_name.stdout }}" { print $6 }'
-    register: subcloud_admin_secondary_pool_name
-    when: subcloud_admin_network_name.stdout | length > 0
-
-  - block:
-    - name: Get previous subcloud admin network's secondary address pool uuid
-      shell: >-
-        source /etc/platform/openrc; system addrpool-list |
-        awk '$4 == "{{ subcloud_admin_secondary_pool_name.stdout }}" { print $2 }'
-      register: subcloud_admin_secondary_pool_uuid
-
-    - name: Delete previous subcloud admin network's secondary address pool
-      shell: >-
-        source /etc/platform/openrc; system addrpool-delete
-        {{ subcloud_admin_secondary_pool_uuid.stdout }}
-    when: subcloud_admin_secondary_pool_name.stdout | length > 0
-
-  when: subcloud_admin_primary_pool_uuid.stdout | length > 0
+    source /etc/platform/openrc; system addrpool-delete
+    {{ admin_addrpool_secondary }}
+  when: admin_addrpool_secondary is defined
 
 - name: Delete previous subcloud admin network's primary address pool
   shell: >-
     source /etc/platform/openrc; system addrpool-delete
-    {{ subcloud_admin_primary_pool_uuid.stdout }}
-  when: subcloud_admin_primary_pool_uuid.stdout | length > 0
+    {{ admin_address_pool_uuid.stdout }}
+  when: admin_address_pool_uuid.stdout | length > 0
 
 - name: Add subcloud admin network primary address pool
   shell: >-
@@ -64,7 +27,7 @@
     {{ (network_params.admin_subnet_primary | ipaddr(0)).split('/')[0]  }}
     {{ network_params.admin_subnet_primary | ipaddr('prefix') }}
     --ranges {{ admin_floating_address }}-{{ admin_floating_address | ipmath(2) }}
-    --gateway-address {{ admin_gateway_address }}  |
+    --gateway-address {{ network_params.admin_gateway_address_primary }}  |
     awk '/uuid/{ print$4 }'
   register: add_subcloud_admin_primary_pool_uuid
 
@@ -84,7 +47,8 @@
       'ipv4' if network_params.admin_subnet_secondary | ipv4 else 'ipv6' }}
       {{ (network_params.admin_subnet_secondary | ipaddr(0)).split('/')[0]  }}
       {{ network_params.admin_subnet_secondary | ipaddr('prefix') }}
-      --ranges {{ admin_floating_address_secondary }}-{{ admin_floating_address_secondary | ipmath(2) }} |
+      --ranges {{ admin_floating_address_secondary }}-{{ admin_floating_address_secondary | ipmath(2) }}
+      --gateway-address {{ network_params.admin_gateway_address_secondary }}  |
       awk '/uuid/{ print$4 }'
     register: add_subcloud_admin_secondary_pool_uuid
 

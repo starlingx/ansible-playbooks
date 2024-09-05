@@ -67,6 +67,8 @@
       management_start_address: "{{ management_start_address }}"
       admin_start_address: "{{ admin_start_address }}"
       cluster_service_start_address: "{{ cluster_service_start_address }}"
+      management_gateway_address: "{{ management_gateway_address | default([]) }}"
+      admin_gateway_address: "{{ admin_gateway_address | default([]) }}"
     loop_control:
       loop_var: network_param
     when: network_param.value != "undef" and network_param.value != "derived"
@@ -103,11 +105,26 @@
           value: "{{ cluster_service_subnet }}"
     when: item.value.address != "derived"
 
+  - name: Validate same sequence and number (single or dual-stack) of IP family on management gateway address and subnet
+    include_tasks: roles/common/validate-addresses/tasks/validate_dual_stack_address_vs_subnet.yml
+    with_dict:
+      management_gateway_address:
+        address: "{{ management_gateway_address }}"
+        subnet:
+          name: management_subnet
+          value: "{{ management_subnet }}"
+    when: item.value.address is defined
+
   - name: Validate same sequence and number (single or dual-stack) of IP family on admin subnet and address
     include_tasks: roles/common/validate-addresses/tasks/validate_dual_stack_address_vs_subnet.yml
     with_dict:
       admin_start_address:
         address: "{{ admin_start_address }}"
+        subnet:
+          name: admin_subnet
+          value: "{{ admin_subnet }}"
+      admin_gateway_address:
+        address: "{{ admin_gateway_address }}"
         subnet:
           name: admin_subnet
           value: "{{ admin_subnet }}"
@@ -182,7 +199,7 @@
     admin_floating_address: "{{ network_params.admin_start_address_primary
                                 if admin_start_address != 'derived'
                                 else default_admin_start_address_primary }}"
-    admin_gateway_address: "{{ admin_gateway_address }}"
+    admin_gateway_address_primary: "{{ network_params.admin_gateway_address_primary }}"
   when: admin_network is defined
 
 - name: Set derived facts for subsequent tasks/roles
@@ -215,6 +232,7 @@
       admin_floating_address_secondary: "{{ network_params.admin_start_address_secondary
                                             if admin_start_address != 'derived'
                                   else default_admin_start_address_secondary }}"
+      admin_gateway_address_secondary: "{{ network_params.admin_gateway_address_secondary }}"
     when: admin_network is defined and network_params.admin_subnet_secondary
 
   - name: Set secondary controller address in derived facts for subsequent tasks/roles
@@ -386,21 +404,74 @@
       awk '$8 == "admin" { print $12 }'
     register: admin_address_pool_uuid
 
-  - name: Get existing admin floating address
+  - name: Get existing primary admin floating address
     shell: >-
       source /etc/platform/openrc; system addrpool-list |
       awk ' $2 == "{{ admin_address_pool_uuid.stdout }}" && $14 == "{{ admin_floating_address }}" '
-    register: check_existing_admin_floating_address
+    register: check_existing_admin_floating_address_primary
 
-  - name: Get existing admin gateway
+  - name: Get existing primary admin gateway
     shell: >-
       source /etc/platform/openrc; system addrpool-list |
-      awk ' $2 == "{{ admin_address_pool_uuid.stdout }}" && $20 == "{{ admin_gateway_address }}" '
-    register: check_existing_admin_gateway
+      awk ' $2 == "{{ admin_address_pool_uuid.stdout }}" && $20 == "{{ admin_gateway_address_primary }}" '
+    register: check_existing_admin_gateway_primary
 
-  - name: Set admin gateway and floating address update required facts
+  - name: Set primary admin gateway and floating address update required facts
     set_fact:
-      admin_floating_update_required: "{{ false if check_existing_admin_floating_address.stdout else true }}"
-      admin_gateway_update_required: "{{ false if check_existing_admin_gateway.stdout else true }}"
+      admin_floating_update_required_primary: "{{ false if check_existing_admin_floating_address_primary.stdout
+                                                        else true }}"
+      admin_gateway_update_required_primary: "{{ false if check_existing_admin_gateway_primary.stdout else true }}"
+
+  - name: Set admin_addrpool_secondary fact
+    include_role:
+      name: common/get-admin-addrpool-secondary
+    vars:
+      admin_addrpool: "{{ admin_address_pool_uuid.stdout }}"
+
+  - block:
+    - name: Set secondary admin gateway and floating address update required facts
+      set_fact:
+        admin_floating_update_required_secondary: false
+        admin_gateway_update_required_secondary: false
+      when: admin_addrpool_secondary is not defined
+            and not network_params.admin_subnet_secondary
+
+    - name: Set secondary admin gateway and floating address update required facts
+      set_fact:
+        admin_floating_update_required_secondary: true
+        admin_gateway_update_required_secondary: true
+      when: (admin_addrpool_secondary is not defined
+            and network_params.admin_subnet_secondary)
+            or (admin_addrpool_secondary is defined
+            and not network_params.admin_subnet_secondary)
+
+    - block:
+      - name: Get existing secondary admin floating address
+        shell: >-
+          source /etc/platform/openrc; system addrpool-list |
+          awk ' $2 == "{{ admin_addrpool_secondary }}" && $14 == "{{ admin_floating_address_secondary }}" '
+        register: check_existing_admin_floating_address_secondary
+
+      - name: Get existing secondary admin gateway
+        shell: >-
+          source /etc/platform/openrc; system addrpool-list |
+          awk ' $2 == "{{ admin_addrpool_secondary }}" && $20 == "{{ admin_gateway_address_secondary }}" '
+        register: check_existing_admin_gateway_secondary
+
+      - name: Set secondary admin gateway and floating address update required facts
+        set_fact:
+          admin_floating_update_required_secondary: "{{ false if check_existing_admin_floating_address_secondary.stdout
+                                                              else true }}"
+          admin_gateway_update_required_secondary: "{{ false if check_existing_admin_gateway_secondary.stdout
+                                                             else true }}"
+
+      when: admin_addrpool_secondary is defined and network_params.admin_subnet_secondary
+
+  - name: Set primary/secondary admin gateway and floating address update required facts
+    set_fact:
+      admin_floating_update_required: "{{ admin_floating_update_required_primary
+                                          or admin_floating_update_required_secondary }}"
+      admin_gateway_update_required: "{{ admin_gateway_update_required_primary
+                                         or admin_gateway_update_required_secondary }}"
 
   when: admin_network is defined

@@ -51,9 +51,9 @@
 
 - name: Set subcloud gateway address
   set_fact:
-    sc_gateway_address: "{{ admin_gateway_address
+    sc_gateway_address: "{{ network_params.admin_gateway_address_primary
                            if admin_network is defined
-                           else management_gateway_address }}"
+                           else network_params.management_gateway_address_primary }}"
 
 - name: Set subcloud to systemcontroller route interface
   set_fact:
