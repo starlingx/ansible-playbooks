@@ -20,6 +20,15 @@
   - set_fact:
       pxeboot_addrs: "{{ ip_addrs_list.stdout }}"
 
+  - name: Deprovision ipsec-config service
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "sm-deprovision service-group-member
+      controller-services ipsec-config --apply" -b -e "ansible_ssh_user={{ ansible_ssh_user }}
+      ansible_ssh_pass={{ ansible_ssh_pass }} ansible_become_pass={{ ansible_become_pass }}"
+    with_items:
+      - controller-0
+      - controller-1
+
   - name: Clean up IPsec services on hosts
     include_tasks: cleanup-services.yml
     loop: "{{ pxeboot_addrs }}"
@@ -40,14 +49,5 @@
     until: host_is_reachable is not failed
     retries: 18
     delay: 10
-
-  - name: Deprovision ipsec-config service
-    command: >-
-      ansible all -i "{{ item }}," -m command -a "sm-deprovision service-group-member
-      controller-services ipsec-config --apply" -b -e "ansible_ssh_user={{ ansible_ssh_user }}
-      ansible_ssh_pass={{ ansible_ssh_pass }} ansible_become_pass={{ ansible_become_pass }}"
-    with_items:
-      - controller-0
-      - controller-1
 
   when: system_mode.stdout != "simplex"
