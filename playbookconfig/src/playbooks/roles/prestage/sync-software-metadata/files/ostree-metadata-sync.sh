@@ -38,6 +38,9 @@ SW_VERSION=${SW_VERSION:-}
 DEBUG=${DEBUG:-}
 DRY_RUN=${DRY_RUN:-}
 
+USM_SOFTWARE_DIR=/opt/software
+USM_METADATA_DIR=${USM_SOFTWARE_DIR}/metadata
+
 help() {
 cat<<EOF
 ostree metadata synchronization utilities.
@@ -164,6 +167,7 @@ initialize_env() {
     export MAJOR_SW_VERSION
 
     export OSTREE_REPO="/var/www/pages/feed/rel-${MAJOR_SW_VERSION}/ostree_repo"
+    export OSTREE_SYSROOT_REPO="/sysroot/ostree/repo"
     export OSTREE_REMOTE=starlingx
     export OSTREE_BRANCH=starlingx
     export OSTREE_LOCAL_REF="${OSTREE_REMOTE}"
@@ -174,6 +178,7 @@ initialize_env() {
     log_debug_l "SW_VERSION: ${SW_VERSION}"\
         "MAJOR_SW_VERSION: ${MAJOR_SW_VERSION}"\
         "OSTREE_REPO: ${OSTREE_REPO}"\
+        "OSTREE_SYSROOT_REPO: ${OSTREE_SYSROOT_REPO}"\
         "OSTREE_LOCAL_REF: ${OSTREE_LOCAL_REF}"\
         "OSTREE_REMOTE_REF: ${OSTREE_REMOTE_REF}"\
         "METADATA_DIR: ${METADATA_DIR}"\
@@ -255,35 +260,46 @@ find_metadata_file_for_attrib_val() {
 }
 
 get_simple_xml_attrib_from_metadata() {
-    # Retrieve the value of given attribute.
-    # WARNING: This function performs very basic parsing:
-    #          It only works if the opening and closing
-    #          <attrib> </attrib> are on the same line.
+    # Get the value of given XML attribute.
+    # We embed Python to parse the XML within script.
+    # Params:
+    #      $1 = the metadata file path
+    #      $2 = the xml attribute to find. can be a path that
+    #           specifies the element. For example:
+    #               /root/item/subitem1
+    # Returns the value of the element if it exists.
     local meta_file=$1
     local attrib=$2
     local val
-    val=$(sed -n 's|<'"${attrib}"'>\(.*\)</'"${attrib}"'>|\1|p' "${meta_file}")
-    val=$(trim "${val}")
+
+val=$(python - <<END
+import xml.etree.ElementTree as et
+import sys
+
+try:
+    tree = et.parse('$meta_file')
+    root = tree.getroot()
+    tag = root.find(".//$attrib")
+
+    print(tag.text)
+except:
+    sys.exit()
+END
+)
     log_debug "metadata GET ${attrib}: ${val}"
     echo "${val}"
 }
 
 get_commit_hashes_from_metadata() {
-    # Retrieves the commit hashes of given metadata file.
-    # The base commit and empty commits are ignored.
-    # Only package commits are taken into account.
-    #
-    # Using a nameref to update the passed-in array,
-    # see https://mywiki.wooledge.org/BashProgramming?highlight=%28nameref%29#Functions
+    # Retrieves the commit hash of given metadata file
+    # Currently the metadata file supports only a single commit.
+    # We use the commit1 path to find the hash.
     local -n from_metadata_commit_hashes=$1
     local meta_file=$2
     local commit
-    while IFS= read -r commit; do
-        commit=$(trim "${commit}")
-        if [ ! -z "$commit" ]; then
-            from_metadata_commit_hashes+=( "${commit}" )
-        fi
-    done < <(sed '/<base>/,/<\/base>/d' "${meta_file}" | sed --quiet 's|<commit[0-9]*>\(.*\)</commit[0-9]*>|\1|p')
+    local commit_path="contents/ostree/commit1/commit"
+
+    from_metadata_commit_hashes=$(get_simple_xml_attrib_from_metadata "${meta_file}" "${commit_path}")
 }
 
 get_usm_state_from_path() {
@@ -318,12 +334,14 @@ get_usm_state_from_path() {
 }
 
 ostree_commit_exists() {
-    # Does given commit exist in ostree?  i.e. has it been pulled into our repo yet?
-    # Note: this only works for locally defined ostree repositories.
-    # i.e. it can't get status from a remote server
+    # To ensure that the patch is entirely deployed, it must be verified in both repositories.
+    # This ensures that when checking whether the commit of a given patch exists on the system,
+    # it considers both repos (ostree repo and sysroot)
     local commit_hash=$1
     local ref=${2:-${OSTREE_LOCAL_REF}}
-    ostree --repo="${OSTREE_REPO}" log "${ref}" | grep '^commit ' | grep --quiet "${commit_hash}"
+    ostree --repo="${OSTREE_REPO}" log "${ref}" | grep '^commit ' | grep --quiet "${commit_hash}" && \
+    ostree --repo="${OSTREE_SYSROOT_REPO}" log "${ref}" | grep '^commit ' | grep --quiet "${commit_hash}"
+    return $?
 }
 
 translate_central_metadata_path() {
@@ -333,33 +351,24 @@ translate_central_metadata_path() {
 }
 
 get_metadata_files_unique_to_central() {
-    # TODO ISSUE:
-    # This gets flagged for removal which it shouldn't - it's just a stage change:
-    #
-    # [sysadmin@controller-0 ~(keystone_admin)]$ diff -s /opt/software/tmp/metadata-sync/ostree-metadata-commits.*
-    # 1d0
-    # < /opt/software/metadata/deployed/starlingx-24.09.1-metadata.xml:db313865837f9512b024a2356bd76106140ebcea783f8183e5fcc8d5cd28783b
-    # 2a2
-    # > /opt/software/metadata/available/starlingx-24.09.1-metadata.xml:db313865837f9512b024a2356bd76106140ebcea783f8183e5fcc8d5cd28783b
-
-    diff "${METADATA_SYNC_DIR}"/ostree-metadata-commits.{central,subcloud} | awk '/^</ {print $2;}' | awk -F ':' '{print $1;}'
+    cat "${METADATA_SYNC_DIR}"/ostree-metadata-commits.central | awk -F ':' '{print $1;}'
 }
 
-get_metadata_files_unique_to_subcloud() {
-    diff "${METADATA_SYNC_DIR}"/ostree-metadata-commits.{central,subcloud} | awk '/^>/ {print $2;}' | awk -F ':' '{print $1;}'
-}
-
-pull_ostree_commit_to_subcloud() {
-    # Pulls given commit into subcloud feed repo
-    #
-    local commit_hash=$1
-    if ostree_commit_exists "${commit_hash}"; then
-        log_info "ostree commit ${commit_hash}: already exists in ${OSTREE_LOCAL_REF}"
-    else
-        log_info "Pulling ostree commit from system controller: ${commit_hash}"
-        run_cmd ostree --repo="${OSTREE_REPO}" pull --mirror "${OSTREE_REMOTE_REF}" "${OSTREE_BRANCH}@${commit_hash}"
-        check_rc_die $? "ostree pull failed"
+sync_ostree_repo() {
+    # Synchronizes the remote ostree repository (system controller) to the local subcloud.
+    local tmp_ostree_sync_file="/tmp/sync-ostree-commits.log"
+    run_cmd ostree --repo="${OSTREE_REPO}" pull --mirror --depth=-1 "${OSTREE_REMOTE_REF}" > "${tmp_ostree_sync_file}" 2>&1
+    rc=$?
+    # To avoid showing all ostree pull progress, which generates a very large output
+    # in Ansible, we show only the report line in case of success.
+    # In case of error only the last 10 lines.
+    if [ "$rc" != "0" ]; then
+        tail -10 "${tmp_ostree_sync_file}"
+        rm -f "${tmp_ostree_sync_file}"
+        check_rc_die $rc "Unable to synchronize ostree repository."
     fi
+    tail -1 "${tmp_ostree_sync_file}"
+    rm -f "${tmp_ostree_sync_file}"
 }
 
 configure_ostree_repo_for_central_pull() {
@@ -436,7 +445,6 @@ find_all_ostree_commits_for_release() {
             get_commit_hashes_from_metadata commit_hashes "${metadata_file}"
             if [ "${#commit_hashes[@]}" -gt 0 ]; then
                 # We only need to supply the first commit here.
-                # See how the sync_subcloud_metadata algorithm works - it only uses the first commit
                 echo "${metadata_file}:${commit_hashes[0]}"
             fi
         fi
@@ -456,19 +464,15 @@ sync_metadata_on_subcloud() {
     #         - this will include the 'ostree-commit-id' and 'committed' ATTRIBUTES from systemController
     #         * this has already been done by ansible
     #
+    #     We are deleting all files of the release before synchronization to ensure that the
+    #     metadata will be exactly the same as the SC. It is not necessary to update the commits since
+    #     the subcloud repository is a mirror of the SC repository.
+    #
     #     IF RELEASE does NOT EXIST on subcloud
     #         IF 'ostree-commit-id' == NULL
-    #             Create it with STATE = unavailable
-    #         ELSE
     #             Create it with STATE = available
-    #     ELSE   // RELEASE exists on subcloud
-    #         IF subcloud STATE == deployed
-    #             Leave it as deployed
-    #         ELSE IF subcloud STATE == available or unavailable
-    #             IF ‘ostree-commit-id’ == NULL
-    #                 Set STATE = unavailable
-    #             ELSE
-    #                 Set STATE = available
+    #         ELSE
+    #             Create it with STATE = deployed
     #
     # For each RELEASE on SUBCLOUD but NOT synchronized from systemController
     #     REMOVE RELEASE FROM SUBCLOUD
@@ -506,50 +510,16 @@ sync_metadata_on_subcloud() {
     if [ -z "${subcloud_metadata_file}" ]; then
         # Not found: RELEASE does NOT EXIST on subcloud
         if ostree_commit_exists "${commit_hash}"; then
-            # Create it with STATE = available
+            # Create it with STATE = deployed
             log_debug_l "sync_metadata_on_subcloud: commit exists in local ${OSTREE_LOCAL_REF}"\
                 "ref: ${commit_hash}"
-            new_state="available"
+            new_state="deployed"
         else
-            # Create it with STATE = unavailable
-            new_state="unavailable"
+            # Create it with STATE = available
+            new_state="available"
         fi
         log_info "${log_hdr} does not exist on subcloud, setting to ${new_state}"
         run_cmd cp "${central_metadata_file}" "${METADATA_DIR}/${new_state}"
-    else
-        # RELEASE exists on subcloud
-        local subcloud_state
-        subcloud_state=$(get_usm_state_from_path "${subcloud_metadata_file}")
-        case "${subcloud_state}" in
-            'deployed')
-                # Leave it as deployed
-                log_info "${log_hdr} is in sync (subcloud state: deployed)"
-                ;;
-            'available'|'unavailable')
-                # Not found: RELEASE does NOT EXIST on subcloud
-                if ostree_commit_exists "${commit_hash}"; then
-                    # Set STATE = available
-                    log_debug_l "sync_metadata_on_subcloud: commit exists in local ${OSTREE_LOCAL_REF}"\
-                        "ref: ${commit_hash}"
-                    new_state=available
-                else
-                    # Set STATE = unavailable
-                    new_state=unavailable
-                fi
-                log_info "${log_hdr} exists on subcloud, setting subcloud state: ${new_state}"
-                run_cmd rm "${subcloud_metadata_file}"
-                run_cmd cp "${central_metadata_file}" "${METADATA_DIR}/${new_state}"
-                ;;
-            'committed')
-                log_info "${log_hdr} subcloud state is ${subcloud_state} - ignoring"
-                ;;
-            'deploying'|'removing')
-                log_info "${log_hdr} subcloud state is ${subcloud_state} - transitional, ignoring"
-                ;;
-            *)
-                log_error "${log_hdr} subcloud state is unexpected: ${subcloud_state} - ignoring"
-                ;;
-        esac
     fi
 }
 
@@ -560,30 +530,37 @@ sync_subcloud_metadata() {
     #
     # When this is invoked, we have the following in place (via ansible):
     #
-    #   - "${METADATA_SYNC_DIR}"/ostree-metadata-commits.{central,subcloud}
-    #       - these files summarizing the metadata files / ostree commits matching our given release
+    #   - "${METADATA_SYNC_DIR}"/ostree-metadata-commits.central
     #   - "${METADATA_SYNC_DIR}/metadata
     #       - is a direct copy of the system controller /opt/software/medatada directory
-    #       - we use this to calculate the new subcloud state of the release
-    #         and to pull the missing ostree commits to the subcloud
+    #       - we use this to ensure that the metadata files exist in the subcloud
     #
     # Synchronization is done on a per-major-release basis.
     # For given major release:
-    # 1) Get a list of all update metadata files needing to be synchronized
-    #    (this is done by comparing (using diff) the central and subcloud file in
-    #    "${METADATA_SYNC_DIR}"/ostree-metadata-commits.{central,subcloud}).
-    # 2) Ensure any ostree commit(s) for the update are pulled from central
-    #    controller if necessary.
-    # 3) Synchronize the update metadata file into the proper state-based location
+    # 1) Syncronize ostree repo
+    # 2) Remove the metadata from the specified release to ensure that when synchronized,
+    #    it is in the right directory, based on the state.
+    # 3) Get a list of all update metadata files needing to be synchronized
+    # 4) Synchronize the update metadata file into the proper state-based location
     #    on the subcloud
     #
     local metadata_file commit_hash central_metadata_file
+    local sw_version=${1:-$SW_VERSION}
 
+    # Configure and sync ostree feed repo
+    # This will be able to ostree at the same level between System Controller and subcloud.
     configure_ostree_repo_for_central_pull
+    sync_ostree_repo
 
     local commit_hashes=()
     local commit_hash
-    # 1) Get list of metadata files requiring sync
+
+    # Remove current files for specified release
+    log_info "Removing directories for release ${sw_version}"
+    rm -Rf ${USM_SOFTWARE_DIR}/rel-${sw_version}.*
+    find ${USM_METADATA_DIR} -type f -name "*${sw_version}*" | xargs rm -f
+
+    # Get list of metadata files requiring sync
     for metadata_file in $(get_metadata_files_unique_to_central); do
         log_info "sync_subcloud_metadata: processing ${metadata_file} from central (sync)"
         central_metadata_file=$(translate_central_metadata_path "${metadata_file}")
@@ -595,44 +572,9 @@ sync_subcloud_metadata() {
             "commit_hashes: ${commit_hashes[*]}"
 
         if [ "${#commit_hashes[@]}" -gt 0 ]; then
-            for commit_hash in "${commit_hashes[@]}"; do
-                # 2) Pull from central controller if necessary
-
-                # TODO(kmacleod): check if previous_commit exists from metadata, fail
-
-                pull_ostree_commit_to_subcloud "${commit_hash}"
-            done
-            # 3) Synchronize the metadata file
+            # Synchronize the metadata file
             sync_metadata_on_subcloud "${metadata_file}" "${central_metadata_file}" commit_hashes
-        fi
-    done
-    for metadata_file in $(get_metadata_files_unique_to_subcloud); do
-        log_info "sync_subcloud_metadata: processing ${metadata_file} from subcloud (check remove)"
-        commit_hashes=()
-        get_commit_hashes_from_metadata commit_hashes "${central_metadata_file}"
-        log_debug_l "sync_subcloud_metadata from subcloud (check remove): "\
-            "metadata_file: ${metadata_file}"\
-            "commit_hashes: ${commit_hashes[*]}"
-        local removed=
-        if [ "${#commit_hashes[@]}" -gt 0 ]; then
-            for commit_hash in "${commit_hashes[@]}"; do
-                if ! ostree_commit_exists "${commit_hash}"; then
-                    log_info "sync_subcloud_metadata from subcloud: commit '${commit_hash}' does not exist, removing '${metadata_file}'"
-                    removed=1
-                fi
-            done
-            if [ -n "${removed}" ]; then
-                rm "${metadata_file}"
-            fi
-        fi
-        if [ -n "${removed}" ]; then
-            log_info_l "sync_subcloud_metadata from subcloud, removed file for non-existing commit(s): "\
-                "metadata_file: ${metadata_file}"\
-                "commit_hashes: ${commit_hashes[*]}"
-        else
-            log_info_l "sync_subcloud_metadata from subcloud, commit is in use, not removing: "\
-                "metadata_file: ${metadata_file}"\
-                "commit_hashes: ${commit_hashes[*]}"
+            commit_hashes=()
         fi
     done
 }
