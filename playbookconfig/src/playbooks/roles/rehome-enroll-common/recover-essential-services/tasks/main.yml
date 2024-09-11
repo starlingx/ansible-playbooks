@@ -106,13 +106,13 @@
       line: "{{ item.To }}"
     loop:
       - { From: "^sysinv::api::keystone_password",
-          To: "sysinv::api::keystone_password: !!python/unicode '{{ users['sysinv'] }}'" }
+          To: "sysinv::api::keystone_password: {{ users['sysinv'] }}" }
       - { From: "^sysinv::certalarm::local_keystone_password",
-          To: "sysinv::certalarm::local_keystone_password: !!python/unicode '{{ users['sysinv'] }}'" }
+          To: "sysinv::certalarm::local_keystone_password: {{ users['sysinv'] }}" }
       - { From: "^sysinv::certmon::local_keystone_password",
-          To: "sysinv::certmon::local_keystone_password: !!python/unicode '{{ users['sysinv'] }}'" }
+          To: "sysinv::certmon::local_keystone_password: {{ users['sysinv'] }}" }
       - { From: "^sysinv::keystone::auth::password",
-          To: "sysinv::keystone::auth::password: !!python/unicode '{{ users['sysinv'] }}'" }
+          To: "sysinv::keystone::auth::password: {{ users['sysinv'] }}" }
     no_log: true
 
   when: >

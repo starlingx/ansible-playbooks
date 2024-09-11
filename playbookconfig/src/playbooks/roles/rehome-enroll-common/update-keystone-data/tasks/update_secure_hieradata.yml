@@ -32,49 +32,49 @@
     line: "{{ item.To }}"
   loop:
     - { From: "^barbican::keystone::auth::password",
-        To: "barbican::keystone::auth::password: !!python/unicode '{{ users['barbican'] }}'" }
+        To: "barbican::keystone::auth::password: {{ users['barbican'] }}" }
     - { From: "^barbican::keystone::authtoken::password",
-        To: "barbican::keystone::authtoken::password: !!python/unicode '{{ users['barbican'] }}'" }
+        To: "barbican::keystone::authtoken::password: {{ users['barbican'] }}" }
     - { From: "^dcmanager::api::keystone_password",
-        To: "dcmanager::api::keystone_password: !!python/unicode '{{ users['dcmanager'] }}'" }
+        To: "dcmanager::api::keystone_password: {{ users['dcmanager'] }}" }
     - { From: "^dcmanager::keystone::auth::password",
-        To: "dcmanager::keystone::auth::password: !!python/unicode '{{ users['dcmanager'] }}'" }
+        To: "dcmanager::keystone::auth::password: {{ users['dcmanager'] }}" }
     - { From: "^dcorch::api_proxy::dcmanager_keystone_password",
-        To: "dcorch::api_proxy::dcmanager_keystone_password: !!python/unicode '{{ users['dcmanager'] }}'" }
+        To: "dcorch::api_proxy::dcmanager_keystone_password: {{ users['dcmanager'] }}" }
     - { From: "^fm::auth::auth_password",
-        To: "fm::auth::auth_password: !!python/unicode '{{ users['fm'] }}'" }
+        To: "fm::auth::auth_password: {{ users['fm'] }}" }
     - { From: "^fm::keystone::auth::password",
-        To: "fm::keystone::auth::password: !!python/unicode '{{ users['fm'] }}'" }
+        To: "fm::keystone::auth::password: {{ users['fm'] }}" }
     - { From: "^fm::keystone::authtoken::password",
-        To: "fm::keystone::authtoken::password: !!python/unicode '{{ users['fm'] }}'" }
+        To: "fm::keystone::authtoken::password: {{ users['fm'] }}" }
     - { From: "^nfv::keystone::auth::password",
-        To: "nfv::keystone::auth::password: !!python/unicode '{{ users['vim'] }}'" }
+        To: "nfv::keystone::auth::password: {{ users['vim'] }}" }
     - { From: "^patching::api::keystone_password",
-        To: "patching::api::keystone_password: !!python/unicode '{{ users['patching'] }}'" }
+        To: "patching::api::keystone_password: {{ users['patching'] }}" }
     - { From: "^patching::keystone::auth::password",
-        To: "patching::keystone::auth::password: !!python/unicode '{{ users['patching'] }}'" }
+        To: "patching::keystone::auth::password: {{ users['patching'] }}" }
     - { From: "^patching::keystone::authtoken::password",
-        To: "patching::keystone::authtoken::password: !!python/unicode '{{ users['patching'] }}'" }
+        To: "patching::keystone::authtoken::password: {{ users['patching'] }}" }
     - { From: "^usm::api::keystone_password",
-        To: "usm::api::keystone_password: !!python/unicode '{{ users['usm'] }}'" }
+        To: "usm::api::keystone_password: {{ users['usm'] }}" }
     - { From: "^usm::keystone::auth::password",
-        To: "usm::keystone::auth::password: !!python/unicode '{{ users['usm'] }}'" }
+        To: "usm::keystone::auth::password: {{ users['usm'] }}" }
     - { From: "^usm::keystone::authtoken::password",
-        To: "usm::keystone::authtoken::password: !!python/unicode '{{ users['usm'] }}'" }
+        To: "usm::keystone::authtoken::password: {{ users['usm'] }}" }
     - { From: "^platform::mtce::params::auth_pw",
-        To: "platform::mtce::params::auth_pw: !!python/unicode '{{ users['mtce'] }}'" }
+        To: "platform::mtce::params::auth_pw: {{ users['mtce'] }}" }
     - { From: "^sysinv::api::keystone_password",
-        To: "sysinv::api::keystone_password: !!python/unicode '{{ users['sysinv'] }}'" }
+        To: "sysinv::api::keystone_password: {{ users['sysinv'] }}" }
     - { From: "^sysinv::certalarm::dc_keystone_password",
-        To: "sysinv::certalarm::dc_keystone_password: !!python/unicode '{{ users['dcmanager'] }}'" }
+        To: "sysinv::certalarm::dc_keystone_password: {{ users['dcmanager'] }}" }
     - { From: "^sysinv::certalarm::local_keystone_password",
-        To: "sysinv::certalarm::local_keystone_password: !!python/unicode '{{ users['sysinv'] }}'" }
+        To: "sysinv::certalarm::local_keystone_password: {{ users['sysinv'] }}" }
     - { From: "^sysinv::certmon::dc_keystone_password",
-        To: "sysinv::certmon::dc_keystone_password: !!python/unicode '{{ users['dcmanager'] }}'" }
+        To: "sysinv::certmon::dc_keystone_password: {{ users['dcmanager'] }}" }
     - { From: "^sysinv::certmon::local_keystone_password",
-        To: "sysinv::certmon::local_keystone_password: !!python/unicode '{{ users['sysinv'] }}'" }
+        To: "sysinv::certmon::local_keystone_password: {{ users['sysinv'] }}" }
     - { From: "^sysinv::keystone::auth::password",
-        To: "sysinv::keystone::auth::password: !!python/unicode '{{ users['sysinv'] }}'" }
+        To: "sysinv::keystone::auth::password: {{ users['sysinv'] }}" }
   no_log: true
   delegate_to: localhost
 
@@ -95,5 +95,5 @@
   lineinfile:
     path: "/opt/platform/puppet/{{ software_version }}/hieradata/secure_system.yaml"
     regexp: "^platform::dockerdistribution::params::registry_password"
-    line: "platform::dockerdistribution::params::registry_password: !!python/unicode '{{ users['sysinv'] }}'"
+    line: "platform::dockerdistribution::params::registry_password: {{ users['sysinv'] }}"
   no_log: true
