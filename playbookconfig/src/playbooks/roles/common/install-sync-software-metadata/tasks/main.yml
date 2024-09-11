@@ -21,6 +21,7 @@
     ostree_sysroot_repo_dir: /sysroot/ostree/repo
     ostree_rev: starlingx
     software_dir: /opt/software
+    synced_dir: /opt/software/synced
 
 - block:
 
@@ -78,12 +79,21 @@
 
     - name: Ensure subcloud {{ software_dir }} exists (sysadmin)
       file:
-        path: "{{ software_dir }}"
+        path: "{{ item }}"
         owner: sysadmin
         group: root
         state: directory
         mode: 0755
         recurse: yes
+      loop:
+        - "{{ software_dir }}"
+        # To prevent the "software-controller-daemon" service from simultaneously
+        # creating the `synced` directory with `root:root` permissions during this task
+        # and the next one which could cause rsync to fail due to permission issues.
+        # The "synced" directory must be created before running rsync. This ensures that
+        # the directory already exists, so the software-controller-daemon" service will
+        # detect it and not attempt to create it, allowing rsync to run without issues.
+        - "{{ synced_dir }}"
       become: true
 
     - name: Synchronize software dir from system controller to subcloud
