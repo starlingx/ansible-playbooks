@@ -9,6 +9,10 @@
 #   This role synchronizes the system controller /opt/software/metadata
 #   directory to the subcloud.
 #
+#   For the N-1 scenario we use the force_ostree_dir_sync variable to determine if it is
+#   necessary to copy the entire ostree repo directory from the system controller
+#   release.
+#
 #   Note: much of the work is done by the ostree-metadata-sync.sh script, which
 #   has two targets: get-commits and sync-subcloud
 #
@@ -35,7 +39,6 @@
 
 - name: Set software metadata synchronization facts for {{ software_version }}
   set_fact:
-    ostree_feed_repo_dir: /var/www/pages/feed/rel-{{ software_version }}/ostree_repo
     ostree_sysroot_repo_dir: /sysroot/ostree/repo
     ostree_rev: starlingx
     usm_software_dir: /opt/software
@@ -44,13 +47,53 @@
     ostree_metadata_commits_central: /opt/software/tmp/metadata-sync/ostree-metadata-commits.central
     ostree_metadata_commits_subcloud: /opt/software/tmp/metadata-sync/ostree-metadata-commits.subcloud
 
+- block:
+  # Transfer the ostree directory from the system controller to the subcloud
+  # in case the scenario corresponds to initial N-1.
+  # Once the directory is copied (or exists) in the subcloud, this block will
+  # no longer be executed.
+
+  # It's necessary to temporarily change the owner to sysadmin so that
+  # the system controller can push the files to the subcloud, since the files
+  # are in the folders only the root can access but the synchronize only
+  # support passwordless sysadmin to execute ssh and rsync.
+  - name: Temporarily change the ownership of feed directory {{ release_feed }}
+    file:
+      path: "{{ release_feed }}"
+      state: directory
+      owner: sysadmin
+      recurse: yes
+    become: yes
+
+  - name: Copy feed directory from system controller to subcloud
+    synchronize:
+      mode: push
+      src: "{{ release_feed }}/"
+      dest: "{{ release_feed }}/"
+      rsync_opts: "--delete"
+    register: prestage_transfer
+    retries: 3
+    delay: 5
+    until: prestage_transfer.rc == 0
+    become: yes
+
+  always:
+    - name: Restore the ownership of the feed directory {{ release_feed }}
+      file:
+        path: "{{ release_feed }}"
+        state: directory
+        owner: root
+        recurse: yes
+      become: yes
+  when: force_ostree_dir_sync
+
 - name: Gather system controller ostree commit
-  command: ostree --repo={{ ostree_feed_repo_dir }} rev-parse {{ ostree_rev }}
+  command: ostree --repo={{ ostree_repo_release_feed }} rev-parse {{ ostree_rev }}
   register: ostree_commit_system_controller
   delegate_to: localhost
 
 - name: Gather subcloud ostree commit
-  command: ostree --repo={{ ostree_feed_repo_dir }} rev-parse {{ ostree_rev }}
+  command: ostree --repo={{ ostree_repo_release_feed }} rev-parse {{ ostree_rev }}
   register: ostree_commit_subcloud
 
 - name: Gather system controller deployed software list
@@ -142,7 +185,7 @@
       exec 3>/tmp/ostree_metadata_commits_central.lock
       flock --exclusive --timeout 180 3 || echo "ERROR: flock failed: $?"
       if [ ! -f "{{ ostree_metadata_commits_central }}" ] \
-        || ! diff -q <(ostree --repo="{{ ostree_feed_repo_dir }}" rev-parse "{{ ostree_rev }}") \
+        || ! diff -q <(ostree --repo="{{ ostree_repo_release_feed }}" rev-parse "{{ ostree_rev }}") \
         <(tail --lines=1 "{{ ostree_metadata_commits_central }}" | awk -F':' '{ print $2; }') > /dev/null 2>&1 ; then
         {{ role_path }}/files/ostree-metadata-sync.sh \
         --sw-version "{{ software_version }}" --output "{{ ostree_metadata_commits_central }}" get-commits
@@ -157,10 +200,11 @@
     debug:
       var: system_controller_software_metadata_commits
 
+  # Switch from command to script module to run the ostree-metadata-sync.sh script
+  # on the system controller as it does not exist on N-1 release e.g. 22.12
   - name: Gather subcloud metadata commits
-    command: >-
-      {{ role_path }}/files/ostree-metadata-sync.sh
-      --sw-version "{{ software_version }}" --output "{{ ostree_metadata_commits_subcloud }}" get-commits
+    script: "{{ role_path }}/files/ostree-metadata-sync.sh --sw-version {{ software_version }}
+            --output {{ ostree_metadata_commits_subcloud }} get-commits"
     register: subcloud_software_metadata_commits
 
   - name: Show ostree metadata commits on subcloud
@@ -169,7 +213,7 @@
 
   - debug:
       msg:
-        - "ostree revision from {{ ostree_feed_repo_dir }}:"
+        - "ostree revision from {{ ostree_repo_release_feed }}:"
         - "system controller: {{ ostree_commit_system_controller.stdout }}"
         - "subcloud:          {{ ostree_commit_subcloud.stdout }}"
         - "Software list:"
@@ -180,10 +224,10 @@
         - "{{ subcloud_software_list.stdout }}"
         - "{{ subcloud_software_metadata_commits.stdout }}"
 
-  - name: Gather system controller deployed minor release list
+  - name: Gather system controller deployed release list
     shell: |
       while IFS= read -r line; do
-        echo "$line" | awk -F'|' '{split($2,p,"-"); if (p[2] !~ /\.0$/) print p[2]}'
+        echo "$line" | awk -F'|' '{split($2,p,"-"); print p[2]}'
       done <<< "{{ system_controller_software_list.stdout }}"
     register: minor_releases_list
     delegate_to: localhost
@@ -200,7 +244,7 @@
       recurse: yes
     become: yes
 
-  - name: Copy system controller minor release directory to subcloud
+  - name: Copy system controller deployed release directory to subcloud
     synchronize:
       mode: "push"
       src: "{{ usm_software_dir }}/rel-{{ item }}"
@@ -229,10 +273,11 @@
       force: true
     become: yes
 
+  # Switch from command to script module to run the ostree-metadata-sync.sh script
+  # on the system controller as it does not exist on N-1 release e.g. 22.12
   - name: Synchronizing system controller ostree commits on subcloud
-    command: >-
-      {{ role_path }}/files/ostree-metadata-sync.sh
-      --sw-version "{{ software_version }}" sync-subcloud 2>&1 | tee /tmp/sync-ostree-commits.log
+    script: "{{ role_path }}/files/ostree-metadata-sync.sh --sw-version {{ software_version }}
+            sync-subcloud 2>&1 | tee /tmp/sync-ostree-commits.log"
     register: sync_software_commits
     become: true
 
@@ -241,8 +286,6 @@
       msg:
         - "sync_software_commits:"
         - "rc: {{ sync_software_commits.rc }}"
-        - "start: {{ sync_software_commits.start }}"
-        - "end: {{ sync_software_commits.end }}"
         - "stderr: {{ sync_software_commits.stderr }}"
         - "stdout: {{ sync_software_commits.stdout }}"
 
