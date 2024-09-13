@@ -16,6 +16,6 @@ restore_extra_items: []
 # after bootstrap controller-0 is done during the restore.
 staging_dir: /opt/backups
 
-# Flag file to indicate if ceph backend is present
-#
+# Flag file to indicate if ceph or rook backend is present
 ceph_backend_flag: "{{ platform_conf_path }}/.node_ceph_configured"
+rook_backend_flag: "{{ platform_conf_path }}/.node_rook_configured"

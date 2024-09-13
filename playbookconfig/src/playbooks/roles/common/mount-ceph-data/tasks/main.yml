@@ -1,0 +1,58 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   This sub-task is to mount ceph data directory to rook-ceph
+
+- name: Look for the flag indicating that rook ceph is configured
+  shell: >-
+    tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |
+    grep 'etc/platform/.node_rook_configured'
+  args:
+    warn: false
+  failed_when: false
+  register: rook_backend
+
+- block:
+  - name: Create list of rook and ceph classes to pass to puppet
+    copy:
+      dest: "/tmp/rook_ceph_runtime.yml"
+      content: |
+        platform::rook::params::service_enabled: true
+        platform::filesystem::ceph::params::ceph_enabled: true
+        classes:
+        - platform::rook::runtime
+        - platform::filesystem::ceph::runtime
+
+  - name: Applying puppet rook and ceph runtime manifest
+    command: >
+      /usr/local/bin/puppet-manifest-apply.sh
+      {{ puppet_permdir }}/hieradata/
+      controller-0
+      controller runtime /tmp/rook_ceph_runtime.yml
+    register: runtime_manifest
+    environment:
+      INITIAL_CONFIG_PRIMARY: "true"
+      LC_ALL: "en_US.UTF-8"
+
+  - name: Fail if puppet manifest apply script returns an error
+    fail:
+      msg: >-
+            Failed to apply rook ceph manifest. See /var/log/puppet/latest/puppet.log
+            for details.
+    when: runtime_manifest.rc != 0
+
+  - name: Wait for /var/lib/ceph/data to be mounted
+    shell: mount | grep /var/lib/ceph/data
+    retries: 10
+    delay: 3
+    register: result
+    until: result.rc == 0
+
+  when: rook_backend.rc == 0
+
+  become: yes
+  become_user: root

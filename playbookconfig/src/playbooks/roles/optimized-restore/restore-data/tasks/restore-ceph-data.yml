@@ -1,12 +1,12 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# ROLE DESCRIPTION:
-#   This role is to restore ceph data specific to optimized restore.
-#   It depends on recover-ceph-data role
+# SUB-TASKS DESCRIPTION:
+#   This sub-task is to restore ceph data specific to optimized restore.
+#   It depends on recover-ceph-data or recover-rook-ceph-data role
 
 - name: Prepare to restore Ceph
   block:
@@ -41,136 +41,180 @@
         line: "system_mode={{ system_mode }}"
 
     - name: Look for the flag indicating that Ceph is configured
-      shell: "tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |  grep 'etc/platform/.node_ceph_configured'"
+      shell: >-
+        tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |
+        grep 'etc/platform/.node_ceph_configured'
       args:
         warn: false
       failed_when: false
       register: ceph_backend
 
-    - name: Restore Ceph cluster data
+    - name: Look for the flag indicating that Rook is configured
+      shell: >-
+        tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |
+        grep 'etc/platform/.node_rook_configured'
+      args:
+        warn: false
+      failed_when: false
+      register: rook_backend
+
+    - name: Restore Ceph cluster
       block:
+        - name: Set Ceph variables
+          set_fact:
+            skip_ceph_osds_wipe_flag: /etc/platform/.skip_ceph_osds_wipe
+            ceph_temp_dir: /tmp/ceph/
+            restore_system_mode: "{{ system_mode }}"
 
-      - name: Restore Ceph configuration files
-        command: "tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }} --overwrite etc/ceph"
+        - name: Create {{ ceph_temp_dir }} dir
+          file:
+            path: "{{ ceph_temp_dir }}"
+            state: directory
+            owner: sysadmin
+            group: sys_protected
+            mode: 0755
+          become: yes
 
-      - name: Set Ceph variables
-        set_fact:
-          ceph_crushmap_file: crushmap.bin.backup
-          ceph_crushmap_file_tmp: crushmap.bin.tmp
-          skip_ceph_osds_wipe_flag: /etc/platform/.skip_ceph_osds_wipe
-          ceph_temp_dir: /tmp/ceph/
-          restore_data_file: "{{ platform_backup_fqpn }}"
-          restore_system_type: "{{ system_type }}"
-          restore_system_mode: "{{ system_mode }}"
+        - name: Create flag file in /etc/platform to skip wiping OSDs
+          file:
+            path: "{{ skip_ceph_osds_wipe_flag }}"
+            state: touch
+          when: restore_system_mode != 'simplex'
 
-      # Recover procedure for systems with storage nodes is different from
-      # that of systems with controller storage:
-      # - For controller storage we recover ceph-mon data by scanning OSDs.
-      # - For systems with storage nodes we get ceph-mon data from storage-0
-      #   ceph-mon that is already up and will not be reinstalled.
-      - name: Check if setup has storage nodes
-        command: bash -c 'source /etc/platform/openrc; system host-list --nowrap --format value --column personality'
-        register: node_personalities
-        failed_when: false
+        - name: Restore Ceph configuration files
+          command: "tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }} --overwrite etc/ceph"
 
-      - name: Create {{ ceph_temp_dir }} dir
-        file:
-          path: "{{ ceph_temp_dir }}"
-          state: directory
-          owner: sysadmin
-          group: sys_protected
-          mode: 0755
-        become: yes
+        # Recover procedure for systems with storage nodes is different from
+        # that of systems with controller storage:
+        # - For controller storage we recover ceph-mon data by scanning OSDs.
+        # - For systems with storage nodes we get ceph-mon data from storage-0
+        #   ceph-mon that is already up and will not be reinstalled.
+        - name: Check if setup has storage nodes
+          command: bash -c 'source /etc/platform/openrc; system host-list --nowrap --format value --column personality'
+          register: node_personalities
+          failed_when: false
 
-      - name: Get {{ ceph_crushmap_file }} file path
-        shell: tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep {{ ceph_crushmap_file }}
-        register: ceph_crushmap_backup_path_tgz
+        - name: Restore Ceph cluster data (bare-metal)
+          block:
+          - name: Set Ceph variables
+            set_fact:
+              ceph_crushmap_file: crushmap.bin.backup
+              ceph_crushmap_file_tmp: crushmap.bin.tmp
+              restore_system_type: "{{ system_type }}"
 
-      - name: Restore {{ ceph_crushmap_file }} file
-        command: >-
-          tar --use-compress-program=pigz -C {{ ceph_temp_dir }}
-          -xpf {{ platform_backup_fqpn }} {{ ceph_crushmap_backup_path_tgz.stdout_lines[0] }}
-        args:
-          warn: false
+          - name: Get {{ ceph_crushmap_file }} file path
+            shell: tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep {{ ceph_crushmap_file }}
+            register: ceph_crushmap_backup_path_tgz
 
-      - name: Set Ceph crushmap backup dir
-        set_fact:
-          ceph_crushmap_backup_dir: "{{ ceph_temp_dir }}{{ ceph_crushmap_backup_path_tgz.stdout_lines[0] | dirname }}"
+          - name: Restore {{ ceph_crushmap_file }} file
+            command: >-
+              tar --use-compress-program=pigz -C {{ ceph_temp_dir }}
+              -xpf {{ platform_backup_fqpn }} {{ ceph_crushmap_backup_path_tgz.stdout_lines[0] }}
+            args:
+              warn: false
 
-      - name: Create flag file in /etc/platform to skip wiping OSDs
-        file:
-          path: "{{ skip_ceph_osds_wipe_flag }}"
-          state: touch
-        when: restore_system_mode != 'simplex'
+          - name: Set Ceph crushmap backup dir
+            set_fact:
+              ceph_crushmap_backup_dir: "{{ ceph_temp_dir }}{{ ceph_crushmap_backup_path_tgz.stdout_lines[0] | dirname }}"
 
-      # Can't store ceph crushmap at sysinv_config_permdir (/opt/platform/sysinv/)
-      # for AIO systems because when unlocking controller-0 for the first time,
-      # the crushmap is set thru ceph puppet when /opt/platform is not mounted yet.
-      # So for AIO systems store the crushmap at /etc/sysinv.
-      - name: Set Ceph crushmap directory to /etc/sysinv if it is AIO system
-        set_fact:
-          ceph_crushmap_dir: /etc/sysinv
-        when: restore_system_type == 'All-in-one'
+          # Can't store ceph crushmap at sysinv_config_permdir (/opt/platform/sysinv/)
+          # for AIO systems because when unlocking controller-0 for the first time,
+          # the crushmap is set thru ceph puppet when /opt/platform is not mounted yet.
+          # So for AIO systems store the crushmap at /etc/sysinv.
+          - name: Set Ceph crushmap directory to /etc/sysinv if it is AIO system
+            set_fact:
+              ceph_crushmap_dir: /etc/sysinv
+            when: restore_system_type == 'All-in-one'
 
-      - name: Set Ceph crushmap directory to /opt/platform/sysinv if it is non-AIO system
-        set_fact:
-          ceph_crushmap_dir: "{{ sysinv_config_permdir }}"
-        when: restore_system_type != 'All-in-one'
+          - name: Set Ceph crushmap directory to /opt/platform/sysinv if it is non-AIO system
+            set_fact:
+              ceph_crushmap_dir: "{{ sysinv_config_permdir }}"
+            when: restore_system_type != 'All-in-one'
 
-      - name: Restore Ceph crush map
-        command: >-
-          cp -a {{ ceph_crushmap_backup_dir }}/{{ ceph_crushmap_file }} {{ ceph_crushmap_dir }}/{{ ceph_crushmap_file }}
+          - name: Restore Ceph crush map
+            command: >-
+              cp -a {{ ceph_crushmap_backup_dir }}/{{ ceph_crushmap_file }} {{ ceph_crushmap_dir }}/{{ ceph_crushmap_file }}
 
-      # Need to remove osd info from the crushmap before it is loaded into ceph.
-      # When osds are created they will be inserted into the crushmap by ceph.
-      - name: Remove osds from the crushmap
-        shell: >-
-          crushtool -i {{ ceph_crushmap_dir }}/{{ ceph_crushmap_file }} --tree |
-          awk /osd/'{print $NF}' |
-          xargs -i crushtool -i {{ ceph_crushmap_dir }}/{{ ceph_crushmap_file }} --remove-item {}
-          -o {{ ceph_crushmap_dir }}/{{ ceph_crushmap_file_tmp }} &&
-          mv {{ ceph_crushmap_dir }}/{{ ceph_crushmap_file_tmp }} {{ ceph_crushmap_dir }}/{{ ceph_crushmap_file }}
+          # Need to remove osd info from the crushmap before it is loaded into ceph.
+          # When osds are created they will be inserted into the crushmap by ceph.
+          - name: Remove osds from the crushmap
+            shell: >-
+              crushtool -i {{ ceph_crushmap_dir }}/{{ ceph_crushmap_file }} --tree |
+              awk /osd/'{print $NF}' |
+              xargs -i crushtool -i {{ ceph_crushmap_dir }}/{{ ceph_crushmap_file }} --remove-item {}
+              -o {{ ceph_crushmap_dir }}/{{ ceph_crushmap_file_tmp }} &&
+              mv {{ ceph_crushmap_dir }}/{{ ceph_crushmap_file_tmp }}
+              {{ ceph_crushmap_dir }}/{{ ceph_crushmap_file }}
 
-      - name: Start Ceph recovery
-        include_role:
-          name: recover-ceph-data
-        when: node_personalities.stdout is not search('storage')
+          - name: Start Ceph recovery
+            include_role:
+              name: recover-ceph-data
+            when: node_personalities.stdout is not search('storage')
 
-      - name: Mark crushmap as restored
-        file:
-          path: "{{ sysinv_config_permdir }}/.crushmap_applied"
-          owner: root
-          group: root
-          mode: 0644
-          state: touch
+          - name: Mark crushmap as restored
+            file:
+              path: "{{ sysinv_config_permdir }}/.crushmap_applied"
+              owner: root
+              group: root
+              mode: 0644
+              state: touch
 
-      - name: Add Ceph flags to list
-        set_fact:
-          extra_required_flags:
-            "{{ extra_required_flags
-             + ['.ceph-mon-lv']
-             + ['.node_ceph_configured'] }}"
+          - name: Add Ceph flags to list
+            set_fact:
+              extra_required_flags:
+                "{{ extra_required_flags
+                + ['.ceph-mon-lv']
+                + ['.node_ceph_configured'] }}"
 
-      # Remove temporary staging area used by the copy module
-      - name: Remove temporary directory used to stage restore data
-        file:
-          path: "{{ ceph_temp_dir }}"
-          state: absent
+          when: not wipe_ceph_osds|bool and ceph_backend.rc == 0
 
-      when: not wipe_ceph_osds|bool and ceph_backend.rc == 0
+        - name: Restore Ceph cluster data (rook-ceph)
+          block:
+          - name: Set Ceph variables
+            set_fact:
+              ceph_monmap_file: monmap.bin
 
-    # The application platform-integ-apps is being removed when the flag
-    # wipe_ceph_osds is set to true because this application needs to be
-    # reapplied, but helm will not reapply the charts if the version is not bumped.
-    #
-    # The application is removed here to be applied after host is unlocked and
-    # ceph is correctly configured after a wipe. This app is automatically
-    # applied by conductor when there is ceph backend configured.
-    - name: Remove platform-integ-apps application when asked to wipe ceph osd disks
-      shell: source /etc/platform/openrc; system application-remove platform-integ-apps
-      when: wipe_ceph_osds|bool and ceph_backend.rc == 0
+          - name: Get {{ ceph_monmap_file }} file path
+            shell: tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep {{ ceph_monmap_file }}
+            register: ceph_monmap_backup_path_tgz
+
+          - name: Restore {{ ceph_monmap_file }} file
+            command: >-
+              tar --use-compress-program=pigz -C {{ ceph_temp_dir }} --transform='s,.*/,,'
+              -xpf {{ platform_backup_fqpn }} {{ ceph_monmap_backup_path_tgz.stdout_lines[0] }}
+            args:
+              warn: false
+
+          - name: Start Ceph recovery
+            include_role:
+              name: recover-rook-ceph-data
+            when: node_personalities.stdout is not search('storage')
+
+          when: not wipe_ceph_osds|bool and rook_backend.rc == 0
+
+        # Remove temporary staging area used by the copy module
+        - name: Remove temporary directory used to stage restore data
+          file:
+            path: "{{ ceph_temp_dir }}"
+            state: absent
+
+      when: not wipe_ceph_osds|bool and (ceph_backend.rc == 0 or rook_backend.rc == 0)
+
 
     - block:
+      - set_fact:
+          app_name: "{{ 'rook-ceph' if rook_backend.rc == 0 else 'platform-integ-apps' }}"
+
+      # The application platform-integ-apps or rook-ceph is being removed when the flag
+      # wipe_ceph_osds is set to true because this application needs to be
+      # reapplied, but helm will not reapply the charts if the version is not bumped.
+      #
+      # The application is removed here to be applied after host is unlocked and
+      # ceph is correctly configured after a wipe. This app is automatically
+      # applied by conductor when there is ceph backend configured.
+      - name: Remove {{ app_name }} application when asked to wipe ceph osd disks
+        shell: source /etc/platform/openrc; system application-remove {{ app_name }} --force
+
       - name: Recover Ceph PVCs when OSDs are wiped
         script: roles/restore-platform/restore-more-data/files/recover_ceph_pvcs.sh
         register: recover_ceph_pvcs_output
@@ -180,4 +224,4 @@
       - name: Result of recovering Ceph PVCs
         debug: var=recover_ceph_pvcs_output.stdout_lines
 
-      when: wipe_ceph_osds|bool and ceph_backend.rc == 0
+      when: wipe_ceph_osds|bool and (ceph_backend.rc == 0 or rook_backend.rc == 0)

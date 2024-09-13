@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2023 Wind River Systems, Inc.
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -74,7 +74,12 @@
   - name: Check if ceph is configured
     stat:
       path: "{{ ceph_backend_flag }}"
-    register: ceph_backend
+    register: ceph_backend_configured_flag
+
+  - name: Check if rook is configured
+    stat:
+      path: "{{ rook_backend_flag }}"
+    register: rook_backend_configured_flag
 
   - name: Wait for system to be healthy before starting backup
     shell: |-

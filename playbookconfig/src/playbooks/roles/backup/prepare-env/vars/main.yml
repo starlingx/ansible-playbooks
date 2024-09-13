@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019,2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -14,9 +14,11 @@ host_override_backup_file: "{{ inventory_hostname }}_override_backup.yml"
 # If the amount of data is over this limit the backup will abort.
 max_home_dir_usage: 2000
 
-# Flag file to indicate if ceph backend is present
-#
+# Flag file to indicate if ceph bare-metal backend is present
 ceph_backend_flag: "{{ platform_conf_path }}/.node_ceph_configured"
+
+# Flag file to indicate if rook-ceph backend is present
+rook_backend_flag: "{{ platform_conf_path }}/.node_rook_configured"
 
 # System must be healthy before starting backup
 ignore_health: false

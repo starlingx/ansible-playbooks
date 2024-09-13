@@ -618,3 +618,10 @@
   command: mount -o bind -t ext4 {{ source_device_image_bind_dir }} {{ target_device_image_bind_dir }}
   args:
     warn: false
+
+# When the mode is restore, the ceph data directory needs
+# to be mounted before the Kubernetes services bring up
+- name: Mount ceph data directory
+  include_role:
+    name: common/mount-ceph-data
+  when: mode == 'restore'

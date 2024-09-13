@@ -1,0 +1,43 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to restore the rook ceph cluster data
+
+- name: Restore Rook Ceph cluster data
+  block:
+
+    - name: Get rook ceph data from hosts
+      script: get_hosts_data.sh
+      register: get_hosts_data_out
+
+    - name: Fail if there are no rook ceph osd disks
+      fail:
+        msg: "No rook ceph osd disk found, aborting restore operation"
+      when: get_hosts_data_out.rc != 0
+
+    - name: Display hosts data script stdout output
+      debug:
+        var: get_hosts_data_out.stdout_lines
+
+    - name: Store hosts data script stdout output
+      set_fact:
+        hosts_data: "{{ get_hosts_data_out.stdout_lines[-1] }}"
+
+    - name: Recover rook-ceph
+      script: recover_rook_ceph.py "{{ hosts_data }}"
+      register: recover_rook_ceph_out
+
+    - name: Display rook-ceph recovery script stdout output
+      debug:
+        var: recover_rook_ceph_out.stdout_lines
+
+    - name: Display rook-ceph recovery script stderr output
+      debug:
+        var: recover_rook_ceph_out.stderr_lines
+
+  become: yes
+  become_user: root

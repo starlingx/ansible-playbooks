@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020-2023 Wind River Systems, Inc.
+# Copyright (c) 2020-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -164,6 +164,55 @@
       - upgrade_in_progress is defined
       - upgrade_in_progress
       - previous_software_version == '22.12'
+
+  - block:
+    - name: Look for the flag indicating that Rook is configured
+      shell: >-
+        tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |
+        grep 'etc/platform/.node_rook_configured'
+      args:
+        warn: false
+      failed_when: false
+      register: rook_backend
+
+    - block:
+      - name: Get rook-ceph-images.yaml filepath
+        shell: >-
+          tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |
+          grep 'rook-ceph-images.yaml'
+        failed_when: false
+        register: rook_ceph_images_backup_path_tgz
+
+      - block:
+        - name: Retrieve rook-ceph-images.yaml
+          command: >-
+            tar --use-compress-program=pigz -C /tmp --transform='s,.*/,,'
+            -xpf {{ platform_backup_fqpn }} {{ rook_ceph_images_backup_path_tgz.stdout_lines[0] }}
+          args:
+            warn: false
+
+        - name: Read rook-ceph-images.yaml file
+          shell: cat /tmp/rook-ceph-images.yaml
+          register: rook_ceph_images_output
+
+        - name: Get images downloaded from rook-ceph
+          set_fact:
+            additional_storage_images_list: "{{ (rook_ceph_images_output.stdout | from_yaml).download_images }}"
+
+        when: rook_ceph_images_backup_path_tgz.rc == 0
+
+      when: rook_backend.rc == 0
+
+    when: mode == "restore" and
+          (restore_registry_filesystem is not defined or
+          not restore_registry_filesystem|bool) and
+          not wipe_ceph_osds|bool
+
+  - name: Append additional storage images if rook-ceph backend is configured
+    set_fact:
+      storage_images: "{{ storage_images }} + [ '{{ item | replace('registry.local:9001/', '') }}' ] "
+    with_items: "{{ additional_storage_images_list }} "
+    when: additional_storage_images_list is defined
 
   - name: Append additional static images if provisioned
     set_fact:
