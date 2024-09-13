@@ -20,6 +20,8 @@
 # - For k8s 1.19, the matchLabels are the same as the k8s 1.18 labels to
 #   allow a rolling update to succeed.
 # - Set CPU requests to 0
+# - Set memory request to zero, otherwise it interferes with the ability of application pods
+#   to reserve the full amount of memory that K8s says is available.
 #
 # Copyright (c) 2024 Wind River Systems, Inc.
 #
@@ -79,7 +81,7 @@ spec:
         resources:
           requests:
             cpu: 0
-            memory: "40Mi"
+            memory: "0"
           limits:
             cpu: 1
             memory: "200Mi"

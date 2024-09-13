@@ -22,8 +22,10 @@
 #   multus-cni-config.
 # - Due to the limitations on resource tracking and CPU usage in Kubernetes,
 #   platform pod's CPU requests are set to zero and must not request CPU resources.
+# - Set memory request to zero, otherwise it interferes with the ability of application pods
+#   to reserve the full amount of memory that K8s says is available.
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -252,7 +254,7 @@ spec:
             /entrypoint.sh --multus-conf-file=/usr/src/multus-cni/05-multus.conf
         resources:
           requests:
-            memory: "50Mi"
+            memory: "0"
           limits:
             memory: "50Mi"
         securityContext:
@@ -274,7 +276,7 @@ spec:
           resources:
             requests:
               cpu: "0"
-              memory: "15Mi"
+              memory: "0"
           securityContext:
             privileged: true
           volumeMounts:
