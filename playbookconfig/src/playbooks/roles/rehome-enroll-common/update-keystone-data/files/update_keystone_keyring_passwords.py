@@ -13,12 +13,23 @@ import subprocess
 import time
 import json
 
+from cgtsclient import client as cgts_client
+from datetime import datetime
 import keyring
-from keystoneauth1.exceptions.http import Unauthorized
+from keystoneauth1 import exceptions as keystone_exceptions
 from keystoneclient.v3 import client as keystone_client
 from keystoneclient.auth.identity import v3
 from keystoneclient import session
 from sysinv.common.utils import generate_random_password
+
+
+MAX_RETRIES_MANIFEST_APPLIED = 10
+INTERVAL_WAIT_MANIFEST_APPLIED = 30
+
+
+def print_with_timestamp(*args, **kwargs):
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    print(f"[{current_time}]", *args, **kwargs)
 
 
 class OpenStackClient:
@@ -61,7 +72,7 @@ class OpenStackClient:
                 project_domain_name=conf["project_domain_name"],
             )
         except KeyError as e:
-            print(f"Configuration key missing: {e}")
+            print_with_timestamp(f"Configuration key missing: {e}")
             sys.exit(1)
         return session.Session(auth=auth)
 
@@ -89,36 +100,48 @@ class OpenStackClient:
             sess = self._get_new_keystone_session(custom_conf)
             sess.get_auth_headers()
             return True
-        except Unauthorized:
-            # Expected as new user password should not be authorized
+        except keystone_exceptions.http.Unauthorized:
+            # Expected as new user password should not be authorized if not
+            # updated in the Keystone.
             return False
         except Exception as e:
-            print(f"check keystone password failed for {username}: {e}")
+            print_with_timestamp("Check keystone password failed for "
+                                 f"{username}: {e}")
             sys.exit(1)
 
     def update_user_password(self, username, new_password):
-        """Update the password of a keystone user."""
+        """Update the password of a Keystone user."""
+        updated = False
         ks_user = self.get_keystone_user_by_name(username)
         if not new_password:
-            print(f"Empty password for {username}, creating new one.")
+            print_with_timestamp(f"Empty password for {username}, creating new one.")
             new_password = generate_random_password()
         if not ks_user:
-            print(f"User not found: {username}, attempting to create.")
+            print_with_timestamp(f"User not found: {username}, attempting to create.")
             try:
                 self.create_keystone_user(username, new_password)
                 store_password_in_keyring(username, new_password)
+                updated = True
+                return updated
             except Exception as error:
-                print(f"Failed to update password for {username}: {str(error)}")
+                print_with_timestamp(f"Failed to update password for {username}: "
+                                     f"{str(error)}")
+                sys.exit(1)
 
         if not self.check_password(username, new_password):
             try:
-                print(f"Start updating keystone password for user: {username}")
                 self.update_keystone_password(ks_user, new_password)
                 store_password_in_keyring(username, new_password)
+                updated = True
             except Exception as error:
-                print(f"Failed to update password for {username}: {str(error)}")
+                print_with_timestamp(f"Failed to update password for {username}: "
+                                     f"{str(error)}")
+                sys.exit(1)
         else:
-            print(f"No update needed: password for {username} is already up to date.")
+            print_with_timestamp(f"No update needed: password for {username} is "
+                                 "already up to date.")
+
+        return updated
 
     def create_keystone_user(self, username, password):
         """Create a new keystone user."""
@@ -127,29 +150,29 @@ class OpenStackClient:
             password=password,
             default_project=self.conf["project_name"],
             )
-        print(f"Keystone user created: {username}")
+        print_with_timestamp(f"Keystone user created: {username}")
 
         # Assigning roles to the new user
         service_project = self.keystone.projects.find(name="services")
         admin_project = self.keystone.projects.find(name="admin")
         admin_role = self.keystone.roles.find(name="admin")
         self.keystone.roles.grant(role=admin_role, user=user, project=service_project)
-        print(f"Admin role added for {username} in 'service' projects.")
+        print_with_timestamp(f"Admin role added for {username} in 'service' projects.")
 
         # Assign "dcmanager" to be admin role in admin project.
         if username == "dcmanager":
             self.keystone.roles.grant(role=admin_role, user=user, project=admin_project)
-            print(f"Admin role added for {username} in 'admin' projects.")
+            print_with_timestamp(f"Admin role added for {username} in 'admin' projects.")
 
     def get_keystone_user_by_name(self, username):
         """Retrieve a keystone user by username."""
         users = self.keystone.users.list(name=username)
         if not users:
-            print(f"No user found with username: {username}")
+            print_with_timestamp(f"No user found with username: {username}")
             return None
         if len(users) > 1:
-            print(f"Multiple users found with username: {username}, "
-                  "please ensure usernames are unique.")
+            print_with_timestamp(f"Multiple users found with username: {username}, "
+                                 "please ensure usernames are unique.")
         return users[0]
 
     def update_keystone_password(self, user, password):
@@ -157,40 +180,110 @@ class OpenStackClient:
         self.keystone.users.update(user, password=password)
         # Wait 10s for application of puppet runtime manifest
         time.sleep(10)
-        print(f"Keystone password updated for user: {user.name}")
+        print_with_timestamp(f"Keystone password updated for user: {user.name}")
+
+
+# CgtsClient class to handle API interactions
+class CgtsClient(object):
+    SYSINV_API_VERSION = 1
+
+    def __init__(self):
+        self.conf = {}
+        self._sysinv = None
+
+        # Loading credentials and configurations from environment variables
+        # typically set in OpenStack
+        source_command = 'source /etc/platform/openrc && env'
+
+        with open(os.devnull, "w") as fnull:
+            proc = subprocess.Popen(
+                ['bash', '-c', source_command],
+                stdout=subprocess.PIPE, stderr=fnull,
+                universal_newlines=True)
+
+        # Strip the configurations starts with 'OS_' and change the value to lower
+        for line in proc.stdout:
+            key, _, value = line.partition("=")
+            if key.startswith('OS_'):
+                self.conf[key[3:].lower()] = value.strip()
+
+        proc.communicate()
+
+    @property
+    def sysinv(self):
+        if not self._sysinv:
+            self._sysinv = cgts_client.get_client(
+                self.SYSINV_API_VERSION,
+                os_username=self.conf['username'],
+                os_password=self.conf['password'],
+                os_auth_url=self.conf['auth_url'],
+                os_project_name=self.conf['project_name'],
+                os_project_domain_name=self.conf['project_domain_name'],
+                os_user_domain_name=self.conf['user_domain_name'],
+                os_region_name=self.conf['region_name'],
+                os_service_type='platform',
+                os_endpoint_type='admin')
+        return self._sysinv
+
+    def wait_until_config_updated(self, old_config, username):
+        retries = 0
+        while retries < MAX_RETRIES_MANIFEST_APPLIED:
+            if self.get_host_config_applied("controller-0") != old_config:
+                return
+            time.sleep(INTERVAL_WAIT_MANIFEST_APPLIED)
+            retries = retries + 1
+        print_with_timestamp(f"Time out waiting for host config update for {username}")
+        sys.exit(1)
+
+    def get_host_config_applied(self, host_name):
+        hostlist = self.sysinv.ihost.list()
+        for h in hostlist:
+            if h.hostname == host_name:
+                return h.config_applied
+        else:
+            print_with_timestamp('host not found: %s' % host_name)
+            sys.exit(1)
 
 
 def set_keyring_path(sw_ver):
     """Set the keyring path."""
     os.environ['XDG_DATA_HOME'] = f"/opt/platform/.keyring/{sw_ver}"
-    print("Keyring path set.")
+    print_with_timestamp("Keyring path set.")
 
 
 def store_password_in_keyring(username, password):
     """Store the password in the keyring."""
     keyring.set_password(username, "services", password)
-    print(f"Keyring password stored securely for {username}.")
+    print_with_timestamp(f"Keyring password stored securely for {username}.")
 
 
 def main():
     """Main function to execute based on command-line input."""
     if len(sys.argv) < 3:
-        print("Usage: update_keystone_passwords.py <sw_ver> <json_file>")
+        print_with_timestamp("Usage: update_keystone_passwords.py <sw_ver> <json_file>")
         sys.exit(1)
 
     sw_ver = sys.argv[1]
     json_file = sys.argv[2]
     if not os.path.isfile(json_file):
-        print(f"Error: JSON file '{json_file}' does not exist.")
+        print_with_timestamp(f"Error: JSON file '{json_file}' does not exist.")
         sys.exit(1)
 
     with open(json_file, 'r') as file:
         user_data = json.load(file)
 
-    client = OpenStackClient()
+    osclient = OpenStackClient()
+    cgts_client = CgtsClient()
     set_keyring_path(sw_ver)
     for user in user_data:
-        client.update_user_password(user['username'], user['password'])
+        config_applied = cgts_client.get_host_config_applied("controller-0")
+        updated = osclient.update_user_password(user["username"], user["password"])
+        # The dc users password update will not trigger a manifest to apply
+        if updated and user["username"] not in ("dcmanager", "dcagent"):
+            cgts_client.wait_until_config_updated(
+                config_applied,
+                user["username"],
+            )
 
 
 if __name__ == '__main__':

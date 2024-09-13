@@ -23,6 +23,21 @@
 #     - Initiate usm-deploy-releases role
 #
 
+- name: Check if the controller is active controller
+  shell: source /etc/platform/openrc
+  register: active_controller
+  failed_when: false
+
+- set_fact:
+    is_active_controller: >-
+      {{ true if 'stdout' in active_controller and active_controller.stdout
+      | length == 0 else false }}
+
+- name: Fail if not active controller
+  fail:
+    msg: "Subcloud enrollment cannot be done on non-active controller."
+  when: not is_active_controller
+
 - name: Run software deploy show
   shell: |
     source /etc/platform/openrc

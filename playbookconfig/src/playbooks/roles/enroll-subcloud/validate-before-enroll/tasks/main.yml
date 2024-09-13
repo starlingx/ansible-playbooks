@@ -8,15 +8,6 @@
 #   to the next step.
 #
 
-# TODO(yuxing) uncomment this task when testing in factory installed host
-# Fail if host is not factory installed
-# - name: Verify host is a factory installed finalized
-#  file:
-#    path: "{{ factory_install_finalized }}"
-#    state: file
-#  register: factory_installed_file
-#  failed_when: not factory_installed_file.stat.exists
-
 - name: Initialize some facts to be used in subsequent roles/tasks
   set_fact:
     use_docker_proxy: false
@@ -120,3 +111,12 @@
 #    - include_tasks: roles/common/validate-addresses/tasks/validate_address_range.yml
 #      with_dict: "{{ address_pairs_secondary }}"
 #    when: network_params.admin_subnet_secondary
+
+- name: Wait until cloud-init finalized reconfiguration
+  wait_for:
+    path: "{{ enroll_init_finalized }}"
+    state: present
+    timeout: 900
+    msg: >-
+      Timeout waiting for cloud-init finalizing reconfiguration. Check the
+      cloud-init.log on the subcloud for the reason.

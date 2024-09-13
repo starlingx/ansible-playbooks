@@ -1,5 +1,5 @@
 ---
-factory_install_finalized: /var/lib/factory-install/stage/final
+enroll_init_finalized: /var/lib/factory-install/state/enroll-init
 central_registry: "registry.central:9001"
 default_k8s_registry:
   url: k8s.gcr.io

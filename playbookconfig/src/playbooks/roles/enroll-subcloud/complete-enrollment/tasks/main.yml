@@ -1,0 +1,24 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#   This role is to check the service status, lock the controller-0 and mark
+#   the completion of the enrollment
+#
+
+- name: Check service status after enrollment
+  include_role:
+    name: common/check-services-status
+
+- name: Lock controller-0
+  include_role:
+    name: common/host-lock
+  vars:
+    target_host: 'controller-0'
+
+- name: Mark enrollment is completed
+  file:
+    path: "{{ subcloud_enrollment_completed_flag }}"
+    state: touch

@@ -24,13 +24,10 @@
     mode: "enroll"
     distributed_cloud_role: "subcloud"
 
-  # TODO(yuxing) uncomment the roles below onces enabled the support of subcloud enrollment
   roles:
     - common/prepare-env
     - common/validate-target
     - common/recover-subcloud-certificates
-    - role: rehome-enroll-common/recover-essential-services
-      become: yes
     - enroll-subcloud/patch-before-enroll
     - rehome-enroll-common/prepare-env
     - enroll-subcloud/validate-before-enroll
@@ -41,4 +38,4 @@
       become: yes
     - rehome-enroll-common/persist-configuration
     - common/update-sc-admin-endpoints
-    # - enroll-subcloud/complete-enrollment
+    - enroll-subcloud/complete-enrollment

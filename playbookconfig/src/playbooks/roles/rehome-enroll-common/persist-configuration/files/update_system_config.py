@@ -13,8 +13,8 @@ import subprocess
 import sys
 
 from barbicanclient import client as barbican_client
-from barbicanclient import exceptions as barbican_exceptions
 from cgtsclient import client as cgts_client
+from datetime import datetime
 from keystoneclient.auth.identity import v3
 from keystoneclient import session
 from sysinv.common import constants as sysinv_constants
@@ -32,6 +32,11 @@ CONF.optionxform = str
 
 RECONFIGURE_NETWORK = False
 RECONFIGURE_SERVICE = False
+
+
+def print_with_timestamp(*args, **kwargs):
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    print(f"[{current_time}]", *args, **kwargs)
 
 
 # CgtsClient class to handle API interactions
@@ -117,7 +122,7 @@ class OpenStackClient:
                 project_domain_name=conf["project_domain_name"],
             )
         except KeyError as e:
-            print(f"Configuration key missing: {e}")
+            print_with_timestamp(f"Configuration key missing: {e}")
             sys.exit(1)
         return session.Session(auth=auth)
 
@@ -136,8 +141,8 @@ class OpenStackClient:
         try:
             for secret in self.barbican.secrets.list(name=secret_name):
                 secrets.append(secret)
-        except barbican_exceptions.HTTPClientError as e:
-            print(f"Failed to list secrets: {e}")
+        except Exception as e:
+            print_with_timestamp(f"Failed to list secrets: {e}")
             sys.exit(1)
         return secrets
 
@@ -145,9 +150,9 @@ class OpenStackClient:
         """Delete a secret by ID."""
         try:
             self.barbican.secrets.delete(secret_id)
-            print(f"Secret {secret_id} deleted successfully.")
-        except barbican_exceptions.HTTPClientError as e:
-            print(f"Failed to delete secret {secret_id}: {e}")
+            print_with_timestamp(f"Secret {secret_id} deleted successfully.")
+        except Exception as e:
+            print_with_timestamp(f"Failed to delete secret {secret_id}: {e}")
             sys.exit(1)
 
     def create_secret(self, name, payload):
@@ -159,10 +164,10 @@ class OpenStackClient:
                 payload_content_type='text/plain'
             )
             secret.store()
-            print(f"Secret {name} created successfully.")
+            print_with_timestamp(f"Secret {name} created successfully.")
             return secret
-        except barbican_exceptions.HTTPClientError as e:
-            print(f"Failed to create secret {name}: {e}")
+        except Exception as e:
+            print_with_timestamp(f"Failed to create secret {name}: {e}")
             sys.exit(1)
 
 
@@ -209,9 +214,9 @@ def update_docker_proxy_config(client, section_name):
             'parameters': parameters
         }
 
-        print("Populating/Updating docker proxy config...")
+        print_with_timestamp("Populating/Updating docker proxy config...")
         client.sysinv.service_parameter.create(**values)
-        print("Docker proxy config completed.")
+        print_with_timestamp("Docker proxy config completed.")
 
 
 def update_barbican_secrets(client, registry_name, username, password):
@@ -223,7 +228,7 @@ def update_barbican_secrets(client, registry_name, username, password):
     # Create a new secret
     secret_payload = f"username:{username} password:{password}"
     new_secret = client.create_secret(secret_name, secret_payload)
-    print(f"New secret created: {new_secret.secret_ref} for registry: {registry_name}")
+    print_with_timestamp(f"New secret created: {new_secret.secret_ref} for registry: {registry_name}")
     return new_secret.secret_ref
 
 
@@ -305,7 +310,7 @@ def update_docker_registry_config(client, section_name):
                 parameters[registry][sysinv_constants.SERVICE_PARAM_NAME_DOCKER_ADDITIONAL_OVERRIDES] = \
                     values[sysinv_constants.SERVICE_PARAM_NAME_DOCKER_ADDITIONAL_OVERRIDES]
 
-        print("Populating/Updating docker registry config...")
+        print_with_timestamp("Populating/Updating docker registry config...")
         for registry in parameters:
             values = {
                 'service': sysinv_constants.SERVICE_TYPE_DOCKER,
@@ -315,7 +320,7 @@ def update_docker_registry_config(client, section_name):
                 'parameters': parameters[registry]
             }
             client.sysinv.service_parameter.create(**values)
-        print("Docker registry config completed.")
+        print_with_timestamp("Docker registry config completed.")
 
 
 def populate_user_dns_host_records(client):
@@ -339,10 +344,10 @@ def populate_user_dns_host_records(client):
             'parameters': parameters
         }
 
-        print("Populating/Updating user dns host-records...")
+        print_with_timestamp("Populating/Updating user dns host-records...")
         client.sysinv.service_parameter.create(**values)
 
-        print("Populating/Updating user dns host-records completed.")
+        print_with_timestamp("Populating/Updating user dns host-records completed.")
 
 
 def populate_docker_config(client, section_name):
@@ -354,12 +359,12 @@ def populate_docker_config(client, section_name):
         update_docker_proxy_config(client, section_name)
         update_docker_registry_config(client, section_name)
     except Exception as e:
-        print(f"Failed to update Docker/Kube config: {e}")
+        print_with_timestamp(f"Failed to update Docker/Kube config: {e}")
         raise
 
 
 def populate_dns_config(client, section_name):
-    print("Populating/Updating DNS config...")
+    print_with_timestamp("Populating/Updating DNS config...")
     nameservers = CONF.get(section_name, 'NAMESERVERS')
 
     dns_list = client.sysinv.idns.list()
@@ -370,7 +375,7 @@ def populate_dns_config(client, section_name):
     }
     patch = dict_to_patch(values)
     client.sysinv.idns.update(dns_record.uuid, patch)
-    print("DNS config completed.")
+    print_with_timestamp("DNS config completed.")
 
 
 def populate_service_parameter_config(client, section_name):
@@ -378,7 +383,7 @@ def populate_service_parameter_config(client, section_name):
     if CONF.has_section("USER_DNS_HOST_RECORDS"):
         populate_user_dns_host_records(client)
     else:
-        print("Skipping Populating/Updating user dns host-records...")
+        print_with_timestamp("Skipping Populating/Updating user dns host-records...")
 
 
 def edit_dc_role_to_subcloud(client):
@@ -406,8 +411,8 @@ def edit_dc_role_to_subcloud(client):
     ]
     isystem = client.sysinv.isystem.update(isystem.uuid, patch)
     updated_dc_role = isystem.distributed_cloud_role
-    print(f"Distributed Cloud Role updated: "
-          f"'{current_dc_role}' -> '{updated_dc_role}'")
+    print_with_timestamp(f"Distributed Cloud Role updated: "
+                         f"'{current_dc_role}' -> '{updated_dc_role}'")
 
 
 def delete_network_and_addrpool(client, network_name):
@@ -416,7 +421,7 @@ def delete_network_and_addrpool(client, network_name):
 
     for addrpool in addresspools:
         if str(addrpool.name).startswith(network_name):
-            print(f"Deleting addrpool {addrpool.uuid}...")
+            print_with_timestamp(f"Deleting addrpool {addrpool.uuid}...")
             client.sysinv.address_pool.delete(addrpool.uuid)
 
 
@@ -430,7 +435,7 @@ def create_system_controller_addr_network(client, section_name, network_type):
             'floating_address': CONF.get(section_name, "SYSTEM_CONTROLLER_FLOATING_ADDRESS")
         }
 
-        print(f"Creating addrpool with name {sc_values['name']}...")
+        print_with_timestamp(f"Creating addrpool with name {sc_values['name']}...")
         sc_pool = client.sysinv.address_pool.create(**sc_values)
 
         sc_network_data = {
@@ -440,7 +445,7 @@ def create_system_controller_addr_network(client, section_name, network_type):
             'pool_uuid': sc_pool.uuid,
         }
 
-        print(f"Creating network with name {sc_network_data['name']}...")
+        print_with_timestamp(f"Creating network with name {sc_network_data['name']}...")
         client.sysinv.network.create(**sc_network_data)
 
     elif network_type == "sc_oam":
@@ -451,7 +456,7 @@ def create_system_controller_addr_network(client, section_name, network_type):
             'floating_address': CONF.get(section_name, "SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS")
         }
 
-        print(f"Creating addrpool with name {sc_oam_values['name']}...")
+        print_with_timestamp(f"Creating addrpool with name {sc_oam_values['name']}...")
         sc_oam_pool = client.sysinv.address_pool.create(**sc_oam_values)
 
         sc_oam_network_data = {
@@ -461,7 +466,7 @@ def create_system_controller_addr_network(client, section_name, network_type):
             'pool_uuid': sc_oam_pool.uuid,
         }
 
-        print(f"Creating network with name {sc_oam_network_data['name']}...")
+        print_with_timestamp(f"Creating network with name {sc_oam_network_data['name']}...")
         client.sysinv.network.create(**sc_oam_network_data)
 
 
@@ -473,7 +478,7 @@ def update_system_controller_subnets(client, section_name):
 
         addr_uuid = addr.uuid
         if addr.name == "system-controller-subnet":
-            print(f"Deleting address pool {addr_uuid}...")
+            print_with_timestamp(f"Deleting address pool {addr_uuid}...")
             client.sysinv.address_pool.delete(addr_uuid)
 
     create_system_controller_addr_network(client, section_name, "sc_subnet")
@@ -482,7 +487,7 @@ def update_system_controller_subnets(client, section_name):
 
         pool_uuid = addrpool.uuid
         if addrpool.name == "system-controller-oam-subnet":
-            print(f"Deleting address pool {pool_uuid}...")
+            print_with_timestamp(f"Deleting address pool {pool_uuid}...")
             client.sysinv.address_pool.delete(pool_uuid)
 
     create_system_controller_addr_network(client, section_name, "sc_oam")
@@ -501,7 +506,7 @@ def update_admin_network(client, section_name):
         'gateway_address': CONF.get(section_name, "ADMIN_GATEWAY_ADDRESS"),
         }
 
-    print(f"Creating addrpool with name {values['name']}...")
+    print_with_timestamp(f"Creating addrpool with name {values['name']}...")
     pool = client.sysinv.address_pool.create(**values)
 
     network_data = {
@@ -511,7 +516,7 @@ def update_admin_network(client, section_name):
         'pool_uuid': pool.uuid,
     }
 
-    print(f"Creating network with name {network_data['name']}...")
+    print_with_timestamp(f"Creating network with name {network_data['name']}...")
     client.sysinv.network.create(**network_data)
 
     assign_if_network(client,
@@ -527,7 +532,7 @@ def update_admin_network(client, section_name):
 
 def assign_if_network(client, host_interface_name, network_name):
 
-    print(f"Assigning network interface {host_interface_name} for {network_name}")
+    print_with_timestamp(f"Assigning network interface {host_interface_name} for {network_name}")
 
     if_uuid = ""
     net_uuid = ""
@@ -553,18 +558,18 @@ def assign_if_network(client, host_interface_name, network_name):
 # Main function to execute based on command-line input
 def main():
     if len(sys.argv) < 2:
-        print("Usage: update_system_config.py <config_file>")
+        print_with_timestamp("Usage: update_system_config.py <config_file>")
         sys.exit(1)
 
     config_file = sys.argv[1]
     if not os.path.isfile(config_file):
-        print(f"Error: Config file '{config_file}' does not exist.")
+        print_with_timestamp(f"Error: Config file '{config_file}' does not exist.")
         sys.exit(1)
 
     CONF.read(config_file)
     if 'OPERATION' not in CONF or 'MODE' not in CONF['OPERATION']:
-        print("The 'MODE' option is missing in the 'OPERATION' section of the "
-              "configuration file.")
+        print_with_timestamp("The 'MODE' option is missing in the 'OPERATION' "
+                             "section of the configuration file.")
         sys.exit(1)
 
     operation = CONF.get('OPERATION', 'MODE')
@@ -576,7 +581,7 @@ def main():
     try:
         delete_network_and_addrpool(client, 'admin')
     except e.NetworkTypeNotFound:
-        print("No admin address found in pool, adding...")
+        print_with_timestamp("No admin address found in pool, adding...")
     update_admin_network(client, section_name)
     edit_dc_role_to_subcloud(client)
 
