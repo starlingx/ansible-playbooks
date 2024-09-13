@@ -28,6 +28,13 @@
           - { username: 'usm', password: "{{ users['usm'] }}", service: 'software-controller-daemon' }
           - { username: 'vim', password: "{{ users['vim'] }}", service: 'vim' }
 
+    # Dcagent password is not created in the system controller, so we pass an empty
+    # string to the script and let it create the password to store in keystone/keyring.
+    - name: Add dcagent user to user list during enrollment
+      set_fact:
+        user_list: "{{ user_list + [{'username': 'dcagent', 'password': '', 'service': 'dcagent'}] }}"
+      when: mode == "enroll"
+
     - name: Update keystone passwords in secure hieradata
       import_tasks: update_secure_hieradata.yml
 

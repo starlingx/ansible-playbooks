@@ -18,6 +18,7 @@ from keystoneauth1.exceptions.http import Unauthorized
 from keystoneclient.v3 import client as keystone_client
 from keystoneclient.auth.identity import v3
 from keystoneclient import session
+from sysinv.common.utils import generate_random_password
 
 
 class OpenStackClient:
@@ -98,6 +99,9 @@ class OpenStackClient:
     def update_user_password(self, username, new_password):
         """Update the password of a keystone user."""
         ks_user = self.get_keystone_user_by_name(username)
+        if not new_password:
+            print(f"Empty password for {username}, creating new one.")
+            new_password = generate_random_password()
         if not ks_user:
             print(f"User not found: {username}, attempting to create.")
             try:
