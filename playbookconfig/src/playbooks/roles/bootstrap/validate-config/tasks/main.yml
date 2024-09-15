@@ -159,6 +159,7 @@
       external_oam_floating_address: "{{ external_oam_floating_address }}"
       management_start_address: "{{ management_start_address }}"
       management_end_address: "{{ management_end_address }}"
+      management_gateway_address: "{{ management_gateway_address | default([]) }}"
       cluster_host_start_address: "{{ cluster_host_start_address }}"
       cluster_host_end_address: "{{ cluster_host_end_address }}"
       cluster_pod_start_address: "{{ cluster_pod_start_address }}"
@@ -180,6 +181,7 @@
     with_dict:
       admin_start_address: "{{ admin_start_address }}"
       admin_end_address: "{{ admin_end_address }}"
+      admin_gateway_address: "{{ admin_gateway_address | default([]) }}"
     loop_control:
       loop_var: network_param
     when: admin_network is defined and network_param.value != "derived"
@@ -271,6 +273,16 @@
           value: "{{ management_multicast_subnet }}"
     when: item.value.address != "derived"
 
+  - name: Validate same sequence and number (single or dual-stack) of IP family on management gateway address and subnet
+    include_tasks: roles/common/validate-addresses/tasks/validate_dual_stack_address_vs_subnet.yml
+    with_dict:
+      management_gateway_address:
+        address: "{{ management_gateway_address }}"
+        subnet:
+          name: management_subnet
+          value: "{{ management_subnet }}"
+    when: item.value.address is defined
+
   - name: Validate same sequence and number (single or dual-stack) of IP family on admin subnet and address
     include_tasks: roles/common/validate-addresses/tasks/validate_dual_stack_address_vs_subnet.yml
     with_dict:
@@ -281,6 +293,11 @@
           value: "{{ admin_subnet }}"
       admin_end_address:
         address: "{{ admin_end_address }}"
+        subnet:
+          name: admin_subnet
+          value: "{{ admin_subnet }}"
+      admin_gateway_address:
+        address: "{{ admin_gateway_address }}"
         subnet:
           name: admin_subnet
           value: "{{ admin_subnet }}"

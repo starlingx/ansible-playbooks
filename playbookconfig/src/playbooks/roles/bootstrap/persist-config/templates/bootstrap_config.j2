@@ -14,7 +14,9 @@ PXEBOOT_END_ADDRESS={{ address_pairs['pxeboot']['end'] }}
 MANAGEMENT_SUBNET={{ address_pairs['management']['subnet'] }}
 MANAGEMENT_START_ADDRESS={{ address_pairs['management']['start'] }}
 MANAGEMENT_END_ADDRESS={{ address_pairs['management']['end'] }}
-MANAGEMENT_GATEWAY_ADDRESS={{ management_gateway_address | default('undef') }}
+MANAGEMENT_GATEWAY_ADDRESS={{ network_params.management_gateway_address_primary
+                              if network_params.management_gateway_address_primary
+                              else 'undef' }}
 MANAGEMENT_DYNAMIC_ADDRESS_ALLOCATION={{ management_dynamic_address_allocation }}
 MANAGEMENT_INTERFACE=lo
 CONTROLLER_0_ADDRESS={{ derived_network_params.controller_0_address }}
@@ -45,12 +47,18 @@ SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS={{ system_controller_oam_floating_address
 ADMIN_SUBNET={{ address_pairs['admin']['subnet'] | default('undef') }}
 ADMIN_START_ADDRESS={{ address_pairs['admin']['start'] | default('undef') }}
 ADMIN_END_ADDRESS={{ address_pairs['admin']['end'] | default('undef') }}
-ADMIN_GATEWAY_ADDRESS={{ admin_gateway_address | default('undef') }}
+ADMIN_GATEWAY_ADDRESS={{ network_params.admin_gateway_address_primary
+                        if (network_params.admin_gateway_address_primary is defined
+                            and network_params.admin_gateway_address_primary)
+                        else 'undef' }}
 ADMIN_INTERFACE={{ 'lo' if admin_network is defined else 'undef' }}
 {# -- start of secondary of dual-stack support #}
 MANAGEMENT_SUBNET_SECONDARY={{ address_pairs_secondary['management']['subnet'] | default('undef') }}
 MANAGEMENT_START_ADDRESS_SECONDARY={{ address_pairs_secondary['management']['start'] | default('undef') }}
 MANAGEMENT_END_ADDRESS_SECONDARY={{ address_pairs_secondary['management']['end'] | default('undef') }}
+MANAGEMENT_GATEWAY_ADDRESS_SECONDARY={{ network_params.management_gateway_address_secondary
+                              if network_params.management_gateway_address_secondary
+                              else 'undef' }}
 CLUSTER_HOST_SUBNET_SECONDARY={{ address_pairs_secondary['cluster_host']['subnet']  | default('undef') }}
 CLUSTER_HOST_START_ADDRESS_SECONDARY={{ address_pairs_secondary['cluster_host']['start'] | default('undef') }}
 CLUSTER_HOST_END_ADDRESS_SECONDARY={{ address_pairs_secondary['cluster_host']['end'] | default('undef') }}
@@ -73,6 +81,10 @@ MANAGEMENT_MULTICAST_END_ADDRESS_SECONDARY={{ address_pairs_secondary['multicast
 ADMIN_SUBNET_SECONDARY={{ address_pairs_secondary['admin']['subnet'] | default('undef') }}
 ADMIN_START_ADDRESS_SECONDARY={{ address_pairs_secondary['admin']['start'] | default('undef') }}
 ADMIN_END_ADDRESS_SECONDARY={{ address_pairs_secondary['admin']['end'] | default('undef') }}
+ADMIN_GATEWAY_ADDRESS_SECONDARY={{ network_params.admin_gateway_address_secondary
+                                   if (network_params.admin_gateway_address_secondary is defined
+                                      and network_params.admin_gateway_address_secondary)
+                                      else 'undef' }}
 {# -- end of secondary of dual-stack support #}
 DOCKER_HTTP_PROXY={{ docker_http_proxy }}
 DOCKER_HTTPS_PROXY={{ docker_https_proxy }}

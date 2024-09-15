@@ -444,6 +444,7 @@ def populate_mgmt_network_secondary(client):
                              'MANAGEMENT_START_ADDRESS_SECONDARY')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'MANAGEMENT_END_ADDRESS_SECONDARY')
+    subcloud_gateway = CONF.get('BOOTSTRAP_CONFIG', 'MANAGEMENT_GATEWAY_ADDRESS_SECONDARY')
 
     network_name = sysinv_constants.NETWORK_TYPE_MGMT
 
@@ -456,6 +457,10 @@ def populate_mgmt_network_secondary(client):
         'prefix': management_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
+    if (is_subcloud() and subcloud_gateway != 'undef'):
+        values.update({
+            'gateway_address': subcloud_gateway,
+        })
     pool = create_addrpool(client, values)
 
     # add the pool to the network
@@ -516,6 +521,7 @@ def populate_admin_network_secondary(client):
                              'ADMIN_START_ADDRESS_SECONDARY')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'ADMIN_END_ADDRESS_SECONDARY')
+    subcloud_gateway = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_GATEWAY_ADDRESS_SECONDARY')
     network_name = sysinv_constants.NETWORK_TYPE_ADMIN
 
     print("Populating secondary admin network...")
@@ -527,6 +533,10 @@ def populate_admin_network_secondary(client):
         'prefix': admin_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
+    if (is_subcloud() and subcloud_gateway != 'undef'):
+        values.update({
+            'gateway_address': subcloud_gateway,
+        })
     pool = create_addrpool(client, values)
 
     # add the pool to the network
