@@ -57,48 +57,50 @@ __wipe_if_ceph_disk() {
 
     ceph_disk="false"
 
-    for part in $(sfdisk -q -l "${__dev}" | \
-        awk '$1 == "Device" {i=1; next}; i {print $1}'); do
-
-        part_no="$(echo "${part}" | sed -n -e 's@^.*[^0-9]\([0-9]\+\)$@\1@p')"
-        guid=$(sfdisk --part-type "$__dev" "$part_no")
-        if [ "${guid}" = "$__osd_guid" ]; then
-            echo "Found Ceph OSD partition #${part_no} ${part}, erasing!"
-            dd if=/dev/zero of="${part}" bs=512 count=34 2>/dev/null
-            seek_end=$(($(blockdev --getsz "${part}") - 34))
-            dd if=/dev/zero of="${part}" \
-                bs=512 count=34 seek="${seek_end}" 2>/dev/null
-            parted -s "${__dev}" rm "${part_no}"
-            ceph_disk="true"
-            # without "set -e" need to check if
-            # the partitions were removed correctly
-            if parted "${__dev}" p | grep "ceph data"; then
-                echo "Ceph data partition could not be deleted! \
-                        Wipe osd disk manually and try again."
-                exit 1
-            fi
-        elif [ "${guid}" = "$__journal_guid" ]; then
-            echo "Found Ceph journal partition #${part_no} ${part}, erasing!"
-            dd if=/dev/zero of="${part}" bs=1M count=100 2>/dev/null
-            seek_end=$(($(blockdev --getsz "${part}") / (1024 * 2) - 100 ))
-            dd if=/dev/zero of="${part}" \
-                bs=1M count=100 seek=${seek_end} 2>/dev/null
-            parted -s "${__dev}" rm "${part_no}"
-            ceph_disk="true"
-            # without "set -e" need to check if
-            # the partitions were removed correctly
-            if parted "${__dev}" p | grep "ceph journal"; then
-                echo "Ceph journal partition could not be deleted! \
-                        Wipe osd disk manually and try again."
-                exit 1
-            fi
-        fi
-    done
-
-    fs_type=$(blkid -o value -s TYPE $__dev)
+    # blkid returns exit code 2 if label is unknown.
+    # So '|| true' prevents script execution from being interrupted.
+    fs_type=$(blkid -o value -s TYPE $__dev || true)
     if [ "${fs_type}" == "ceph_bluestore" ]; then
         sgdisk --zap-all "${__dev}"
         ceph_disk="true"
+    else
+        for part in $(sfdisk -q -l "${__dev}" | \
+            awk '$1 == "Device" {i=1; next}; i {print $1}'); do
+
+            part_no="$(echo "${part}" | sed -n -e 's@^.*[^0-9]\([0-9]\+\)$@\1@p')"
+            guid=$(sfdisk --part-type "$__dev" "$part_no")
+            if [ "${guid}" = "$__osd_guid" ]; then
+                echo "Found Ceph OSD partition #${part_no} ${part}, erasing!"
+                dd if=/dev/zero of="${part}" bs=512 count=34 2>/dev/null
+                seek_end=$(($(blockdev --getsz "${part}") - 34))
+                dd if=/dev/zero of="${part}" \
+                    bs=512 count=34 seek="${seek_end}" 2>/dev/null
+                parted -s "${__dev}" rm "${part_no}"
+                ceph_disk="true"
+                # without "set -e" need to check if
+                # the partitions were removed correctly
+                if parted "${__dev}" p | grep "ceph data"; then
+                    echo "Ceph data partition could not be deleted! \
+                            Wipe osd disk manually and try again."
+                    exit 1
+                fi
+            elif [ "${guid}" = "$__journal_guid" ]; then
+                echo "Found Ceph journal partition #${part_no} ${part}, erasing!"
+                dd if=/dev/zero of="${part}" bs=1M count=100 2>/dev/null
+                seek_end=$(($(blockdev --getsz "${part}") / (1024 * 2) - 100 ))
+                dd if=/dev/zero of="${part}" \
+                    bs=1M count=100 seek=${seek_end} 2>/dev/null
+                parted -s "${__dev}" rm "${part_no}"
+                ceph_disk="true"
+                # without "set -e" need to check if
+                # the partitions were removed correctly
+                if parted "${__dev}" p | grep "ceph journal"; then
+                    echo "Ceph journal partition could not be deleted! \
+                            Wipe osd disk manually and try again."
+                    exit 1
+                fi
+            fi
+        done
     fi
 
     # Wipe the entire disk, including GPT signatures
