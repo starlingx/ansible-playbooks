@@ -817,10 +817,14 @@
       set_fact:
         controller_0_cluster_host_secondary: "{{ cluster_floating_address_secondary|ipmath(1) }}"
         controller_1_cluster_host_secondary: "{{ cluster_floating_address_secondary|ipmath(2) }}"
+      when: cluster_floating_address_secondary is defined
+
+    - name: Set secondary controller_floating_address_url_secondary addresses for subsequent tasks/roles
+      set_fact:
         controller_floating_address_url_secondary:
           "{{ controller_floating_address_secondary|ipwrap if controller_floating_address_secondary|ipv6 != False
           else controller_floating_address_secondary}}"
-      when: cluster_floating_address_secondary is defined
+      when: controller_floating_address_secondary is defined
 
   # set primary virtual
   - name: Set facts for IP address provisioning against loopback interface
