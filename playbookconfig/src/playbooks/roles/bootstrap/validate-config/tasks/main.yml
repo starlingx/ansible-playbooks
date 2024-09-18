@@ -22,7 +22,19 @@
   - name: Set the generated UUID4 as a region_name
     set_fact:
       region_name: "{{ uuid_output.stdout | trim }}"
-  when: distributed_cloud_role != 'systemcontroller' and mode != 'restore'
+  when: distributed_cloud_role != 'systemcontroller' and mode != 'restore' and not replayed
+
+- block:
+  - name: Retrieve openrc region_name
+    shell: |
+      source /etc/platform/openrc
+      echo "$OS_REGION_NAME"
+    register: openrc_region_name
+
+  - name: Set region name
+    set_fact:
+      region_name: "{{ openrc_region_name.stdout | trim }}"
+  when: replayed
 
 - debug:
     msg:
