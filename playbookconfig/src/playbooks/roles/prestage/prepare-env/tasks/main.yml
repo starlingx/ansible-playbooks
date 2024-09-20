@@ -38,7 +38,6 @@
     prestage_source: remote
     prestage_dir: "{{ platform_backup_dir }}/{{ software_version }}"
     host_software_metadata_dir: "/opt/software/metadata"
-    prestage_sync_software_metadata_required: false
     patches_prestage_dir: "{{ platform_backup_dir }}/{{ software_version }}/patches"
     host_patch_metadata_dir: "{{ '/opt/patching/metadata' if software_version
                               is version('24.09', '<') else '/opt/software/metadata' }}"

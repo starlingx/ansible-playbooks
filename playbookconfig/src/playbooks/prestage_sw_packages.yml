@@ -27,7 +27,7 @@
     - role: prestage/prepare-env
 
     - role: prestage/sync-software-metadata
-      when: prestage_reason == 'for_sw_deploy' and prestage_sync_software_metadata_required
+      when: prestage_reason == 'for_sw_deploy'
       vars:
         ansible_become_pass: "{{ ansible_ssh_pass }}"
 

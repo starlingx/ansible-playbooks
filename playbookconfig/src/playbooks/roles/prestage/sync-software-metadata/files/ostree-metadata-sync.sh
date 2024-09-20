@@ -138,6 +138,10 @@ colorecho() {  # usage: colorecho <colour> <text> or colorecho -n <colour> <text
 initialize_env() {
     if [ -f /etc/platform/openrc ]; then
         # shellcheck disable=SC1091
+        # Removes the positional parameters, which are not required in this
+        # case by the openrc script. This is to ensure backward compatibility
+        # of the source command.
+        set -- ""
         source /etc/platform/openrc
     else
         # unit testing
@@ -209,7 +213,7 @@ find_metadata_files_for_release_sorted() {
     # 1) Get all the sw_version metadata files matching the major/minor software version we're given
     #    Storing in a associative array
     local meta_file
-    local -A metadata_files_map  # key: sw_version, value: metadata file
+    local -A metadata_files_map=()  # key: sw_version, value: metadata file
     local found_sw_version
     while IFS= read -r meta_file; do
         found_sw_version=$(get_simple_xml_attrib_from_metadata "${meta_file}" "sw_version")
