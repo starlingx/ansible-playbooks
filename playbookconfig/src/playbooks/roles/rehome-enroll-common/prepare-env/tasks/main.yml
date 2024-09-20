@@ -66,6 +66,7 @@
       external_oam_floating_address: "{{ external_oam_floating_address }}"
       management_start_address: "{{ management_start_address }}"
       admin_start_address: "{{ admin_start_address }}"
+      admin_end_address: "{{ admin_end_address }}"
       cluster_service_start_address: "{{ cluster_service_start_address }}"
       management_gateway_address: "{{ management_gateway_address | default([]) }}"
       admin_gateway_address: "{{ admin_gateway_address | default([]) }}"
@@ -123,6 +124,11 @@
         subnet:
           name: admin_subnet
           value: "{{ admin_subnet }}"
+      admin_end_address:
+        address: "{{ admin_end_address }}"
+        subnet:
+          name: admin_subnet
+          value: "{{ admin_subnet }}"
       admin_gateway_address:
         address: "{{ admin_gateway_address }}"
         subnet:
@@ -167,9 +173,13 @@
   - name: Set default start admin network addresses based on provided subnets
     set_fact:
       default_admin_start_address_primary: "{{ (network_params.admin_subnet_primary | ipaddr(1)).split('/')[0] }}"
+      default_admin_end_address_primary: "{{ (network_params.admin_subnet_primary | ipaddr(-2)).split('/')[0] }}"
       default_admin_start_address_secondary: "{{ False if (not network_params.admin_subnet_secondary)
                                                        else (network_params.admin_subnet_secondary | ipaddr(1))
                                                             .split('/')[0] }}"
+      default_admin_end_address_secondary: "{{ False if (not network_params.admin_subnet_secondary)
+                                                     else (network_params.admin_subnet_secondary | ipaddr(-2))
+                                                          .split('/')[0] }}"
     when: admin_network is defined
 
 - name: Set default values for docker proxies if not defined

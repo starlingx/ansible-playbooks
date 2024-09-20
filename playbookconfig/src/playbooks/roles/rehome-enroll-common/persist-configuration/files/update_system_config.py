@@ -17,6 +17,7 @@ from cgtsclient import client as cgts_client
 from datetime import datetime
 from keystoneclient.auth.identity import v3
 from keystoneclient import session
+from netaddr import IPNetwork
 from sysinv.common import constants as sysinv_constants
 from sysinv.common import exception as e
 
@@ -78,7 +79,7 @@ class CgtsClient(object):
                 os_user_domain_name=self.conf['user_domain_name'],
                 os_region_name=self.conf['region_name'],
                 os_service_type='platform',
-                os_endpoint_type='admin')
+                os_endpoint_type='internal')
         return self._sysinv
 
 
@@ -415,14 +416,44 @@ def edit_dc_role_to_subcloud(client):
                          f"'{current_dc_role}' -> '{updated_dc_role}'")
 
 
-def delete_network_and_addrpool(client, network_name):
+def get_secondary_pool_uuid(
+        client, network_uuid, primary_pool_uuid, section_name):
+    # Subcloud enrollment should be supported on N-1 load,
+    # As dual-stack supported only on/after 24.09 software version,
+    # newer api (network_addrpool) should not be called upon N-1 load.
+    software_version = CONF.get(section_name, "SW_VERSION")
+    if float(software_version) < 24.09:
+        return None
 
-    addresspools = client.sysinv.address_pool.list()
+    network_addrpools = client.sysinv.network_addrpool.list()
+    for network_addrpool in network_addrpools:
+        if (network_addrpool.network_uuid == network_uuid and
+                network_addrpool.address_pool_uuid != primary_pool_uuid):
+            return network_addrpool.address_pool_uuid
+    return None
 
-    for addrpool in addresspools:
-        if str(addrpool.name).startswith(network_name):
-            print_with_timestamp(f"Deleting addrpool {addrpool.uuid}...")
-            client.sysinv.address_pool.delete(addrpool.uuid)
+
+def delete_network_and_addrpool(client, network_name, section_name):
+    networks = client.sysinv.network.list()
+    network_uuid = None
+    primary_pool_uuid = None
+    for network in networks:
+        if network.name == network_name:
+            network_uuid = network.uuid
+            primary_pool_uuid = network.pool_uuid
+            break
+
+    if network_uuid and primary_pool_uuid:
+        # Delete secondary addrpool if supported and exists
+        secondary_pool_uuid = get_secondary_pool_uuid(
+            client, network_uuid, primary_pool_uuid, section_name)
+        if secondary_pool_uuid:
+            print_with_timestamp(f"Deleting secondary addrpool {secondary_pool_uuid}...")
+            client.sysinv.address_pool.delete(secondary_pool_uuid)
+
+        # Delete primary addrpool
+        print_with_timestamp(f"Deleting primary addrpool {primary_pool_uuid}...")
+        client.sysinv.address_pool.delete(primary_pool_uuid)
 
 
 def create_system_controller_addr_network(client, section_name, network_type):
@@ -493,31 +524,65 @@ def update_system_controller_subnets(client, section_name):
     create_system_controller_addr_network(client, section_name, "sc_oam")
 
 
+def get_version_text(ip_network):
+    return "ipv4" if ip_network.version == 4 else "ipv6"
+
+
+def get_network(client, network_name):
+    networks = client.sysinv.network.list()
+    for network in networks:
+        if network.name == network_name:
+            return network
+    raise ValueError(f'No {network_name} network found.')
+
+
+def has_admin_network(section_name):
+    admin_subnet = CONF.get(section_name, 'ADMIN_SUBNET')
+    return admin_subnet != 'undef'
+
+
+def has_admin_network_secondary(section_name):
+    admin_subnet_secondary = CONF.get(section_name, 'ADMIN_SUBNET_SECONDARY')
+    return admin_subnet_secondary != 'undef'
+
+
 def update_admin_network(client, section_name):
 
+    if not has_admin_network(section_name):
+        return
+
+    admin_subnet = IPNetwork(CONF.get(section_name, "ADMIN_SUBNET"))
     admin_start_address = CONF.get(section_name, "ADMIN_START_ADDRESS")
     admin_end_address = CONF.get(section_name, "ADMIN_END_ADDRESS")
+    subcloud_gateway = CONF.get(section_name, "ADMIN_GATEWAY_ADDRESS")
 
     values = {
-        'name': 'admin',
-        'network': CONF.get(section_name, "ADMIN_SUBNET").split("/")[0],
-        'prefix': CONF.get(section_name, "ADMIN_SUBNET").split("/")[1],
+        'name': f'admin-{get_version_text(admin_subnet)}',
+        'network': str(admin_subnet.network),
+        'prefix': admin_subnet.prefixlen,
         'ranges': [(admin_start_address, admin_end_address)],
-        'gateway_address': CONF.get(section_name, "ADMIN_GATEWAY_ADDRESS"),
         }
+
+    if (subcloud_gateway != 'undef'):
+        values.update({
+            'gateway_address': subcloud_gateway,
+        })
 
     print_with_timestamp(f"Creating addrpool with name {values['name']}...")
     pool = client.sysinv.address_pool.create(**values)
 
     network_data = {
-        'type': 'admin',
-        'name': 'admin',
+        'type': sysinv_constants.NETWORK_TYPE_ADMIN,
+        'name': sysinv_constants.NETWORK_TYPE_ADMIN,
         'dynamic': False,
         'pool_uuid': pool.uuid,
     }
 
     print_with_timestamp(f"Creating network with name {network_data['name']}...")
     client.sysinv.network.create(**network_data)
+
+    if has_admin_network_secondary(section_name):
+        update_admin_network_secondary(client, section_name)
 
     assign_if_network(client,
                       CONF.get(section_name, "CONTROLLER_0_ADMIN_NETWORK_IF"),
@@ -528,6 +593,39 @@ def update_admin_network(client, section_name):
     #     assign_if_network(client,
     #                       CONF.get(section_name, "CONTROLLER_1_ADMIN_NETWORK_IF"),
     #                       "admin")
+
+
+def update_admin_network_secondary(client, section_name):
+
+    admin_subnet = IPNetwork(CONF.get(section_name, "ADMIN_SUBNET_SECONDARY"))
+    admin_start_address = CONF.get(section_name, "ADMIN_START_ADDRESS_SECONDARY")
+    admin_end_address = CONF.get(section_name, "ADMIN_END_ADDRESS_SECONDARY")
+    subcloud_gateway = CONF.get(section_name, "ADMIN_GATEWAY_ADDRESS_SECONDARY")
+    network_name = sysinv_constants.NETWORK_TYPE_ADMIN
+
+    values = {
+        'name': f'admin-{get_version_text(admin_subnet)}',
+        'network': str(admin_subnet.network),
+        'prefix': admin_subnet.prefixlen,
+        'ranges': [(admin_start_address, admin_end_address)],
+        }
+
+    if (subcloud_gateway != 'undef'):
+        values.update({
+            'gateway_address': subcloud_gateway,
+        })
+
+    print_with_timestamp(f"Creating addrpool with name {values['name']}...")
+    pool = client.sysinv.address_pool.create(**values)
+
+    # add the pool to the network
+    network_addrpool_data = {
+        'network_uuid': get_network(client, network_name).uuid,
+        'address_pool_uuid': pool.uuid,
+    }
+
+    print_with_timestamp(f"Creating network_addrpool with {network_addrpool_data}...")
+    client.sysinv.network_addrpool.assign(**network_addrpool_data)
 
 
 def assign_if_network(client, host_interface_name, network_name):
@@ -579,7 +677,7 @@ def main():
     populate_service_parameter_config(client, section_name)
     update_system_controller_subnets(client, section_name)
     try:
-        delete_network_and_addrpool(client, 'admin')
+        delete_network_and_addrpool(client, 'admin', section_name)
     except e.NetworkTypeNotFound:
         print_with_timestamp("No admin address found in pool, adding...")
     update_admin_network(client, section_name)
