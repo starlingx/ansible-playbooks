@@ -38,13 +38,8 @@
     - name: Update keystone passwords in secure hieradata
       import_tasks: update_secure_hieradata.yml
 
-    - name: Migrate keystone passwords for subcloud rehoming
-      import_tasks: migrate_keystone_passwords_for_rehome.yml
-      when: mode == "rehoming"
-
-    - name: Migrate keystone passwords for subcloud enrollment
-      import_tasks: migrate_keystone_passwords_for_enroll.yml
-      when: mode == "enroll"
+    - name: Migrate keystone passwords
+      import_tasks: migrate_keystone_passwords.yml
 
     - name: Migrate keystone IDs
       import_tasks: migrate_keystone_ids.yml
