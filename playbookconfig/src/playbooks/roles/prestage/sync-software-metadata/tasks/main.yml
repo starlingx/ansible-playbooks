@@ -40,6 +40,7 @@
 - name: Set software metadata synchronization facts for {{ software_version }}
   set_fact:
     ostree_sysroot_repo_dir: /sysroot/ostree/repo
+    usm_scripts_dir: /usr/sbin/software-deploy
     ostree_rev: starlingx
     usm_software_dir: /opt/software
     usm_metadata_dir: /opt/software/metadata
@@ -315,3 +316,7 @@
         owner: sysadmin
         recurse: yes
       become: yes
+
+    - name: Synchronizing software between controllers
+      command: "{{ usm_scripts_dir }}/controllers-software-sync"
+      become: true
