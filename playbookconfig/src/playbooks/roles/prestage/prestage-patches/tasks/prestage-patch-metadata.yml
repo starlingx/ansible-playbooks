@@ -56,3 +56,11 @@
         - "{{ patches_prestage_dir }}/metadata/applied/*"
         - "{{ patches_prestage_dir }}/metadata/committed/*"
   when: software_version is version('24.09', '<')
+
+# Removing the unavailable directory, as it will not come in
+# Software list output
+- name: Remove unavailable metadata if host software version is 24.09 and newer
+  file:
+    path: "{{ patches_prestage_dir }}/metadata/unavailable"
+    state: absent
+  when: software_version is version('24.09', '>=')
