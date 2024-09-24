@@ -8,21 +8,10 @@
 #   This role is to restore the remaining data in the backup tarball
 #   during platform restore.
 #
-- name: Get os-release from backup file
-  shell: |
-    tar -tf {{ restore_data_file }}
-    --to-stdout etc/os-release | grep '^NAME=' | sed 's/NAME=//'
-  register: backup_distro
 
 - name: Set backup OS Release to Debian
   set_fact:
     backup_os_release: "debian"
-  when: "'Debian' in backup_distro.stdout"
-
-- name: Set backup OS Release to Centos
-  set_fact:
-    backup_os_release: "centos"
-  when: "'Debian' not in backup_distro.stdout"
 
 - name: Set parameters for archive paths
   set_fact:
@@ -594,6 +583,15 @@
 
   - name: Wait for 90 secs before check if services come up
     wait_for: timeout=90
+
+  # added this to make keystone start up faster.
+  - name: Get Keystone user data
+    shell: source /etc/platform/openrc; openstack user list
+    register: keystone_output
+    retries: 5
+    delay: 10  # Delay between retries in seconds
+    until: keystone_output.rc == 0
+    ignore_errors: true  # To allow retries even if the first attempt fails
 
   # admin-keystone is always the very last to be ready,
   # So we just wait and check for admin-keystone to come up.
