@@ -2,6 +2,7 @@
 MODE={{ mode }}
 
 [{{ mode | upper }}_CONFIG]
+SW_VERSION={{ software_version }}
 NAMESERVERS={{ dns_servers | join(',') }}
 DOCKER_HTTP_PROXY={{ docker_http_proxy }}
 DOCKER_HTTPS_PROXY={{ docker_https_proxy }}
@@ -56,10 +57,24 @@ GHCR_REGISTRY_PASSWORD={{ ghcr_registry.password | default('none') }}
 REGISTRYK8S_REGISTRY_PASSWORD={{ registryk8s_registry.password | default('none') }}
 ICR_REGISTRY_PASSWORD={{ icr_registry.password | default('none') }}
 
-ADMIN_SUBNET={{ admin_subnet }}
-ADMIN_START_ADDRESS={{ admin_start_address }}
-ADMIN_END_ADDRESS={{ admin_end_address }}
-ADMIN_GATEWAY_ADDRESS={{ admin_gateway_address }}
+ADMIN_SUBNET={{ address_pairs['admin']['subnet'] | default('undef') }}
+ADMIN_START_ADDRESS={{ address_pairs['admin']['start'] | default('undef') }}
+ADMIN_END_ADDRESS={{ address_pairs['admin']['end'] | default('undef') }}
+ADMIN_GATEWAY_ADDRESS={{ network_params.admin_gateway_address_primary
+                        if (network_params.admin_gateway_address_primary is defined
+                            and network_params.admin_gateway_address_primary)
+                        else 'undef' }}
+
+{# -- start of secondary of dual-stack support #}
+ADMIN_SUBNET_SECONDARY={{ address_pairs_secondary['admin']['subnet'] | default('undef') }}
+ADMIN_START_ADDRESS_SECONDARY={{ address_pairs_secondary['admin']['start'] | default('undef') }}
+ADMIN_END_ADDRESS_SECONDARY={{ address_pairs_secondary['admin']['end'] | default('undef') }}
+ADMIN_GATEWAY_ADDRESS_SECONDARY={{ network_params.admin_gateway_address_secondary
+                                   if (network_params.admin_gateway_address_secondary is defined
+                                      and network_params.admin_gateway_address_secondary)
+                                      else 'undef' }}
+{# -- end of secondary of dual-stack support #}
+
 
 SYSTEM_CONTROLLER_OAM_SUBNET={{ system_controller_oam_subnet }}
 SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS={{ system_controller_oam_floating_address }}
