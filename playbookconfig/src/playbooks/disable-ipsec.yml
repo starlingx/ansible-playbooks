@@ -10,7 +10,7 @@
 # The playbook is supposed to run on Active controller.
 #
 # Example to run the playbook:
-# ansible-playbook /usr/share/ansible/stx-ansible/playbooks/roles/disable-ipsec.yml \
+# ansible-playbook /usr/share/ansible/stx-ansible/playbooks/disable-ipsec.yml \
 #   -e "ansible_ssh_user=sysadmin ansible_ssh_pass=<ssh_passwd> ansible_become_pass=<sudo passwd>"
 #
 

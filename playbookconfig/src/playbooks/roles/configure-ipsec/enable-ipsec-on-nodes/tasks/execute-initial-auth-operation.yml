@@ -31,7 +31,7 @@
     loop: "{{ initial_auth_exec.results }}"
     register: hosts_initial_auth
     until: hosts_initial_auth.finished
-    retries: 12
+    retries: 18
     delay: 10
     failed_when: false
 
@@ -49,14 +49,26 @@
         - Failed to enable IPsec on all hosts.
     when: 'pending_hosts | length > 0'
 
-  - name: Enable strongswan and ipsec-server services on nodes
+  - name: Enable strongswan service on nodes
     command: >-
-      ansible all -i "{{ item }}," -m command -a "systemctl enable ipsec.service
-      ipsec-server.service --now " -b -e "ansible_ssh_user={{ ansible_ssh_user }}
+      ansible all -i "{{ item }}," -m command -a "systemctl enable strongswan-starter.service
+      --now" -b -e "ansible_ssh_user={{ ansible_ssh_user }}
       ansible_ssh_pass={{ ansible_ssh_pass }} ansible_become_pass={{ ansible_become_pass }}"
     loop: "{{ pxeboot_addrs }}"
     async: 30
     poll: 0
+    when: 'pending_hosts | length == 0'
+
+  - name: Fail if strongswan remains inactive
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "systemctl is-active
+      strongswan-starter.service" -b -e "ansible_ssh_user={{ ansible_ssh_user }}
+      ansible_ssh_pass={{ ansible_ssh_pass }} ansible_become_pass={{ ansible_become_pass }}"
+    register: check_strongswan_service
+    loop: "{{ pxeboot_addrs }}"
+    retries: 3
+    delay: 10
+    until: check_strongswan_service.rc == 0
     when: 'pending_hosts | length == 0'
 
   rescue:

@@ -10,7 +10,7 @@
 # The playbook is supposed to run on Active controller.
 #
 # Example to run the playbook:
-# ansible-playbook /usr/share/ansible/stx-ansible/playbooks/roles/enable-ipsec.yml \
+# ansible-playbook /usr/share/ansible/stx-ansible/playbooks/enable-ipsec.yml \
 #   -e "ansible_ssh_user=sysadmin ansible_ssh_pass=<ssh_passwd> ansible_become_pass=<sudo passwd>"
 #
 
@@ -23,10 +23,8 @@
         action: 'alarm'
     - role: configure-ipsec/prep-enable-ipsec
       become: yes
-
     - role: configure-ipsec/enable-ipsec-on-nodes
       become: yes
-
     - role: configure-ipsec/update_heartbeat_failure_action
       vars:
         action: 'fail'

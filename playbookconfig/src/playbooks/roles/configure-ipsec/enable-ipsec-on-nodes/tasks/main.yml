@@ -19,7 +19,7 @@
     register: pending_hosts
     become_user: postgres
 
-  - name: Get PXEBoot network list addresses
+  - name: Get PXEBoot network addresses list
     script: roles/common/files/get_pxeboot_addr_list.py
     register: ip_addrs_list
 
@@ -48,23 +48,73 @@
     include_tasks: execute-initial-auth-operation.yml
     when: 'pending_hosts | length > 0'
 
+  - name: Get hostnames list
+    script: roles/configure-ipsec/files/get_all_hostnames.py
+    register: all_hosts
+    become_user: postgres
+
   - name: Get MGMT network addresses list
     script: roles/configure-ipsec/files/get_all_mgmt_addrs.py
-    register: all_hosts
+    register: all_mgmt_ips
     become_user: postgres
 
   - set_fact:
       all_hosts: "{{ all_hosts.stdout }}"
+      all_mgmt_ips: "{{ all_mgmt_ips.stdout }}"
 
-  # Wait a maximum time of 3 minutes until hosts are reachable,
-  # i.e. IPsec SAs are established between hosts.
-  - name: Wait until hosts are online and reachable
-    shell: "ping -c 1 -w 5 {{ item }} | grep ' 0% packet loss'"
+  # Wait until IPsec SAs are established and hosts are reachable.
+  - name: Wait until hosts are reachable
+    shell: ping -c 1 -w 5 {{ item }} | grep ' 0% packet loss'
     register: host_is_reachable
     loop: "{{ all_hosts | list }}"
     until: host_is_reachable is not failed
     retries: 18
     delay: 10
+
+  - name: Wait until SAs are established
+    shell: >-
+      tail -n 100 /var/log/charon.log |
+      grep "= {{ item }}" -A 2 |
+      grep 'checkin of IKE_SA successful'
+    register: ike_sas
+    loop: "{{ all_mgmt_ips }}"
+    retries: 24
+    delay: 5
+    until: ike_sas.rc|int == 0
+    failed_when: false
+
+  - name: Check if SAs are established
+    shell: swanctl --list-sas | grep -c {{ item }}
+    register: host_sas
+    loop: "{{ all_hosts | list }}"
+    until: host_sas.stdout|int >= 1
+    retries: 2
+    delay: 30
+    failed_when: false
+
+  - name: Failed to establish SAs, restart strongswan service
+    systemd:
+      name: "strongswan-starter"
+      state: restarted
+    when: host_sas is failed
+
+  - name: Recheck SAs for each host
+    shell: "swanctl --list-sas | grep -c {{ item }}"
+    register: recheck_host_sas
+    loop: "{{ all_hosts | list }}"
+    until: recheck_host_sas.stdout|int >= 1
+    retries: 3
+    delay: 30
+    when: host_sas is failed
+
+  - name: Enable ipsec-server service on controllers
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "systemctl enable ipsec-server.service --now"
+      -b -e "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+    with_items:
+      - controller-0
+      - controller-1
 
   - name: Start and provision ipsec-config service on controllers
     command: >-
