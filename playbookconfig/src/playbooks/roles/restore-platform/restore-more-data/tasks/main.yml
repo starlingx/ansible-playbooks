@@ -568,6 +568,23 @@
       mode: '0644'
     when: resolv_conf_stat.stat.mode != "0644"
 
+  - name: Kill the dnsmasq process
+    command: killall dnsmasq
+    ignore_errors: true
+
+  - name: Restart networking
+    systemd:
+      name: networking
+      state: restarted
+    ignore_errors: yes
+
+  - name: Start dnsmasq for internal FQDN
+    command: dnsmasq
+    args:
+      warn: false
+    become: yes
+    ignore_errors: yes
+
   - name: Restart services
     systemd:
       name: "{{ item }}"
