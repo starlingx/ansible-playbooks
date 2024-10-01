@@ -71,6 +71,10 @@
 #       msg: "Admin_subnet or admin_gateway_address is not defined in bootstrap values."
 #     when: admin_network is not defined
 #
+- name: Initialize address pairs secondary
+  set_fact:
+    address_pairs_secondary: { }
+
 - name: Validate admin network configuration
   block:
   - name: Build admin address primary pairs for validation
@@ -92,7 +96,7 @@
   - block:
     - name: Build admin address secondary pairs for validation
       set_fact:
-        address_pairs_secondary:
+        admin_pairs_secondary:
           admin:
             start:
               "{{ network_params.admin_start_address_secondary if admin_start_address != 'derived'
@@ -103,9 +107,41 @@
             subnet: "{{ network_params.admin_subnet_secondary }}"
 
     - include_tasks: roles/common/validate-addresses/tasks/validate_address_range.yml
-      with_dict: "{{ address_pairs_secondary }}"
+      with_dict: "{{ admin_pairs_secondary }}"
+
+    - name: Group secondary address pairs
+      set_fact:
+        address_pairs_secondary: "{{ address_pairs_secondary |combine({item.key: item.value}) }}"
+      with_dict: "{{ admin_pairs_secondary }}"
     when: network_params.admin_subnet_secondary
   when: admin_network is defined
+
+- name: Validate oam secondary network configuration
+  block:
+  - name: Build oam address secondary pairs for validation
+    set_fact:
+      oam_address_pairs_secondary:
+        oam:
+          start:
+            "{{ network_params.external_oam_start_address_secondary if external_oam_start_address != 'derived'
+            else default_external_oam_start_address_secondary }}"
+          end:
+            "{{ network_params.external_oam_end_address_secondary if external_oam_end_address != 'derived'
+            else default_external_oam_end_address_secondary }}"
+          subnet: "{{ network_params.external_oam_subnet_secondary }}"
+        oam_node:
+          start: "{{ derived_network_params.oam_node_0_address_secondary }}"
+          end: "{{ derived_network_params.oam_node_1_address_secondary }}"
+          subnet: "{{ network_params.external_oam_subnet_secondary }}"
+
+  - include_tasks: roles/common/validate-addresses/tasks/validate_address_range.yml
+    with_dict: "{{ oam_address_pairs_secondary }}"
+
+  - name: Group secondary address pairs
+    set_fact:
+      address_pairs_secondary: "{{ address_pairs_secondary |combine({item.key: item.value}) }}"
+    with_dict: "{{ oam_address_pairs_secondary }}"
+  when: network_params.external_oam_subnet_secondary
 
 - name: Wait until cloud-init finalized reconfiguration
   wait_for:
