@@ -290,16 +290,6 @@
         - "stderr: {{ sync_software_commits.stderr }}"
         - "stdout: {{ sync_software_commits.stdout }}"
 
-  # Restart the software controller and agent to pickup the changes
-  - name: Restart the software controller and agent
-    systemd:
-      name: "{{ item }}"
-      state: restarted
-    with_items:
-      - software-controller-daemon
-      - software-agent
-    become: true
-
   always:
     - name: Restore the ownership of {{ usm_software_dir }}
       file:
