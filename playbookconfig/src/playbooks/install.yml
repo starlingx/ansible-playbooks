@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020-2023 Wind River Systems, Inc.
+# Copyright (c) 2020-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -124,6 +124,23 @@
           timeout={{ wait_for_timeout }}
           state=started
           msg="Timeout waiting for {{ host_to_check }}:{{ ansible_port }}. Err_code=wait_{{ operation_string }}"
+
+      # TODO (srana): Now that enroll-init tasks diverge from install, consider separating enroll-init
+      # from the install playbook. The RVMC script block should be made common so both install and
+      # enroll-init can use it independently.
+    - name: Wait for sysinv API to be ready on the reconfigured OAM endpoint
+      local_action:
+        module: uri
+        url: "https://{{ host_to_check }}:{{ ansible_port }}/v1/isystems/region_id"
+        method: GET
+        validate_certs: no
+      register: api_response
+      retries: 10
+      delay: 6
+      until: api_response.status == 200
+      # The caller (DCManager) will try and report an error in case of failure
+      failed_when: false
+      when: enroll_init
 
 - name: Run validate host playbook post install
   import_playbook: validate_host.yml

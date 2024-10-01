@@ -47,8 +47,6 @@
   shell: |
     source /etc/platform/openrc
     software deploy precheck "{{ release_id }}"
-  #TODO(srana): Must be removed once pre-check is fixed for multi-patch deploy with dependencies
-  ignore_errors: yes
 
 - name: Deploy start
   shell: |
