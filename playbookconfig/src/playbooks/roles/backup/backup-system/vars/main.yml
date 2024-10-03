@@ -30,7 +30,7 @@ fluxcd_permdir: "{{ platform_path }}/fluxcd/{{ software_version }}"
 helm_overrides_permdir: "{{ platform_path }}/helm/{{ software_version }}"
 helm_charts_permdir: "{{ platform_path }}/helm_charts"
 keyring_permdir: "{{ platform_path }}/.keyring/{{ software_version }}"
-patching_permdir: "/opt/patching"  # TODO(outbrito): Remove when CentOS deprecates
+software_permdir: "/opt/software"
 puppet_permdir: "{{ platform_path }}/puppet/{{ software_version }}"
 sysinv_permdir: "{{ platform_path }}/sysinv/{{ software_version }}"
 
@@ -51,11 +51,11 @@ backup:
     - "{{ helm_overrides_permdir }}"
     - "{{ homedir }}"
     - "{{ keyring_permdir }}"
-    - "{{ patching_permdir }}"  # TODO(outbrito): Remove when CentOS deprecates
     - "{{ puppet_permdir }}/hieradata"
     - "{{ postgres_dir.path }}"
     - "{{ sysinv_permdir }}"
     - "/var/luks/stx/luks_fs"
+
   exclude:
     - "/etc/selinux/**"
     - "/etc/selinux"
@@ -73,7 +73,14 @@ backup:
     - "{{ homedir }}/*/.kube/**"
     - "{{ homedir }}/*/.kube"
 
-exclude_patches_glob: /opt/patching/**
+# What to include when also backing up software deployments
+sw_deployments_backup_targets:
+  - "{{ software_permdir }}"
+  - "/var/www/pages/updates"
+
+# Only include metadata if software deployments are excluded
+sw_deployments_backup_metadata_targets:
+  - "{{ software_permdir }}/metadata"
 
 # Image filesystem backup configurations
 backup_registry_filesystem: false

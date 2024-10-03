@@ -64,8 +64,8 @@
 
   - name: Exclude patches on AIO-SX
     set_fact:
-      exclude_patches: "{{ system_mode == 'simplex' and system_type == 'All-in-one' }}"
-    when: exclude_patches is not defined
+      exclude_sw_deployments: "{{ system_mode == 'simplex' and system_type == 'All-in-one' }}"
+    when: exclude_sw_deployments is not defined
 
   - name: Set dc-vault config path fact
     set_fact:

@@ -399,6 +399,10 @@
         mode: 0755
         content: '{{ updates_list | default("") }}'
 
+    - name: Normalize backup items
+      set_fact:
+        backup_targets: "{{ backup.targets }}"
+
     # Check for protected backup directories in exclude_dirs options
     - block:
       - name: Set input exclude dirs list from exclude_dirs option
@@ -419,6 +423,18 @@
 
       when: exclude_dirs is defined
 
+    - name: Include software deployments in backup
+      block:
+        - name: Include software deployments metadata in backup targets
+          set_fact:
+            backup_targets: "{{ backup_targets + sw_deployments_backup_metadata_targets }}"
+          when: exclude_sw_deployments|bool
+
+        - name: Include software deployments data in backup targets
+          set_fact:
+            backup_targets: "{{ backup_targets + sw_deployments_backup_targets }}"
+          when: not exclude_sw_deployments|bool
+
     - name: Set exclude targets
       set_fact:
         exclude_targets:
@@ -426,17 +442,12 @@
       vars:
         _exclude_dirs: "{{ exclude_dirs | default(\"\") }}"
 
-    - name: Exclude patches
-      set_fact:
-        exclude_targets: "{{ exclude_targets + [exclude_patches_glob] }}"
-      when: exclude_patches|bool
-
     # Now Postgres data and MariaDB data are stored in staging dir, we can estimate
     # the disk size requirement for the backup archive.
     - name: Check the size (in KiB) of directories that will be backed up for platform
       shell: "du -sh -k  {{ item }} --exclude {{ exclude_targets|join(' --exclude ') }} | awk '{print $1}'"
       register: size_output_platform
-      with_items: "{{ backup.targets }}"
+      with_items: "{{ backup_targets }}"
 
     # Estimate the backup size. We add 128M overhead for things like ceph crushmap,
     # ldap data, etc. that will be generated and stored in the staging dir later on.
@@ -764,7 +775,7 @@
     # Some additional files generated during this playbook's execution are appended to the backup targets here
     - name: Set fact for backup targets with extra files
       set_fact:
-        final_backup_targets: "{{ (backup.targets + [
+        final_backup_targets: "{{ (backup_targets + [
           etcd_snapshot_file,
           helm_overrides_sqldump_dir.path,
           override_backup_file,
