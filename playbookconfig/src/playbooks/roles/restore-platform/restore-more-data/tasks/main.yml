@@ -380,6 +380,7 @@
     {{ ' '.join(restore_extra_items) }}
   args:
     warn: false
+  when: restore_extra_items | length > 0
 
 - name: Look for the flag indicating that ceph is configured
   shell: "tar -tf {{ restore_data_file }} | grep '{{ archive_ceph_backend_flag }}'"
