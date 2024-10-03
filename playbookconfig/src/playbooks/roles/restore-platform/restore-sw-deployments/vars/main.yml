@@ -1,0 +1,27 @@
+---
+# Used to mark if this action is in progress
+restore_patching_in_progress_flag: /etc/platform/.restore_patching_in_progress
+restore_patching_complete_flag: /etc/platform/.restore_patching_complete
+
+# We want to only restore software deployments when the base commit from backup
+# matches the current freshly installed commit.  During testing or development it is useful
+# to be able to restore software deployments even if the commit doesn't match.
+verify_base_commit: true
+
+# This file contains information required to restore the software deployments.
+# It was created during backup.
+sw_deployments_backup_info_file: "etc/platform/.backup_sw_deployments_info.json"
+
+# All the data that needs to be restore for this is under these files/directories.
+sw_deployments_restore_items:
+  - "opt/software"
+  - "var/www/pages/updates"
+
+# Timeout while waiting for software deploy start to finish
+wait_for_start_timeout: 3600
+
+# Timeout while waiting for software deploy activate to finish
+wait_for_activate_timeout: 900
+
+# Force a reboot even if reboot_required is false
+sw_deployments_force_reboot: false

@@ -1,0 +1,127 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- name: Verify base commit
+  block:
+    - name: Read current OSTree commit
+      command: ostree rev-parse starlingx
+      register: ostree_commit_result
+
+    - name: Verify current commit matches target commit
+      fail:
+        msg: |
+          Cannot initiate software deployments restore.
+
+          Mismatch detected between OSTree commits.
+          Expected: {{ sw_deployments_info.target_commit }}
+          Found:    {{ ostree_commit_result.stdout.strip() }}
+
+          This means that the system has been reinstalled with a different ISO.
+          To ignore this mismatch rerun restore and set `verify_base_commit=false`.
+      when: ostree_commit_result.stdout.strip() != sw_deployments_info.target_commit
+
+  when: verify_base_commit|bool
+
+- name: Set {{ restore_patching_in_progress_flag }} flag
+  file:
+    path: "{{ restore_patching_in_progress_flag }}"
+    state: touch
+
+- name: Restore software deployments data
+  command: >
+    tar --use-compress-program=pigz
+    -C /
+    {%+ for v in sw_deployments_info.tar_transforms %}
+    --transform {{ v | quote }}
+    {%+ endfor %}
+    -xpvf {{ restore_data_file | quote }}
+    {{ ' '.join(sw_deployments_restore_items | map('quote')) }}
+  args:
+    warn: false
+
+- name: Strip previously deployed patch contents from metadata
+  script: "strip_patch_contents.py {{ current_path | quote }}"
+  loop_control:
+    label: "{{ current_path }}"
+  loop: "{{ sw_deployments_info.metadata.deployed[1:] }}"
+  vars:
+    current_path: "{{ ('/', item.replace('deployed', 'available')) | path_join }}"
+
+- name: Restore software deployments in progress
+  block:
+    - name: Do software deploy start
+      command: "software deploy start {{ sw_deployments_info.target_release_id }}"
+
+    - name: Wait for software deploy start to finish
+      command: software deploy show
+      register: wait_for_start_result
+      until: wait_for_start_result.stdout | regex_search('start-(done|failed)')
+      retries: "{{ (wait_for_start_timeout|int + 9) // 10 }}"
+      delay: 10
+      failed_when: wait_for_start_result | regex_search('start-failed')
+
+    - name: Do software deploy host localhost
+      command: software deploy host localhost
+
+    - name: Do software deploy activate
+      command: software deploy activate
+
+    - name: Wait for software deploy activate to finish
+      command: software deploy show
+      register: wait_for_activate_result
+      until: wait_for_activate_result.stdout | regex_search('activate-(done|failed)')
+      retries: "{{ (wait_for_activate_timeout|int + 9) // 10 }}"
+      delay: 10
+      failed_when: wait_for_activate_result | regex_search('activate-failed')
+
+    - name: Do software deploy complete
+      command: software deploy complete
+
+    - name: Do software deploy delete
+      command: software deploy delete
+
+    # TODO(jkraitbe): Remote playbook execution can support reboot module
+    - name: Reboot the controller in one minute
+      command: shutdown -r +1
+      when: >
+        sw_deployments_info.target_reboot_required|bool or
+        sw_deployments_force_reboot|bool
+
+  rescue:
+    - name: Fail the software deployements restore
+      fail:
+        msg: |
+          Restoration of the software deployments failed.
+
+          For additional information:
+            - Check output of "software deploy show"
+            - Check for errors in /var/log/software.log
+
+          Error:
+            {{ ansible_failed_result | to_nice_yaml | indent(2) }}
+
+  when: sw_deployments_info.target_release_id is not none
+  become: true
+
+- name: Set {{ restore_patching_complete_flag }} flag
+  file:
+    path: "{{ restore_patching_complete_flag }}"
+    state: absent
+
+- name: Clear {{ restore_patching_in_progress_flag }} flag
+  file:
+    path: "{{ restore_patching_in_progress_flag }}"
+    state: absent
+
+- name: Terminate the platform restore
+  fail:
+    msg: |
+      The restore has been terminated due to a required controller node reboot.
+      A reboot will be triggered in approximately one minute.
+      Please re-run the playbook to restore the platform after the reboot is completed.
+  when: >
+    sw_deployments_info.target_reboot_required|bool or
+    sw_deployments_force_reboot|bool

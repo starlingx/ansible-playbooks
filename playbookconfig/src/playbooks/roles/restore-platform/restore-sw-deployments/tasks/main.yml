@@ -1,0 +1,59 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   These tasks perform following activities:
+#       - Verify if the original base OSTree commit from backup matches current OSTree commit
+#       - Extract and reapply all software deployments from backup
+#       - Reboot the controller if the patching requires it
+#
+
+- name: Exclude patches on AIO-SX
+  set_fact:
+    exclude_sw_deployments: "{{ system_mode == 'simplex' and system_type == 'All-in-one' }}"
+  when: exclude_sw_deployments is not defined
+
+- name: Check if software deployments restore is already in progress
+  stat:
+    path: "{{ restore_patching_in_progress_flag }}"
+  register: in_progress_flag
+
+- name: Check if software deployments restore is already complete
+  stat:
+    path: "{{ restore_patching_complete_flag }}"
+  register: complete_flag
+
+- name: Fail if software deployments restore is already in progress
+  fail:
+    msg: |
+      Software deployments restore is already in progress.
+
+      It is recommended to reinstall the system before reattempting.
+  when:
+    - not complete_flag.stat.exists
+    - in_progress_flag.stat.exists
+
+- name: Restore software deployments
+  block:
+    - name: Gather software deployments information
+      script: "get_sw_deployments_info.py {{ restore_data_file | quote }}"
+      register: sw_deployments_info_result
+
+    - name: Normalize facts
+      set_fact:
+        sw_deployments_info: "{{ sw_deployments_info_result.stdout | from_json }}"
+
+    - name: Display software deployments information from backup
+      debug:
+        var: sw_deployments_info
+
+    - name: Restore software deployments
+      include_tasks: restore_sw_deployments.yml
+      when: sw_deployments_info.backup_patched
+
+  when:
+    - not exclude_sw_deployments|bool
+    - not complete_flag.stat.exists

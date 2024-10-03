@@ -1,6 +1,0 @@
----
-restore_patching_complete_flag: /etc/platform/.restore_patching_complete
-node_is_patched_flag: /var/run/node_is_patched
-patching_permdir: /opt/patching
-patching_repo_permdir: /var/www/pages/updates
-skip_version_check: false

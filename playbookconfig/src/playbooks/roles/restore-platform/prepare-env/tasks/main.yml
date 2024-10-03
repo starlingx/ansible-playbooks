@@ -274,6 +274,12 @@
 
     when: inventory_hostname != "localhost"
 
+  # Call restore-sw-deployments from here so we don't need to
+  # play hide-and-seek with the in-progress flags.
+  - name: Restore software deployments
+    import_role:
+      name: restore-platform/restore-sw-deployments
+
   - name: Create {{ restore_in_progress_flag }} flag file
     file:
       path: "{{ restore_in_progress_flag }}"

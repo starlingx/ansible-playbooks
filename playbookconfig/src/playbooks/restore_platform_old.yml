@@ -17,7 +17,6 @@
     - common/validate-target
     - backup-restore/validate-input
     - restore-platform/prepare-env
-    - restore-platform/restore-sw-patches
     - { role: backup-restore/restore-luks, become: yes }
 
 - name: Run bootstrap playbook with restore mode

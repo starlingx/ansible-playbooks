@@ -236,6 +236,7 @@
     - "backup_filename: {{ platform_backup_filename }}"
     - "restore_mode: {{ restore_mode }}"
     - "skip_patches_restore: true"
+    - "exclude_sw_deployments: true"
   connection: local
 
 - name: Add restore registry filesystem flag to overrides file

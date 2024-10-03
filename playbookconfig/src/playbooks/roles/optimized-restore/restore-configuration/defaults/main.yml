@@ -1,10 +1,13 @@
 ---
 # These are to be restored from localhost_platform_backup.tgz
 # Some directories like /etc/kuberenetes and /etc/ldap are not
-# covered here because they are handled by their respective roles
-# like common/bringup-kubemaster and backup-restore/restore-ldap.
+# covered here because they are handled by their respective roles.
 # Files listed here shoud generally be simple to restore and
 # not require complex logic.
+# A list of *some* roles that do this:
+# - common/bringup-kubemaster
+# - backup-restore/restore-ldap
+# - restore-platform/restore-sw-deployments
 restore_items:
   - etc/barbican
   - etc/containerd
@@ -42,7 +45,6 @@ restore_items:
   - etc/ssl
   - etc/sysctl.d
   - etc/sysinv
-  - opt/patching
   - opt/platform
   - opt/extension
 
