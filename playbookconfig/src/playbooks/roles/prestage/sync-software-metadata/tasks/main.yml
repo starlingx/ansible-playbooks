@@ -150,33 +150,52 @@
     subcloud_releases: "{{ subcloud_software_list.stdout_lines | \
     map('regex_replace', '.*?-([0-9\\.]+).*', '\\1') | list }}"
 
-- name: Verify patch levels between system controller and subcloud
-  debug:
-    msg: >
-      {% if system_controller_releases | length > subcloud_releases | length %}
-        The system controller has a patch level higher than the subcloud
-      {% elif system_controller_releases | length == subcloud_releases | length %}
+# The subcloud must have at least one release for the given software version to be able
+# to compare with the system controller version. Otherwise, it is assumed that the
+# release does not exist in the subcloud and the prestage is executed.
+- block:
+    # It is necessary to compare the current patch level between the SC and the subcloud
+    # to determine if prestage should be executed. In this way all scenarios are covered,
+    # including pre-patched scenario.
+  - name: Extract current patch number from system controller release list
+    set_fact:
+      system_controller_current_patch: "{{ system_controller_releases[-1] | \
+      regex_replace('.*\\.', '') | int }}"
+
+  - name: Extract current patch number from subcloud release list
+    set_fact:
+      subcloud_current_patch: "{{ subcloud_releases[-1] | regex_replace('.*\\.', '') | int  }}"
+
+  # We need to compare the patch level, since we must take into account even the
+  # pre-patched scenario.
+  - debug:
+      msg: |
+        ostree revision from:                 {{ ostree_repo_release_feed }}:
+        system controller current patch:      {{ system_controller_releases[-1] }}
+        subcloud current patch:               {{ subcloud_releases[-1] }}
+        system controller current commit:     {{ ostree_commit_system_controller.stdout }}
+        subcloud current commit:              {{ ostree_commit_subcloud.stdout }}
+
+        {% if system_controller_current_patch == subcloud_current_patch %}
         Skipping for software deploy prestage as the subcloud has the same patch level
         than the system controller.
-      {% else %}
+        {% elif subcloud_current_patch > system_controller_current_patch %}
         Skipping for software deploy prestage as the subcloud has a higher patch level
         than the system controller.
-      {% endif %}
+        {% endif %}
 
-- name: "Subcloud does not require software prestage. Exiting..."
-  meta: end_play
-  when: subcloud_releases | length >= system_controller_releases | length
+  - name: "Subcloud does not require software prestage. Exiting..."
+    meta: end_play
+    when: subcloud_current_patch >= system_controller_current_patch
+  when: subcloud_releases | length > 0
 
 - block:
+  - debug:
+      msg: The system controller has a patch level higher than the subcloud
+
   - name: Gather system controller metadata commits
-    #
-    # Use the existing ostree_metadata_commits_central file if:
-    # 1) It exists, and
-    # 2) There are no new commits. Compare last line of the ostree_metadata_commits_central
-    #    file against current ostree repo commit.
-    # Otherwise, we generate a new ostree_metadata_commits_central file using the
-    # get-commits target to our script.
-    #
+    # Get the commits from the metadata, in the same way that software list does,
+    # avoiding ambiguous queries.
     # Parallel operations (for orchestration):
     # We use flock here because there may be many prestaging operations running
     # in parallel on system controller. flock behaviour:
@@ -184,15 +203,10 @@
     #   - the timeout is long just to ensure we never deadlock for any reason
     shell: |
       exec 3>/tmp/ostree_metadata_commits_central.lock
-      flock --exclusive --timeout 180 3 || echo "ERROR: flock failed: $?"
-      if [ ! -f "{{ ostree_metadata_commits_central }}" ] \
-        || ! diff -q <(ostree --repo="{{ ostree_repo_release_feed }}" rev-parse "{{ ostree_rev }}") \
-        <(tail --lines=1 "{{ ostree_metadata_commits_central }}" | awk -F':' '{ print $2; }') > /dev/null 2>&1 ; then
-        {{ role_path }}/files/ostree-metadata-sync.sh \
-        --sw-version "{{ software_version }}" --output "{{ ostree_metadata_commits_central }}" get-commits
-      else
-        cat "{{ ostree_metadata_commits_central }}"
-      fi
+      flock --exclusive --timeout 180 3 || \
+      { echo "ERROR: $? - flock failed while trying to get the commits."; exit 1; }
+      {{ role_path }}/files/ostree-metadata-sync.sh --sw-version "{{ software_version }}" \
+      --output "{{ ostree_metadata_commits_central }}" get-commits
       exec 3>&-  # release the lock
     register: system_controller_software_metadata_commits
     delegate_to: localhost
@@ -212,27 +226,6 @@
     debug:
       var: subcloud_software_metadata_commits
 
-  - debug:
-      msg:
-        - "ostree revision from {{ ostree_repo_release_feed }}:"
-        - "system controller: {{ ostree_commit_system_controller.stdout }}"
-        - "subcloud:          {{ ostree_commit_subcloud.stdout }}"
-        - "Software list:"
-        - "system controller:"
-        - "{{ system_controller_software_list.stdout }}"
-        - "{{ system_controller_software_metadata_commits.stdout }}"
-        - "subcloud:"
-        - "{{ subcloud_software_list.stdout }}"
-        - "{{ subcloud_software_metadata_commits.stdout }}"
-
-  - name: Gather system controller deployed release list
-    shell: |
-      while IFS= read -r line; do
-        echo "$line" | awk -F'|' '{split($2,p,"-"); print p[2]}'
-      done <<< "{{ system_controller_software_list.stdout }}"
-    register: minor_releases_list
-    delegate_to: localhost
-
   # It's necessary to temporarily change the owner to sysadmin so that
   # the system controller can push the files to the subcloud, since the files
   # are in the folders only the root can access but the synchronize only
@@ -244,21 +237,6 @@
       owner: sysadmin
       recurse: yes
     become: yes
-
-  - name: Copy system controller deployed release directory to subcloud
-    synchronize:
-      mode: "push"
-      src: "{{ usm_software_dir }}/rel-{{ item }}"
-      dest: "{{ usm_software_dir }}"
-    with_items: "{{ minor_releases_list.stdout_lines }}"
-    failed_when: false
-
-  - name: Copy system controller {{ usm_software_dir }}/software-scripts to subcloud
-    synchronize:
-      mode: "push"
-      src: "{{ usm_software_dir }}/software-scripts"
-      dest: "{{ usm_software_dir }}"
-    failed_when: false
 
   - name: Copy system controller {{ usm_metadata_dir }} to subcloud {{ tmp_metadata_sync_dir }}
     copy:
@@ -278,7 +256,7 @@
   # on the system controller as it does not exist on N-1 release e.g. 22.12
   - name: Synchronizing system controller ostree commits on subcloud
     script: "{{ role_path }}/files/ostree-metadata-sync.sh --sw-version {{ software_version }}
-            sync-subcloud 2>&1 | tee /tmp/sync-ostree-commits.log"
+            sync-subcloud"
     register: sync_software_commits
     become: true
 
@@ -289,6 +267,21 @@
         - "rc: {{ sync_software_commits.rc }}"
         - "stderr: {{ sync_software_commits.stderr }}"
         - "stdout: {{ sync_software_commits.stdout }}"
+
+  - name: Copy system controller deployed release directory to subcloud
+    synchronize:
+      mode: "push"
+      src: "{{ usm_software_dir }}/rel-{{ item }}"
+      dest: "{{ usm_software_dir }}"
+    with_items: "{{ system_controller_releases }}"
+    failed_when: false
+
+  - name: Copy system controller {{ usm_software_dir }}/software-scripts to subcloud
+    synchronize:
+      mode: "push"
+      src: "{{ usm_software_dir }}/software-scripts"
+      dest: "{{ usm_software_dir }}"
+    failed_when: false
 
   always:
     - name: Restore the ownership of {{ usm_software_dir }}

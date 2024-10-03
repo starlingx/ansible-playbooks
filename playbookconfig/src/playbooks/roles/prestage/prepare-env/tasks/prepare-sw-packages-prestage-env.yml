@@ -65,6 +65,7 @@
     force_ostree_dir_sync: "{{ 'true' if (prestage_source == 'remote' and
                                 host_software_version is version('22.12', '=') and
                                 not host_ostree_dir_exist) else 'false' }}"
+
 - debug:
     msg: |
       Prestaging type: {{ prestage_type }}
