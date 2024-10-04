@@ -96,8 +96,10 @@ SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS={{ system_controller_oam_floating_address
 SYSTEM_CONTROLLER_SUBNET={{ system_controller_subnet }}
 SYSTEM_CONTROLLER_FLOATING_ADDRESS={{ system_controller_floating_address }}
 
-# TODO(glyraper): Check with controller-1 variable enabled
-CONTROLLER_0_ADMIN_NETWORK_IF={{ controller_0_admin_network_if.stdout }}
+# Controller-1 will not be installed before enrollment
+CONTROLLER_0_ADMIN_NETWORK_IF={{ controller_0_admin_network_if.get('stdout', 'undef')
+                                 if controller_0_admin_network_if is defined
+                                 else 'undef' }}
 
 {# -- Check user_dns_host_records to include dns_host_records #}
 {% if user_dns_host_records is defined | default(false) %}

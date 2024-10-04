@@ -18,6 +18,15 @@
   vars:
     target_host: 'controller-0'
 
+# In non-SX system, the controller-0 node will be tainted disabled during lock,
+# remove the taint after locking the only controller.
+- name: Remove disabled taint on controller-0 if not simplex
+  command: kubectl taint nodes controller-0 services=disabled:NoExecute-
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  failed_when: false
+  when: system_mode != 'simplex'
+
 - name: Mark enrollment is completed
   file:
     path: "{{ subcloud_enrollment_completed_flag }}"

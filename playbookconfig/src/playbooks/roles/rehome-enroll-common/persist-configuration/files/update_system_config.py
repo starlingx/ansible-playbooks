@@ -601,12 +601,6 @@ def update_admin_network(client, section_name):
                       CONF.get(section_name, "CONTROLLER_0_ADMIN_NETWORK_IF"),
                       "admin")
 
-    # TODO (glyraper): Add controller-1 option
-    # if CONF.get(section_name, "CONTROLLER_1_ADMIN_NETWORK_IF") != 'undef':
-    #     assign_if_network(client,
-    #                       CONF.get(section_name, "CONTROLLER_1_ADMIN_NETWORK_IF"),
-    #                       "admin")
-
 
 def update_admin_network_secondary(client, section_name):
 

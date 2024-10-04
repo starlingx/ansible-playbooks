@@ -386,7 +386,7 @@
     source /etc/platform/openrc; system interface-network-list controller-1 |
     awk '$8 == "mgmt" { print $6 }'
   register: controller_1_management_interface_result
-  when: system_mode != 'simplex'
+  when: system_mode != 'simplex' and mode != "enroll"
 
 - block:
 
@@ -427,7 +427,7 @@
       set_fact:
         admin_if_c1: "{{ controller_1_admin_network_if.stdout_lines[0] }}"
 
-    when: system_mode != "simplex"
+    when: system_mode != "simplex" and mode != "enroll"
 
   - name: Get existing admin address pool
     shell: >-
