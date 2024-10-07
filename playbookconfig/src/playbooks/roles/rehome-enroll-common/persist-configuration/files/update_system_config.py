@@ -434,9 +434,23 @@ def get_secondary_pool_uuid(
 
 
 def delete_network_and_addrpool(client, network_name, section_name):
+    network_uuid, primary_pool_uuid, secondary_pool_uuid = get_network_addrpools_uuid_of_network(
+        client, network_name, section_name)
+    # Delete secondary addrpool
+    if secondary_pool_uuid:
+        print_with_timestamp(f"Deleting secondary addrpool {secondary_pool_uuid}...")
+        client.sysinv.address_pool.delete(secondary_pool_uuid)
+    # Delete primary addrpool
+    print_with_timestamp(f"Deleting primary addrpool {primary_pool_uuid}...")
+    client.sysinv.address_pool.delete(primary_pool_uuid)
+
+
+def get_network_addrpools_uuid_of_network(
+        client, network_name, section_name):
     networks = client.sysinv.network.list()
     network_uuid = None
     primary_pool_uuid = None
+    secondary_pool_uuid = None
     for network in networks:
         if network.name == network_name:
             network_uuid = network.uuid
@@ -444,16 +458,10 @@ def delete_network_and_addrpool(client, network_name, section_name):
             break
 
     if network_uuid and primary_pool_uuid:
-        # Delete secondary addrpool if supported and exists
+        # get secondary addrpool if supported and exists
         secondary_pool_uuid = get_secondary_pool_uuid(
             client, network_uuid, primary_pool_uuid, section_name)
-        if secondary_pool_uuid:
-            print_with_timestamp(f"Deleting secondary addrpool {secondary_pool_uuid}...")
-            client.sysinv.address_pool.delete(secondary_pool_uuid)
-
-        # Delete primary addrpool
-        print_with_timestamp(f"Deleting primary addrpool {primary_pool_uuid}...")
-        client.sysinv.address_pool.delete(primary_pool_uuid)
+    return network_uuid, primary_pool_uuid, secondary_pool_uuid
 
 
 def create_system_controller_addr_network(client, section_name, network_type):
@@ -546,6 +554,11 @@ def has_admin_network_secondary(section_name):
     return admin_subnet_secondary != 'undef'
 
 
+def has_oam_network_secondary(section_name):
+    oam_subnet_secondary = CONF.get(section_name, 'EXTERNAL_OAM_SUBNET_SECONDARY')
+    return oam_subnet_secondary != 'undef'
+
+
 def update_admin_network(client, section_name):
 
     if not has_admin_network(section_name):
@@ -628,6 +641,90 @@ def update_admin_network_secondary(client, section_name):
     client.sysinv.network_addrpool.assign(**network_addrpool_data)
 
 
+def is_equal_with_existing_pool(client, pool_values, pool_uuid):
+    address_pool = client.sysinv.address_pool.get(pool_uuid)
+    return (
+        pool_values['network'] == address_pool.network and
+        pool_values['prefix'] == address_pool.prefix and
+        pool_values['ranges'][0][0] == address_pool.ranges[0][0] and
+        pool_values['ranges'][0][1] == address_pool.ranges[0][1] and
+        (pool_values['floating_address'] == address_pool.floating_address
+            if 'floating_address' in pool_values
+            else address_pool.floating_address is None) and
+        (pool_values['gateway_address'] == address_pool.gateway_address
+            if 'gateway_address' in pool_values
+            else address_pool.gateway_address is None) and
+        (pool_values['controller0_address'] == address_pool.controller0_address
+            if 'controller0_address' in pool_values
+            else address_pool.controller0_address is None) and
+        (pool_values['controller1_address'] == address_pool.controller1_address
+            if 'controller1_address' in pool_values
+            else address_pool.controller1_address is None)
+    )
+
+
+def update_oam_network_secondary(client, section_name):
+    network_name = sysinv_constants.NETWORK_TYPE_OAM
+    network_uuid, primary_pool_uuid, secondary_pool_uuid = (
+        get_network_addrpools_uuid_of_network(client, network_name, section_name))
+    if not has_oam_network_secondary(section_name):
+        if secondary_pool_uuid:
+            print_with_timestamp(
+                f"Deleting oam secondary addrpool {secondary_pool_uuid}...")
+            client.sysinv.address_pool.delete(secondary_pool_uuid)
+        return
+
+    oam_subnet = IPNetwork(CONF.get(section_name, "EXTERNAL_OAM_SUBNET_SECONDARY"))
+    oam_start_address = CONF.get(section_name, "EXTERNAL_OAM_START_ADDRESS_SECONDARY")
+    oam_end_address = CONF.get(section_name, "EXTERNAL_OAM_END_ADDRESS_SECONDARY")
+    oam_gateway = CONF.get(section_name, "EXTERNAL_OAM_GATEWAY_ADDRESS_SECONDARY")
+    floating_address = CONF.get(section_name, "EXTERNAL_OAM_FLOATING_ADDRESS_SECONDARY")
+
+    # create the address pool
+    values = {
+        'name': f'oam-{get_version_text(oam_subnet)}',
+        'network': str(oam_subnet.network),
+        'prefix': oam_subnet.prefixlen,
+        'ranges': [(oam_start_address, oam_end_address)],
+        'floating_address': floating_address,
+        'gateway_address': oam_gateway,
+        }
+
+    system_mode = CONF.get(section_name, 'SYSTEM_MODE')
+    if system_mode != sysinv_constants.SYSTEM_MODE_SIMPLEX:
+        values.update({
+            'controller0_address': CONF.get(
+                section_name, 'EXTERNAL_OAM_0_ADDRESS_SECONDARY'),
+            'controller1_address': CONF.get(
+                section_name, 'EXTERNAL_OAM_1_ADDRESS_SECONDARY'),
+        })
+
+    # In case secondary pool already exists, compare existing pool with given/expected
+    # configuration
+    # same: then nothing to do
+    # different: update by doing delete old and create new
+    if secondary_pool_uuid:
+        if is_equal_with_existing_pool(client, values, secondary_pool_uuid):
+            print_with_timestamp(
+                f"OAM secondary addrpool {secondary_pool_uuid} is uptodate.")
+            return
+        else:
+            print_with_timestamp(f"Deleting oam secondary addrpool {secondary_pool_uuid}...")
+            client.sysinv.address_pool.delete(secondary_pool_uuid)
+
+    print_with_timestamp(f"Creating addrpool with name {values['name']}...")
+    pool = client.sysinv.address_pool.create(**values)
+
+    # add the pool to the network
+    network_addrpool_data = {
+        'network_uuid': network_uuid,
+        'address_pool_uuid': pool.uuid,
+    }
+
+    print_with_timestamp(f"Creating network_addrpool with {network_addrpool_data}...")
+    client.sysinv.network_addrpool.assign(**network_addrpool_data)
+
+
 def assign_if_network(client, host_interface_name, network_name):
 
     print_with_timestamp(f"Assigning network interface {host_interface_name} for {network_name}")
@@ -673,6 +770,9 @@ def main():
     operation = CONF.get('OPERATION', 'MODE')
     section_name = operation.upper() + '_CONFIG'
     client = CgtsClient()
+    # Primary OAM has been updated by cloud-init, secondary oam has been
+    # procastinated until now.
+    update_oam_network_secondary(client, section_name)
     populate_dns_config(client, section_name)
     populate_service_parameter_config(client, section_name)
     update_system_controller_subnets(client, section_name)

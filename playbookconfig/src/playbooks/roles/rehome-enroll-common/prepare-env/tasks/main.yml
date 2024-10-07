@@ -61,6 +61,9 @@
   - name: Validate and parse provided comma separated dual-stack addresses (IPv4 & IPv6 notations)
     include_tasks: roles/common/validate-addresses/tasks/validate_and_parse_dual_stack.yml
     with_dict:
+      external_oam_start_address: "{{ external_oam_start_address }}"
+      external_oam_end_address: "{{ external_oam_end_address }}"
+      external_oam_gateway_address: "{{ external_oam_gateway_address }}"
       external_oam_node_0_address: "{{ external_oam_node_0_address }}"
       external_oam_node_1_address: "{{ external_oam_node_1_address }}"
       external_oam_floating_address: "{{ external_oam_floating_address }}"
@@ -79,6 +82,21 @@
   - name: Validate same sequence and number (single or dual-stack) of IP family on subnet and address
     include_tasks: roles/common/validate-addresses/tasks/validate_dual_stack_address_vs_subnet.yml
     with_dict:
+      external_oam_start_address:
+        address: "{{ external_oam_start_address }}"
+        subnet:
+          name: external_oam_subnet
+          value: "{{ external_oam_subnet }}"
+      external_oam_end_address:
+        address: "{{ external_oam_end_address }}"
+        subnet:
+          name: external_oam_subnet
+          value: "{{ external_oam_subnet }}"
+      external_oam_gateway_address:
+        address: "{{ external_oam_gateway_address }}"
+        subnet:
+          name: external_oam_subnet
+          value: "{{ external_oam_subnet }}"
       external_oam_node_0_address:
         address: "{{ external_oam_node_0_address }}"
         subnet:
@@ -158,11 +176,14 @@
 
   # The provided subnets have passed validation, set the secondary default addresses
   # based on the secondary subnet values, if present.
-  - name: Set default start secondary addresses based on provided secondary subnets
+  - name: Set default start and end secondary addresses based on provided secondary subnets
     set_fact:
       default_external_oam_start_address_secondary: "{{ False if (not network_params.external_oam_subnet_secondary)
                                                               else (network_params.external_oam_subnet_secondary |
                                                                     ipaddr(1)).split('/')[0] }}"
+      default_external_oam_end_address_secondary: "{{ False if (not network_params.external_oam_subnet_secondary)
+                                                            else (network_params.external_oam_subnet_secondary |
+                                                                  ipaddr(-2)).split('/')[0] }}"
       default_management_start_address_secondary: "{{ False if (not network_params.management_subnet_secondary)
                                                             else (network_params.management_subnet_secondary |
                                                                   ipaddr(1)).split('/')[0] }}"
@@ -170,7 +191,7 @@
                                                             else (network_params.cluster_service_subnet_secondary |
                                                                   ipaddr(1)).split('/')[0] }}"
 
-  - name: Set default start admin network addresses based on provided subnets
+  - name: Set default start and end admin network addresses based on provided subnets
     set_fact:
       default_admin_start_address_primary: "{{ (network_params.admin_subnet_primary | ipaddr(1)).split('/')[0] }}"
       default_admin_end_address_primary: "{{ (network_params.admin_subnet_primary | ipaddr(-2)).split('/')[0] }}"

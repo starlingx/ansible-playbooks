@@ -3,6 +3,7 @@ MODE={{ mode }}
 
 [{{ mode | upper }}_CONFIG]
 SW_VERSION={{ software_version }}
+SYSTEM_MODE={{ system_mode }}
 NAMESERVERS={{ dns_servers | join(',') }}
 DOCKER_HTTP_PROXY={{ docker_http_proxy }}
 DOCKER_HTTPS_PROXY={{ docker_https_proxy }}
@@ -72,6 +73,20 @@ ADMIN_END_ADDRESS_SECONDARY={{ address_pairs_secondary['admin']['end'] | default
 ADMIN_GATEWAY_ADDRESS_SECONDARY={{ network_params.admin_gateway_address_secondary
                                    if (network_params.admin_gateway_address_secondary is defined
                                       and network_params.admin_gateway_address_secondary)
+                                      else 'undef' }}
+
+EXTERNAL_OAM_SUBNET_SECONDARY={{ address_pairs_secondary['oam']['subnet'] | default('undef') }}
+EXTERNAL_OAM_START_ADDRESS_SECONDARY={{ address_pairs_secondary['oam']['start'] | default('undef') }}
+EXTERNAL_OAM_END_ADDRESS_SECONDARY={{ address_pairs_secondary['oam']['end'] | default('undef') }}
+EXTERNAL_OAM_0_ADDRESS_SECONDARY={{ address_pairs_secondary['oam_node']['start'] | default('undef') }}
+EXTERNAL_OAM_1_ADDRESS_SECONDARY={{ address_pairs_secondary['oam_node']['end'] | default('undef') }}
+EXTERNAL_OAM_FLOATING_ADDRESS_SECONDARY={{ network_params.external_oam_floating_address_secondary
+                                   if (network_params.external_oam_floating_address_secondary is defined
+                                      and network_params.external_oam_floating_address_secondary)
+                                      else 'undef' }}
+EXTERNAL_OAM_GATEWAY_ADDRESS_SECONDARY={{ network_params.external_oam_gateway_address_secondary
+                                   if (network_params.external_oam_gateway_address_secondary is defined
+                                      and network_params.external_oam_gateway_address_secondary)
                                       else 'undef' }}
 {# -- end of secondary of dual-stack support #}
 
