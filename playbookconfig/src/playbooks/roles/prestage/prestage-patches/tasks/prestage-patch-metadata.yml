@@ -58,9 +58,16 @@
   when: software_version is version('24.09', '<')
 
 # Removing the unavailable directory, as it will not come in
-# Software list output
-- name: Remove unavailable metadata if host software version is 24.09 and newer
+# software list output
+# Removing committed directory, as it contains 22.12 metadata which
+# is not required for 24.09
+- name: Remove unnecessary metadata for software version 24.09 and newer
+  vars:
+    paths_to_remove:
+      - "{{ patches_prestage_dir }}/metadata/unavailable"
+      - "{{ patches_prestage_dir }}/metadata/committed"
   file:
-    path: "{{ patches_prestage_dir }}/metadata/unavailable"
+    path: "{{ item }}"
     state: absent
+  loop: "{{ paths_to_remove }}"
   when: software_version is version('24.09', '>=')
