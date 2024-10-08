@@ -300,6 +300,10 @@
         recurse: yes
       become: yes
 
-    - name: Synchronizing software between controllers
+    - name: Synchronize software between controllers
       command: "{{ usm_scripts_dir }}/controllers-software-sync"
+      become: true
+
+    - name: Synchronize {{ release_feed }} directory between controllers
+      command: "{{ usm_scripts_dir }}/sync-controllers-feed --feed={{ release_feed }}"
       become: true
