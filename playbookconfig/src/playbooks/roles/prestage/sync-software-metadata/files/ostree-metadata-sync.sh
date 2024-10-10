@@ -375,31 +375,39 @@ configure_ostree_repo_for_central_pull() {
     # Ensures the $OSTREE_REPO is configured to pull from the system controller
     [ -n "${DRY_RUN}" ] && return
 
-    # Get system controller management IP (run from system controller):
+    local remote_ostree_resource="iso/${MAJOR_SW_VERSION}/ostree_repo"
     local system_controller_ip
+    local url
+
+    # Get system controller management IP (run from system controller):
     system_controller_ip=$(system addrpool-list --nowrap | awk '/system-controller-subnet/ { print $14; }')
-
-    local is_https_enabled
-    is_https_enabled=$(system show | awk '/https_enabled/ { print $4; }')
-
-    log_info_l "Configuring ostree repo: "\
-        "system_controller_ip: ${system_controller_ip}"\
-        "is_https_enabled: ${is_https_enabled}"\
-        "OSTREE_REPO: ${OSTREE_REPO}"
 
     # Adapts to IPv6 format if necessary
     if [[ $system_controller_ip =~ : && ! $system_controller_ip =~ \[ ]]; then
         system_controller_ip="["$system_controller_ip"]"
     fi
 
-    if [ "${is_https_enabled}" = True ]; then
-        sed -i.bak 's|^url=.*|url=https://'"${system_controller_ip}:${OSTREE_HTTPS_PORT}/iso/${MAJOR_SW_VERSION}/ostree_repo"'|' "${OSTREE_REPO}/config"
-        if ! grep --quiet 'tls-permissive=true' "${OSTREE_REPO}/config"; then
-            echo "tls-permissive=true" >> "${OSTREE_REPO}/config"
-        fi
-    else
-        sed -i.bak 's|^url=.*|url=http://'"${system_controller_ip}:${OSTREE_HTTP_PORT}/iso/${MAJOR_SW_VERSION}/ostree_repo"'|' "${OSTREE_REPO}/config"
+    # We need to know if the system controller has https enabled. We cannot query locally since
+    # ostree needs a remote URL to sync.
+    # For the N-1 subcloud scenario, it may happen that the subcloud did not have https enabled
+    # on the source system controller, then it is necessary to check if the new system controller
+    # has https support.
+    # The script queries the URL using https initially to check if the system controller has https
+    # enabled. If the query fails, assume it is http.
+    url="https://${system_controller_ip}:${OSTREE_HTTPS_PORT}/${remote_ostree_resource}"
+    response_code=$(curl -k --max-time 20 --connect-timeout 5 -s -o /dev/null -w "%{http_code}" "${url}")
+    if [ "$?" != "0" ]; then
+        url="http://${system_controller_ip}:${OSTREE_HTTP_PORT}/${remote_ostree_resource}"
     fi
+
+    # Configure remote ostree repo via the CLI.
+    ostree remote add --force --no-gpg-verify --set=tls-permissive=true --set=branches="${OSTREE_BRANCH};" "${OSTREE_REMOTE}" "${url}"
+
+    log_info_l "Configuring ostree repo: "\
+        "Remote ostree url: ${url}"\
+        "Remote ostree response code: ${response_code}" \
+        "Local ostree repo: ${OSTREE_REPO}"
+
 }
 
 run_cmd() {
