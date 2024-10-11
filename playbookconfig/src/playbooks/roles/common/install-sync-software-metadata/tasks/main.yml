@@ -107,6 +107,24 @@
       delay: 5
       until: software_transfer.rc == 0
 
+    - name: Delete patch metadata files not belonging to the current
+            software version ({{ sw_version.stdout }})
+      vars:
+        paths_to_delete:
+          - "{{ software_dir }}/metadata/unavailable"
+          - "{{ software_dir }}/metadata/committed"
+      become: yes
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ paths_to_delete }}"
+      register: delete_results
+
+    - debug:
+        msg:
+          - "delete_patch_metadata_files:"
+          - "{{ delete_results }}"
+
     - name: Restore root ownership to subcloud {{ software_dir }}
       file:
         path: "{{ software_dir }}"
@@ -114,27 +132,6 @@
         owner: root
         recurse: yes
       become: true
-
-    # TODO(kmacleod) This has to change.  We'll have different versions for
-    # the upgrades in USM
-    # - name: Delete patch metadata files not belonging to the current software version
-    #         ({{ sw_version.stdout }})
-    #   shell: >
-    #     grep -L "<sw_version>{{ sw_version.stdout }}</sw_version>" {{ item }}
-    #     | xargs -I {} sh -c 'echo "$1"; rm -f "$1"' sh {}
-    #   loop:
-    #     - "{{ software_dir }}/metadata/available/*"
-    #     - "{{ software_dir }}/metadata/deployed/*"
-    #     - "{{ software_dir }}/metadata/committed/*"
-    #   register: deleted_metadata_files
-    #   become: true
-    #
-    # - name: Print deleted software metadata files
-    #   debug:
-    #     msg: "{{ deleted_metadata_files.results | map(attribute='stdout_lines')
-    #           | flatten | join('\n') }}"
-    #   when: deleted_metadata_files.results | map(attribute='stdout_lines')
-    #         | flatten | length > 0
 
     # Restart the software controller and agent to pickup the changes
     - name: Restart the software controller and agent
@@ -148,4 +145,4 @@
 
     when: software_sync_required
 
-  when: sync_software_metadata and sw_version.stdout is version('24.03', '>=')
+  when: sync_software_metadata and sw_version.stdout is version('24.09', '>=')
