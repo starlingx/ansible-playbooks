@@ -24,3 +24,6 @@ rook_backend_flag: "{{ platform_conf_path }}/.node_rook_configured"
 ignore_health: false
 wait_for_healthy_retries: 30
 wait_for_healthy_retry_delay: 10
+
+# Ignore kubernetes verification for backup process
+ignore_kube_version_check_for_backup: false
