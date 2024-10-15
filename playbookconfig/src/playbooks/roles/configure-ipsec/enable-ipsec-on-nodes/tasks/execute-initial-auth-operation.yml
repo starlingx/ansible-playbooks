@@ -21,7 +21,7 @@
       "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
       ansible_become_pass={{ ansible_become_pass }}"
     loop: "{{ pending_hosts }}"
-    async: 120
+    async: 180
     poll: 0
     register: initial_auth_exec
 
