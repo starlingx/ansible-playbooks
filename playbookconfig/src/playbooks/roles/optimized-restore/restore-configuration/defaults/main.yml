@@ -45,8 +45,10 @@ restore_items:
   - etc/ssl
   - etc/sysctl.d
   - etc/sysinv
+  - etc/systemd/system
   - opt/platform
   - opt/extension
+  - var/rootdirs/root
 
 restore_extra_items: []
 

@@ -127,12 +127,12 @@
       - "{{ source_helm_bind_dir }}/{{ helm_repo_name_platform }}"
   when: mode == 'bootstrap'
 
-# Note that /opt/platform/helm_charts are owned by www
+# Note that /opt/platform/helm_charts are owned by www:root
 # NOTE: helm --debug option displays vital information, no harm enabling.
 # These only show in ansible.log on failure.
 - name: Generate Helm repo indicies
   command: /sbin/helm repo index "{{ source_helm_bind_dir }}/{{ item }}" --debug
-  become_user: www
+  become_user: root
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
     HOME: /home/sysadmin

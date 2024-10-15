@@ -21,6 +21,7 @@ backup_include_apps: []
 backup_include_dc_controller_apps: ["platform-integ-apps", "rook-ceph"]
 
 homedir: "{{ '/home' if os_release == 'centos' else '/var/home' }}"
+rootdir: "/var/rootdirs/root"
 config_permdir: "{{ platform_path }}/config/{{ software_version }}"
 deploy_permdir: "{{ platform_path }}/deploy/{{ software_version }}"
 extension_permdir: "/opt/extension"
@@ -50,6 +51,7 @@ backup:
     - "{{ helm_charts_permdir }}"
     - "{{ helm_overrides_permdir }}"
     - "{{ homedir }}"
+    - "{{ rootdir }}"
     - "{{ keyring_permdir }}"
     - "{{ puppet_permdir }}/hieradata"
     - "{{ postgres_dir.path }}"
@@ -72,6 +74,12 @@ backup:
     - "{{ homedir }}/*/.cache"
     - "{{ homedir }}/*/.kube/**"
     - "{{ homedir }}/*/.kube"
+    - "{{ rootdir }}/*/ansible.log"
+    - "{{ rootdir }}/*/.ansibl**"
+    - "{{ rootdir }}/*/.cache/**"
+    - "{{ rootdir }}/*/.cache"
+    - "{{ rootdir }}/*/.kube/**"
+    - "{{ rootdir }}/*/.kube"
 
 # What to include when also backing up software deployments
 sw_deployments_backup_targets:
