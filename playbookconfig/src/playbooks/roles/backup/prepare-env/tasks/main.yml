@@ -123,7 +123,11 @@
       set_fact:
         failure_msg: >
           Failed task: {{ ansible_failed_task.name }}.
-          Failed with error : {{ ansible_failed_result.msg }}
+          {% if ansible_failed_result.msg is defined %}
+          Failed with error: {{ ansible_failed_result.msg }}
+          {% else %}
+          Failed with details: {{ ansible_failed_result }}
+          {% endif %}
       when: ansible_failed_task is defined and ansible_failed_result is defined
 
     - name: Display failure message
