@@ -24,6 +24,11 @@ def recover_ceph_data():
     for osd in os.listdir(ceph_osds):
         osd = ceph_osds + osd
         print("Scanning {}.".format(osd))
+
+        # Fix possible lost objects
+        subprocess.run(["ceph-objectstore-tool", "--data-path",
+                        osd, "--op", "fix-lost"], stderr=subprocess.STDOUT)
+
         output = subprocess.check_output(["ceph-objectstore-tool", "--data-path",
                                           osd, "--op", "update-mon-db",
                                           "--mon-store-path",
