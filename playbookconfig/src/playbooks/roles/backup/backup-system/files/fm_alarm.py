@@ -1,23 +1,24 @@
 #!/usr/bin/python
 
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 
 import sys
+import socket
 
 from fm_api import constants as fm_constants
 from fm_api import fm_api
-from sysinv.common import constants as sysinv_constants
 
 
 def update_alarm(alarm_state, alarm_id, reason_text=None):
     """ Update backup-in-progress alarm"""
     fmApi = fm_api.FaultAPIs()
+    hostname = socket.gethostname()
     entity_instance_id = "%s=%s" % (fm_constants.FM_ENTITY_TYPE_HOST,
-                                    sysinv_constants.CONTROLLER_HOSTNAME)
+                                    hostname)
 
     if alarm_state == fm_constants.FM_ALARM_STATE_SET:
         fault = fm_api.Fault(
