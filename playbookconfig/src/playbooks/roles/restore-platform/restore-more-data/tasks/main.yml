@@ -818,6 +818,8 @@
         until: check_uploaded.stdout == "uploaded"
 
       - block:
+        # Between obtaining the CRDs and deleting the resources, one of the CRDs may have already
+        # been removed. Therefore, to prevent the task from failing, 'ignore_errors' was added.
         - name: Delete all resources from the rook-ceph namespace
           shell: |
             CRDS=$(kubectl api-resources --namespaced=true --verbs=delete -o name | \
@@ -827,6 +829,7 @@
             kubectl delete -n rook-ceph "$CRDS" --all --force
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
+          ignore_errors: true
 
         - name: Remove content from ceph data directory
           shell: |

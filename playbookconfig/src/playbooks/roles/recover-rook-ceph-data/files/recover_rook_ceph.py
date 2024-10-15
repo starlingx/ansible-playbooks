@@ -86,6 +86,9 @@ def recover_cluster():
                         "-n", "rook-ceph", "-l", "app=rook-ceph-recovery", "--timeout=30m"])
 
     if structure != "ONE_HOST":
+        subprocess.run(["kubectl", "label", "deployment", "-n", "rook-ceph",
+                        "-l", "app=rook-ceph-mon", "ceph.rook.io/do-not-reconcile="])
+
         if structure == "ONLY_OSD":
             move_mon_job_template = get_move_mon_job_template()
             move_mon_job_resource = move_mon_job_template.safe_substitute({'TARGET_HOSTNAME': target_mon_hostname,
@@ -449,6 +452,16 @@ data:
 
     set -x
 
+    while true
+    do
+      status=$(kubectl -n rook-ceph get configmap rook-ceph-recovery -o jsonpath='{.data.status}')
+      if [ "$status" == "completed" ]; then
+        break
+      else
+        sleep 10
+      fi
+    done
+
     if [ "${MON_HOST}"x == ""x ]; then
         MON_HOST=$(echo ${ROOK_MONS} | sed 's/[a-z]\\+=//g')
     fi
@@ -464,11 +477,16 @@ data:
     key = $admin_keyring
     EOF
 
+    while [ ! -f /tmp/ceph/osd_data ]
+    do
+      sleep 5
+    done
+
     until ceph -s; do
       sleep 60
     done
 
-    for row in $(ceph-volume raw list | jq -r '.[] | @base64'); do
+    for row in $(cat /tmp/ceph/osd_data | jq -r '.[] | @base64'); do
       _jq() {
         echo "${row}" | base64 -di | jq -r "${1}"
       }
@@ -481,6 +499,10 @@ data:
         sleep 5
       done
 
+      until ceph -s; do
+        sleep 60
+      done
+
       NEW_OSD_KEYRING=(`cat /var/lib/rook/rook-ceph/${ceph_fsid}_${osd_uuid}/keyring | sed -n -e 's/^.*key = //p'`)
       cat > /tmp/osd.${osd_id}.keyring << EOF
     [osd.${osd_id}]
@@ -490,11 +512,9 @@ data:
             caps osd = "allow *"
     EOF
 
-      ceph -s
-      if [ $? -ne 0 ]; then
-        echo "ceph timeout exceeded, exit"
-        exit 1
-      fi
+      until ceph -s; do
+        sleep 60
+      done
 
       ceph auth import -i /tmp/osd.${osd_id}.keyring
       if [ $? -ne 0 ]; then
@@ -577,13 +597,14 @@ data:
             kubectl -n rook-ceph delete pod -l mon=${MON_NAME} --grace-period=0 --force
           fi
 
+          rm -rf /var/lib/rook/mon-${MON_NAME}
+
           kubectl -n rook-ceph label deployment -l app=rook-ceph-mon ceph.rook.io/do-not-reconcile=""
 
           kubectl -n rook-ceph patch deployment rook-ceph-mon-${MON_NAME} -p '{"spec": {"template": {"spec": {"nodeSelector": {"kubernetes.io/hostname": "'"${HOSTNAME}"'"}}}}}'
           kubectl label nodes ${HOSTNAME} ceph-mgr-placement-
           kubectl label nodes ${HOSTNAME} ceph-mon-placement-
 
-          rm -rf /var/lib/ceph/data/mon-${MON_NAME}
           kubectl -n rook-ceph scale deployment rook-ceph-mon-${MON_NAME} --replicas 1
           sleep 10
           kubectl -n rook-ceph wait --for=condition=Ready pod --all=true -l mon=${MON_NAME} --timeout=60s
@@ -604,12 +625,15 @@ data:
 
     while true
     do
-      kubectl -n rook-ceph wait --for=condition=complete job --all=true -l app.kubernetes.io/part-of=rook-ceph-recovery --timeout=30s
-      if [ $? -eq 0 ]; then
-        if [ "${HAS_MON_FLOAT}" == false ]; then
-          kubectl -n rook-ceph label deployment -l app=rook-ceph-mon ceph.rook.io/do-not-reconcile-
+      status=$(kubectl -n rook-ceph get configmap rook-ceph-recovery -o jsonpath='{.data.status}')
+      if [ "$status" == "completed" ]; then
+        kubectl -n rook-ceph wait --for=condition=complete job --all=true -l app.kubernetes.io/part-of=rook-ceph-recovery --timeout=30s
+        if [ $? -eq 0 ]; then
+          if [ "${HAS_MON_FLOAT}" == false ]; then
+            kubectl -n rook-ceph label deployment -l app=rook-ceph-mon ceph.rook.io/do-not-reconcile-
+          fi
+          break
         fi
-        break
       else
         sleep 5m
       fi
@@ -806,6 +830,7 @@ spec:
       name: rook-ceph-keyring-update-$TARGET_HOSTNAME
       namespace: rook-ceph
     spec:
+      serviceAccountName: rook-ceph-recovery
       nodeSelector:
         kubernetes.io/hostname: $TARGET_HOSTNAME
       tolerations:
@@ -822,6 +847,10 @@ spec:
             type: ""
           name: rook-data
         - hostPath:
+            path: /tmp/ceph
+            type: ""
+          name: tmp
+        - hostPath:
             path: /dev
             type: ""
           name: devices
@@ -833,9 +862,29 @@ spec:
           configMap:
             name: rook-ceph-recovery
             defaultMode: 0555
+        - name: kube-config
+          hostPath:
+            path: /etc/kubernetes/admin.conf
+      initContainers:
+        - name: osd-data
+          image: registry.local:9001/quay.io/ceph/ceph:v18.2.2
+          command: [ "/bin/bash", "-c", "/usr/sbin/ceph-volume raw list > /tmp/ceph/osd_data" ]
+          securityContext:
+            privileged: true
+            readOnlyRootFilesystem: false
+            runAsUser: 0
+          volumeMounts:
+          - mountPath: /var/lib/rook
+            name: rook-data
+          - mountPath: /tmp/ceph
+            name: tmp
+          - mountPath: /dev
+            name: devices
+          - mountPath: /run/udev
+            name: run-udev
       containers:
         - name: update
-          image: registry.local:9001/quay.io/ceph/ceph:v18.2.2
+          image: registry.local:9001/docker.io/openstackhelm/ceph-config-helper:ubuntu_jammy_18.2.2-1-20240312
           command: [ "/bin/bash", "/tmp/mount/update_keyring.sh" ]
           env:
           - name: ROOK_MONS
@@ -855,12 +904,17 @@ spec:
           volumeMounts:
           - mountPath: /var/lib/rook
             name: rook-data
+          - mountPath: /tmp/ceph
+            name: tmp
           - mountPath: /dev
             name: devices
           - mountPath: /run/udev
             name: run-udev
           - mountPath: /tmp/mount
             name: rook-ceph-recovery
+          - name: kube-config
+            mountPath: /etc/kubernetes/admin.conf
+            readOnly: true
         """)
 
 
@@ -957,6 +1011,10 @@ spec:
         key: node-role.kubernetes.io/control-plane
       restartPolicy: OnFailure
       volumes:
+        - hostPath:
+            path: /var/lib/ceph/data
+            type: ""
+          name: rook-data
         - name: rook-ceph-recovery
           configMap:
             name: rook-ceph-recovery
@@ -988,6 +1046,8 @@ spec:
             readOnlyRootFilesystem: false
             runAsUser: 0
           volumeMounts:
+          - mountPath: /var/lib/rook
+            name: rook-data
           - mountPath: /tmp/mount
             name: rook-ceph-recovery
           - name: kube-config
