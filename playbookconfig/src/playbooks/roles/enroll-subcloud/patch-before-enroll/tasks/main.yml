@@ -176,6 +176,7 @@
       set_fact:
         releases_to_apply: "{{ dependent_patches.stdout_lines + [target_release_id.stdout] }}"
         patches_source_dir: "/opt/dc-vault/software/{{ sw_version_subcloud.stdout }}"
+        patch_file_id_dict: { } # Map release ids to patch files
 
     - name: Gather ids for already applied releases on subcloud
       shell: |
@@ -190,21 +191,52 @@
         releases_to_apply: |
           {{ releases_to_apply | difference(subcloud_software_list_ids.stdout_lines) }}
 
-    - name: Ensure all releases_to_apply are available to upload and deploy
-      stat:
-        path: "{{ patches_source_dir }}/{{ item }}.patch"
-      register: patch_stat
-      loop: "{{ releases_to_apply }}"
+    - name: Gather patch files from dc-vault
+      find:
+        paths: "{{ patches_source_dir }}"
+        patterns: "*.patch"
+      register: patch_files
       delegate_to: localhost
 
-    - name: Fail if any patch file does not exist
-      fail:
-        msg: |
-          Patch file {{ item.item }}.patch is missing on the system
+    # Extract release id from patch metadata <id> tag
+    - name: Identify the releases associated with the patch files
+      shell: |
+        tar -xOf {{ item.path }} metadata.tar | \
+        tar -xOf - metadata.xml | \
+        grep -oP '(?<=<id>).*?(?=</id>)'
+      register: patch_metadata
+      loop: "{{ patch_files.files }}"
+      delegate_to: localhost
+      args:
+        # Suppress warning suggesting the use of the "unarchive" module.
+        # Using shell for this specific task is more appropriate.
+        # The "unarchive" module offers no benefits here, it adds unnecessary
+        # complexity and tasks, so 'warn: false' is added to suppress
+        # the warning message.
+        warn: false
+
+    # Note: Duplicate keys are not an issue.
+    # Multiple patch files with the same id but different names simply
+    # indicate that these files are duplicates with different filenames.
+    - name: Create release id to patch file mapping
+      set_fact:
+        patch_file_id_dict: "{{ patch_file_id_dict | combine({ item.stdout: item.item.path }) }}"
+      when: item.stdout is defined and item.stdout | length > 0
+      loop: "{{ patch_metadata.results }}"
+
+    - name: Print patch_file_id_dict
+      debug:
+        var: patch_file_id_dict
+
+    - name: Fail if patch files not found
+      assert:
+        that:
+          - item in patch_file_id_dict
+        fail_msg: |
+          Patch file for {{ item }} is missing on the system
           controller in {{ patches_source_dir }}. Please ensure the
           patch file is present (uploade to dc-vault) and retry.
-      when: not item.stat.exists
-      loop: "{{ patch_stat.results }}"
+      loop: "{{ releases_to_apply }}"
 
     - name: Create a tmp directory to stage patches on subcloud
       tempfile:
@@ -214,7 +246,7 @@
 
     - name: Synchronize patch files from system controller to subcloud
       synchronize:
-        src: "{{ patches_source_dir }}/{{ item }}.patch"
+        src: "{{ patch_file_id_dict[item] }}"
         dest: "{{ patches_stage_dir.path }}/{{ item }}.patch"
       loop: "{{ releases_to_apply }}"
       delegate_to: localhost
