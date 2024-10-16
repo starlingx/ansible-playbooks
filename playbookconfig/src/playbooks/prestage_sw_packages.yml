@@ -40,7 +40,7 @@
       become: true
 
     - role: prestage/prestage-patches
-      when: prestage_reason == 'for_install' and host_patches_exist
+      when: prestage_reason == 'for_install'
       become: true
 
     - role: prestage/get-prestage-versions
