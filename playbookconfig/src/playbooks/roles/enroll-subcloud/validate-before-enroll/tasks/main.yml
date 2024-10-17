@@ -150,4 +150,4 @@
     timeout: 900
     msg: >-
       Timeout waiting for cloud-init finalizing reconfiguration. Check the
-      cloud-init.log on the subcloud for the reason.
+      cloud-init-output.log on the subcloud for the reason.
