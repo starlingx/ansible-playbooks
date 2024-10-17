@@ -78,6 +78,14 @@
   delay: "{{ system_online_retry_delay }}"
   until: check_online.stdout == "online"
 
+- name: Configure lowlatency kernel
+  shell: >-
+    source /etc/platform/openrc;
+    system host-kernel-modify controller-0 {{ kernel | quote }}
+  when:
+    - system_type == 'All-in-one'
+    - kernel == 'lowlatency'
+
 # When controller unlock occurs there is a chance platform-integ-apps or rook-ceph
 # has not yet been completely removed. This causes the running removal to abort
 # and sets the state from removing to remove-failed. This removal is necessary
