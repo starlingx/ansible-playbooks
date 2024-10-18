@@ -123,6 +123,13 @@
 
   when: backup_registry_images
 
+# Subclouds do not have their software deployments restored via B&R.
+- name: Set exclude software deployments during backup in overrides file
+  lineinfile:
+    path: "{{ subcloud_overrides }}"
+    line: "exclude_sw_deployments: true"
+  connection: local
+
 - block:
   - name: Update default_local_backup_dir fact
     set_fact:
