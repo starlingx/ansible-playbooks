@@ -194,6 +194,14 @@
       msg: The system controller has a patch level higher than the subcloud
 
   - name: Gather system controller metadata commits
+    #
+    # Use the existing ostree_metadata_commits_central file if:
+    # 1) It exists, and
+    # 2) There are no new commits. Compare last line of the ostree_metadata_commits_central
+    #    file against current ostree repo commit.
+    # Otherwise, we generate a new ostree_metadata_commits_central file using the
+    # get-commits target to our script.
+    #
     # Get the commits from the metadata, in the same way that software list does,
     # avoiding ambiguous queries.
     # Parallel operations (for orchestration):
@@ -205,8 +213,15 @@
       exec 3>/tmp/ostree_metadata_commits_central.lock
       flock --exclusive --timeout 180 3 || \
       { echo "ERROR: $? - flock failed while trying to get the commits."; exit 1; }
-      {{ role_path }}/files/ostree-metadata-sync.sh --sw-version "{{ software_version }}" \
-      --output "{{ ostree_metadata_commits_central }}" get-commits
+      if [ ! -f "{{ ostree_metadata_commits_central }}" ] \
+        || ! diff -q <(echo {{ ostree_commit_system_controller.stdout }}) \
+        <(tail --lines=1 "{{ ostree_metadata_commits_central }}" | awk -F':' '{ print $2; }') > \
+        /dev/null 2>&1 ; then
+        {{ role_path }}/files/ostree-metadata-sync.sh --sw-version "{{ software_version }}" \
+        --output "{{ ostree_metadata_commits_central }}" get-commits
+      else
+        cat "{{ ostree_metadata_commits_central }}"
+      fi
       exec 3>&-  # release the lock
     register: system_controller_software_metadata_commits
     delegate_to: localhost
