@@ -16,7 +16,9 @@
 # For oidc-auth-app certificate an application-apply is also performed
 # in order to restart the application with the new certificate
 #
-- name: Install / Update cert-manager certificate
+
+# Precheck to ensure conditions for Install/Update are met.
+- name: Precheck before Install / Update certificate
   block:
     - name: Check for management affecting alarms
       include_tasks: check-for-management-alarms.yml
@@ -25,7 +27,10 @@
     - name: Verify CA overrides provided for 'system-local-ca' issuer
       include_role:
         name: common/verify-system-local-ca-overrides
+  when: mode == 'update'
 
+- name: Install / Update cert-manager certificate
+  block:
     - name: Check certificates to be installed
       include_tasks: check-certificates-to-be-installed.yml
 
@@ -162,6 +167,10 @@
       include_tasks: reapply-oidc-auth-app.yml
       when: oidc_applied.stdout | bool
 
+    - name: Get system mode
+      shell: source /etc/platform/platform.conf; echo $system_mode
+      register: system_mode_result
+
     - name: Update ipsec certificates
       block:
       - name: Get PXEBoot network list addresses
@@ -216,6 +225,7 @@
           loop:
             - "{{ root_ca_cert.path }}"
             - "{{ local_ca_cert.path }}"
+      when: system_mode_result.stdout != 'simplex'
 
     - name: Signal that user provided the CA data for system-local-ca
       block:
