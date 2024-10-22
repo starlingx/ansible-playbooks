@@ -69,11 +69,12 @@
                      /etc/systemd/system/strongswan-starter.service.d/"
       cert_files: "/etc/swanctl/x509/* /etc/swanctl/x509ca/*"
       key_files: "/etc/swanctl/private/*"
+      luks_ipsec_dir: "/var/luks/stx/luks_fs/ipsec/"
 
   - name: Remove IPsec configuration, certificate and key files
     command: >-
       ansible all -i "{{ item }}," -m command -a "rm -rf {{ config_files }} {{ cert_files }}
-      {{ key_files }}" -b -e "ansible_ssh_user={{ ansible_ssh_user }}
+      {{ key_files }} {{ luks_ipsec_dir }}" -b -e "ansible_ssh_user={{ ansible_ssh_user }}
       ansible_ssh_pass={{ ansible_ssh_pass }} ansible_become_pass={{ ansible_become_pass }}"
 
   no_log: true
