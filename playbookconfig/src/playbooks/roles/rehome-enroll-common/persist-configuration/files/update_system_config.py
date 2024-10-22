@@ -19,7 +19,6 @@ from keystoneclient.auth.identity import v3
 from keystoneclient import session
 from netaddr import IPNetwork
 from sysinv.common import constants as sysinv_constants
-from sysinv.common import exception as e
 
 
 # Configuration parser setup
@@ -441,8 +440,9 @@ def delete_network_and_addrpool(client, network_name, section_name):
         print_with_timestamp(f"Deleting secondary addrpool {secondary_pool_uuid}...")
         client.sysinv.address_pool.delete(secondary_pool_uuid)
     # Delete primary addrpool
-    print_with_timestamp(f"Deleting primary addrpool {primary_pool_uuid}...")
-    client.sysinv.address_pool.delete(primary_pool_uuid)
+    if primary_pool_uuid:
+        print_with_timestamp(f"Deleting primary addrpool {primary_pool_uuid}...")
+        client.sysinv.address_pool.delete(primary_pool_uuid)
 
 
 def get_network_addrpools_uuid_of_network(
@@ -770,10 +770,7 @@ def main():
     populate_dns_config(client, section_name)
     populate_service_parameter_config(client, section_name)
     update_system_controller_subnets(client, section_name)
-    try:
-        delete_network_and_addrpool(client, 'admin', section_name)
-    except e.NetworkTypeNotFound:
-        print_with_timestamp("No admin address found in pool, adding...")
+    delete_network_and_addrpool(client, 'admin', section_name)
     update_admin_network(client, section_name)
     edit_dc_role_to_subcloud(client)
 
