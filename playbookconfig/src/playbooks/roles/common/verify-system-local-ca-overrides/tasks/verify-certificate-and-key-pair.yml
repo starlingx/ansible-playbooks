@@ -17,6 +17,14 @@
     path: "{{ local_ca_key_file.path }}"
   register: key_info
 
+# TODO: Remove this checking once ECC cert/key is supported.
+- name: Fail if the provided system-local-ca key is ECC based
+  fail:
+    msg: |
+      The provided system-local-ca cert/key is ECC based which is not supported.
+      Please replace with RSA based cert/key.
+  when: key_info.type == "ECC"
+
 # TODO: replace this shell call once we upversion community.crypto module
 - name: Verify if the certificate matches the RSA key
   block:
