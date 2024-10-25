@@ -81,6 +81,47 @@
       path: "{{ rook_backend_flag }}"
     register: rook_backend_configured_flag
 
+  - block:
+    - name: Get Kubernetes version
+      import_role:
+        name: common/get-kube-version
+
+    - name: Get kubernetes version for fresh installs
+      include_vars:
+        file: roles/bootstrap/validate-config/vars/main.yml
+        name: bootstrap_vars
+
+    - name: Set fresh_install_k8s_version variable
+      set_fact:
+        fresh_install_k8s_version: "{{ bootstrap_vars.fresh_install_k8s_version }}"
+
+    - name: Get the recommended K8s version list for this Release
+      script: roles/backup/prepare-env/files/kube_supported_versions.py {{ fresh_install_k8s_version }}
+      register: result
+
+    - name: Fail if get supported kubernetes version is empty or throws an exception
+      fail:
+        msg: |
+          Failed to get list of supported kubernetes version,
+          Min_version: {{ fresh_install_k8s_version }}
+          Return code: {{ result.rc }}
+          Error output: {{ result.stderr }}
+          Result values: {{ result.stdout }}
+      when: result.rc != 0 or result.stdout == ""
+
+    - name: Set list of recommended K8s versions as variable
+      set_fact:
+        recommended_k8s_versions: "{{ result.stdout }}"
+
+    - name: Check if K8s version is in the recommended version list for backup
+      fail:
+        msg: |
+          K8s Version {{ kubernetes_version }} is not present in the recommended K8s version list for backup;
+          Use the extra arg: ignore_kube_version_check_for_backup=true to proceed with the backup anyway.
+          The K8s recommended version list for backup: {{ recommended_k8s_versions }}
+      when: kubernetes_version not in recommended_k8s_versions
+    when: not ignore_kube_version_check_for_backup | bool
+
   - name: Wait for system to be healthy before starting backup
     shell: |-
       source /etc/platform/openrc
