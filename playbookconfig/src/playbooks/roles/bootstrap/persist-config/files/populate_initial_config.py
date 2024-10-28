@@ -274,12 +274,8 @@ def populate_load_config(client):
         client.sysinv.load.create(patch)
     except Exception as e:
         if INCOMPLETE_BOOTSTRAP:
-            loads = client.sysinv.load.list()
-            if len(loads) > 0:
-                # Load config in previous play went through
-                pass
-            else:
-                raise e
+            # Load config in previous play went through
+            pass
         else:
             raise e
     print("Load config completed.")
@@ -290,15 +286,6 @@ def create_addrpool(client, addrpool_data):
         pool = client.sysinv.address_pool.create(**addrpool_data)
         return pool
     except Exception as e:
-        if INCOMPLETE_BOOTSTRAP:
-            # The previous bootstrap might have been interrupted while
-            # it was in the middle of persisting this network config data
-            # and the controller host has not been created.
-            pools = client.sysinv.address_pool.list()
-            if pools:
-                for pool in pools:
-                    if addrpool_data['name'] == pool.name:
-                        return pool
         raise e
 
 
@@ -306,14 +293,6 @@ def create_network(client, network_data, network_name):
     try:
         client.sysinv.network.create(**network_data)
     except Exception as e:
-        if INCOMPLETE_BOOTSTRAP:
-            # The previous bootstrap might have been interrupted while
-            # it was in the middle of persisting this network config data
-            # and the controller host has not been created.
-            networks = client.sysinv.network.list()
-            for network in networks:
-                if network.name == network_name:
-                    return
         raise e
 
 
@@ -373,26 +352,56 @@ def get_addrpools_uuid(client, network_uuid):
     return addrpools_uuid
 
 
-def delete_network_and_addrpool(client, network_name):
+def delete_network_and_addrpool(client, network_name, addrpool_name):
     networks = client.sysinv.network.list()
     network_uuid = None
     for network in networks:
         if network.name == network_name:
             network_uuid = network.uuid
+
     if network_uuid:
-        print("Deleting network, routes, addresses, and address pool for network %s..." %
-              network_name)
-        host = client.sysinv.ihost.get('controller-0')
-        host_routes = client.sysinv.route.list_by_host(host.uuid)
-        for route in host_routes:
-            client.sysinv.route.delete(route.uuid)
-        host_addresses = client.sysinv.address.list_by_host(host.uuid)
-        for addr in host_addresses:
-            client.sysinv.address.delete(addr.uuid)
+        print("Deleting network, routes, addresses, and address pool for network "
+              f"{network_name}...")
+
+        try:
+            # When the bootstrap is incomplete, the host is not created
+            host = client.sysinv.ihost.get('controller-0')
+
+            host_routes = client.sysinv.route.list_by_host(host.uuid)
+            for route in host_routes:
+                client.sysinv.route.delete(route.uuid)
+
+            host_addresses = client.sysinv.address.list_by_host(host.uuid)
+            for addr in host_addresses:
+                client.sysinv.address.delete(addr.uuid)
+        except cgts_client.exc.HTTPNotFound:
+            print("Controller-0 host not found")
+        except Exception as e:
+            raise e
+
         addrpools_uuid = get_addrpools_uuid(client, network_uuid)
         client.sysinv.network.delete(network_uuid)
         for addrpool_uuid in addrpools_uuid:
             client.sysinv.address_pool.delete(addrpool_uuid)
+
+    # In an incomplete bootstrap, it is possible that the address pool is created
+    # without the network, e.g. using a cluster service subnet that overlaps with
+    # the oam ip.
+    # Additionally, in a dual-stack system, if a failure occurs when populating
+    # the secondary address, the network is found, but there will also be an
+    # incorrect address pool set, which needs to be deleted.
+    addrpools = client.sysinv.address_pool.list()
+    for addrpool in addrpools:
+        # The address pool can either have a suffix with the IP version or not,
+        # e.g. management-ipv4 and pxeboot
+        if (
+            addrpool.name == f"{addrpool_name}-ipv4" or
+            addrpool.name == f"{addrpool_name}-ipv6" or
+            addrpool.name == addrpool_name
+        ):
+            print("Network not found for %s, attempting to delete address pool..." %
+                  addrpool.name)
+            client.sysinv.address_pool.delete(addrpool.uuid)
 
 
 def populate_mgmt_network(client):
@@ -407,16 +416,17 @@ def populate_mgmt_network(client):
     dynamic_allocation = CONF.getboolean(
         'BOOTSTRAP_CONFIG', 'MANAGEMENT_DYNAMIC_ADDRESS_ALLOCATION')
     network_name = 'mgmt'
+    addrpool_prefix = 'management'
 
-    if RECONFIGURE_NETWORK:
-        delete_network_and_addrpool(client, network_name)
+    if RECONFIGURE_NETWORK or INCOMPLETE_BOOTSTRAP:
+        delete_network_and_addrpool(client, network_name, addrpool_prefix)
         print("Updating management network...")
     else:
         print("Populating management network...")
 
     # create the address pool
     values = {
-        'name': f'management-{get_version_text(management_subnet)}',
+        'name': f'{addrpool_prefix}-{get_version_text(management_subnet)}',
         'network': str(management_subnet.network),
         'prefix': management_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
@@ -473,9 +483,10 @@ def populate_mgmt_network_secondary(client):
 
 def populate_admin_network(client):
     network_name = 'admin'
+    addrpool_prefix = 'admin'
 
-    if RECONFIGURE_NETWORK:
-        delete_network_and_addrpool(client, network_name)
+    if RECONFIGURE_NETWORK or INCOMPLETE_BOOTSTRAP:
+        delete_network_and_addrpool(client, network_name, addrpool_prefix)
         print("Updating admin network...")
     else:
         print("Populating admin network...")
@@ -493,7 +504,7 @@ def populate_admin_network(client):
 
     # create the address pool
     values = {
-        'name': f'admin-{get_version_text(admin_subnet)}',
+        'name': f'{addrpool_prefix}-{get_version_text(admin_subnet)}',
         'network': str(admin_subnet.network),
         'prefix': admin_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
@@ -554,16 +565,17 @@ def populate_pxeboot_network(client):
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'PXEBOOT_END_ADDRESS')
     network_name = 'pxeboot'
+    addrpool_name = 'pxeboot'
 
-    if RECONFIGURE_NETWORK:
-        delete_network_and_addrpool(client, network_name)
+    if RECONFIGURE_NETWORK or INCOMPLETE_BOOTSTRAP:
+        delete_network_and_addrpool(client, network_name, addrpool_name)
         print("Updating pxeboot network...")
     else:
         print("Populating pxeboot network...")
 
     # create the address pool
     values = {
-        'name': 'pxeboot',
+        'name': addrpool_name,
         'network': str(pxeboot_subnet.network),
         'prefix': pxeboot_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
@@ -588,16 +600,17 @@ def populate_oam_network(client):
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'EXTERNAL_OAM_END_ADDRESS')
     network_name = 'oam'
+    addrpool_prefix = 'oam'
 
-    if RECONFIGURE_NETWORK:
-        delete_network_and_addrpool(client, network_name)
+    if RECONFIGURE_NETWORK or INCOMPLETE_BOOTSTRAP:
+        delete_network_and_addrpool(client, network_name, addrpool_prefix)
         print("Updating oam network...")
     else:
         print("Populating oam network...")
 
     # create the address pool
     values = {
-        'name': f'oam-{get_version_text(external_oam_subnet)}',
+        'name': f'{addrpool_prefix}-{get_version_text(external_oam_subnet)}',
         'network': str(external_oam_subnet.network),
         'prefix': external_oam_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
@@ -680,16 +693,17 @@ def populate_multicast_network(client):
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'MANAGEMENT_MULTICAST_END_ADDRESS')
     network_name = 'multicast'
+    addrpool_prefix = f'{network_name}-subnet'
 
-    if RECONFIGURE_NETWORK:
-        delete_network_and_addrpool(client, network_name)
+    if RECONFIGURE_NETWORK or INCOMPLETE_BOOTSTRAP:
+        delete_network_and_addrpool(client, network_name, addrpool_prefix)
         print("Updating multicast network...")
     else:
         print("Populating multicast network...")
 
     # create the address pool
     values = {
-        'name': f'multicast-subnet-{get_version_text(management_multicast_subnet)}',
+        'name': f'{addrpool_prefix}-{get_version_text(management_multicast_subnet)}',
         'network': str(management_multicast_subnet.network),
         'prefix': management_multicast_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
@@ -744,16 +758,17 @@ def populate_cluster_host_network(client):
     dynamic_allocation = CONF.getboolean(
         'BOOTSTRAP_CONFIG', 'CLUSTER_HOST_DYNAMIC_ADDRESS_ALLOCATION')
     network_name = 'cluster-host'
+    addrpool_prefix = f'{network_name}-subnet'
 
-    if RECONFIGURE_NETWORK:
-        delete_network_and_addrpool(client, network_name)
+    if RECONFIGURE_NETWORK or INCOMPLETE_BOOTSTRAP:
+        delete_network_and_addrpool(client, network_name, addrpool_prefix)
         print("Updating cluster host network...")
     else:
         print("Populating cluster host network...")
 
     # create the address pool
     values = {
-        'name': f'cluster-host-subnet-{get_version_text(cluster_host_subnet)}',
+        'name': f'{addrpool_prefix}-{get_version_text(cluster_host_subnet)}',
         'network': str(cluster_host_subnet.network),
         'prefix': cluster_host_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
@@ -804,23 +819,25 @@ def populate_system_controller_network(client):
     system_controller_floating_ip = CONF.get(
         'BOOTSTRAP_CONFIG', 'SYSTEM_CONTROLLER_FLOATING_ADDRESS')
     network_name_mgmt = 'system-controller'
+    addrpool_prefix = f'{network_name_mgmt}-subnet'
 
     system_controller_oam_subnet = IPNetwork(CONF.get(
         'BOOTSTRAP_CONFIG', 'SYSTEM_CONTROLLER_OAM_SUBNET'))
     system_controller_oam_floating_ip = CONF.get(
         'BOOTSTRAP_CONFIG', 'SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS')
     network_name_oam = 'system-controller-oam'
+    addrpool_oam_prefix = f'{network_name_oam}-subnet'
 
-    if RECONFIGURE_NETWORK:
-        delete_network_and_addrpool(client, network_name_mgmt)
-        delete_network_and_addrpool(client, network_name_oam)
+    if RECONFIGURE_NETWORK or INCOMPLETE_BOOTSTRAP:
+        delete_network_and_addrpool(client, network_name_mgmt, addrpool_prefix)
+        delete_network_and_addrpool(client, network_name_oam, addrpool_oam_prefix)
         print("Updating system controller network...")
     else:
         print("Populating system controller network...")
 
     # create the address pool
     values = {
-        'name': 'system-controller-subnet',
+        'name': addrpool_prefix,
         'network': str(system_controller_subnet.network),
         'prefix': system_controller_subnet.prefixlen,
         'floating_address': str(system_controller_floating_ip),
@@ -828,7 +845,7 @@ def populate_system_controller_network(client):
     mgmt_pool = create_addrpool(client, values)
 
     values = {
-        'name': 'system-controller-oam-subnet',
+        'name': addrpool_oam_prefix,
         'network': str(system_controller_oam_subnet.network),
         'prefix': system_controller_oam_subnet.prefixlen,
         'floating_address': str(system_controller_oam_floating_ip),
@@ -861,16 +878,17 @@ def populate_cluster_pod_network(client):
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'CLUSTER_POD_END_ADDRESS')
     network_name = 'cluster-pod'
+    addrpool_prefix = f'{network_name}-subnet'
 
-    if RECONFIGURE_NETWORK:
-        delete_network_and_addrpool(client, network_name)
+    if RECONFIGURE_NETWORK or INCOMPLETE_BOOTSTRAP:
+        delete_network_and_addrpool(client, network_name, addrpool_prefix)
         print("Updating cluster pod network...")
     else:
         print("Populating cluster pod network...")
 
     # create the address pool
     values = {
-        'name': f'cluster-pod-subnet-{get_version_text(cluster_pod_subnet)}',
+        'name': f'{addrpool_prefix}-{get_version_text(cluster_pod_subnet)}',
         'network': str(cluster_pod_subnet.network),
         'prefix': cluster_pod_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
@@ -923,16 +941,17 @@ def populate_cluster_service_network(client):
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'CLUSTER_SERVICE_END_ADDRESS')
     network_name = 'cluster-service'
+    addrpool_prefix = f'{network_name}-subnet'
 
-    if RECONFIGURE_NETWORK:
-        delete_network_and_addrpool(client, network_name)
+    if RECONFIGURE_NETWORK or INCOMPLETE_BOOTSTRAP:
+        delete_network_and_addrpool(client, network_name, addrpool_prefix)
         print("Updating cluster service network...")
     else:
         print("Populating cluster service network...")
 
     # create the address pool
     values = {
-        'name': f'cluster-service-subnet-{get_version_text(cluster_service_subnet)}',
+        'name': f'{addrpool_prefix}-{get_version_text(cluster_service_subnet)}',
         'network': str(cluster_service_subnet.network),
         'prefix': cluster_service_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
