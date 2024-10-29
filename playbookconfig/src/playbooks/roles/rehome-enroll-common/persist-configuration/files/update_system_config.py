@@ -364,21 +364,6 @@ def populate_docker_config(client, section_name):
         raise
 
 
-def populate_dns_config(client, section_name):
-    print_with_timestamp("Populating/Updating DNS config...")
-    nameservers = CONF.get(section_name, 'NAMESERVERS')
-
-    dns_list = client.sysinv.idns.list()
-    dns_record = dns_list[0]
-    values = {
-        'nameservers': nameservers.rstrip(','),
-        'action': 'apply'
-    }
-    patch = dict_to_patch(values)
-    client.sysinv.idns.update(dns_record.uuid, patch)
-    print_with_timestamp("DNS config completed.")
-
-
 def populate_service_parameter_config(client, section_name):
     populate_docker_config(client, section_name)
     if CONF.has_section("USER_DNS_HOST_RECORDS"):
@@ -767,7 +752,6 @@ def main():
     # Primary OAM has been updated by cloud-init, secondary oam has been
     # procastinated until now.
     update_oam_network_secondary(client, section_name)
-    populate_dns_config(client, section_name)
     populate_service_parameter_config(client, section_name)
     update_system_controller_subnets(client, section_name)
     try:

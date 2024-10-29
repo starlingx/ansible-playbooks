@@ -4,7 +4,6 @@ MODE={{ mode }}
 [{{ mode | upper }}_CONFIG]
 SW_VERSION={{ software_version }}
 SYSTEM_MODE={{ system_mode }}
-NAMESERVERS={{ dns_servers | join(',') }}
 DOCKER_HTTP_PROXY={{ docker_http_proxy }}
 DOCKER_HTTPS_PROXY={{ docker_https_proxy }}
 DOCKER_NO_PROXY={{ docker_no_proxy_combined | join(',') }}

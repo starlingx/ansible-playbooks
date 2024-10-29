@@ -23,8 +23,8 @@ from keystoneclient import session
 from sysinv.common.utils import generate_random_password
 
 
-MAX_RETRIES_MANIFEST_APPLIED = 10
-INTERVAL_WAIT_MANIFEST_APPLIED = 30
+MAX_RETRIES_MANIFEST_APPLIED = 30
+INTERVAL_WAIT_MANIFEST_APPLIED = 10
 
 
 def print_with_timestamp(*args, **kwargs):
