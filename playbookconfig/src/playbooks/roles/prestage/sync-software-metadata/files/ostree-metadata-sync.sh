@@ -273,7 +273,7 @@ get_simple_xml_attrib_from_metadata() {
     local val
 
 val=$(python - <<END
-import xml.etree.ElementTree as et
+import defusedxml.ElementTree as et
 import sys
 
 try:
