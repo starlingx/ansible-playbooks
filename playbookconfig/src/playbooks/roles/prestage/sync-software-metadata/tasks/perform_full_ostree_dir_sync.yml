@@ -1,0 +1,63 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#
+#   This role is only executed when the subcloud has an N-1 release, where the
+#   ostree repository for N release will be transferred entirely to prepare
+#   the subcloud. It is executed at least once as long as the release N ostree
+#   directory does not exist in the subcloud and if the subcloud is N-1.
+#   Once the ostree N directory was transferred, if the playbook were to be
+#   executed again, the file will not be executed.
+#   The force_ostree_dir_sync variable must be set to true in order to execute
+#   this role.
+#
+
+- name: Perform full ostree repo sync
+  block:
+  # It's necessary to temporarily change the owner to sysadmin so that
+  # the system controller can push the files to the subcloud, since the files
+  # are in the folders only the root can access but the synchronize only
+  # support passwordless sysadmin to execute ssh and rsync.
+  - name: Temporarily change the ownership of feed directory {{ release_feed }}
+    file:
+      path: "{{ release_feed }}"
+      state: directory
+      owner: sysadmin
+      recurse: yes
+
+  - name: Copy feed directory from system controller to subcloud
+    synchronize:
+      mode: push
+      src: "{{ release_feed }}/"
+      dest: "{{ release_feed }}/"
+      rsync_opts: "--delete"
+    register: prestage_transfer
+    retries: 3
+    delay: 5
+    until: prestage_transfer.rc == 0
+
+  - name: Check if install_uuid file exists in {{ host_software_version }} feed directory
+    stat:
+      path: "{{ release_feed | dirname }}/rel-{{ host_software_version }}/install_uuid"
+    register: install_uuid_exists
+
+  - name: Copy install_uuid file from {{ host_software_version }} to {{ software_version }} feed directory
+    copy:
+      src: "{{ release_feed | dirname }}/rel-{{ host_software_version }}/install_uuid"
+      dest: "{{ release_feed }}/install_uuid"
+      force: true
+      remote_src: yes
+    when: install_uuid_exists.stat.exists
+
+  always:
+    - name: Restore the ownership of the feed directory {{ release_feed }}
+      file:
+        path: "{{ release_feed }}"
+        state: directory
+        owner: root
+        recurse: yes
+  become: true
