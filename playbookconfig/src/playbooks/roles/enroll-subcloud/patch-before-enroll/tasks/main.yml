@@ -241,15 +241,22 @@
     - name: Create a tmp directory to stage patches on subcloud
       tempfile:
         state: directory
-        prefix: temp_
+        prefix: enroll_patches_
+        # The default /tmp directory may not have sufficient space for large patches.
+        # The created directory is cleaned up by the always block below.
+        path: /scratch
       register: patches_stage_dir
 
-    - name: Synchronize patch files from system controller to subcloud
-      synchronize:
+    - name: Copy patch files from system controller to subcloud
+      copy:
         src: "{{ patch_file_id_dict[item] }}"
         dest: "{{ patches_stage_dir.path }}/{{ item }}.patch"
       loop: "{{ releases_to_apply }}"
-      delegate_to: localhost
+      vars:
+        # The ansible_remote_tmp directory is used as a staging area to
+        # transfer files. The default location, /tmp, may not have
+        # sufficient space for transfers.
+        ansible_remote_tmp: /scratch
 
     - name: Print gathered values before deploying patches
       debug:
