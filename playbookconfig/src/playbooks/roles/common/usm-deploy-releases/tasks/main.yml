@@ -47,6 +47,18 @@
   shell: |
     source /etc/platform/openrc
     software deploy precheck "{{ release_id }}"
+  register: deploy_pre_check
+  retries: 10
+  delay: 30
+  until: deploy_pre_check.rc == 0
+  failed_when: false
+
+- name: Fail if deploy precheck failed
+  fail:
+    msg: |
+      Deploy precheck failed
+      {{ deploy_pre_check.stdout }}
+  when: deploy_pre_check.rc != 0
 
 - name: Deploy start
   shell: |
