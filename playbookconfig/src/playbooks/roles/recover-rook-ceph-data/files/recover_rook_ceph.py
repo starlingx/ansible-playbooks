@@ -16,7 +16,7 @@ from string import Template
 CEPH_TMP = '/tmp/ceph'
 MONMAP_FILENAME = 'monmap.bin'
 RECOVERY_JOB_RESOURCE_FILENAME = 'recovery-job.yaml'
-KEYRING_JOB_RESOURCE_FILENAME = 'keyring-update-{}-job.yaml'
+UPDATE_OSD_KEYRING_JOB_RESOURCE_FILENAME = 'update-osd-keyring-{}-job.yaml'
 MOVE_MON_JOB_RESOURCE_FILENAME = 'move-mon-{}-job.yaml'
 CLEAN_MON_JOB_RESOURCE_FILENAME = 'clean-mon-{}-job.yaml'
 MONITOR_JOB_RESOURCE_FILENAME = 'monitor-job.yaml'
@@ -92,17 +92,18 @@ def recover_cluster():
         if structure == "ONLY_OSD":
             move_mon_job_template = get_move_mon_job_template()
             move_mon_job_resource = move_mon_job_template.safe_substitute({'TARGET_HOSTNAME': target_mon_hostname,
-                                                                           'TARGET_MON': target_mon})
+                                                                           'TARGET_MON': target_mon,
+                                                                           'RECOVERY_HOSTNAME': target_hostname})
             move_mon_job_resource_path = create_job_resource(move_mon_job_resource,
                                                              MOVE_MON_JOB_RESOURCE_FILENAME.format(target_mon))
             subprocess.run(["kubectl", "apply", "-f", move_mon_job_resource_path])
 
         for hostname in hosts_to_update_keyring:
-            keyring_job_template = get_keyring_job_template()
-            keyring_job_resource = keyring_job_template.safe_substitute({'TARGET_HOSTNAME': hostname})
-            keyring_job_resource_path = create_job_resource(keyring_job_resource,
-                                                            KEYRING_JOB_RESOURCE_FILENAME.format(hostname))
-            subprocess.run(["kubectl", "apply", "-f", keyring_job_resource_path])
+            update_osd_keyring_job_template = get_update_osd_keyring_job_template()
+            update_osd_keyring_job_resource = update_osd_keyring_job_template.safe_substitute({'TARGET_HOSTNAME': hostname})
+            update_osd_keyring_job_resource_path = create_job_resource(update_osd_keyring_job_resource,
+                                                                       UPDATE_OSD_KEYRING_JOB_RESOURCE_FILENAME.format(hostname))
+            subprocess.run(["kubectl", "apply", "-f", update_osd_keyring_job_resource_path])
 
         for name, hostname in mons_to_clean.items():
             clean_mon_job_template = get_clean_mon_job_template()
@@ -112,11 +113,13 @@ def recover_cluster():
                                                               CLEAN_MON_JOB_RESOURCE_FILENAME.format(name))
             subprocess.run(["kubectl", "apply", "-f", clean_mon_job_resource_path])
 
-        monitor_job_template = get_monitor_job_template()
-        monitor_job_resource = monitor_job_template.safe_substitute({'MON_FLOAT_ENABLED': mon_float})
-        monitor_job_resource_path = create_job_resource(monitor_job_resource,
-                                                        MONITOR_JOB_RESOURCE_FILENAME)
-        subprocess.run(["kubectl", "apply", "-f", monitor_job_resource_path])
+    monitor_job_template = get_monitor_job_template()
+    monitor_job_resource = monitor_job_template.safe_substitute({'TARGET_HOSTNAME': target_hostname,
+                                                                 'MON_FLOAT_ENABLED': mon_float,
+                                                                 'STRUCTURE': structure})
+    monitor_job_resource_path = create_job_resource(monitor_job_resource,
+                                                    MONITOR_JOB_RESOURCE_FILENAME)
+    subprocess.run(["kubectl", "apply", "-f", monitor_job_resource_path])
 
 
 def create_job_resource(content, filename):
@@ -205,8 +208,6 @@ data:
       kubectl -n rook-ceph patch configmap rook-ceph-mon-endpoints -p '{"data": {"data": "'"${MON_NAME}"'='"${mon_host_addr}"':6789"}}'
       kubectl -n rook-ceph patch secret rook-ceph-config -p '{"stringData": {"mon_host": "[v2:'"${mon_host_addr}"':3300,v1:'"${mon_host_addr}"':6789]", "mon_initial_members": "'"${MON_NAME}"'"}}'
 
-      kubectl -n rook-ceph label deployment -l app=rook-ceph-mon ceph.rook.io/do-not-reconcile=""
-
       if [ $STRUCT == 'ONLY_OSD' ]; then
         kubectl label nodes ${HOSTNAME} ceph-mgr-placement=enabled
         kubectl label nodes ${HOSTNAME} ceph-mon-placement=enabled
@@ -292,20 +293,23 @@ data:
         kubectl -n rook-ceph delete pod -l osd=${osd_id} --grace-period=0 --force
       fi
 
-      NEW_OSD_KEYRING=(`cat /var/lib/rook/rook-ceph/${ceph_fsid}_${osd_uuid}/keyring | sed -n -e 's/^.*key = //p'`)
+      OSD_KEYRING=(`cat /var/lib/rook/rook-ceph/${ceph_fsid}_${osd_uuid}/keyring | sed -n -e 's/^.*key = //p'`)
       cat > /tmp/osd.${osd_id}.keyring << EOF
     [osd.${osd_id}]
-            key = ${NEW_OSD_KEYRING}
+            key = ${OSD_KEYRING}
             caps mgr = "allow profile osd"
             caps mon = "allow profile osd"
             caps osd = "allow *"
     EOF
 
-      ceph auth import -i /tmp/osd.${osd_id}.keyring
-      if [ $? -ne 0 ]; then
-        echo "ceph timeout exceeded, exit"
-        exit 1
-      fi
+      while [ "$(ceph auth get-key osd.${osd_id})" != "${OSD_KEYRING}" ]
+      do
+        ceph auth import -i /tmp/osd.${osd_id}.keyring
+        if [ $? -ne 0 ]; then
+          echo "ceph timeout exceeded, exit"
+          exit 1
+        fi
+      done
 
       ceph-objectstore-tool --type bluestore --data-path /var/lib/rook/rook-ceph/${ceph_fsid}_${osd_uuid} --op update-mon-db --mon-store-path /tmp/monstore
       if [ $? -ne 0 ]; then
@@ -364,7 +368,7 @@ data:
     kubectl -n rook-ceph scale deployment -l app=rook-ceph-osd --replicas 1
     sleep ${TIME_AFTER_SCALE}
     kubectl -n rook-ceph wait --for=condition=Ready pod --all=true -l mon=${MON_NAME} --timeout=${TIME_WAIT_READY}
-    kubectl -n rook-ceph wait --for=condition=Ready pod --all=true -l app=rook-ceph-osd --timeout=${TIME_WAIT_READY}
+    kubectl -n rook-ceph wait --for=condition=Ready pod --all=true -l "app=rook-ceph-osd,topology-location-host=${HOSTNAME}" --timeout=${TIME_WAIT_READY}
 
     ceph -s
     if [ $? -ne 0 ]; then
@@ -428,6 +432,12 @@ data:
         echo "Waiting for cluster recovery"
       done
 
+      kubectl -n rook-ceph scale deployment rook-ceph-operator --replicas 0
+      kubectl -n rook-ceph wait --for=delete pod --all=true -l app=rook-ceph-operator --timeout=${TIME_WAIT_DELETE}
+      if [ $? -ne 0 ]; then
+        kubectl -n rook-ceph delete pod -l app=rook-ceph-operator --grace-period=0 --force
+      fi
+
       kubectl -n rook-ceph scale deployment -l app=rook-ceph-mon --replicas 0
       kubectl -n rook-ceph wait --for=delete pod --all=true -l app=rook-ceph-mon --timeout=${TIME_WAIT_DELETE}
       if [ $? -ne 0 ]; then
@@ -439,27 +449,31 @@ data:
       kubectl -n rook-ceph patch secret rook-ceph-config -p '{"data": {"mon_initial_members": "'"${DATA_MON_INIT}"'"}}'
 
       kubectl -n rook-ceph scale deployment rook-ceph-mon-${MON_NAME} --replicas 1
+      kubectl -n rook-ceph scale deployment rook-ceph-operator --replicas 1
       sleep ${TIME_AFTER_SCALE}
       kubectl -n rook-ceph wait --for=condition=Ready pod --all=true -l mon=${MON_NAME} --timeout=${TIME_WAIT_READY}
+      kubectl -n rook-ceph wait --for=condition=Ready pod --all=true -l app=rook-ceph-operator --timeout=${TIME_WAIT_READY}
     fi
+
+    ceph config set mgr mgr/crash/warn_recent_interval 0
 
     kubectl -n rook-ceph patch configmap rook-ceph-recovery -p '{"data": {"status": "completed"}}'
 
     exit 0
 
-  update_keyring.sh: |-
+  update_osd_keyring.sh: |-
     #!/bin/bash
 
     set -x
 
     while true
     do
+      # TODO: Instead of sleep, use 'kubectl wait'
       status=$(kubectl -n rook-ceph get configmap rook-ceph-recovery -o jsonpath='{.data.status}')
       if [ "$status" == "completed" ]; then
         break
-      else
-        sleep 10
       fi
+      sleep 10
     done
 
     if [ "${MON_HOST}"x == ""x ]; then
@@ -503,10 +517,10 @@ data:
         sleep 60
       done
 
-      NEW_OSD_KEYRING=(`cat /var/lib/rook/rook-ceph/${ceph_fsid}_${osd_uuid}/keyring | sed -n -e 's/^.*key = //p'`)
+      OSD_KEYRING=(`cat /var/lib/rook/rook-ceph/${ceph_fsid}_${osd_uuid}/keyring | sed -n -e 's/^.*key = //p'`)
       cat > /tmp/osd.${osd_id}.keyring << EOF
     [osd.${osd_id}]
-            key = ${NEW_OSD_KEYRING}
+            key = ${OSD_KEYRING}
             caps mgr = "allow profile osd"
             caps mon = "allow profile osd"
             caps osd = "allow *"
@@ -516,11 +530,14 @@ data:
         sleep 60
       done
 
-      ceph auth import -i /tmp/osd.${osd_id}.keyring
-      if [ $? -ne 0 ]; then
-        echo "ceph timeout exceeded, exit"
-        exit 1
-      fi
+      while [ "$(ceph auth get-key osd.${osd_id})" != "${OSD_KEYRING}" ]
+      do
+        ceph auth import -i /tmp/osd.${osd_id}.keyring
+        if [ $? -ne 0 ]; then
+          echo "ceph timeout exceeded, exit"
+          exit 1
+        fi
+      done
     done
 
     exit 0
@@ -530,30 +547,24 @@ data:
 
     set -x
 
-    if [ ${MON_NAME} == "float" ]; then
-      data_dir"/var/lib/rook/mon-${MON_NAME}/mon-${MON_NAME}"
-    else
-      data_dir="/var/lib/rook/data/mon-${MON_NAME}"
-    fi
-
     while true
     do
+      # TODO: Instead of sleep, use 'kubectl wait'
       status=$(kubectl -n rook-ceph get configmap rook-ceph-recovery -o jsonpath='{.data.status}')
       if [ "$status" == "completed" ]; then
-        kubectl -n rook-ceph scale deployment rook-ceph-mon-${MON_NAME} --replicas 0
-        kubectl -n rook-ceph wait --for=delete pod --all=true -l mon=${MON_NAME} --timeout=30s
-        if [ $? -ne 0 ]; then
-          kubectl -n rook-ceph delete pod -l mon=${MON_NAME} --grace-period=0 --force
+        kubectl -n rook-ceph wait --for=condition=complete job --all=true -l app=rook-ceph-recovery-update-osd-keyring --timeout=30s
+        if [ $? -eq 0 ]; then
+          kubectl -n rook-ceph scale deployment rook-ceph-mon-${MON_NAME} --replicas 0
+          kubectl -n rook-ceph wait --for=delete pod --all=true -l mon=${MON_NAME} --timeout=30s
+          if [ $? -ne 0 ]; then
+            kubectl -n rook-ceph delete pod -l mon=${MON_NAME} --grace-period=0 --force
+          fi
+          rm -rf /var/lib/rook/mon-${MON_NAME}
+          kubectl -n rook-ceph scale deployment rook-ceph-mon-${MON_NAME} --replicas 1
+          break
         fi
-
-        rm -rf $data_dir
-
-        kubectl -n rook-ceph scale deployment rook-ceph-mon-${MON_NAME} --replicas 1
-
-        break
-      else
-        sleep 10
       fi
+      sleep 10
     done
 
     exit 0
@@ -580,15 +591,14 @@ data:
 
     while true
     do
+      # TODO: Instead of sleep, use 'kubectl wait'
+      sleep 10
       status=$(kubectl -n rook-ceph get configmap rook-ceph-recovery -o jsonpath='{.data.status}')
       if [ "$status" == "completed" ]; then
         if [ "$(ceph health)" == "HEALTH_OK" ]; then
-          PODS=$(kubectl -n rook-ceph get pods -l app=rook-ceph-clean-mon)
-          if echo "$PODS" | grep rook-ceph-clean; then
-            kubectl -n rook-ceph wait --for=condition=complete job --all=true -l app=rook-ceph-clean-mon --timeout=30s
-            if [ $? -ne 0 ]; then
-                continue
-            fi
+          kubectl -n rook-ceph wait --for=condition=complete job --all=true -l app=rook-ceph-recovery-clean-mon --timeout=30s
+          if [ $? -ne 0 ]; then
+            continue
           fi
 
           kubectl -n rook-ceph scale deployment rook-ceph-mon-${MON_NAME} --replicas 0
@@ -597,25 +607,40 @@ data:
             kubectl -n rook-ceph delete pod -l mon=${MON_NAME} --grace-period=0 --force
           fi
 
+          MGR_NAME=$(kubectl -n rook-ceph get pods -l app=rook-ceph-mgr --field-selector spec.nodeName=${RECOVERY_HOSTNAME} --no-headers -o custom-columns=":metadata.labels.mgr")
+          MDS_NAME=$(kubectl -n rook-ceph get pods -l app=rook-ceph-mds --field-selector spec.nodeName=${RECOVERY_HOSTNAME} --no-headers -o custom-columns=":metadata.labels.mds")
+
+          kubectl -n rook-ceph scale deployment rook-ceph-mgr-${MGR_NAME} --replicas 0
+          kubectl -n rook-ceph wait --for=delete pod --all=true -l mgr=${MGR_NAME} --timeout=30s
+          if [ $? -ne 0 ]; then
+            kubectl -n rook-ceph delete pod -l mgr=${MGR_NAME} --grace-period=0 --force
+          fi
+
+          kubectl -n rook-ceph scale deployment rook-ceph-mds-${MDS_NAME} --replicas 0
+          kubectl -n rook-ceph wait --for=delete pod --all=true -l mds=${MDS_NAME} --timeout=30s
+          if [ $? -ne 0 ]; then
+            kubectl -n rook-ceph delete pod -l mds=${MDS_NAME} --grace-period=0 --force
+          fi
+
           rm -rf /var/lib/rook/mon-${MON_NAME}
 
-          kubectl -n rook-ceph label deployment -l app=rook-ceph-mon ceph.rook.io/do-not-reconcile=""
-
           kubectl -n rook-ceph patch deployment rook-ceph-mon-${MON_NAME} -p '{"spec": {"template": {"spec": {"nodeSelector": {"kubernetes.io/hostname": "'"${HOSTNAME}"'"}}}}}'
-          kubectl label nodes ${HOSTNAME} ceph-mgr-placement-
-          kubectl label nodes ${HOSTNAME} ceph-mon-placement-
+          kubectl label nodes ${RECOVERY_HOSTNAME} ceph-mgr-placement-
+          kubectl label nodes ${RECOVERY_HOSTNAME} ceph-mon-placement-
 
           kubectl -n rook-ceph scale deployment rook-ceph-mon-${MON_NAME} --replicas 1
+          kubectl -n rook-ceph scale deployment rook-ceph-mgr-${MGR_NAME} --replicas 1
+          kubectl -n rook-ceph scale deployment rook-ceph-mds-${MDS_NAME} --replicas 1
           sleep 10
           kubectl -n rook-ceph wait --for=condition=Ready pod --all=true -l mon=${MON_NAME} --timeout=60s
+          kubectl -n rook-ceph wait --for=condition=Ready pod --all=true -l mgr=${MGR_NAME} --timeout=60s
+          kubectl -n rook-ceph wait --for=condition=Ready pod --all=true -l mds=${MDS_NAME} --timeout=60s
 
           echo "rook-ceph mon moved successfully."
           break
         fi
       fi
-      sleep 30
     done
-
     exit 0
 
   monitor.sh: |-
@@ -625,26 +650,50 @@ data:
 
     while true
     do
+      # TODO: Instead of sleep, use 'kubectl wait'
+      sleep 30
       status=$(kubectl -n rook-ceph get configmap rook-ceph-recovery -o jsonpath='{.data.status}')
       if [ "$status" == "completed" ]; then
-        kubectl -n rook-ceph wait --for=condition=complete job --all=true -l app.kubernetes.io/part-of=rook-ceph-recovery --timeout=30s
-        if [ $? -eq 0 ]; then
-          if [ "${HAS_MON_FLOAT}" == false ]; then
-            kubectl -n rook-ceph label deployment -l app=rook-ceph-mon ceph.rook.io/do-not-reconcile-
-          fi
+        if [ "${STRUCT}" == 'ONE_HOST' ]; then
           break
         fi
-      else
-        sleep 5m
+
+        kubectl -n rook-ceph wait --for=condition=complete job --all=true -l app.kubernetes.io/part-of=rook-ceph-recovery --timeout=30s
+        if [ $? -ne 0 ]; then
+          continue
+        fi
+
+        if [ "${HAS_MON_FLOAT}" == false ]; then
+          kubectl -n rook-ceph label deployment -l app=rook-ceph-mon ceph.rook.io/do-not-reconcile-
+        fi
+
+        if [ "${STRUCT}" == 'ONLY_OSD' ]; then
+          rm -rf /var/lib/rook/mon-*
+        fi
+
+        break
       fi
     done
 
+    set +x
+    PODS=$(kubectl -n rook-ceph get pods -l app.kubernetes.io/part-of=rook-ceph-recovery --no-headers -o custom-columns=":metadata.name")
+    for pod in $PODS; do
+      echo -e "\\n##############################\\n$pod\\n##############################" >> /var/log/ceph/restore.log
+      kubectl -n rook-ceph logs $pod >> /var/log/ceph/restore.log
+    done
+
+    set -x
     kubectl -n rook-ceph delete jobs -l app.kubernetes.io/part-of=rook-ceph-recovery
     kubectl -n rook-ceph wait --for=delete job --all=true -l app.kubernetes.io/part-of=rook-ceph-recovery --timeout=30s
     if [ $? -ne 0 ]; then
       kubectl -n rook-ceph delete jobs -l app.kubernetes.io/part-of=rook-ceph-recovery --grace-period=0 --force
     fi
 
+    set +x
+    echo -e "\\n##############################\\nrook-ceph-recovery-monitor\\n##############################" >> /var/log/ceph/restore.log
+    kubectl -n rook-ceph logs $(kubectl get pod -n rook-ceph -l app=rook-ceph-recovery-monitor -o name) >> /var/log/ceph/restore.log
+
+    set -x
     exit 0
 
   monmap_b64: |-
@@ -662,6 +711,12 @@ rules:
 - apiGroups: [""]
   resources: ["services"]
   verbs: ["get"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
 - apiGroups: [""]
   resources: ["nodes"]
   verbs: ["get", "patch"]
@@ -708,13 +763,16 @@ metadata:
   name: rook-ceph-recovery
   namespace: rook-ceph
   labels:
-   app: rook-ceph-recovery
-   app.kubernetes.io/part-of: rook-ceph-recovery
+    app: rook-ceph-recovery
+    app.kubernetes.io/part-of: rook-ceph-recovery
 spec:
   template:
     metadata:
       name: rook-ceph-recovery
       namespace: rook-ceph
+      labels:
+        app: rook-ceph-recovery
+        app.kubernetes.io/part-of: rook-ceph-recovery
     spec:
       serviceAccountName: rook-ceph-recovery
       nodeSelector:
@@ -812,23 +870,26 @@ spec:
         """)
 
 
-def get_keyring_job_template():
+def get_update_osd_keyring_job_template():
     return Template(
         """
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: rook-ceph-keyring-update-$TARGET_HOSTNAME
+  name: rook-ceph-recovery-update-osd-keyring-$TARGET_HOSTNAME
   namespace: rook-ceph
   labels:
-   app: rook-ceph-keyring-update
-   app.kubernetes.io/part-of: rook-ceph-recovery
+    app: rook-ceph-recovery-update-osd-keyring
+    app.kubernetes.io/part-of: rook-ceph-recovery
 spec:
   template:
     metadata:
-      name: rook-ceph-keyring-update-$TARGET_HOSTNAME
+      name: rook-ceph-recovery-update-osd-keyring-$TARGET_HOSTNAME
       namespace: rook-ceph
+      labels:
+        app: rook-ceph-recovery-update-osd-keyring
+        app.kubernetes.io/part-of: rook-ceph-recovery
     spec:
       serviceAccountName: rook-ceph-recovery
       nodeSelector:
@@ -883,9 +944,9 @@ spec:
           - mountPath: /run/udev
             name: run-udev
       containers:
-        - name: update
+        - name: update-osd-keyring
           image: registry.local:9001/docker.io/openstackhelm/ceph-config-helper:ubuntu_jammy_18.2.2-1-20240312
-          command: [ "/bin/bash", "/tmp/mount/update_keyring.sh" ]
+          command: [ "/bin/bash", "/tmp/mount/update_osd_keyring.sh" ]
           env:
           - name: ROOK_MONS
             valueFrom:
@@ -925,16 +986,19 @@ def get_clean_mon_job_template():
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: rook-ceph-clean-mon-$TARGET_MON
+  name: rook-ceph-recovery-clean-mon-$TARGET_MON
   namespace: rook-ceph
   labels:
-   app: rook-ceph-clean-mon
-   app.kubernetes.io/part-of: rook-ceph-recovery
+    app: rook-ceph-recovery-clean-mon
+    app.kubernetes.io/part-of: rook-ceph-recovery
 spec:
   template:
     metadata:
-      name: rook-ceph-clean-mon-$TARGET_MON
+      name: rook-ceph-recovery-clean-mon-$TARGET_MON
       namespace: rook-ceph
+      labels:
+        app: rook-ceph-recovery-clean-mon
+        app.kubernetes.io/part-of: rook-ceph-recovery
     spec:
       serviceAccountName: rook-ceph-recovery
       nodeSelector:
@@ -949,7 +1013,7 @@ spec:
       restartPolicy: OnFailure
       volumes:
         - hostPath:
-            path: /var/lib/ceph
+            path: /var/lib/ceph/data
             type: ""
           name: rook-data
         - name: rook-ceph-recovery
@@ -960,7 +1024,7 @@ spec:
           hostPath:
             path: /etc/kubernetes/admin.conf
       containers:
-        - name: clean
+        - name: clean-mon
           image: registry.local:9001/docker.io/openstackhelm/ceph-config-helper:ubuntu_jammy_18.2.2-1-20240312
           command: [ "/bin/bash", "/tmp/mount/clean_mon.sh" ]
           env:
@@ -988,16 +1052,19 @@ def get_move_mon_job_template():
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: rook-ceph-move-mon-$TARGET_MON
+  name: rook-ceph-recovery-move-mon-$TARGET_MON
   namespace: rook-ceph
   labels:
-   app: rook-ceph-move-mon
-   app.kubernetes.io/part-of: rook-ceph-recovery
+    app: rook-ceph-recovery-move-mon
+    app.kubernetes.io/part-of: rook-ceph-recovery
 spec:
   template:
     metadata:
-      name: rook-ceph-move-mon-$TARGET_MON
+      name: rook-ceph-recovery-move-mon-$TARGET_MON
       namespace: rook-ceph
+      labels:
+        app: rook-ceph-recovery-move-mon
+        app.kubernetes.io/part-of: rook-ceph-recovery
     spec:
       serviceAccountName: rook-ceph-recovery
       nodeSelector:
@@ -1023,7 +1090,7 @@ spec:
           hostPath:
             path: /etc/kubernetes/admin.conf
       containers:
-        - name: update
+        - name: move-mon
           image: registry.local:9001/docker.io/openstackhelm/ceph-config-helper:ubuntu_jammy_18.2.2-1-20240312
           command: [ "/bin/bash", "/tmp/mount/move_mon.sh" ]
           env:
@@ -1037,6 +1104,8 @@ spec:
               secretKeyRef:
                 name: rook-ceph-admin-keyring
                 key: keyring
+          - name: RECOVERY_HOSTNAME
+            value: $RECOVERY_HOSTNAME
           - name: HOSTNAME
             value: $TARGET_HOSTNAME
           - name: MON_NAME
@@ -1066,15 +1135,19 @@ metadata:
   name: rook-ceph-recovery-monitor
   namespace: rook-ceph
   labels:
-   app: rook-ceph-recovery-monitor
+    app: rook-ceph-recovery-monitor
 spec:
-  ttlSecondsAfterFinished: 300
+  ttlSecondsAfterFinished: 30
   template:
     metadata:
       name: rook-ceph-recovery-monitor
       namespace: rook-ceph
+      labels:
+        app: rook-ceph-recovery-monitor
     spec:
       serviceAccountName: rook-ceph-recovery
+      nodeSelector:
+        kubernetes.io/hostname: $TARGET_HOSTNAME
       tolerations:
       - effect: NoSchedule
         operator: Exists
@@ -1084,6 +1157,14 @@ spec:
         key: node-role.kubernetes.io/control-plane
       restartPolicy: OnFailure
       volumes:
+        - hostPath:
+            path: /var/lib/ceph/data
+            type: ""
+          name: rook-data
+        - hostPath:
+            path: /var/log/ceph
+            type: ""
+          name: ceph-log
         - name: rook-ceph-recovery
           configMap:
             name: rook-ceph-recovery
@@ -1096,9 +1177,19 @@ spec:
           image: registry.local:9001/docker.io/bitnami/kubectl:1.29
           command: [ "/bin/bash", "/tmp/mount/monitor.sh" ]
           env:
+          - name: STRUCT
+            value: $STRUCTURE
           - name: HAS_MON_FLOAT
             value: "$MON_FLOAT_ENABLED"
+          securityContext:
+            privileged: true
+            readOnlyRootFilesystem: false
+            runAsUser: 0
           volumeMounts:
+          - mountPath: /var/lib/rook
+            name: rook-data
+          - mountPath: /var/log/ceph
+            name: ceph-log
           - mountPath: /tmp/mount
             name: rook-ceph-recovery
           - name: kube-config

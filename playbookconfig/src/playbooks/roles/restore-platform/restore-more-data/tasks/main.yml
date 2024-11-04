@@ -802,6 +802,7 @@
           kubectl delete -n rook-ceph helmrepository stx-platform --force
         environment:
           KUBECONFIG: /etc/kubernetes/admin.conf
+        ignore_errors: true
         when: rook_backend.rc == 0
 
       # When controller unlock occurs there is a chance platform-integ-apps or rook-ceph
