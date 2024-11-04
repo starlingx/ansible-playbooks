@@ -42,6 +42,12 @@
       until: create_subcloud_ep is not failed
       retries: 10
       delay: 30
+
+    - name: Wait up to 30s for admin endpoint certificate to be ready
+      command: >-
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf -n "{{ sc_adminep_ca_cert_ns }}"
+        wait --for=condition=ready certificate "{{ sc_adminep_cert_secret }}" --timeout=30s
+
   rescue:
     - name: System app-list
       shell: "source /etc/platform/openrc; system application-list"
@@ -85,10 +91,10 @@
     - debug:
         msg: "{{ all_sc_cert_yaml_output.stdout_lines }}"
 
-- name: Wait up to 30s for admin endpoint certificate to be ready
-  command: >-
-    kubectl --kubeconfig=/etc/kubernetes/admin.conf -n "{{ sc_adminep_ca_cert_ns }}"
-    wait --for=condition=ready certificate "{{ sc_adminep_cert_secret }}" --timeout=30s
+    - fail:
+        msg: >-
+          "Error while creating certificate {{ sc_adminep_cert_secret }}.
+          Check resources dumped and the logs from cert-manager pods."
 
 - name: Copy admin endpoint certficates to the shared filesystem directory
   copy:
