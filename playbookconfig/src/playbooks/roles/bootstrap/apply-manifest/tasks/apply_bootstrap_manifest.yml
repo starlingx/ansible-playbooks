@@ -252,6 +252,26 @@
       line: "platform::config::hosts::host_records: {{ user_dns_host_records_lines }}"
     when: user_dns_host_records
 
+  - name: Getting supported disk devices from udev
+    shell: |
+      import pyudev
+      from sysinv.common import constants as sysinv_constants
+      context = pyudev.Context()
+      output = ""
+      for device in context.list_devices(DEVTYPE='disk'):
+          if device.properties['MAJOR'] in sysinv_constants.VALID_MAJOR_LIST:
+              if 'ID_PATH' in device:
+                  output += "(ID_PATH=%s)|" % device.properties['ID_PATH']
+      print(output[:-1])
+    args:
+      executable: /usr/bin/python
+    register: tuned_devices
+
+  - name: Write disk devices to StarlingX Tuned profile
+    lineinfile:
+      path: "{{ hieradata_workdir }}/runtime.yaml"
+      line: "platform::sysctl::params::tuned_devices: {{ tuned_devices.stdout }}"
+
   when: mode == 'bootstrap'
 
 - name: Add L4 service ports value to bootstrap runtime hieradata
