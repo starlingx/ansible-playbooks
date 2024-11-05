@@ -36,7 +36,15 @@ ROLES_TO_CREATE = [
     {
         "name": "_member_",
         "domain": None
-    }
+    },
+    {
+        "name": "operator",
+        "domain": None
+    },
+    {
+        "name": "configurator",
+        "domain": None
+    },
 ]
 
 USERS_TO_UPDATE = [{"name": "admin", "email": "admin@localhost"}]

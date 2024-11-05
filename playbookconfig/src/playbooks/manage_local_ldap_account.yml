@@ -24,7 +24,7 @@
 # - sudo_permission         : give sudo capabilities to new LDAP user to execute
 #                             commands with root privileges (default: no).
 # - user_role               : role for the new Keystone user as
-#                             'admin'/'member'/'reader' (default: 'admin').
+#                             'admin'/'member'/'reader'/'operator'/'configurator'.
 # - sys_protected           : is used to add the new LDAP user to the group
 #                             "sys_protected" (default: no).
 #
@@ -89,8 +89,8 @@
 
   - name: Validate user_role
     fail:
-      msg: "The user role must be 'admin', 'member' or 'reader'."
-    when: "in_user_role not in ['admin', 'member', 'reader']"
+      msg: "The user role must be 'admin', 'member', 'reader', 'operator' or 'configurator'."
+    when: "in_user_role not in ['admin', 'member', 'reader', 'operator', 'configurator']"
 
   # The ansible's conversion of a invalid string to integer will return 0,
   # that would be a valid value, this is the reason of the validation
