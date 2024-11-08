@@ -477,10 +477,9 @@ def populate_admin_network(client):
 
     admin_subnet = IPNetwork(
         CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_SUBNET'))
-    start_address = CONF.get('BOOTSTRAP_CONFIG',
-                             'ADMIN_START_ADDRESS')
-    end_address = CONF.get('BOOTSTRAP_CONFIG',
-                           'ADMIN_END_ADDRESS')
+    start_address = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_START_ADDRESS')
+    end_address = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_END_ADDRESS')
+    floating_address = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_FLOATING_ADDRESS')
     admin_gateway_address = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_GATEWAY_ADDRESS')
 
     # create the address pool
@@ -494,6 +493,11 @@ def populate_admin_network(client):
         values.update({
             'gateway_address': admin_gateway_address,
         })
+    if (floating_address != 'undef'):
+        values.update({
+            'floating_address': floating_address,
+        })
+
     pool = create_addrpool(client, values)
 
     # create the network for the pool
@@ -507,12 +511,14 @@ def populate_admin_network(client):
 
 
 def populate_admin_network_secondary(client):
-    admin_subnet = IPNetwork(
-        CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_SUBNET_SECONDARY'))
-    start_address = CONF.get('BOOTSTRAP_CONFIG',
-                             'ADMIN_START_ADDRESS_SECONDARY')
-    end_address = CONF.get('BOOTSTRAP_CONFIG',
-                           'ADMIN_END_ADDRESS_SECONDARY')
+    admin_subnet = IPNetwork(CONF.get(
+        'BOOTSTRAP_CONFIG', 'ADMIN_SUBNET_SECONDARY'))
+    start_address = CONF.get(
+        'BOOTSTRAP_CONFIG', 'ADMIN_START_ADDRESS_SECONDARY')
+    end_address = CONF.get(
+        'BOOTSTRAP_CONFIG', 'ADMIN_END_ADDRESS_SECONDARY')
+    floating_address = CONF.get(
+        'BOOTSTRAP_CONFIG', 'ADMIN_FLOATING_ADDRESS_SECONDARY')
     admin_gateway_address = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_GATEWAY_ADDRESS_SECONDARY')
     network_name = sysinv_constants.NETWORK_TYPE_ADMIN
 
@@ -528,6 +534,10 @@ def populate_admin_network_secondary(client):
     if (admin_gateway_address != 'undef'):
         values.update({
             'gateway_address': admin_gateway_address,
+        })
+    if (floating_address != 'undef'):
+        values.update({
+            'floating_address': floating_address,
         })
     pool = create_addrpool(client, values)
 

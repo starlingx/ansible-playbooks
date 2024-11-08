@@ -51,6 +51,7 @@
     external_oam_node_1_address: "{{ external_oam_node_1_address | default('derived') }}"
     admin_start_address: "{{ admin_start_address | default('derived') }}"
     admin_end_address: "{{ admin_end_address | default('derived') }}"
+    admin_floating_address: "{{ admin_floating_address | default('derived') }}"
 
 # Network config validation
 - block:
@@ -78,12 +79,14 @@
       management_end_address: "{{ management_end_address }}"
       admin_start_address: "{{ admin_start_address }}"
       admin_end_address: "{{ admin_end_address }}"
+      admin_floating_address: "{{ admin_floating_address }}"
       cluster_service_start_address: "{{ cluster_service_start_address }}"
       management_gateway_address: "{{ management_gateway_address | default([]) }}"
       admin_gateway_address: "{{ admin_gateway_address | default([]) }}"
     loop_control:
       loop_var: network_param
     when: network_param.value != "undef" and network_param.value != "derived"
+
 
   # validate dual-stack address respective to subnet, sequence of ip family (primary and secondary) should
   # match between address and subnet. Both address and respective subnet either should be single-stack or dual-stack.
@@ -162,6 +165,11 @@
           value: "{{ admin_subnet }}"
       admin_gateway_address:
         address: "{{ admin_gateway_address }}"
+        subnet:
+          name: admin_subnet
+          value: "{{ admin_subnet }}"
+      admin_floating_address:
+        address: "{{ admin_floating_address }}"
         subnet:
           name: admin_subnet
           value: "{{ admin_subnet }}"

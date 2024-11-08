@@ -617,6 +617,7 @@ def update_admin_network(client, section_name):
     delete_network_and_addrpool(client, 'admin', section_name)
 
     admin_subnet = IPNetwork(CONF.get(section_name, "ADMIN_SUBNET"))
+    admin_floating_address = CONF.get(section_name, "ADMIN_FLOATING_ADDRESS")
     admin_start_address = CONF.get(section_name, "ADMIN_START_ADDRESS")
     admin_end_address = CONF.get(section_name, "ADMIN_END_ADDRESS")
     subcloud_gateway = CONF.get(section_name, "ADMIN_GATEWAY_ADDRESS")
@@ -631,6 +632,11 @@ def update_admin_network(client, section_name):
     if (subcloud_gateway != 'undef'):
         values.update({
             'gateway_address': subcloud_gateway,
+        })
+
+    if (admin_floating_address != 'undef'):
+        values.update({
+            'floating_address': admin_floating_address,
         })
 
     print_with_timestamp(f"Creating addrpool with name {values['name']}...")

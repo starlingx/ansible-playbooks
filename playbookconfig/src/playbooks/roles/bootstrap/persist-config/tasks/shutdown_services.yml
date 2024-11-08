@@ -156,9 +156,9 @@
   - name: Set facts derived from previous admin network configuration
     set_fact:
       prev_admin_subnet_prefix: "{{ prev_network_params.prev_admin_subnet_primary | ipaddr('prefix') }}"
-      prev_controller_admin_floating_address:
-        "{{ default_prev_admin_start_address_primary
-        if prev_admin_start_address == 'derived' else prev_network_params.prev_admin_start_address_primary }}"
+      prev_admin_floating_address:
+        "{{ default_prev_admin_floating_address_primary
+        if prev_admin_floating_address == 'derived' else prev_network_params.prev_admin_floating_address_primary }}"
       prev_admin_broadcast: "{{ prev_network_params.prev_admin_subnet_primary | ipaddr('broadcast') }}"
     when: (prev_admin_network|bool == true)
 
@@ -173,8 +173,8 @@
       set_fact:
         prev_admin_subnet_prefix_secondary: "{{ prev_network_params.prev_admin_subnet_secondary | ipaddr('prefix') }}"
         prev_controller_admin_floating_address_secondary:
-          "{{ default_prev_admin_start_address_secondary
-          if prev_admin_start_address == 'derived' else prev_network_params.prev_admin_start_address_secondary }}"
+          "{{ default_prev_admin_floating_address_secondary
+          if prev_admin_floating_address == 'derived' else prev_network_params.prev_admin_floating_address_secondary }}"
         prev_admin_broadcast_secondary: "{{ prev_network_params.prev_admin_subnet_secondary | ipaddr('broadcast') }}"
       when: ((prev_admin_network|bool == true) and
              prev_network_params.prev_admin_subnet_secondary)

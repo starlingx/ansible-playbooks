@@ -210,6 +210,7 @@
     with_dict:
       admin_start_address: "{{ admin_start_address }}"
       admin_end_address: "{{ admin_end_address }}"
+      admin_floating_address: "{{ admin_floating_address }}"
       admin_gateway_address: "{{ admin_gateway_address | default([]) }}"
     loop_control:
       loop_var: network_param
@@ -327,6 +328,11 @@
           value: "{{ admin_subnet }}"
       admin_gateway_address:
         address: "{{ admin_gateway_address }}"
+        subnet:
+          name: admin_subnet
+          value: "{{ admin_subnet }}"
+      admin_floating_address:
+        address: "{{ admin_floating_address }}"
         subnet:
           name: admin_subnet
           value: "{{ admin_subnet }}"
@@ -567,6 +573,10 @@
                                                      else (network_params.admin_subnet_secondary |
                                                           ipaddr(-1 if (network_params.admin_subnet_secondary
                                                           |ipv6) else -2)).split('/')[0] }}"
+      default_admin_floating_address_primary: "{{ (network_params.admin_subnet_primary | ipaddr(1)).split('/')[0] }}"
+      default_admin_floating_address_secondary: "{{ False if (not network_params.admin_subnet_secondary)
+                                                       else (network_params.admin_subnet_secondary | ipaddr(1))
+                                                            .split('/')[0] }}"
     when: admin_network is defined
 
   - name: Build primary address pairs for validation, merging default and user provided values
@@ -646,7 +656,10 @@
         end:
           "{{ network_params.admin_end_address_primary if admin_end_address != 'derived'
           else default_admin_end_address_primary }}"
+        floating: "{{ network_params.admin_floating_address_primary if admin_floating_address != 'derived'
+                   else network_params.admin_start_address_primary }}"
         subnet: "{{ network_params.admin_subnet_primary }}"
+        system_mode: "{{ system_mode }}"
     when: admin_network is defined
 
   - name: Add primary admin address pairs to primary address pairs
@@ -730,7 +743,11 @@
         end:
           "{{ network_params.admin_end_address_secondary if admin_end_address != 'derived'
           else default_admin_end_address_secondary }}"
+        floating:
+          "{{ network_params.admin_floating_address_secondary if admin_floating_address != 'derived'
+          else network_params.admin_start_address_secondary }}"
         subnet: "{{ network_params.admin_subnet_secondary }}"
+        system_mode: "{{ system_mode }}"
     when: admin_network is defined
 
   - name: Add secondary admin address pairs to temp secondary address pairs
@@ -780,7 +797,7 @@
 
   - name: Set subcloud admin floating address
     set_fact:
-      controller_admin_floating_address: "{{ address_pairs['admin']['start'] }}"
+      controller_admin_floating_address: "{{ address_pairs['admin']['floating'] }}"
     when: address_pairs.admin is defined
 
   # Set secondary addresses
@@ -797,7 +814,7 @@
 
     - name: Set secondary admin floating address
       set_fact:
-        controller_admin_floating_address_secondary: "{{ address_pairs_secondary['admin']['start'] }}"
+        controller_admin_floating_address_secondary: "{{ address_pairs_secondary['admin']['floating'] }}"
       when: address_pairs_secondary.admin is defined
 
   - name: Set subcloud floating address
@@ -816,6 +833,7 @@
         'controller_1_address': "{{ controller_floating_address|ipmath(2) }}"
         'controller_pxeboot_address_0': "{{ controller_pxeboot_floating_address|ipmath(1) }}"
         'controller_pxeboot_address_1': "{{ controller_pxeboot_floating_address|ipmath(2) }}"
+        'controller_admin_floating_address': "{{ admin_start_address }}"
 
       # Make common facts available to other roles
       config_workdir: "{{ config_workdir }}"
