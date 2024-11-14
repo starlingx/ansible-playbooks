@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #   This role applies software updates (release deployment) on a
@@ -96,7 +96,7 @@
 - name: Deploy host
   shell: |
     source /etc/platform/openrc
-    software deploy host controller-0
+    software deploy host controller-0 --yes
 
 - name: Wait for deploy host
   shell: |

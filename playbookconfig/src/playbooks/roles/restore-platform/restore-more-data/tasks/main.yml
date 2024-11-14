@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -656,7 +656,7 @@
     register: ids_and_personalities
 
   - name: Delete unprovisioned hosts
-    shell: source /etc/platform/openrc; system host-delete {{ item.split(' ')[0] }}
+    shell: source /etc/platform/openrc; system host-delete {{ item.split(' ')[0] }} --yes
     loop: "{{ ids_and_personalities.stdout_lines }}"
     when: (item.split(' ')[1] | lower) == 'none'
 
@@ -764,7 +764,7 @@
       # ceph is correctly configured after a wipe. This app is automatically
       # applied by conductor when there is ceph backend configured.
       - name: Remove {{ app_name }}
-        shell: source /etc/platform/openrc; system application-remove {{ app_name }} --force
+        shell: source /etc/platform/openrc; system application-remove {{ app_name }} --force --yes
 
       - name: Delete resources that block rook-ceph remove
         shell: |

@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -243,7 +243,7 @@
   - name: Prepare removal items -- Remove loopback interface in sysinv db and associated addresses
     set_fact:
       remove_items:
-        - source /etc/platform/openrc; system host-if-delete controller-0 lo
+        - source /etc/platform/openrc; system host-if-delete controller-0 lo --yes
         - "ip addr delete {{ prev_cluster_floating_virtual }} dev lo scope host"
         - "ip addr delete {{ prev_pxe_virtual }} dev lo scope host"
         - "ip addr delete {{ prev_cluster_virtual }}  brd {{ cluster_broadcast }} dev lo:5 scope host"

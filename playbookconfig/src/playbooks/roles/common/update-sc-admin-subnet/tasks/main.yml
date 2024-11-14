@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023-2024 Wind River Systems, Inc.
+# Copyright (c) 2023-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -10,13 +10,13 @@
 
 - name: Delete previous subcloud admin network's secondary address pool
   shell: >-
-    source /etc/platform/openrc; system addrpool-delete
+    source /etc/platform/openrc; system addrpool-delete --yes
     {{ admin_addrpool_secondary }}
   when: admin_addrpool_secondary is defined
 
 - name: Delete previous subcloud admin network's primary address pool
   shell: >-
-    source /etc/platform/openrc; system addrpool-delete
+    source /etc/platform/openrc; system addrpool-delete --yes
     {{ admin_address_pool_uuid.stdout }}
   when: admin_address_pool_uuid.stdout | length > 0
 
