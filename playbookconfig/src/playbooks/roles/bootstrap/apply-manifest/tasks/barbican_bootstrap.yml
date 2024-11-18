@@ -53,8 +53,9 @@
     mode: 0600
 
 - name: Create barbican endpoints
-  script: >
-    create_barbican_endpoints.py {{ OS_USERNAME }} {{ OS_PASSWORD }} {{ barbican_password }} {{ admin_username }}
+  script: >-
+    create_barbican_endpoints.py '{{ OS_USERNAME }}' '{{ OS_PASSWORD }}'
+    '{{ barbican_password }}' '{{ admin_username }}'
   vars:
     OS_USERNAME: "{{ barbican_var_dict['keystone::roles::admin::admin_tenant'] }}"
     OS_PASSWORD: "{{ barbican_var_dict['platform::client::params::admin_password'] }}"
