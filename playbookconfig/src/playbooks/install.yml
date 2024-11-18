@@ -16,104 +16,14 @@
         boot_wait_time: "{{ boot_wait_time | default(600) }}"
         wait_for_timeout: "{{ wait_for_timeout | default(3600) }}"
         job_retry_delay: "{{ 120 | random }}"
-        operation_string: "install"
         host_to_check: "{{ ansible_host }}"
-        enroll_init: "{{ enroll_reconfigured_oam is defined }}"
 
-    - name: Set facts for enroll_init
-      set_fact:
-        # ansible_port is waited on for an open connection,
-        # set it to sysinv_api_port to ensure that endpoints have
-        # reconfigured before marking the playbook as complete.
-        ansible_port: 6385
-        operation_string: "enroll-init"
-        host_to_check: "{{ enroll_reconfigured_oam }}"
-        boot_wait_time: "{{ enroll_boot_wait_time | default(150) }}"
-        wait_for_timeout: "{{ enroll_wait_for_timeout | default(900) }}"
-      when: enroll_init
-
-    # The following block is executed locally
-    - block:
-      - name: Run rvmc script
-        script: >
-          /usr/local/bin/rvmc_install.py
-          --debug={{ rvmc_debug_level | default(0) }}
-          --subcloud_name="{{ inventory_hostname }}"
-          --config_file="{{ rvmc_config_file }}"
-        # Script return code:
-        # 0 - Success
-        # 1 - Retryable failures
-        # 2 - Non-retryable failures
-        #     (eg. Invalid credentials, Script execution timeout in 30 minutes,
-        #      Failed to terminate the previous process.)
-        # Refer to rvmc_install.py in the distributedcloud repository for details.
-        until: script_result.rc != 1
-        register: script_result
-        retries: 1
-        delay: "{{ job_retry_delay }}"
-        failed_when: false
-
-      - name: Display script output
-        debug:
-          msg: "{{ script_result.stdout }}"
-
-      # Block to isolate failure message
-      - block:
-        - name: Set credential failure flag
-          set_fact:
-            failure_msg: >-
-              Credential failure.
-              Action: Check BMC username and password in config file
-          when: '"Action: Check BMC username and password in config file" in script_result.stdout'
-
-        - name: Set output msg if BMC is unreachable.
-          set_fact:
-            failure_msg: >-
-              Ping to BMC has failed.
-              Check BMC values in install values file.
-              Ensure you can ssh into BMC using these credentials.
-              Err_code=ping_bmc
-          when: '"Action: Check BMC ip address is pingable" in script_result.stdout'
-
-        - name: Set output message if session creation fails
-          set_fact:
-            failure_msg: >-
-              Failed to connect to BMC.
-              Check BMC credentials in install values file.
-              Ensure you can ssh into BMC using these credentials.
-              Err_code=bmc_cred
-          when: '"Failed to Create session" in script_result.stdout'
-
-        - name: Set output message if the script execution times out
-          set_fact:
-            failure_msg: >-
-              BMC operations timed out.
-              Please review the script output to identify the operation
-              that is currently stuck.
-              Err_code=rvmc_timeout
-          when: '"RVMC script execution timed out" in script_result.stdout'
-
-        - name: Set output message if failed to terminate the previous RVMC process
-          set_fact:
-            failure_msg: >-
-              Failed to terminate the previous RVMC process.
-              Please review the script output to find out the previous
-              RVMC process ID.
-              Err_code=rvmc_process
-          when: '"Failed to terminate the previous process" in script_result.stdout'
-
-        - name: Fail if Redfish Virtual Media Controller returns an error
-          fail:
-            msg: |
-              Failed to {{ operation_string }} the host via Redfish Virtual Media Controller.
-              {{ failure_msg | default('The RVMC script exited with failure response or exception.') }}
-
-        when: script_result.rc != 0
-
-      delegate_to: localhost
+    - name: Run RVMC script to insert boot image and power on host
+      include_role:
+        name: common/rvmc
 
     - debug:
-        msg: "Waiting for the system to {{ operation_string }}..."
+        msg: "Waiting for the system to install..."
 
     - name: Waiting {{ wait_for_timeout }} seconds for port {{ ansible_port }} become open on {{ host_to_check }}
       local_action:
@@ -123,24 +33,7 @@
           delay={{ boot_wait_time }}
           timeout={{ wait_for_timeout }}
           state=started
-          msg="Timeout waiting for {{ host_to_check }}:{{ ansible_port }}. Err_code=wait_{{ operation_string }}"
-
-      # TODO (srana): Now that enroll-init tasks diverge from install, consider separating enroll-init
-      # from the install playbook. The RVMC script block should be made common so both install and
-      # enroll-init can use it independently.
-    - name: Wait for sysinv API to be ready on the reconfigured OAM endpoint
-      local_action:
-        module: uri
-        url: "https://{{ host_to_check }}:{{ ansible_port }}/v1/isystems/region_id"
-        method: GET
-        validate_certs: no
-      register: api_response
-      retries: 10
-      delay: 6
-      until: api_response.status == 200
-      # The caller (DCManager) will try and report an error in case of failure
-      failed_when: false
-      when: enroll_init
+          msg="Timeout waiting for {{ host_to_check }}:{{ ansible_port }}. Err_code=wait_install"
 
 - name: Run validate host playbook post install
   import_playbook: validate_host.yml
@@ -152,4 +45,3 @@
     sync_patch_metadata: true
     sync_software_metadata: true
     enforce_password_change: true
-  when: not enroll_init

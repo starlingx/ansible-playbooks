@@ -12,6 +12,10 @@
   include_role:
     name: common/check-services-status
 
+- name: Cleanup the cloud-init services
+  command: /usr/local/bin/enroll-init-cleanup
+  become: yes
+
 - name: Lock controller-0
   include_role:
     name: common/host-lock

@@ -1,0 +1,94 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#  This role handles the execution of the RVMC script, including error handling
+#  and reporting. It is primarily used for subcloud remote installation and
+#  subcloud enrollment, where an image is inserted, and the subcloud is rebooted.
+#
+
+# The following block is executed locally
+- block:
+  - name: Run rvmc script
+    script: >
+      /usr/local/bin/rvmc_install.py
+      --debug={{ rvmc_debug_level | default(0) }}
+      --subcloud_name="{{ inventory_hostname }}"
+      --config_file="{{ rvmc_config_file }}"
+      {% if eject_image_only | default(false) %}
+      --eject_image_only
+      {% endif %}
+
+    # Script return code:
+    # 0 - Success
+    # 1 - Retryable failures
+    # 2 - Non-retryable failures
+    #     (eg. Invalid credentials, Script execution timeout in 30 minutes,
+    #      Failed to terminate the previous process.)
+    # Refer to rvmc_install.py in the distributedcloud repository for details.
+    until: script_result.rc != 1
+    register: script_result
+    retries: 1
+    delay: "{{ job_retry_delay }}"
+    failed_when: false
+
+  - name: Display script output
+    debug:
+      msg: "{{ script_result.stdout }}"
+
+  # Block to isolate failure message
+  - block:
+    - name: Set credential failure flag
+      set_fact:
+        failure_msg: >-
+          Credential failure.
+          Action: Check BMC username and password in config file
+      when: '"Action: Check BMC username and password in config file" in script_result.stdout'
+
+    - name: Set output msg if BMC is unreachable.
+      set_fact:
+        failure_msg: >-
+          Ping to BMC has failed.
+          Check BMC values in install values file.
+          Ensure you can ssh into BMC using these credentials.
+          Err_code=ping_bmc
+      when: '"Action: Check BMC ip address is pingable" in script_result.stdout'
+
+    - name: Set output message if session creation fails
+      set_fact:
+        failure_msg: >-
+          Failed to connect to BMC.
+          Check BMC credentials in install values file.
+          Ensure you can ssh into BMC using these credentials.
+          Err_code=bmc_cred
+      when: '"Failed to Create session" in script_result.stdout'
+
+    - name: Set output message if the script execution times out
+      set_fact:
+        failure_msg: >-
+          BMC operations timed out.
+          Please review the script output to identify the operation
+          that is currently stuck.
+          Err_code=rvmc_timeout
+      when: '"RVMC script execution timed out" in script_result.stdout'
+
+    - name: Set output message if failed to terminate the previous RVMC process
+      set_fact:
+        failure_msg: >-
+          Failed to terminate the previous RVMC process.
+          Please review the script output to find out the previous
+          RVMC process ID.
+          Err_code=rvmc_process
+      when: '"Failed to terminate the previous process" in script_result.stdout'
+
+    - name: Fail if Redfish Virtual Media Controller returns an error
+      fail:
+        msg: |
+          Failed to {{ operation_string | default('install') }} the host via Redfish Virtual Media Controller.
+          {{ failure_msg | default('The RVMC script exited with failure response or exception.') }}
+
+    when: script_result.rc != 0
+
+  delegate_to: localhost
