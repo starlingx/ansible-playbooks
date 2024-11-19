@@ -1,0 +1,42 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   This task execute commands to update ipsec CA
+#   certificates on each host
+#
+- block:
+  - name: Set async parameter
+    set_fact:
+      async_timeout: 120
+
+  - name: Send IPsec CA certificates to host
+    command: >-
+      ansible all -i "{{ item }}," -m copy -a
+       "src={{ file.source }} dest={{ file.destination }}" -b -e
+       "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+    async: "{{ async_timeout }}"
+    loop:
+      - source: "{{ root_ca_cert.path }}"
+        destination: "/tmp/system-root-ca.crt"
+      - source: "{{ local_ca_cert.path }}"
+        destination: "/tmp/system-local-ca.crt"
+    loop_control:
+      loop_var: file
+
+  - name: Swap IPSec CA certificates
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "ipsec-swap-certificates" -b -e
+      "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+    async: "{{ async_timeout }}"
+
+  no_log: true
+  rescue:
+    - name: Fail to update ipsec CA certificates
+      set_fact:
+        failures_list: "{{ failures_list + [item] }}"

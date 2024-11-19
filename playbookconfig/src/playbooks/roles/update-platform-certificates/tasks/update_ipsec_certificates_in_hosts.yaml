@@ -13,28 +13,6 @@
     set_fact:
       async_timeout: 120
 
-  - name: Send certificates to host
-    command: >-
-      ansible all -i "{{ item }}," -m copy -a
-       "src={{ file.source }} dest={{ file.destination }}" -b -e
-       "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
-      ansible_become_pass={{ ansible_become_pass }}"
-    async: "{{ async_timeout }}"
-    loop:
-      - source: "{{ root_ca_cert.path }}"
-        destination: "/tmp/system-root-ca.crt"
-      - source: "{{ local_ca_cert.path }}"
-        destination: "/tmp/system-local-ca.crt"
-    loop_control:
-      loop_var: file
-
-  - name: Swap IPSec certificates
-    command: >-
-      ansible all -i "{{ item }}," -m command -a "ipsec-swap-certificates" -b -e
-      "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
-      ansible_become_pass={{ ansible_become_pass }}"
-    async: "{{ async_timeout }}"
-
   - name: Run ipsec-client command
     retries: 3
     command: >-

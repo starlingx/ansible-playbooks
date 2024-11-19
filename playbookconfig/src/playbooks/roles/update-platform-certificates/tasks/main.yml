@@ -207,14 +207,36 @@
           - path: "{{ local_ca_cert.path }}"
             secret: "{{ system_local_ca_cert }}"
 
-      - name: Update IPSec certificates
-        include_tasks: update_ipsec_certificates_in_hosts.yaml
+      - name: Update mtc heartbeat failure action to avoid controller reboot
+        include_role:
+          name: configure-ipsec/update_heartbeat_failure_action
+        vars:
+          action: 'alarm'
+
+      - name: Update IPSec CA certificates
+        include_tasks: update_ipsec_CA_certificates_in_hosts.yaml
         loop: "{{ ip_addrs_list_result.stdout }}"
 
-      - name: Failed to update IPSec certificates on nodes
+      - name: Show failed hosts if IPSec CA certificates update failed
         debug:
-          msg: "{{ failures_list | join('\n') }}"
+          msg: "Failed to update CA certs: {{ failures_list | join('\n') }}"
         when: 'failures_list | length > 0'
+
+      - name: Set failed flag if IPSec CA certificates update failed
+        set_fact:
+          CA_update_failed: true
+        when: 'failures_list | length > 0'
+
+      - block:
+        - name: Update IPSec certificates
+          include_tasks: update_ipsec_certificates_in_hosts.yaml
+          loop: "{{ ip_addrs_list_result.stdout }}"
+
+        - name: Show failed hosts if IPSec certificates update failed
+          debug:
+            msg: "Failed to update IPsec certs: {{ failures_list | join('\n') }}"
+          when: 'failures_list | length > 0'
+        when: CA_update_failed is undefined
 
       always:
         - name: Cleanup temporary certificate files
@@ -225,6 +247,11 @@
           loop:
             - "{{ root_ca_cert.path }}"
             - "{{ local_ca_cert.path }}"
+        - name: Restore mtc heartbeat failure action to original
+          include_role:
+            name: configure-ipsec/update_heartbeat_failure_action
+          vars:
+            action: 'fail'
       when: system_mode_result.stdout != 'simplex'
 
     - name: Signal that user provided the CA data for system-local-ca
