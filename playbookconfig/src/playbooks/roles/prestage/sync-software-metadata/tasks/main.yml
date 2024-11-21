@@ -64,7 +64,6 @@
       state: directory
       owner: sysadmin
       recurse: yes
-    become: yes
 
   - name: Copy feed directory from system controller to subcloud
     synchronize:
@@ -76,7 +75,19 @@
     retries: 3
     delay: 5
     until: prestage_transfer.rc == 0
-    become: yes
+
+  - name: Check if install_uuid file exists in {{ host_software_version }} feed directory
+    stat:
+      path: "{{ release_feed | dirname }}/rel-{{ host_software_version }}/install_uuid"
+    register: install_uuid_exists
+
+  - name: Copy install_uuid file from {{ host_software_version }} to {{ software_version }} feed directory
+    copy:
+      src: "{{ release_feed | dirname }}/rel-{{ host_software_version }}/install_uuid"
+      dest: "{{ release_feed }}/install_uuid"
+      force: true
+      remote_src: yes
+    when: install_uuid_exists.stat.exists
 
   always:
     - name: Restore the ownership of the feed directory {{ release_feed }}
@@ -85,7 +96,7 @@
         state: directory
         owner: root
         recurse: yes
-      become: yes
+  become: true
   when: force_ostree_dir_sync
 
 - name: Gather system controller ostree commit
@@ -241,38 +252,36 @@
     debug:
       var: subcloud_software_metadata_commits
 
-  # It's necessary to temporarily change the owner to sysadmin so that
-  # the system controller can push the files to the subcloud, since the files
-  # are in the folders only the root can access but the synchronize only
-  # support passwordless sysadmin to execute ssh and rsync.
-  - name: Temporarily change the ownership of {{ usm_software_dir }}
-    file:
-      path: "{{ usm_software_dir }}"
-      state: directory
-      owner: sysadmin
-      recurse: yes
-    become: yes
+  - block:
+    # It's necessary to temporarily change the owner to sysadmin so that
+    # the system controller can push the files to the subcloud, since the files
+    # are in the folders only the root can access but the synchronize only
+    # support passwordless sysadmin to execute ssh and rsync.
+    - name: Temporarily change the ownership of {{ usm_software_dir }}
+      file:
+        path: "{{ usm_software_dir }}"
+        state: directory
+        owner: sysadmin
+        recurse: yes
 
-  - name: Copy system controller {{ usm_metadata_dir }} to subcloud {{ tmp_metadata_sync_dir }}
-    copy:
-      src: "{{ usm_metadata_dir }}"
-      dest: "{{ tmp_metadata_sync_dir }}"
-      force: true
-    become: yes
+    - name: Copy system controller {{ usm_metadata_dir }} to subcloud {{ tmp_metadata_sync_dir }}
+      copy:
+        src: "{{ usm_metadata_dir }}"
+        dest: "{{ tmp_metadata_sync_dir }}"
+        force: true
 
-  - name: Copy system controller {{ ostree_metadata_commits_central }} to subcloud {{ tmp_metadata_sync_dir }}
-    copy:
-      src: "{{ ostree_metadata_commits_central }}"
-      dest: "{{ tmp_metadata_sync_dir }}"
-      force: true
-    become: yes
+    - name: Copy system controller {{ ostree_metadata_commits_central }} to subcloud {{ tmp_metadata_sync_dir }}
+      copy:
+        src: "{{ ostree_metadata_commits_central }}"
+        dest: "{{ tmp_metadata_sync_dir }}"
+        force: true
 
-  # Switch from command to script module to run the ostree-metadata-sync.sh script
-  # on the system controller as it does not exist on N-1 release e.g. 22.12
-  - name: Synchronizing system controller ostree commits on subcloud
-    script: "{{ role_path }}/files/ostree-metadata-sync.sh --sw-version {{ software_version }}
-            sync-subcloud"
-    register: sync_software_commits
+    # Switch from command to script module to run the ostree-metadata-sync.sh script
+    # on the system controller as it does not exist on N-1 release e.g. 22.12
+    - name: Synchronizing system controller ostree commits on subcloud
+      script: "{{ role_path }}/files/ostree-metadata-sync.sh --sw-version {{ software_version }}
+              sync-subcloud"
+      register: sync_software_commits
     become: true
 
   - name: Show sync output
@@ -299,26 +308,24 @@
     failed_when: false
 
   always:
-    - name: Restore the ownership of {{ usm_software_dir }}
-      file:
-        path: "{{ usm_software_dir }}"
-        state: directory
-        owner: root
-        recurse: yes
-      become: yes
+    - block:
+      - name: Restore the ownership of {{ usm_software_dir }}
+        file:
+          path: "{{ usm_software_dir }}"
+          state: directory
+          owner: root
+          recurse: yes
 
-    - name: Restore the ownership of {{ tmp_metadata_sync_dir }}
-      file:
-        path: "{{ tmp_metadata_sync_dir }}"
-        state: directory
-        owner: sysadmin
-        recurse: yes
-      become: yes
+      - name: Restore the ownership of {{ tmp_metadata_sync_dir }}
+        file:
+          path: "{{ tmp_metadata_sync_dir }}"
+          state: directory
+          owner: sysadmin
+          recurse: yes
 
-    - name: Synchronize software between controllers
-      command: "{{ usm_scripts_dir }}/controllers-software-sync"
-      become: true
+      - name: Synchronize software between controllers
+        command: "{{ usm_scripts_dir }}/controllers-software-sync"
 
-    - name: Synchronize {{ release_feed }} directory between controllers
-      command: "{{ usm_scripts_dir }}/sync-controllers-feed --feed={{ release_feed }}"
+      - name: Synchronize {{ release_feed }} directory between controllers
+        command: "{{ usm_scripts_dir }}/sync-controllers-feed --feed={{ release_feed }}"
       become: true
