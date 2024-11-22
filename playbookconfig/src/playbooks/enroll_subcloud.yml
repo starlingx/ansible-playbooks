@@ -37,5 +37,6 @@
     - role: rehome-enroll-common/update-keystone-data
       become: yes
     - rehome-enroll-common/persist-configuration
-    - common/update-sc-admin-endpoints
+    - role: common/update-sc-admin-endpoints
+      when: admin_floating_address is defined
     - enroll-subcloud/complete-enrollment

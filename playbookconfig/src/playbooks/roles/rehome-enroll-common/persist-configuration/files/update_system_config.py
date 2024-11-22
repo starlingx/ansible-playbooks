@@ -11,6 +11,7 @@ import configparser
 import os
 import subprocess
 import sys
+import time
 
 from barbicanclient import client as barbican_client
 from cgtsclient import client as cgts_client
@@ -19,6 +20,7 @@ from keystoneclient.auth.identity import v3
 from keystoneclient import session
 from netaddr import IPNetwork
 from sysinv.common import constants as sysinv_constants
+from tsconfig.tsconfig import MGMT_NETWORK_RECONFIGURATION_ONGOING
 
 
 # Configuration parser setup
@@ -37,6 +39,17 @@ RECONFIGURE_SERVICE = False
 def print_with_timestamp(*args, **kwargs):
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     print(f"[{current_time}]", *args, **kwargs)
+
+
+def wait_for_file(file_path, timeout=300, interval=5):
+    start_time = time.time()
+    while not os.path.exists(file_path):
+        elapsed_time = time.time() - start_time
+        if elapsed_time > timeout:
+            raise ValueError(f"Timeout reached: {file_path} does not exist.")
+        print_with_timestamp(f"Waiting for {file_path}...")
+        time.sleep(interval)
+    print_with_timestamp(f"File found: {file_path}")
 
 
 # CgtsClient class to handle API interactions
@@ -549,6 +562,8 @@ def update_admin_network(client, section_name):
     if not has_admin_network(section_name):
         return
 
+    delete_network_and_addrpool(client, 'admin', section_name)
+
     admin_subnet = IPNetwork(CONF.get(section_name, "ADMIN_SUBNET"))
     admin_start_address = CONF.get(section_name, "ADMIN_START_ADDRESS")
     admin_end_address = CONF.get(section_name, "ADMIN_END_ADDRESS")
@@ -618,6 +633,95 @@ def update_admin_network_secondary(client, section_name):
 
     print_with_timestamp(f"Creating network_addrpool with {network_addrpool_data}...")
     client.sysinv.network_addrpool.assign(**network_addrpool_data)
+
+
+def precheck_update_management_network(client, section_name):
+    # skip update management network if not simplex
+    system_mode = CONF.get(section_name, 'SYSTEM_MODE')
+    if system_mode != sysinv_constants.SYSTEM_MODE_SIMPLEX:
+        print_with_timestamp(
+            f"Ignore management network update in {system_mode}",
+        )
+        return False
+
+    # skip update management network if admin network configured
+    try:
+        admin_network = get_network(client, sysinv_constants.NETWORK_TYPE_ADMIN)
+        if admin_network:
+            print_with_timestamp(
+                f"Admin network: {admin_network.uuid} discovered, ignore management "
+                "network update.",
+            )
+        return False
+    except ValueError:
+        # admin network is expected to be not configured if need to update
+        # management network
+        pass
+
+    return True
+
+
+# TODO(yuxing): improve the following method if dual stack reconfiguration on the
+# management network is verified
+def update_management_network(client, section_name):
+
+    if not precheck_update_management_network(client, section_name):
+        return
+
+    management_subnet = IPNetwork(CONF.get(section_name, "MANAGEMENT_SUBNET"))
+    ip_family = get_version_text(management_subnet)
+
+    existing_network = get_network(client, sysinv_constants.NETWORK_TYPE_MGMT)
+    primary_ip_family = existing_network.primary_pool_family
+    if primary_ip_family.lower() != ip_family:
+        print_with_timestamp(
+            f"Primary IP family of management network: {primary_ip_family}, "
+            f"can not be updated to {ip_family}."
+        )
+        sys.exit(1)
+
+    subcloud_gateway = CONF.get(section_name, "MANAGEMENT_GATEWAY_ADDRESS")
+    if subcloud_gateway == 'undef':
+        print_with_timestamp(
+            "Management gateway address required to update management network, "
+            "please add it to the bootstrap values and try again."
+        )
+        sys.exit(1)
+
+    pool_id = existing_network.pool_uuid
+
+    values = {
+        'network': str(management_subnet.network),
+        'prefix': str(management_subnet.prefixlen),
+        'ranges': [(
+            CONF.get(section_name, "MANAGEMENT_START_ADDRESS"),
+            CONF.get(section_name, "MANAGEMENT_END_ADDRESS"),
+            )],
+        'gateway_address': subcloud_gateway,
+        'floating_address': CONF.get(section_name, "MANAGEMENT_FLOATING_ADDRESS"),
+        'controller0_address': CONF.get(section_name, "MANAGEMENT_CONTROLLER0_ADDRESS"),
+        'controller1_address': CONF.get(section_name, "MANAGEMENT_CONTROLLER1_ADDRESS"),
+        }
+    if is_equal_with_existing_pool(client, values, pool_id):
+        print_with_timestamp(
+            f"Management network addrpool {pool_id} is up-to-date.")
+        return
+
+    patch = []
+    for (k, v) in values.items():
+        patch.append({'op': 'replace', 'path': '/' + k, 'value': v})
+    try:
+        client.sysinv.address_pool.update(pool_id, patch)
+        # Wait for flag to block the dnsmasq runtime manifest triggered by
+        # system controller network update
+        wait_for_file(MGMT_NETWORK_RECONFIGURATION_ONGOING)
+        print_with_timestamp(
+            f"Management network addrpool {pool_id} is updated.")
+    except Exception as e:
+        print_with_timestamp(f"Failed to update management network: {e}")
+        sys.exit(1)
+
+    return
 
 
 def is_equal_with_existing_pool(client, pool_values, pool_uuid):
@@ -752,9 +856,9 @@ def main():
     # Primary OAM has been updated by cloud-init, secondary oam has been
     # procastinated until now.
     update_oam_network_secondary(client, section_name)
+    update_management_network(client, section_name)
     populate_service_parameter_config(client, section_name)
     update_system_controller_subnets(client, section_name)
-    delete_network_and_addrpool(client, 'admin', section_name)
     update_admin_network(client, section_name)
     edit_dc_role_to_subcloud(client)
 

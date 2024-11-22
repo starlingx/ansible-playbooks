@@ -57,9 +57,20 @@ GHCR_REGISTRY_PASSWORD={{ ghcr_registry.password | default('none') }}
 REGISTRYK8S_REGISTRY_PASSWORD={{ registryk8s_registry.password | default('none') }}
 ICR_REGISTRY_PASSWORD={{ icr_registry.password | default('none') }}
 
-ADMIN_SUBNET={{ address_pairs['admin']['subnet'] | default('undef') }}
-ADMIN_START_ADDRESS={{ address_pairs['admin']['start'] | default('undef') }}
-ADMIN_END_ADDRESS={{ address_pairs['admin']['end'] | default('undef') }}
+MANAGEMENT_SUBNET={{ management_pairs['management']['subnet'] | default('undef') }}
+MANAGEMENT_START_ADDRESS={{ management_pairs['management']['start'] | default('undef') }}
+MANAGEMENT_END_ADDRESS={{ management_pairs['management']['end'] | default('undef') }}
+MANAGEMENT_FLOATING_ADDRESS={{ controller_floating_address| default('undef') }}
+MANAGEMENT_CONTROLLER0_ADDRESS={{ derived_network_params.controller_0_address | default('undef')}}
+MANAGEMENT_CONTROLLER1_ADDRESS={{ derived_network_params.controller_1_address | default('undef')}}
+MANAGEMENT_GATEWAY_ADDRESS={{ network_params.management_gateway_address_primary
+                              if (network_params.management_gateway_address_primary is defined
+                                 and network_params.management_gateway_address_primary)
+                              else 'undef' }}
+
+ADMIN_SUBNET={{ admin_pairs['admin']['subnet'] | default('undef') }}
+ADMIN_START_ADDRESS={{ admin_pairs['admin']['start'] | default('undef') }}
+ADMIN_END_ADDRESS={{ admin_pairs['admin']['end'] | default('undef') }}
 ADMIN_GATEWAY_ADDRESS={{ network_params.admin_gateway_address_primary
                         if (network_params.admin_gateway_address_primary is defined
                             and network_params.admin_gateway_address_primary)

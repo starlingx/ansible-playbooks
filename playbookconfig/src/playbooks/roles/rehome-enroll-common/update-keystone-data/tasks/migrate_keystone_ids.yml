@@ -48,7 +48,9 @@
   no_log: true
 
 - name: Flush memcached
-  shell: echo flush_all > /dev/tcp/{{ derived_network_params.controller_0_address }}/11211
+  shell: |
+    controller_0_address=$(awk '/controller-0$/ {print $1}' /etc/hosts)
+    echo flush_all > /dev/tcp/$controller_0_address/11211
 
 - name: Restart keystone service
   import_role:
