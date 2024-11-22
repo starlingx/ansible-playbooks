@@ -148,7 +148,7 @@
     when: keystone_bootstrap.rc != 0
 
   - name: Configure keystone services, roles and users
-    script: configure_keystone.py {{ OS_USERNAME }} {{ OS_PASSWORD }}
+    script: configure_keystone.py '{{ OS_USERNAME }}' '{{ OS_PASSWORD }}'
     no_log: true
     register: keystone_configuration
     failed_when: false
