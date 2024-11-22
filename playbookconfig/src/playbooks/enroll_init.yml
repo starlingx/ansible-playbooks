@@ -1,0 +1,73 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#  This playbook executes the enroll-init stage of subcloud enrollment,
+#  using cloud-init on the target system and rvmc to insert a seed image.
+#  Overall, this triggers OAM network and password updates required for subsequent
+#  enrollment stages.
+#
+
+- name: Enroll Init Playbook
+  hosts: all
+  gather_facts: false
+  become: no
+
+  tasks:
+    - set_fact:
+        sysinv_port: "{{ sysinv_port | default(6385) }}"
+        boot_wait_time: "{{ enroll_boot_wait_time | default(150) }}"
+        wait_for_timeout: "{{ enroll_wait_for_timeout | default(900) }}"
+        job_retry_delay: "{{ 120 | random }}"
+        protocol: "{{ protocol | default('https') }}"
+        operation_string: "enroll-init"
+
+    - name: Run RVMC script to insert seed image and power on host
+      include_role:
+        name: common/rvmc
+
+    - debug:
+        msg: "Waiting for the system to enroll init..."
+
+    # Wait for the sysinv API to open, ensuring that endpoints
+    # are reconfigured with the new address.
+    - name: Waiting {{ wait_for_timeout }} seconds for port {{ sysinv_port }} become open on {{ enroll_reconfigured_oam }}
+      local_action:
+        module: wait_for
+          port={{ sysinv_port }}
+          host={{ enroll_reconfigured_oam }}
+          delay={{ boot_wait_time }}
+          timeout={{ wait_for_timeout }}
+          state=started
+          msg="Timeout waiting for {{ enroll_reconfigured_oam }}:{{ sysinv_port }}. Err_code=wait_enroll_init"
+
+    # The seed ISO must be ejected to prevent it from being reapplied on reboot.
+    # This is necessary because cloud-config is set to run always and cloud-init services
+    # remain enabled until enrollment is complete (allowing for the possibility
+    # of re-running enroll-init if needed)
+    - name: Run RVMC script to eject image
+      include_role:
+        name: common/rvmc
+      vars:
+        eject_image_only: true
+
+    # During the OAM update, several async operations may trigger one another.
+    # Although the endpoints are reconfigured by now, the API and certs may not
+    # be fully updated. A simple curl request can be used to verify both, specifically
+    # checking the region_id API, which will be needed shortly after this playbook completes.
+    - name: Wait for the sysinv API to be ready and for certs to be updated for the reconfigured OAM endpoint
+      shell: |
+        curl -s -o /dev/null -w '%{http_code}' \
+        {{ protocol }}://{{ enroll_reconfigured_oam }}:{{ sysinv_port }}/v1/isystems/region_id
+      register: api_response
+      retries: 30
+      delay: 20
+      until: api_response.stdout == "200"
+      delegate_to: localhost
+      args:
+        # Disable warning that suggests using the get_url and uri module:
+        # - get_url is unnecessary as we're not actually downloading.
+        # - uri module doesn't seem to work for our cert update check
+        warn: false
