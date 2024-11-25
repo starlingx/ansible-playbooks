@@ -124,14 +124,13 @@
     when: deleted_metadata_files.results | map(attribute='stdout_lines')
           | flatten | length > 0
 
-  # Restart the patch controller and agent to pickup the changes
-  - name: Restart the patch controller and agent
+  # Restart the patch controller to pickup the changes
+  - name: Restart the patch controller
     systemd:
       name: "{{ item }}"
       state: restarted
     with_items:
       - sw-patch-controller-daemon
-      - sw-patch-agent
     become: yes
 
   when: patch_sync_required
