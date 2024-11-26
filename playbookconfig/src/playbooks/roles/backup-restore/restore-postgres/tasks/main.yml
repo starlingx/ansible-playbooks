@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2024 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -40,7 +40,10 @@
         certificate where certtype='ssl_ca') to
         '/tmp/db.csv' with delimiter ';'"
     become_user: postgres
-    when: ssl_ca_certificate_file is defined and ssl_ca_certificate_file is not none
+    when:
+      - ssl_ca_certificate_file is defined
+      - ssl_ca_certificate_file is not none
+      - restore_mode|default(none) != 'optimized'
 
   - name: Determine which postgresql database files exist
     stat:
@@ -60,6 +63,39 @@
     become_user: postgres
     with_items: "{{ pgfiles.results }}"
     when: item.stat.exists
+
+  - name: Remove expired ssl_ca certs on the system
+    block:
+    - name: Remove expired ssl_ca certs in db
+      block:
+      - name: Read expired ssl_ca certificates from db
+        command: >-
+          psql -d sysinv -c
+          "SELECT signature FROM certificate
+          where certtype='ssl_ca' and expiry_date < NOW();"
+        register: invalid_certs
+
+      - name: Delete expired ssl_ca certificates in db
+        command: >-
+          psql -d sysinv -c
+          "DELETE FROM certificate
+          where certtype='ssl_ca' and expiry_date < NOW();"
+
+      - name: Restore system table row count
+        command: >-
+          psql -d sysinv -c
+          "ALTER SEQUENCE certificate_id_seq
+          RESTART WITH 1;
+          UPDATE certificate SET id=nextval('certificate_id_seq');"
+      become_user: postgres
+
+    - name: Remove ssl_ca certs in config dir
+      file:
+        path: "/opt/platform/config/{{ software_version }}/ssl_ca/{{ item }}"
+        state: absent
+      with_items: "{{ invalid_certs.stdout | regex_findall('ssl_ca_[0-9]+') }}"
+      become: yes
+    when: restore_mode|default(none) == 'optimized'
 
   - name: Update ssl_ca certificates in sysinv database
     block:
@@ -99,7 +135,10 @@
         path: "/tmp/db.csv"
         state: absent
     become_user: postgres
-    when: ssl_ca_certificate_file is defined and ssl_ca_certificate_file is not none
+    when:
+      - ssl_ca_certificate_file is defined
+      - ssl_ca_certificate_file is not none
+      - restore_mode|default(none) != 'optimized'
 
   - name: Clear mgmt_ipsec flags from other nodes
     script: roles/common/files/clear-mgmt-ipsec-flag.py -r

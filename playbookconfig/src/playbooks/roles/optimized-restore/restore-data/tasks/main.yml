@@ -14,6 +14,13 @@
 - name: Restore LDAP
   import_role: name=backup-restore/restore-ldap
 
+- name: Install ssl_ca from ssl_ca_cerficate_file
+  include_tasks: install_ssl_ca.yml
+  when:
+    - ssl_ca_certificate_file is defined
+    - ssl_ca_certificate_file is not none
+    - restore_mode|default(none) == 'optimized'
+
 - name: Restore docker and docker-registry
   import_tasks: restore-docker.yml
 

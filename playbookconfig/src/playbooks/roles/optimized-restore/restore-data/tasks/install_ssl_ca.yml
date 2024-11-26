@@ -1,0 +1,39 @@
+---
+#
+# Copyright (c) 2022-2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   This sub-task is to install ssl_ca certificates during optimized restore
+#   when ssl_ca_certificate_file option is used
+
+- name: Install ssl_ca certificate defined in ssl_ca_certificate
+  shell: >-
+    source /etc/platform/openrc &&
+    system ca-certificate-install "{{ ssl_ca_cert }}"
+  register: install_cert_output
+  until: install_cert_output is not failed
+  retries: 3
+  delay: 15
+
+- name: Register if a new certificate was installed
+  set_fact:
+    cert_installed: "{{ true if (install_cert_output is search('uuid') and
+                                    install_cert_output is search('certtype') and
+                                    install_cert_output is search('signature') and
+                                    install_cert_output is search('start_date') and
+                                    install_cert_output is search('expiry_date') and
+                                    install_cert_output is search('subject'))
+                            else false }}"
+
+- name: Pass if atleast one certificate is installed
+  debug:
+    msg: "{{ install_cert_output.stdout }}"
+  when: cert_installed
+
+- name: Fail if not one certificate is installed
+  fail:
+    msg: "Failed to install ssl_ca_certificate_file.
+          {{ install_cert_output.stdout }}"
+  when: not cert_installed
