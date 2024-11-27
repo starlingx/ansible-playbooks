@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -18,6 +18,8 @@
     should_use_old_image_backup: "{{ backup_user_images|bool == true }}"
     include_hc_vault: "{{ backup_hc_vault | bool }}"
     omit_hc_vault: false
+    include_openbao: "{{ backup_openbao | bool }}"
+    omit_openbao: false
 
 # The feature is enabled by backup_encryption_enabled variable.
 # The backup tarballs are included in the feature by
@@ -45,6 +47,11 @@
     set_fact:
       hc_vault_tarball_encrypted: true
     when: '"hc_vault" in backup_encyption_include'
+
+  - name: Set Openbao tar encryption enabled
+    set_fact:
+      openbao_tarball_encrypted: true
+    when: '"openbao" in backup_encyption_include'
   when: backup_encryption_enabled|bool
 
 - name: Do StarlingX backup
@@ -148,6 +155,61 @@
         when: vault_system_health.rc != 0
       when: include_hc_vault | bool
 
+    - name: Check openbao status
+      block:
+      - name: Check if openbao is applied
+        shell: |
+          source /etc/platform/openrc
+          system application-show openbao --format value --column status
+        register: openbao_applied_exists
+
+      - name: Omit openbao if status is empty or uploaded
+        set_fact:
+          include_openbao: false
+          omit_openbao: true
+        when: >-
+          openbao_applied_exists.stdout | length == 0 or
+          openbao_applied_exists.stdout == "uploaded"
+
+      - name: Fail openbao if status is not applied
+        fail:
+          msg: "Openbao application is {{ openbao_applied_exists.stdout }}, not applied."
+        when: openbao_applied_exists.stdout != "applied"
+      when: include_openbao | bool
+
+    - name: Indicate if openbao is omitted from status check
+      debug:
+        msg: "Openbao backup will be omitted because openbao application is not applied."
+      when: omit_openbao | bool
+
+    - name: Openbao precheck
+      block:
+      - name: Find openbao manager pod
+        shell: >-
+          kubectl get pods -n openbao | grep "openbao-manager" | cut -d " " -f 1
+        register: openbao_manager_pod_name
+        environment:
+          KUBECONFIG: /etc/kubernetes/admin.conf
+
+      - name: Fail if openbao manager pod is not found
+        fail:
+          msg: "Openbao manager pod is not found"
+        when: openbao_manager_pod_name.stdout | length == 0
+
+      - name: Check openbao system health
+        shell: >-
+          kubectl exec -n "openbao" "{{ openbao_manager_pod_name.stdout }}" --
+          bash -c "source /opt/script/init.sh; snapshotPreCheck" 2>&1
+        register: openbao_system_health
+        environment:
+          KUBECONFIG: /etc/kubernetes/admin.conf
+
+      - name: Fail if openbao health check returns error
+        fail:
+          msg: "Openbao system health check returned error"
+        when: openbao_system_health.rc != 0
+      when: include_openbao | bool
+
     - name: Send application lifecycle notifications for pre-backup semantic check
       command: /usr/bin/sysinv-utils notify backup-semantic-check
       register: backup_semantic_check_notification_result
@@ -233,6 +295,13 @@
         state: directory
       register: hc_vault_dir
       when: include_hc_vault | bool
+
+    - name: Create openbao temp dir
+      file:
+        path: "{{ tempdir.path }}/openbao_dir"
+        state: directory
+      register: openbao_dir
+      when: include_openbao | bool
 
     - name: Backup roles, table spaces and schemas for databases.
       shell: >-
@@ -649,6 +718,33 @@
         when: hc_vault_backup_result.matched != 2
       when: include_hc_vault | bool
 
+    # Openbao snapshot should be taken before the backup of etcd database.
+    # A k8s secret is created that is associated with the snapshot.
+    - name: Run Openbao backup
+      block:
+      - name: Include openbao backup role
+        include_role:
+          name: openbao/openbao_backup
+        vars:
+          openbao_backup_dir: "{{ openbao_dir.path }}"
+          openbao_encrypt: "{{ openbao_tarball_encrypted|bool }}"
+          encrypt_openbao_secret: "{{ backup_encryption_passphrase }}"
+          op_mode: "platform"
+
+      - name: Find result files
+        find:
+          paths: "{{ openbao_dir.path }}"
+          patterns: "openbao-snapshot-*.tar*"
+        register: openbao_backup_result
+
+      - name: Fail if incorrect number of file created from openbao backup
+        fail:
+          msg: >
+            There was an error with the openbao backup process.
+            Incorrect number of files produced.
+        when: openbao_backup_result.matched != 2
+      when: include_openbao | bool
+
     - name: Create etcd snapshot temp dir
       file:
         path: "{{ tempdir.path }}/etcd-snapshot"
@@ -741,6 +837,7 @@
         openstack_backup_file: "{{ openstack_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
         dc_vault_backup_file: "{{ dc_vault_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
         hc_vault_backup_file: "{{ hc_vault_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
+        openbao_backup_file: "{{ openbao_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
 
     - name: Set backup files absolute path
       set_fact:
@@ -749,6 +846,7 @@
         openstack_backup_file_path: "{{ backup_dir }}/{{ openstack_backup_file }}"
         dc_vault_backup_file_path: "{{ backup_dir }}/{{ dc_vault_backup_file }}"
         hc_vault_backup_file_path: "{{ backup_dir }}/{{ hc_vault_backup_file }}"
+        openbao_backup_file_path: "{{ backup_dir }}/{{ openbao_backup_file }}"
 
     - name: Save user uploaded images from local registry to an archive
       include_tasks: export-user-local-registry-images.yml
@@ -866,6 +964,24 @@
       failed_when: tar_cmd.rc >= 2 or tar_cmd.rc < 0
       when: include_hc_vault | bool
 
+    - name: Create a tgz archive for openbao backup
+      shell: >-
+        tar
+        --use-compress-program={{ compress_program }}
+        --exclude {{ exclude_targets | map('regex_replace', '^/', '')
+        | list | join(' --exclude ') }}
+        -cf {{ openbao_backup_file_path }}
+        $(ls -d
+        {{ openbao_dir.path }}
+        2> /dev/null)
+      args:
+        warn: false
+      # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it", which
+      # makes tar return 1
+      register: tar_cmd
+      failed_when: tar_cmd.rc >= 2 or tar_cmd.rc < 0
+      when: include_openbao | bool
+
     - name: Set default backup files absolute path
       set_fact:
         platform_backup_file_path_final: "{{ platform_backup_file_path }}"
@@ -922,6 +1038,14 @@
           dest: "{{ host_backup_dir }}/"
           flat: yes
         when: include_hc_vault | bool
+        no_log: true
+
+      - name: Transfer for openbao backup tar files to the local machine if it exists
+        fetch:
+          src: "{{ openbao_backup_file_path }}"
+          dest: "{{ host_backup_dir }}/"
+          flat: yes
+        when: include_openbao | bool
         no_log: true
 
       # TODO transfer docker image archive which may be very big during remote play.

@@ -70,16 +70,18 @@ backup_encryption_enabled: false
 backup_encryption_passphrase: ""
 
 # A list of identifiers indicating which backup files to encrypt:
-#   [platform, openstack, user_images, dc_vault, registry, hc_vault]
+#   [platform, openstack, user_images, dc_vault, registry, hc_vault, openbao]
 backup_encyption_include:
   - platform
   - hc_vault
+  - openbao
 
 # Internal boolean variables for encryption to simplify logic.  These
 # will be adjusted later when the overriden parameters above are
 # considered.
 platform_tarball_encrypted: false
 hc_vault_tarball_encrypted: false
+openbao_tarball_encrypted: false
 
 # The platform backup tarball will be named in this format:
 # <platform_backup_filename_prefix>_<timestamp>.tgz
@@ -126,9 +128,21 @@ dc_vault_backup_filename_prefix: "{{ inventory_hostname }}_dc_vault_backup"
 backup_hc_vault: false
 
 # The hashicorp vault backup tarball will be named in this format:
-# <dc_vault_backup_filename_prefix>_<timestamp>.tgz
+# <hc_vault_backup_filename_prefix>_<timestamp>.tgz
 #
 hc_vault_backup_filename_prefix: "{{ inventory_hostname }}_hc_vault_backup"
+
+# This is the default value for including openbao into the platform backup process.
+# This value can be overridden by the user when calling for platform backup playbook,
+# to include or not include the openbao backup.
+# If the openbao application is either uploaded only or non-existent,
+# the backup process will be omitted regardless of what this value is.
+backup_openbao: false
+
+# The openbao backup tarball will be named in this format:
+# <openbao_backup_filename_prefix>_<timestamp>.tgz
+#
+openbao_backup_filename_prefix: "{{ inventory_hostname }}_openbao_backup"
 
 restore_cinder_glance_data: false
 

@@ -1,0 +1,66 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Unpackage the backup tarball
+  command: >-
+    tar --use-compress-program=pigz -C {{ openbao_backup_dir }} -xpf {{ backup_filepath }}
+    --wildcards --transform='s,.*/,,'
+  args:
+    warn: false
+  become: yes
+
+- name: Find the snapshot file
+  command: >-
+    find {{ openbao_backup_dir }} -name "openbao-snapshot-*.tar"
+  register: backup_snapshot_file
+  become: yes
+
+- name: Fail if snapshot file was not found
+  fail:
+    msg: "Backup snapshot was not found in {{ backup_filepath }}"
+  when: backup_snapshot_file.stdout | length == 0
+
+- name: Change snapshot file permissions
+  file:
+    path: "{{ backup_snapshot_file.stdout }}"
+    mode: 0755
+  become: yes
+
+- name: Find openbao manager pod
+  shell: >-
+    kubectl get pods -n openbao | grep "openbao-manager" | cut -d " " -f 1
+  register: openbao_manager_pod_name
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+# call openbao_restore.sh
+- name: Restore openbao from the snapshot
+  block:
+    - name: Restore openbao snapshot with default encryption
+      script: openbao_restore.sh {{ backup_snapshot_file.stdout }}
+      when: not openbao_encrypt
+      register: openbao_restore_script
+      failed_when: openbao_restore_script.rc != 0
+
+    - name: Restore openbao snapshot with custom encryption
+      script: openbao_restore.sh {{ backup_snapshot_file.stdout }} '--decrypt' "custom_var"
+      when: openbao_encrypt
+      register: openbao_restore_script
+      failed_when: openbao_restore_script.rc != 0
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+    custom_var: "{{ encrypt_openbao_secret }}"
+  always:
+    - name: Unpause openbao manager
+      shell: >-
+        kubectl exec -n "openbao" "{{ openbao_manager_pod_name.stdout }}" --
+        bash -c "source /opt/script/init.sh; if [ -f $PAUSEFILE ]; then rm -f $PAUSEFILE; fi" 2>&1
+    - name: Clean up openbao subdir
+      file:
+        path: "{{ openbao_backup_dir }}"
+        state: absent
+      become: yes

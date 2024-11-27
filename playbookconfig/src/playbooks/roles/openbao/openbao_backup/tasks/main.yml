@@ -1,0 +1,114 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Check openbao system health
+  shell: >-
+    kubectl exec -n "openbao" "{{ openbao_manager_pod_name.stdout }}" --
+    bash -c "source /opt/script/init.sh; snapshotPreCheck" 2>&1
+  register: openbao_system_health
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  failed_when: openbao_system_health.rc != 0
+
+- name: Create openbao snapshot
+  block:
+    - name: Create openbao snapshot with default encryption
+      script: openbao_snapshot.sh {{ openbao_backup_dir }}
+      when: not openbao_encrypt
+      register: openbao_snapshot_script
+      failed_when: openbao_snapshot_script.rc != 0
+
+    - name: Create openbao snapshot with custom encryption
+      script: openbao_snapshot.sh {{ openbao_backup_dir }} '--encrypt' "custom_var"
+      when: openbao_encrypt
+      register: openbao_snapshot_script
+      failed_when: openbao_snapshot_script.rc != 0
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+    custom_var: "{{ encrypt_openbao_secret }}"
+  always:
+    - name: Unpause openbao manager
+      shell: >-
+        kubectl exec -n "openbao" "{{ openbao_manager_pod_name.stdout }}" --
+        bash -c "source /opt/script/init.sh; if [ -f $PAUSEFILE ]; then rm -f $PAUSEFILE; fi" 2>&1
+  rescue:
+    - name: Clean up openbao subdir if in standalone mode
+      file:
+        path: "{{ openbao_backup_dir }}"
+        state: absent
+      when: op_mode == "standalone"
+
+
+- name: Package openbao if running in standalone mode
+  block:
+  - name: Check if pigz package is installed
+    block:
+
+      - name: Issue command to pkg manager
+        command: "{{ 'rpm -q' if os_release == 'centos' else 'dpkg -l' }} pigz"
+        args:
+          warn: false
+        failed_when: false
+        register: check
+
+      - set_fact:
+          pigz_check: "{{ 'succeeded' if check.rc == 0 else 'failed' }}"
+
+    when: os_release in ["centos", "debian"]
+
+  - name: Check if pigz package is installed
+    package:
+      name: pigz
+      state: present
+    check_mode: true
+    register: pigz_check
+    when: os_release not in ["centos", "debian"]
+
+  - name: Check number of platform cores
+    shell: |
+      source /etc/platform/openrc
+      system host-cpu-list $(hostname) --nowrap | grep " Platform " | wc -l
+    register: num_platform_cores
+
+  - name: Set compress program for backup tarball
+    set_fact:
+      compress_program: >-
+        "{{ 'pigz' if num_platform_cores.stdout | int >= 4 and
+        pigz_check is succeeded else 'gzip' }}"
+
+  - name: Use current timestamp as backups timestamp
+    set_fact:
+      backup_timestamp: "{{ lookup('pipe', 'date +%Y_%m_%d_%H_%M_%S') }}"
+
+  - name: Attach timestamp to backups filename
+    set_fact:
+      openbao_backup_file: "{{ openbao_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
+
+  - name: Set backup files absolute path
+    set_fact:
+      openbao_backup_file_path: "{{ initial_backup_dir }}/{{ openbao_backup_file }}"
+
+  - name: Create a tgz archive for Hashicorp openbao backup
+    shell: >-
+      tar
+      --use-compress-program={{ compress_program }}
+      -cf {{ openbao_backup_file_path }}
+      $(ls -d
+      {{ openbao_backup_dir }}
+      2> /dev/null)
+    args:
+      warn: false
+    # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it", which
+    # makes tar return 1
+    register: tar_cmd
+    failed_when: tar_cmd.rc >= 2 or tar_cmd.rc < 0
+
+  - name: Cleanup openbao subdir
+    file:
+      path: "{{ openbao_backup_dir }}"
+      state: absent
+  when: op_mode == "standalone"
