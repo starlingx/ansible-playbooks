@@ -68,6 +68,7 @@
       external_oam_node_1_address: "{{ external_oam_node_1_address }}"
       external_oam_floating_address: "{{ external_oam_floating_address }}"
       management_start_address: "{{ management_start_address }}"
+      management_end_address: "{{ management_end_address }}"
       admin_start_address: "{{ admin_start_address }}"
       admin_end_address: "{{ admin_end_address }}"
       cluster_service_start_address: "{{ cluster_service_start_address }}"
@@ -114,6 +115,11 @@
           value: "{{ external_oam_subnet }}"
       management_start_address:
         address: "{{ management_start_address }}"
+        subnet:
+          name: management_subnet
+          value: "{{ management_subnet }}"
+      management_end_address:
+        address: "{{ management_end_address }}"
         subnet:
           name: management_subnet
           value: "{{ management_subnet }}"
@@ -166,13 +172,18 @@
 
   # The provided subnets have passed validation, set the primary default addresses
   # based on the primary subnet values
-  - name: Set default start primary addresses based on provided primary subnets
+  - name: Set default start and end primary addresses based on provided primary subnets
     set_fact:
       default_external_oam_start_address_primary: "{{ (network_params.external_oam_subnet_primary | ipaddr(1))
                                                       .split('/')[0] }}"
+      default_external_oam_end_address_primary: "{{ (network_params.external_oam_subnet_primary | ipaddr(-2))
+                                                    .split('/')[0] }}"
       default_management_start_address_primary: "{{ (network_params.management_subnet_primary | ipaddr(1)).split('/')[0] }}"
+      default_management_end_address_primary: "{{ (network_params.management_subnet_primary | ipaddr(-2)).split('/')[0] }}"
       default_cluster_service_start_address_primary: "{{ (network_params.cluster_service_subnet_primary |
                                                          ipaddr(1)).split('/')[0] }}"
+      default_cluster_service_end_address_primary: "{{ (network_params.cluster_service_subnet_primary | ipaddr(-2))
+                                                       .split('/')[0] }}"
 
   # The provided subnets have passed validation, set the secondary default addresses
   # based on the secondary subnet values, if present.

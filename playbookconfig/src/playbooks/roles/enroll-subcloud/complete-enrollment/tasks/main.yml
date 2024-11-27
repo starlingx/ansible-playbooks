@@ -16,19 +16,28 @@
   command: /usr/local/bin/enroll-init-cleanup
   become: yes
 
-- name: Lock controller-0
-  include_role:
-    name: common/host-lock
-  vars:
-    target_host: 'controller-0'
+# Ensure controller-0 is schedulable in non-simplex systems
+- name: Ensure controller-0 is schedulable and taints are removed
+  block:
+    - name: Uncordon controller-0 node
+      command: kubectl uncordon controller-0
+      environment:
+        KUBECONFIG: "/etc/kubernetes/admin.conf"
+      failed_when: false
+      register: uncordon_result
 
-# In non-SX system, the controller-0 node will be tainted disabled during lock,
-# remove the taint after locking the only controller.
-- name: Remove disabled taint on controller-0 if not simplex
-  command: kubectl taint nodes controller-0 services=disabled:NoExecute-
-  environment:
-    KUBECONFIG: "/etc/kubernetes/admin.conf"
-  failed_when: false
+    - name: Remove services=disabled taint from controller-0
+      command: kubectl taint nodes controller-0 services=disabled:NoExecute-
+      environment:
+        KUBECONFIG: "/etc/kubernetes/admin.conf"
+      failed_when: false
+      register: taint_removal_result
+
+    - name: Debug uncordon and taint removal results
+      debug:
+        msg:
+          - "Uncordon result: {{ uncordon_result.stdout }}"
+          - "Taint removal result: {{ taint_removal_result.stdout }}"
   when: system_mode != 'simplex'
 
 - name: Mark enrollment is completed

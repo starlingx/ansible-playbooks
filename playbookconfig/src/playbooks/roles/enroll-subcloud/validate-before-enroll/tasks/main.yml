@@ -62,15 +62,6 @@
   import_role:
     name: common/validate-registries
 
-# TODO(yuxing) uncomment the following block when the admin network can be configured
-# during factory installation. Task: 50089
-# - name: Validate admin network configuration
-#   block:
-#   - name: Fail if admin network configuration not specified
-#     fail:
-#       msg: "Admin_subnet or admin_gateway_address is not defined in bootstrap values."
-#     when: admin_network is not defined
-#
 - name: Initialize address pairs secondary
   set_fact:
     address_pairs_secondary: { }
@@ -79,7 +70,7 @@
   block:
   - name: Build admin address primary pairs for validation
     set_fact:
-      address_pairs:
+      admin_pairs:
         admin:
           start:
             "{{ network_params.admin_start_address_primary if admin_start_address != 'derived'
@@ -90,7 +81,7 @@
           subnet: "{{ network_params.admin_subnet_primary }}"
 
   - include_tasks: roles/common/validate-addresses/tasks/validate_address_range.yml
-    with_dict: "{{ address_pairs }}"
+    with_dict: "{{ admin_pairs }}"
 
   # admin secondary pairs validation if defined
   - block:
@@ -115,6 +106,21 @@
       with_dict: "{{ admin_pairs_secondary }}"
     when: network_params.admin_subnet_secondary
   when: admin_network is defined
+
+- name: Build management address primary pairs for validation
+  set_fact:
+    management_pairs:
+      management:
+        start:
+          "{{ network_params.management_start_address_primary if management_start_address != 'derived'
+          else default_management_start_address_primary }}"
+        end:
+          "{{ network_params.management_end_address_primary if management_end_address != 'derived'
+          else default_management_end_address_primary }}"
+        subnet: "{{ network_params.management_subnet_primary }}"
+
+- include_tasks: roles/common/validate-addresses/tasks/validate_address_range.yml
+  with_dict: "{{ management_pairs }}"
 
 - name: Validate oam secondary network configuration
   block:
