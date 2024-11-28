@@ -52,18 +52,32 @@
   set_fact:
     host_patches_exist: "{{ host_patch_dir_result.stat.exists }}"
 
+- name: Check if {{ software_bin }} exists on {{ inventory_hostname }}
+  stat:
+    path: "{{ software_bin }}"
+  register: software_bin_result
+
+- name: Set flag to indicate usm is enabled in the host
+  set_fact:
+    usm_enabled_on_subcloud: "{{ software_bin_result.stat.exists }}"
+
+# The subcloud_is_previous_release flag determines whether the subcloud release
+# corresponds to an N-1 release.
+- name: Set flag to indicate if subcloud prestage is for N-1 scenario
+  set_fact:
+    subcloud_is_previous_release: "{{ 'true' if (prestage_source == 'remote' and
+                                    host_software_version is version('22.12', '='))
+                                    else 'false' }}"
+
 # The force_ostree_dir_sync flag determines whether the entire N release ostree
 # directory should be copied to the subcloud or not. This flag is only relevant
 # if the subcloud is running N-1 release.
 # The condition for it to be true must meet:
-#   - The release of the subcloud must be different from the release being
-#     prestaged.
-#   - The release of the subcloud must be a N-1 release that is USM enabled.
+#   - The release of the subcloud must be an N-1 release (subcloud_is_previous_release)
 #   - The N release ostree directory does not already exist on the N-1 subcloud.
-- name: Set flag to indicate if subcloud prestage is for N-1 scenario
+- name: Set flag to indicate if the ostree directory should be copied to the subcloud
   set_fact:
-    force_ostree_dir_sync: "{{ 'true' if (prestage_source == 'remote' and
-                                host_software_version is version('22.12', '=') and
+    force_ostree_dir_sync: "{{ 'true' if (subcloud_is_previous_release and
                                 not host_ostree_dir_exist) else 'false' }}"
 
 - debug:
@@ -72,5 +86,7 @@
       Prestaging reason: {{ prestage_reason }}
       Prestaging source: {{ prestage_source }}
       Prestaging os type: {{ prestage_os_type }}
-      Prestaging for N-1 subcloud: {{ force_ostree_dir_sync }}
+      Prestaging for N-1 subcloud: {{ subcloud_is_previous_release }}
+      Force ostree dir sync for N-1 subcloud: {{ force_ostree_dir_sync }}
+      USM enabled on subcloud: {{ usm_enabled_on_subcloud }}
       Release feed directory (on target): {{ release_feed|default('N/A') }}

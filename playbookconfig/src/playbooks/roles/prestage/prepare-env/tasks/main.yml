@@ -36,6 +36,7 @@
 - name: Set prestage dir and subdirectory facts
   set_fact:
     prestage_source: remote
+    software_bin: "/usr/bin/software"
     prestage_dir: "{{ platform_backup_dir }}/{{ software_version }}"
     host_software_metadata_dir: "/opt/software/metadata"
     patches_prestage_dir: "{{ platform_backup_dir }}/{{ software_version }}/patches"

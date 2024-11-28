@@ -38,9 +38,6 @@ SW_VERSION=${SW_VERSION:-}
 DEBUG=${DEBUG:-}
 DRY_RUN=${DRY_RUN:-}
 
-USM_SOFTWARE_DIR=/opt/software
-USM_METADATA_DIR=${USM_SOFTWARE_DIR}/metadata
-
 help() {
 cat<<EOF
 ostree metadata synchronization utilities.
@@ -151,8 +148,9 @@ initialize_env() {
         log_warn "not found: /etc/platform/openrc"
     fi
 
-    export METADATA_DIR=${METADATA_DIR:-/opt/software/metadata}
-    export METADATA_SYNC_DIR=${METADATA_SYNC_DIR:-/opt/software/tmp/metadata-sync}
+    export SOFTWARE_DIR=/opt/software
+    export METADATA_DIR=${METADATA_DIR:-${SOFTWARE_DIR}/metadata}
+    export METADATA_SYNC_DIR=${METADATA_SYNC_DIR:-${SOFTWARE_DIR}/tmp/metadata-sync}
     export METADATA_SYNC_METADATA_DIR=${METADATA_SYNC_DIR}/metadata
 
     # shellcheck disable=SC1091
@@ -526,6 +524,11 @@ sync_metadata_on_subcloud() {
             # Create it with STATE = available
             new_state="available"
         fi
+        # Ensures that the new state directory exists
+        if [ ! -d "${METADATA_DIR}/${new_state}" ]; then
+            log_info "Creating ${METADATA_DIR}/${new_state} state directory"
+            run_cmd mkdir -p "${METADATA_DIR}/${new_state}"
+        fi
         log_info "${log_hdr} does not exist on subcloud, setting to ${new_state}"
         run_cmd cp "${central_metadata_file}" "${METADATA_DIR}/${new_state}"
     fi
@@ -565,8 +568,8 @@ sync_subcloud_metadata() {
 
     # Remove current files for specified release
     log_info "Removing directories for release ${sw_version}"
-    rm -Rf ${USM_SOFTWARE_DIR}/rel-${sw_version}.*
-    find ${USM_METADATA_DIR} -type f -name "*${sw_version}*" | xargs rm -f
+    rm -Rf ${SOFTWARE_DIR}/rel-${sw_version}.*
+    find ${METADATA_DIR} -type f -name "*${sw_version}*" | xargs rm -f
 
     # Get list of metadata files requiring sync
     for metadata_file in $(get_metadata_files_unique_to_central); do
