@@ -75,11 +75,25 @@
           where certtype='ssl_ca' and expiry_date < NOW();"
         register: invalid_certs
 
+      - name: Reset system table id sequence
+        command: >-
+          psql -d sysinv -c
+          "ALTER SEQUENCE certificate_id_seq
+          RESTART WITH 1000;
+          UPDATE certificate SET id=nextval('certificate_id_seq');"
+
       - name: Delete expired ssl_ca certificates in db
         command: >-
           psql -d sysinv -c
           "DELETE FROM certificate
           where certtype='ssl_ca' and expiry_date < NOW();"
+
+      - name: Re-sync system table row count
+        command: >-
+          psql -d sysinv -c
+          "SELECT setval('certificate_id_seq',
+          (SELECT MAX(id) FROM certificate)+1);
+          UPDATE certificate SET id=nextval('certificate_id_seq');"
 
       - name: Restore system table row count
         command: >-
