@@ -60,7 +60,7 @@
     - name: Wait for the sysinv API to be ready and for certs to be updated for the reconfigured OAM endpoint
       shell: |
         curl -s -o /dev/null -w '%{http_code}' \
-        {{ protocol }}://{{ enroll_reconfigured_oam }}:{{ sysinv_port }}/v1/isystems/region_id
+        {{ protocol }}://{{ enroll_reconfigured_oam | ipwrap }}:{{ sysinv_port }}/v1/isystems/region_id
       register: api_response
       retries: 30
       delay: 20
