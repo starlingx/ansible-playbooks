@@ -61,7 +61,6 @@
 
 - name: Look for the flag indicating that Ceph is configured
   shell: >-
-    tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |
     grep 'etc/platform/.node_ceph_configured'
   args:
     warn: false
@@ -70,7 +69,6 @@
 
 - name: Look for the flag indicating that Rook is configured
   shell: >-
-    tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |
     grep 'etc/platform/.node_rook_configured'
   args:
     warn: false
@@ -99,7 +97,7 @@
     fail:
       msg: Application rook-ceph was not applied successfully during controller-0 unlock
     when: check_rook_ceph.stdout not in ['applied', 'completed']
-  when: rook_ceph.rc == 0
+  when: rook_backend.rc == 0
 
 - name: Transfer backup tarball to target if the file is off-box
   include_role:
