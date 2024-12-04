@@ -60,19 +60,13 @@
   when: check_openstack.stdout != "uploaded"
 
 - name: Look for the flag indicating that Ceph is configured
-  shell: >-
-    grep 'etc/platform/.node_ceph_configured'
-  args:
-    warn: false
-  failed_when: false
+  stat:
+    path: "/etc/platform/.node_ceph_configured"
   register: ceph_backend
 
 - name: Look for the flag indicating that Rook is configured
-  shell: >-
-    grep 'etc/platform/.node_rook_configured'
-  args:
-    warn: false
-  failed_when: false
+  stat:
+    path: "/etc/platform/.node_rook_configured"
   register: rook_backend
 
 - block:
@@ -85,7 +79,7 @@
     fail:
       msg: Application platform-integ-apps was not applied successfully during controller-0 unlock
     when: check_platform_integ.stdout not in ['applied', 'completed']
-  when: ceph_backend.rc == 0
+  when: ceph_backend.stat.exists
 
 - block:
   - name: Check if rook-ceph was applied successfully during controller-0 unlock
@@ -97,7 +91,7 @@
     fail:
       msg: Application rook-ceph was not applied successfully during controller-0 unlock
     when: check_rook_ceph.stdout not in ['applied', 'completed']
-  when: rook_backend.rc == 0
+  when: rook_backend.stat.exists
 
 - name: Transfer backup tarball to target if the file is off-box
   include_role:
