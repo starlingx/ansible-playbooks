@@ -76,6 +76,59 @@
 
 - name: Inspect the platform backup file locally
   block:
+  - name: Extract subfunction from platform.conf in backup
+    shell:
+      cmd: >-
+        {{ extract_command_method }}
+        | tar --use-compress-program=pigz -xO etc/platform/platform.conf
+        | grep 'subfunction='
+      stdin: "{{ backup_encryption_passphrase }}"
+    args:
+      warn: false
+    failed_when: false
+    register: backup_subfunc
+
+  - name: Ensure subfunction was found in backup
+    fail:
+      msg: "Failed to extract subfunction from backup platform.conf"
+    when: backup_subfunc.stdout_lines is not defined or backup_subfunc.stdout_lines | length == 0
+
+  - name: Get subfunction set from backup platform.conf
+    set_fact:
+      backup_subfunc_set: "{{ backup_subfunc.stdout_lines[0].split('=')[1].split(',') }}"
+
+  - name: Get subfunction from the installed load
+    shell: grep -F 'subfunction' /etc/platform/platform.conf
+    register: installed_subfunc
+    delegate_to: "{{ inventory_hostname }}"
+
+  - name: Get subfunction set from installed platform.conf
+    set_fact:
+      installed_subfunc_set: "{{ installed_subfunc.stdout_lines[0].split('=')[1].split(',') }}"
+
+  - name: Check the difference between the two subfunction sets
+    set_fact:
+      diff_set: "{{ backup_subfunc_set | symmetric_difference(installed_subfunc_set) }}"
+
+  - name: Check if lowlatency is missing from the installed subfunction
+    set_fact:
+      missing_lowlatency: "{{ 'lowlatency' in backup_subfunc_set and 'lowlatency' not in installed_subfunc_set }}"
+
+  - name: Fail if subfunction of backup does not match the subfunction of the installed load
+    fail:
+      msg: "Subfunction mismatch - backup: {{ backup_subfunc_set }}, installed: {{ installed_subfunc_set }}"
+    when: diff_set != [] and not missing_lowlatency
+
+  - name: Set kernel to lowlatency to match backup subfunction
+    set_fact:
+      kernel: "lowlatency"
+    when: missing_lowlatency and system_type == 'All-in-one'
+
+  - name: Log kernel switch to lowlatency
+    debug:
+      msg: "Switching to lowlatency kernel."
+    when: missing_lowlatency
+
   - name: Extract OS_REGION_NAME from openrc file
     shell:
       cmd: >-
@@ -273,58 +326,6 @@
         become: no
 
     when: inventory_hostname != "localhost"
-
-  - name: Extract subfunction from platform.conf in backup
-    shell:
-      cmd: >-
-        {{ extract_command_method }}
-        | tar --use-compress-program=pigz -xO etc/platform/platform.conf
-        | grep 'subfunction='
-      stdin: "{{ backup_encryption_passphrase }}"
-    args:
-      warn: false
-    failed_when: false
-    register: backup_subfunc
-
-  - name: Ensure subfunction was found in backup
-    fail:
-      msg: "Failed to extract subfunction from backup platform.conf"
-    when: backup_subfunc.stdout_lines is not defined or backup_subfunc.stdout_lines | length == 0
-
-  - name: Get subfunction set from backup platform.conf
-    set_fact:
-      backup_subfunc_set: "{{ backup_subfunc.stdout_lines[0].split('=')[1].split(',') }}"
-
-  - name: Get subfunction from the installed load
-    shell: grep -F 'subfunction' /etc/platform/platform.conf
-    register: installed_subfunc
-
-  - name: Get subfunction set from installed platform.conf
-    set_fact:
-      installed_subfunc_set: "{{ installed_subfunc.stdout_lines[0].split('=')[1].split(',') }}"
-
-  - name: Check the difference between the two subfunction sets
-    set_fact:
-      diff_set: "{{ backup_subfunc_set | symmetric_difference(installed_subfunc_set) }}"
-
-  - name: Check if lowlatency is missing from the installed subfunction
-    set_fact:
-      missing_lowlatency: "{{ 'lowlatency' in backup_subfunc_set and 'lowlatency' not in installed_subfunc_set }}"
-
-  - name: Fail if subfunction of backup does not match the subfunction of the installed load
-    fail:
-      msg: "Subfunction mismatch - backup: {{ backup_subfunc_set }}, installed: {{ installed_subfunc_set }}"
-    when: diff_set != [] and not missing_lowlatency
-
-  - name: Set kernel to lowlatency to match backup subfunction
-    set_fact:
-      kernel: "lowlatency"
-    when: missing_lowlatency and system_type == 'All-in-one'
-
-  - name: Log kernel switch to lowlatency
-    debug:
-      msg: "Switching to lowlatency kernel."
-    when: missing_lowlatency
 
   # Call restore-sw-deployments from here so we don't need to
   # play hide-and-seek with the in-progress flags.
