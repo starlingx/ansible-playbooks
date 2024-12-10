@@ -19,7 +19,7 @@
     - set_fact:
         sysinv_port: "{{ sysinv_port | default(6385) }}"
         boot_wait_time: "{{ enroll_boot_wait_time | default(150) }}"
-        wait_for_timeout: "{{ enroll_wait_for_timeout | default(900) }}"
+        wait_for_timeout: "{{ enroll_wait_for_timeout | default(1020) }}"
         job_retry_delay: "{{ 120 | random }}"
         protocol: "{{ protocol | default('https') }}"
         operation_string: "enroll-init"
@@ -57,17 +57,75 @@
     # Although the endpoints are reconfigured by now, the API and certs may not
     # be fully updated. A simple curl request can be used to verify both, specifically
     # checking the region_id API, which will be needed shortly after this playbook completes.
+    - set_fact:
+        sysinv_check_endpoint: >-
+          {{ protocol }}://{{ enroll_reconfigured_oam | ipwrap }}:{{ sysinv_port }}/v1/isystems/region_id
+
     - name: Wait for the sysinv API to be ready and for certs to be updated for the reconfigured OAM endpoint
       shell: |
-        curl -s -o /dev/null -w '%{http_code}' \
-        {{ protocol }}://{{ enroll_reconfigured_oam | ipwrap }}:{{ sysinv_port }}/v1/isystems/region_id
+        curl -s -o /dev/null -w '%{http_code}' {{ sysinv_check_endpoint }}
       register: api_response
-      retries: 30
+      retries: 45
       delay: 20
       until: api_response.stdout == "200"
       delegate_to: localhost
+      failed_when: false
       args:
         # Disable warning that suggests using the get_url and uri module:
         # - get_url is unnecessary as we're not actually downloading.
         # - uri module doesn't seem to work for our cert update check
         warn: false
+
+    - name: Check and retry certificate renewal upon timeout
+      block:
+      - name: Perform insecure sysinv API check to confirm invalid cert
+        shell: |
+          curl -k -s -o /dev/null -w '%{http_code}' {{ sysinv_check_endpoint }}
+        register: insecure_api_response
+        delegate_to: localhost
+        failed_when: false
+        args:
+          warn: false
+
+      - name: Abort on failed insecure sysinv endpoint request
+        fail:
+          msg: >-
+            Requests to sysinv API through the OAM network are not succeeding. Check the
+            subcloud logs (cloud-init-output.log) and for errors in the network
+            reconfiguration and reattempt.
+        when: insecure_api_response.rc != 0 or insecure_api_response.stdout != "200"
+
+      - name: Check the existence of the k8s Certificate
+        command: kubectl get certificate -n deployment system-restapi-gui-certificate
+        environment:
+          KUBECONFIG: "/etc/kubernetes/admin.conf"
+        register: cert_get_result
+
+      - name: Fail if REST/API GUI K8s Certificate doesn't exist
+        fail:
+          msg: >-
+            REST/API GUI certificate is not managed by cert-manager. The procedure to
+            update platform certificates (previously known as cert-manager migration)
+            should be followed to create the required resources.
+        when: cert_get_result.rc != 0
+
+      - name: Renew Rest API/GUI certificate
+        shell: |
+          kubectl delete secret -n deployment system-restapi-gui-certificate
+          kubectl wait certificate -n deployment system-restapi-gui-certificate \
+          --for=condition=Ready --timeout=90s
+        environment:
+          KUBECONFIG: "/etc/kubernetes/admin.conf"
+
+      - name: Retry waiting for sysinv API and REST API/GUI certificate to be updated for the new OAM endpoint
+        shell: |
+          curl -s -o /dev/null -w '%{http_code}' {{ sysinv_check_endpoint }}
+        register: api_response
+        retries: 15
+        delay: 20
+        until: api_response.stdout == "200"
+        delegate_to: localhost
+        args:
+          warn: false
+      when:
+        - api_response.rc != 0 or api_response.stdout != "200"
