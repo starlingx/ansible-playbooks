@@ -10,6 +10,9 @@ fernet_keys_permdir: /opt/platform/keystone/fernet-keys
 crushmap_file: crushmap.bin.backup
 crushmap_file_tmp: crushmap.bin.tmp
 skip_ceph_osds_wipe_flag: /etc/platform/.skip_ceph_osds_wipe
+restore_items:
+  - etc/systemd/system
+  - var/rootdirs/root
 restore_extra_items: []
 
 # The staging area to process the data from the backup tarball

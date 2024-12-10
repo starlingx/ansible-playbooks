@@ -374,6 +374,14 @@
   args:
     warn: false
 
+- name: Restore configuration files
+  command: >-
+    tar --use-compress-program=pigz -C / -xvpf {{ restore_data_file }} --overwrite
+    {{ ' '.join(restore_items) }}
+  args:
+    warn: false
+  when: restore_items | length > 0
+
 - name: Restore extra configuration files
   command: >-
     tar --use-compress-program=pigz -C / -xvpf {{ restore_data_file }} --overwrite

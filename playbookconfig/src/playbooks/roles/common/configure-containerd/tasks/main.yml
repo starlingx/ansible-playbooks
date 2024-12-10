@@ -115,6 +115,14 @@
 
   when: distributed_cloud_role == 'subcloud'
 
+- name: Add containerd service cpushares
+  ini_file:
+    dest: /etc/systemd/system/containerd.service.d/containerd-cpu-shares.conf
+    section: Service
+    option: Slice
+    value: k8splatform.slice
+    create: true
+
 - name: Restart containerd
   systemd:
     name: containerd
