@@ -78,9 +78,56 @@
     when: system_local_ca_exists.stdout | bool
 
   when:
-    - distributed_cloud_role == 'subcloud' or upgrade_in_progress or mode == 'restore'
+    - distributed_cloud_role == 'subcloud'
     - not system_local_ca_data_obtained
   connection: local
+
+- block:
+  - name: Check if 'system-local-ca' secret exists
+    shell: |
+      kubectl get secret system-local-ca -n cert-manager \
+      --ignore-not-found=true --no-headers=true | \
+      awk '{ if ($0 != "") print "true"; exit}'
+    environment:
+      KUBECONFIG: "/etc/kubernetes/admin.conf"
+    register: system_local_ca_exists
+
+  - block:
+    - name: Retrieve system local CA cert from k8s secret
+      command: kubectl get secret system-local-ca -n cert-manager -o jsonpath='{.data.tls\.crt}'
+      environment:
+        KUBECONFIG: "/etc/kubernetes/admin.conf"
+      register: cert_result
+      no_log: true
+
+    - name: Retrieve system local CA key from k8s secret
+      command: kubectl get secret system-local-ca -n cert-manager -o jsonpath='{.data.tls\.key}'
+      environment:
+        KUBECONFIG: "/etc/kubernetes/admin.conf"
+      register: key_result
+      no_log: true
+
+    - name: Retrieve system local root CA cert from k8s secret
+      command: kubectl get secret system-local-ca -n cert-manager -o jsonpath='{.data.ca\.crt}'
+      environment:
+        KUBECONFIG: "/etc/kubernetes/admin.conf"
+      register: ca_cert_result
+      no_log: true
+
+    - name: Set system-local-ca data
+      set_fact:
+        system_root_ca_cert: "{{ ca_cert_result.stdout | default('', true) }}"
+        system_local_ca_cert: "{{ cert_result.stdout }}"
+        system_local_ca_key: "{{ key_result.stdout }}"
+        system_local_ca_data_obtained: true
+      no_log: true
+
+    when: system_local_ca_exists.stdout | bool
+
+  when:
+    - distributed_cloud_role != 'subcloud'
+    - upgrade_in_progress or mode == 'restore'
+    - not system_local_ca_data_obtained
 
 # The default case is use Kubernetes Root CA (we don't need to install this one)
 - block:
