@@ -35,10 +35,11 @@ def print_with_timestamp(*args, **kwargs):
 class OpenStackClient:
     """Client to interact with OpenStack Keystone."""
 
-    def __init__(self) -> None:
+    def __init__(self, verify_certs) -> None:
         self.conf = {}
         self._session = None
         self._keystone = None
+        self.verify_certs = verify_certs
 
         # Loading credentials and configurations from environment variables
         # typically set in OpenStack
@@ -74,7 +75,7 @@ class OpenStackClient:
         except KeyError as e:
             print_with_timestamp(f"Configuration key missing: {e}")
             sys.exit(1)
-        return session.Session(auth=auth)
+        return session.Session(auth=auth, verify=self.verify_certs)
 
     @property
     def keystone(self):
@@ -187,9 +188,10 @@ class OpenStackClient:
 class CgtsClient(object):
     SYSINV_API_VERSION = 1
 
-    def __init__(self):
+    def __init__(self, verify_certs):
         self.conf = {}
         self._sysinv = None
+        self.insecure = False if verify_certs else True
 
         # Loading credentials and configurations from environment variables
         # typically set in OpenStack
@@ -222,7 +224,8 @@ class CgtsClient(object):
                 os_user_domain_name=self.conf['user_domain_name'],
                 os_region_name=self.conf['region_name'],
                 os_service_type='platform',
-                os_endpoint_type='admin')
+                os_endpoint_type='admin',
+                insecure=self.insecure)
         return self._sysinv
 
     def wait_until_config_updated(self, old_config, username):
@@ -260,7 +263,7 @@ def store_password_in_keyring(username, password):
 def main():
     """Main function to execute based on command-line input."""
     if len(sys.argv) < 3:
-        print_with_timestamp("Usage: update_keystone_passwords.py <sw_ver> <json_file>")
+        print_with_timestamp("Usage: update_keystone_passwords.py <sw_ver> <json_file> [optional: verify_cert False]")
         sys.exit(1)
 
     sw_ver = sys.argv[1]
@@ -272,8 +275,15 @@ def main():
     with open(json_file, 'r') as file:
         user_data = json.load(file)
 
-    osclient = OpenStackClient()
-    cgts_client = CgtsClient()
+    verify_certs = True
+    if len(sys.argv) > 3:
+        verify_value = sys.argv[3].lower()
+        if verify_value == 'false':
+            print_with_timestamp("Cert checks will be disabled.")
+            verify_certs = False
+
+    osclient = OpenStackClient(verify_certs)
+    cgts_client = CgtsClient(verify_certs)
     set_keyring_path(sw_ver)
     for user in user_data:
         config_applied = cgts_client.get_host_config_applied("controller-0")

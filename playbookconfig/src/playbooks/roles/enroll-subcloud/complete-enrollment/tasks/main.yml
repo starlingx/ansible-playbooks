@@ -44,3 +44,9 @@
   file:
     path: "{{ subcloud_enrollment_completed_flag }}"
     state: touch
+
+- name: Clear enrollment_in_progress flag
+  file:
+    path: /var/run/.enrollment_in_progress
+    state: absent
+  become: true
