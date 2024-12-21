@@ -49,7 +49,10 @@
       mode: push
       src: "{{ ostree_repo_release_feed }}/"
       dest: "{{ prestage_ostree_repo }}/"
-      rsync_opts: "--delete"
+      rsync_opts:
+        - "--delete"
+        - "--chmod=ugo+rw"
+        - "--exclude=*/~.tmp~"
     register: prestage_transfer
     retries: 3
     delay: 5
