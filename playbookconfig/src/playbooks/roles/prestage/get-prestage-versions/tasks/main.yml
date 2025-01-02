@@ -1,13 +1,23 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
-#   This role is used to get prestage versions by searching them from
-#   the subcloud protected partition "/opt/platform-backup".
+#   This role is used to get prestage versions.
+#   For prestage for-install, versions are searched from /opt/platform-backup
+#   using the variable "platform_backup_dir".
+#   For prestage for-sw-deploy, versions are searched from /opt/software/metadata
+#   using the variable "host_software_metadata_dir".
 #
+
+# When the prestage is for-install, the prestaged versions are stored in
+# /opt/platform-backup. This block is responsible for getting the list of
+# prestaged versions in that directory.
+- name: Set the releases path
+  set_fact:
+    platform_backup_dir: "{{ platform_backup_dir }}"
 
 - name: Find ostree_repo subdirectories
   find:
@@ -18,19 +28,52 @@
     file_type: directory
   register: ostree_dirs
 
-- name: Get parent directories of ostree_repo subdirectories
+- name: Generate a versions list from ostree_repo subdirectories
   set_fact:
-    parent_dirs: "{{ ostree_dirs.files
+    versions_list: "{{ ostree_dirs.files
                   | map(attribute='path')
                   | map('dirname')
                   | map('basename')
                   | select('regex', '^[1-9][0-9]*.[0-9]+$')
                   | list }}"
 
-- name: Extract and sort version numbers
+# Add the "for-install" label to differentiate the versions list.
+# As long as versions_list contains versions, they will be displayed.
+# Otherwise, 'None'.
+- name: Extract and sort version numbers for install
   set_fact:
-    prestage_versions: "{{ parent_dirs | sort | join(',') }}"
+    for_install_versions: "for-install: {{ 'None' if versions_list | length == 0 \
+    else (versions_list | sort | join(',')) }}"
+
+# When the prestage is for-sw-deploy, in this case we need to obtain the
+# latest patch of the prestaged releases. This is obtained from the metadata
+# in the "available" state, since it is assumed that this is the state in
+# which the software is left when it is prestaged to the subcloud.
+# These metadata files are obtained from the /opt/software/metadata/available
+# directory.
+# We print the MM.mm format when the prestaged release has no patches applied.
+# Otherwise, the release is printed in MM.mm.pp format to indicate the patch
+# level of the prestaged release.
+- name: Find metadata files in available state
+  shell: |
+    find {{ host_software_metadata_dir }}/available/ -name '*.xml' | \
+    awk -F'/' '{split($NF, versions, "-"); print versions[2]}' | \
+    sed 's/\.0$//g' | sort -V | \
+    awk -F'.' '{versions[$1"."$2] = $0} END {for (v in versions) print versions[v]}'
+  register: versions
+
+- name: Generate a versions list from metadata files name
+  set_fact:
+    versions_list: "{{ versions.stdout_lines }}"
+
+# Add the "for-sw-deploy" label to differentiate the versions list.
+# As long as versions_list contains versions, they will be displayed.
+# Otherwise, 'None'.
+- name: Extract and sort version numbers for software deploy
+  set_fact:
+    for_sw_deploy_versions: "for-sw-deploy: {{ 'None' if versions_list | length == 0 \
+    else (versions_list | sort | join(',')) }}"
 
 - name: Print prestage versions
   debug:
-    msg: "prestage_versions: {{ prestage_versions }}"
+    msg: "prestage_versions: {{ for_install_versions }} - {{ for_sw_deploy_versions }}"
