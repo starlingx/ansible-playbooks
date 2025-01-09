@@ -90,13 +90,17 @@
     os_release: "centos"
   when: "'Debian' not in distro.stdout"
 
-# Evaluate if ansible_become_pass is sysinv user password
+# Evaluate if ansible_become_pass is the sysadmin user password
 - name: Evaluate ansible_become_pass
-  shell: "echo {{ ansible_become_pass }} | sudo -S -k -v"
+  shell: "echo '{{ ansible_become_pass }}' | sudo -S -k -v"
   register: password_check
   no_log: true
   failed_when: false
 
-- name: Check if ansible_become_pass is sysinv user password
-  fail: msg="Wrong ansible_become_pass password in your localhost.yml, ansible_become_pass should be sysinv user password"
+- name: Check if ansible_become_pass is the sysadmin user password
+  fail:
+    msg: >-
+      Wrong ansible_become_pass password in your localhost.yml. The value
+      for ansible_become_pass should be the same as the sysadmin Linux user
+      password.
   when: password_check.rc != 0
