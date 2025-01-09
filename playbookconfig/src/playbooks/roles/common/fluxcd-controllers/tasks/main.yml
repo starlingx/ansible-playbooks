@@ -30,9 +30,27 @@
   when: local_registry_credentials is not defined
   become: yes
 
+- name: Check Kubernetes health
+  command: sysinv-k8s-health check
+  register: k8s_health_check
+  become: yes
+  failed_when: k8s_health_check.rc != 0
+
+- name: Log Kubernetes health check failure
+  fail:
+    msg: >-
+      Kubernetes health check failed with return code {{ k8s_health_check.rc }}
+      and error: {{ k8s_health_check.stderr }}. Command "sysinv-k8s-health
+      check" tried 20 attempts to check k8s health and failed.
+  when: k8s_health_check.rc != 0
+
 - name: Bring up FluxCD helm and source controllers
   import_tasks: bringup_fluxcd.yml
   become: yes
+  register: bringup_fluxcd_result
+  retries: "{{ bringup_fluxcd_retries }}"
+  delay: "{{ delay_time }}"
+  until: bringup_fluxcd_result is succeeded
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
     HOME: /home/sysadmin
@@ -59,7 +77,7 @@
     # The retry length should be x2 the length of the async_timeout
     # eg async_retries = async_timeout * 2 / delay
     retries: "{{ async_retries }}"
-    delay: 6
+    delay: "{{ delay_time }}"
     failed_when: false
     with_items: "{{ wait_for_fluxcd_deployments.results }}"
 
