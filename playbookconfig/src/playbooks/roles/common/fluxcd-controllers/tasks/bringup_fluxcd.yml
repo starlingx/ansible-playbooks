@@ -28,7 +28,10 @@
     # Create the FluxCD namespace. This is used for the local registry secret.
     - name: Create namespace for FluxCD
       command: kubectl create namespace {{ fluxcd_namespace }}
+      retries: "{{ create_fluxcd_ns_retries }}"
+      delay: "{{ delay_time }}"
       register: create_fluxcd_ns
+      until: create_fluxcd_ns.rc == 0
       failed_when: false
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
@@ -48,7 +51,10 @@
                pod-security.kubernetes.io/audit=privileged
                pod-security.kubernetes.io/enforce=privileged
                pod-security.kubernetes.io/warn=privileged
+      retries: "{{ create_fluxcd_ns_retries }}"
+      delay: "{{ delay_time }}"
       register: label_fluxcd_ns
+      until: label_fluxcd_ns.rc == 0
       failed_when: false
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
@@ -60,7 +66,10 @@
 
     - name: Check if flux helm and source controllers exist
       command: kubectl -n {{ fluxcd_namespace }} get pods
+      retries: "{{ create_fluxcd_ns_retries }}"
+      delay: "{{ delay_time }}"
       register: fluxcd_get_pods
+      until: fluxcd_get_pods.rc == 0
       failed_when: false
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
@@ -80,11 +89,18 @@
         - { namespace: flux-helm, deployment: source-controller }
       when: (mode is defined and mode == 'restore') and
             fluxcd_get_pods.stderr is not search('No resources found')
+      retries: "{{ create_fluxcd_ns_retries }}"
+      delay: "{{ delay_time }}"
+      register: scale_deployments
+      until: scale_deployments.rc == 0
 
     - block:
         - name: Check if secret exists
           command: kubectl -n {{ fluxcd_namespace }} get secret {{ fluxcd_secret_name }}
+          retries: "{{ create_fluxcd_ns_retries }}"
+          delay: "{{ delay_time }}"
           register: fluxcd_get_secret
+          until: fluxcd_get_secret.rc == 0
           failed_when: false
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
@@ -95,13 +111,20 @@
             --docker-server={{ local_registry }}
             --docker-username={{ local_registry_credentials['username'] }}
             --docker-password={{ local_registry_credentials['password'] }}
+          retries: "{{ create_fluxcd_ns_retries }}"
+          delay: "{{ delay_time }}"
+          register: Create_secret_if_it_does_not_exist
+          until: Create_secret_if_it_does_not_exist.rc == 0
           when: fluxcd_get_secret.rc !=0
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
 
         - name: Install flux helm and source controllers with no prior deployment
           command: kubectl create -f {{ fluxcd_resource_dir }}
+          retries: "{{ create_fluxcd_ns_retries }}"
+          delay: "{{ delay_time }}"
           register: create_fluxcd_pods
+          until: create_fluxcd_pods.rc == 0
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
       when: fluxcd_get_pods.stderr is search('No resources found')
@@ -110,7 +133,10 @@
         # This will scale the deployment up, but will also upgrade FluxCD in case there was a change
         - name: Install flux helm and source controllers for restore/upgrades over existing deployment
           command: kubectl apply -f {{ fluxcd_resource_dir }}
+          retries: "{{ create_fluxcd_ns_retries }}"
+          delay: "{{ delay_time }}"
           register: create_fluxcd_pods
+          until: create_fluxcd_pods.rc == 0
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
 
@@ -120,7 +146,10 @@
     - block:
         - name: Install flux helm and source controllers for upgrade activate
           command: kubectl apply -f {{ fluxcd_resource_dir }}
+          retries: "{{ create_fluxcd_ns_retries }}"
+          delay: "{{ delay_time }}"
           register: create_fluxcd_pods
+          until: create_fluxcd_pods.rc == 0
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
 

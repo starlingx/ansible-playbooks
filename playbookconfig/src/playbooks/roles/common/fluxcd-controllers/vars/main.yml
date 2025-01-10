@@ -13,3 +13,7 @@ flux_source_controller_memory_request: 0
 local_registry: registry.local:9001
 async_timeout: 240
 async_retries: 80
+bringup_fluxcd_retries: 5
+check_kubernetes_health_retries: 5
+delay_time: 6
+create_fluxcd_ns_retries: 5
