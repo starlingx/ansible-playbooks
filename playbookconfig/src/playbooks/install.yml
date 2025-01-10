@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020-2024 Wind River Systems, Inc.
+# Copyright (c) 2020-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -17,6 +17,8 @@
         wait_for_timeout: "{{ wait_for_timeout | default(3600) }}"
         job_retry_delay: "{{ 120 | random }}"
         host_to_check: "{{ ansible_host }}"
+        sync_patch_metadata: "{{ sync_patch_metadata | default(true) }}"
+        sync_software_metadata: "{{ sync_software_metadata | default(true) }}"
 
     - name: Run RVMC script to insert boot image and power on host
       include_role:
@@ -42,6 +44,4 @@
     check_load: false
     check_bootstrap_address: false
     check_patches: false
-    sync_patch_metadata: true
-    sync_software_metadata: true
     enforce_password_change: true
