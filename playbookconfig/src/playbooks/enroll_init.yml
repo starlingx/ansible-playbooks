@@ -95,6 +95,51 @@
             reconfiguration and reattempt.
         when: insecure_api_response.rc != 0 or insecure_api_response.stdout != "200"
 
+      - name: Register system controller certificates
+        shell: >-
+          kubectl get secret system-local-ca -n cert-manager -o
+          jsonpath='{.data.{{ item.parentKey }}\.{{ item.key }}}'
+          | base64 -d | openssl {{ item.command }} -noout -modulus | openssl md5
+        environment:
+          KUBECONFIG: "/etc/kubernetes/admin.conf"
+        register: system_controller_data_cert
+        changed_when: false
+        with_items:
+          - { parentKey: 'ca', key: 'crt', command: 'x509' }
+          - { parentKey: 'tls', key: 'crt', command: 'x509' }
+          - { parentKey: 'tls', key: 'key', command: 'rsa' }
+        delegate_to: localhost
+
+      - name: Check Connectivity
+        include_role:
+          name: common/check-connectivity
+
+      - name: Register subcloud certificates
+        shell: >-
+          kubectl get secret system-local-ca -n cert-manager -o
+          jsonpath='{.data.{{ item.parentKey }}\.{{ item.key }}}'
+          | base64 -d | openssl {{ item.command }} -noout -modulus | openssl md5
+        environment:
+          KUBECONFIG: "/etc/kubernetes/admin.conf"
+        register: subcloud_data_cert
+        changed_when: false
+        with_items:
+          - { parentKey: 'ca', key: 'crt', command: 'x509' }
+          - { parentKey: 'tls', key: 'crt', command: 'x509' }
+          - { parentKey: 'tls', key: 'key', command: 'rsa' }
+        delegate_to: "{{ enroll_reconfigured_oam }}"
+
+      - name: Fail if certificates are different
+        fail:
+          msg: "{{ item.0.item.parentKey }} - {{ item.0.item.key }} do
+                not match between the system controller and subcloud.
+                Ensure that the same system-local-ca (local_ca_cert,
+                local_ca_key, and root_ca_cert) are installed on both
+                the system controller and the subcloud."
+        when: (item.0.stdout != item.1.stdout )
+        with_items:
+          - "{{ system_controller_data_cert.results | zip(subcloud_data_cert.results) | list }}"
+
       - name: Check the existence of the k8s Certificate
         command: kubectl get certificate -n deployment system-restapi-gui-certificate
         environment:
