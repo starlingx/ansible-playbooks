@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2024 Wind River Systems, Inc.
+# Copyright (c) 2021-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -135,6 +135,14 @@
   template:
     src: "roles/common/bringup-kubemaster/templates/k8s-{{ kubernetes_long_version }}/sriov-cni.yaml.j2"
     dest: /etc/kubernetes/update_sriov-cni.yaml
+
+# K8s upgrade from 1.24.4 to 1.29.2 results in a duplication
+# of the SRIOV daemonsets due to the name change in the new upstream release.
+# This task was added to clean up the old daemonsets before
+# upgrading to the up-versioned daemonsets.
+- name: Prune old SRIOV daemonset
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf delete daemonset -l app=sriov-cni --namespace=kube-system"
+  failed_when: false
 
 - name: Update SRIOV Networking
   command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_sriov-cni.yaml"
