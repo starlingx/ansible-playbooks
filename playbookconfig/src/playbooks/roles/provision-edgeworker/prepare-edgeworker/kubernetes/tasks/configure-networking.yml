@@ -14,10 +14,3 @@
     value: 1
     sysctl_file: /etc/sysctl.d/99-sysctl.conf
     state: present
-
-- name: Add net.ipv4.conf.tunl0.rp_filter in sysctl for calico
-  lineinfile:
-    path: /etc/sysctl.conf
-    line: net.ipv4.conf.tunl0.rp_filter=0
-    state: present
-  failed_when: false
