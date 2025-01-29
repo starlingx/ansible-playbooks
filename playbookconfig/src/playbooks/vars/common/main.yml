@@ -1,6 +1,6 @@
 ---
 supported_release_versions:
-  - "24.09"
+  - "25.09"
 
 # The staging directory to platform-backup to have a consistent behavior
 # regardless of where the restore playbook is executed (locally vs remotely)
