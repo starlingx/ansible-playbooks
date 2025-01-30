@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2024 Wind River Systems, Inc.
+# Copyright (c) 2022-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -8,6 +8,14 @@
 #   This will complete the restoration process.
 #   Applying any missing changes or creating any missing flags
 #   that are not created during optimized restore.
+
+- name: Stop SM so it doesn't interfere with services before unlock
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+  loop:
+    - pmon.service
+    - sm.service
 
 - set_fact:
     _remove_items:
