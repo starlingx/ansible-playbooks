@@ -14,11 +14,11 @@ nginx_kube_webhook_certgen_img: registry.k8s.io/ingress-nginx/kube-webhook-certg
 nginx_opentelemetry_img: registry.k8s.io/ingress-nginx/opentelemetry:v20230721-3e2062ee5
 default_backend_img: registry.k8s.io/defaultbackend-amd64:1.5
 # Cert-manager images
-cert_manager_acmesolver_img: quay.io/jetstack/cert-manager-acmesolver:v1.15.3
-cert_manager_cainjector_img: quay.io/jetstack/cert-manager-cainjector:v1.15.3
-cert_manager_controller_img: quay.io/jetstack/cert-manager-controller:v1.15.3
-cert_manager_webhook_img: quay.io/jetstack/cert-manager-webhook:v1.15.3
-cert_manager_startupapicheck_img: quay.io/jetstack/cert-manager-startupapicheck:v1.15.3
+cert_manager_acmesolver_img: quay.io/jetstack/cert-manager-acmesolver:v1.16.3
+cert_manager_cainjector_img: quay.io/jetstack/cert-manager-cainjector:v1.16.3
+cert_manager_controller_img: quay.io/jetstack/cert-manager-controller:v1.16.3
+cert_manager_webhook_img: quay.io/jetstack/cert-manager-webhook:v1.16.3
+cert_manager_startupapicheck_img: quay.io/jetstack/cert-manager-startupapicheck:v1.16.3
 cert_manager_ctl_img_171: quay.io/jetstack/cert-manager-ctl:v1.7.1
 cert_manager_acmesolver_img_171: quay.io/jetstack/cert-manager-acmesolver:v1.7.1
 cert_manager_cainjector_img_171: quay.io/jetstack/cert-manager-cainjector:v1.7.1
