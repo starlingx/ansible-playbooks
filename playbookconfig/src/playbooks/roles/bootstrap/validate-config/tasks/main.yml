@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -447,27 +447,34 @@
   - name: Set default start and end primary addresses based on provided primary subnets
     set_fact:
       default_management_start_address_primary: "{{ (network_params.management_subnet_primary | ipaddr(1)).split('/')[0] }}"
-      default_management_end_address_primary: "{{ (network_params.management_subnet_primary | ipaddr(-2)).split('/')[0] }}"
+      default_management_end_address_primary: >-
+        {{ (network_params.management_subnet_primary |
+            ipaddr(-1 if (network_params.management_subnet_primary|ipv6) else -2)).split('/')[0] }}
       default_cluster_host_start_address_primary: "{{ (network_params.cluster_host_subnet_primary | ipaddr(1))
                                                       .split('/')[0] }}"
-      default_cluster_host_end_address_primary: "{{ (network_params.cluster_host_subnet_primary | ipaddr(-2))
-                                                    .split('/')[0] }}"
+      default_cluster_host_end_address_primary: >-
+        {{ (network_params.cluster_host_subnet_primary |
+            ipaddr(-1 if (network_params.cluster_host_subnet_primary|ipv6) else -2)).split('/')[0] }}
       default_cluster_pod_start_address_primary: "{{ (network_params.cluster_pod_subnet_primary | ipaddr(1))
                                                      .split('/')[0] }}"
-      default_cluster_pod_end_address_primary: "{{ (network_params.cluster_pod_subnet_primary | ipaddr(-2))
-                                                   .split('/')[0] }}"
+      default_cluster_pod_end_address_primary: >-
+        {{ (network_params.cluster_pod_subnet_primary |
+            ipaddr(-1 if (network_params.cluster_pod_subnet_primary|ipv6) else -2)).split('/')[0] }}
       default_cluster_service_start_address_primary: "{{ (network_params.cluster_service_subnet_primary | ipaddr(1))
                                                          .split('/')[0] }}"
-      default_cluster_service_end_address_primary: "{{ (network_params.cluster_service_subnet_primary | ipaddr(-2))
-                                                       .split('/')[0] }}"
+      default_cluster_service_end_address_primary: >-
+        {{ (network_params.cluster_service_subnet_primary |
+            ipaddr(-1 if (network_params.cluster_service_subnet_primary|ipv6) else -2)).split('/')[0] }}
       default_external_oam_start_address_primary: "{{ (network_params.external_oam_subnet_primary | ipaddr(1))
                                                       .split('/')[0] }}"
-      default_external_oam_end_address_primary: "{{ (network_params.external_oam_subnet_primary | ipaddr(-2))
-                                                    .split('/')[0] }}"
+      default_external_oam_end_address_primary: >-
+        {{ (network_params.external_oam_subnet_primary |
+            ipaddr(-1 if (network_params.external_oam_subnet_primary|ipv6) else -2)).split('/')[0] }}
       default_management_multicast_start_address_primary: "{{ (network_params.management_multicast_subnet_primary |
                                                                ipaddr(1)).split('/')[0] }}"
-      default_management_multicast_end_address_primary: "{{ (network_params.management_multicast_subnet_primary |
-                                                             ipaddr(-2)).split('/')[0] }}"
+      default_management_multicast_end_address_primary: >-
+        {{ (network_params.management_multicast_subnet_primary |
+            ipaddr(-1 if (network_params.management_multicast_subnet_primary|ipv6) else -2)).split('/')[0] }}
       default_external_oam_node_0_address_primary: "{{ network_params.external_oam_floating_address_primary | ipmath(1) }}"
       default_external_oam_node_1_address_primary: "{{ network_params.external_oam_floating_address_primary | ipmath(2) }}"
 
@@ -475,66 +482,74 @@
   # based on the secondary subnet values, if present.
   - name: Set default start and end secondary addresses based on provided secondary subnets
     set_fact:
-      default_management_start_address_secondary: "{{ False if (not network_params.management_subnet_secondary)
-                                                            else (network_params.management_subnet_secondary |
-                                                                  ipaddr(1)).split('/')[0] }}"
-      default_management_end_address_secondary: "{{ False if (not network_params.management_subnet_secondary)
-                                                          else (network_params.management_subnet_secondary |
-                                                                ipaddr(-2)).split('/')[0] }}"
-      default_cluster_host_start_address_secondary: "{{ False if (not network_params.cluster_host_subnet_secondary)
-                                                              else (network_params.cluster_host_subnet_secondary |
-                                                                    ipaddr(1)).split('/')[0] }}"
-      default_cluster_host_end_address_secondary: "{{ False if (not network_params.cluster_host_subnet_secondary)
-                                                            else (network_params.cluster_host_subnet_secondary |
-                                                                  ipaddr(-2)).split('/')[0] }}"
-      default_cluster_pod_start_address_secondary: "{{ False if (not network_params.cluster_pod_subnet_secondary)
-                                                             else (network_params.cluster_pod_subnet_secondary |
-                                                                   ipaddr(1)).split('/')[0] }}"
-      default_cluster_pod_end_address_secondary: "{{ False if (not network_params.cluster_pod_subnet_secondary)
-                                                           else (network_params.cluster_pod_subnet_secondary |
-                                                                 ipaddr(-2)).split('/')[0] }}"
-      default_cluster_service_start_address_secondary: "{{ False if (not network_params.cluster_service_subnet_secondary)
-                                                                 else (network_params.cluster_service_subnet_secondary |
-                                                                       ipaddr(1)).split('/')[0] }}"
-      default_cluster_service_end_address_secondary: "{{ False if (not network_params.cluster_service_subnet_secondary)
-                                                               else (network_params.cluster_service_subnet_secondary |
-                                                                     ipaddr(-2)).split('/')[0] }}"
-      default_external_oam_start_address_secondary: "{{ False if (not network_params.external_oam_subnet_secondary)
-                                                              else (network_params.external_oam_subnet_secondary |
-                                                                    ipaddr(1)).split('/')[0] }}"
-      default_external_oam_end_address_secondary: "{{ False if (not network_params.external_oam_subnet_secondary)
-                                                            else (network_params.external_oam_subnet_secondary |
-                                                                  ipaddr(-2)).split('/')[0] }}"
-      default_management_multicast_start_address_secondary: "{{ False if (not network_params.
-                                                                              management_multicast_subnet_secondary)
-                                                                      else (network_params.
-                                                                            management_multicast_subnet_secondary
-                                                                            | ipaddr(1)).split('/')[0] }}"
-      default_management_multicast_end_address_secondary: "{{ False if (not network_params.
-                                                                            management_multicast_subnet_secondary)
-                                                                    else (network_params.
-                                                                          management_multicast_subnet_secondary
-                                                                          | ipaddr(-2)).split('/')[0] }}"
-      default_external_oam_node_0_address_secondary: "{{ False if (not network_params.
-                                                                       external_oam_floating_address_secondary)
-                                                               else network_params.external_oam_floating_address_secondary
-                                                                    | ipmath(1) }}"
-      default_external_oam_node_1_address_secondary: "{{ False if (not network_params.
-                                                                       external_oam_floating_address_secondary)
-                                                               else network_params.
-                                                                    external_oam_floating_address_secondary
-                                                                    | ipmath(2) }}"
+      default_management_start_address_secondary: >-
+        {{ False if (not network_params.management_subnet_secondary)
+                  else (network_params.management_subnet_secondary | ipaddr(1)).split('/')[0] }}
+      default_management_end_address_secondary: >-
+        {{ False if (not network_params.management_subnet_secondary)
+                  else (network_params.management_subnet_secondary |
+                        ipaddr(-1 if (network_params.management_subnet_secondary
+                        |ipv6) else -2)).split('/')[0] }}
+      default_cluster_host_start_address_secondary: >-
+        {{ False if (not network_params.cluster_host_subnet_secondary)
+                  else (network_params.cluster_host_subnet_secondary | ipaddr(1)).split('/')[0] }}
+      default_cluster_host_end_address_secondary: >-
+        {{ False if (not network_params.cluster_host_subnet_secondary)
+                  else (network_params.cluster_host_subnet_secondary |
+                        ipaddr(-1 if (network_params.cluster_host_subnet_secondary
+                        |ipv6) else -2)).split('/')[0] }}
+      default_cluster_pod_start_address_secondary: >-
+        {{ False if (not network_params.cluster_pod_subnet_secondary)
+                  else (network_params.cluster_pod_subnet_secondary | ipaddr(1)).split('/')[0] }}
+      default_cluster_pod_end_address_secondary: >-
+        {{ False if (not network_params.cluster_pod_subnet_secondary)
+                  else (network_params.cluster_pod_subnet_secondary |
+                        ipaddr(-1 if (network_params.cluster_pod_subnet_secondary
+                        |ipv6) else -2)).split('/')[0] }}
+      default_cluster_service_start_address_secondary: >-
+        {{ False if (not network_params.cluster_service_subnet_secondary)
+                  else (network_params.cluster_service_subnet_secondary | ipaddr(1)).split('/')[0] }}
+      default_cluster_service_end_address_secondary: >-
+        {{ False if (not network_params.cluster_service_subnet_secondary)
+                  else (network_params.cluster_service_subnet_secondary |
+                        ipaddr(-1 if (network_params.cluster_service_subnet_secondary
+                        |ipv6) else -2)).split('/')[0] }}
+      default_external_oam_start_address_secondary: >-
+        {{ False if (not network_params.external_oam_subnet_secondary)
+                  else (network_params.external_oam_subnet_secondary | ipaddr(1)).split('/')[0] }}
+      default_external_oam_end_address_secondary: >-
+        {{ False if (not network_params.external_oam_subnet_secondary)
+                  else (network_params.external_oam_subnet_secondary |
+                        ipaddr(-1 if (network_params.external_oam_subnet_secondary
+                        |ipv6) else -2)).split('/')[0] }}
+      default_management_multicast_start_address_secondary: >-
+        {{ False if (not network_params.management_multicast_subnet_secondary)
+                  else (network_params.management_multicast_subnet_secondary | ipaddr(1)).split('/')[0] }}
+      default_management_multicast_end_address_secondary: >-
+        {{ False if (not network_params.management_multicast_subnet_secondary)
+                  else (network_params.management_multicast_subnet_secondary |
+                        ipaddr(-1 if (network_params.management_multicast_subnet_secondary
+                        |ipv6) else -2)).split('/')[0] }}
+      default_external_oam_node_0_address_secondary: >-
+        {{ False if (not network_params.external_oam_floating_address_secondary)
+                  else network_params.external_oam_floating_address_secondary | ipmath(1) }}
+      default_external_oam_node_1_address_secondary: >-
+        {{ False if (not network_params.external_oam_floating_address_secondary)
+                  else network_params.external_oam_floating_address_secondary | ipmath(2) }}
 
   - name: Set default start and end admin network addresses based on provided subnets
     set_fact:
       default_admin_start_address_primary: "{{ (network_params.admin_subnet_primary | ipaddr(1)).split('/')[0] }}"
-      default_admin_end_address_primary: "{{ (network_params.admin_subnet_primary | ipaddr(-2)).split('/')[0] }}"
+      default_admin_end_address_primary: "{{ (network_params.admin_subnet_primary |
+                                              ipaddr(-1 if (network_params.admin_subnet_primary
+                                                            |ipv6) else -2)).split('/')[0] }}"
       default_admin_start_address_secondary: "{{ False if (not network_params.admin_subnet_secondary)
                                                        else (network_params.admin_subnet_secondary | ipaddr(1))
                                                             .split('/')[0] }}"
       default_admin_end_address_secondary: "{{ False if (not network_params.admin_subnet_secondary)
-                                                     else (network_params.admin_subnet_secondary | ipaddr(-2))
-                                                          .split('/')[0] }}"
+                                                     else (network_params.admin_subnet_secondary |
+                                                          ipaddr(-1 if (network_params.admin_subnet_secondary
+                                                          |ipv6) else -2)).split('/')[0] }}"
     when: admin_network is defined
 
   - name: Build primary address pairs for validation, merging default and user provided values
