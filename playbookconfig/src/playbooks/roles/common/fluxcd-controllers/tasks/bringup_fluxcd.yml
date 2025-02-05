@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021 Wind River Systems, Inc.
+# Copyright (c) 2021,2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -21,14 +21,14 @@
       src: "{{ item }}"
       dest: "{{ fluxcd_resource_dir }}/{{ item | basename | regex_replace('\\.j2$', '') }}"
     with_fileglob:
-    - "{{ role_path }}/templates/fluxcd-*.j2"
+    - "{{ role_path }}/templates/values.yaml.j2"
 
 - name: Configure and launch FluxCD helm and source controllers
   block:
     # Create the FluxCD namespace. This is used for the local registry secret.
     - name: Create namespace for FluxCD
       command: kubectl create namespace {{ fluxcd_namespace }}
-      retries: "{{ create_fluxcd_ns_retries }}"
+      retries: "{{ fluxcd_retries }}"
       delay: "{{ delay_time }}"
       register: create_fluxcd_ns
       until: create_fluxcd_ns.rc == 0
@@ -51,7 +51,7 @@
                pod-security.kubernetes.io/audit=privileged
                pod-security.kubernetes.io/enforce=privileged
                pod-security.kubernetes.io/warn=privileged
-      retries: "{{ create_fluxcd_ns_retries }}"
+      retries: "{{ fluxcd_retries }}"
       delay: "{{ delay_time }}"
       register: label_fluxcd_ns
       until: label_fluxcd_ns.rc == 0
@@ -66,7 +66,7 @@
 
     - name: Check if flux helm and source controllers exist
       command: kubectl -n {{ fluxcd_namespace }} get pods
-      retries: "{{ create_fluxcd_ns_retries }}"
+      retries: "{{ fluxcd_retries }}"
       delay: "{{ delay_time }}"
       register: fluxcd_get_pods
       until: fluxcd_get_pods.rc == 0
@@ -89,7 +89,7 @@
         - { namespace: flux-helm, deployment: source-controller }
       when: (mode is defined and mode == 'restore') and
             fluxcd_get_pods.stderr is not search('No resources found')
-      retries: "{{ create_fluxcd_ns_retries }}"
+      retries: "{{ fluxcd_retries }}"
       delay: "{{ delay_time }}"
       register: scale_deployments
       until: scale_deployments.rc == 0
@@ -97,7 +97,7 @@
     - block:
         - name: Check if secret exists
           command: kubectl -n {{ fluxcd_namespace }} get secret {{ fluxcd_secret_name }}
-          retries: "{{ create_fluxcd_ns_retries }}"
+          retries: "{{ fluxcd_retries }}"
           delay: "{{ delay_time }}"
           register: fluxcd_get_secret
           until: fluxcd_get_secret.rc == 0
@@ -111,7 +111,7 @@
             --docker-server={{ local_registry }}
             --docker-username={{ local_registry_credentials['username'] }}
             --docker-password={{ local_registry_credentials['password'] }}
-          retries: "{{ create_fluxcd_ns_retries }}"
+          retries: "{{ fluxcd_retries }}"
           delay: "{{ delay_time }}"
           register: Create_secret_if_it_does_not_exist
           until: Create_secret_if_it_does_not_exist.rc == 0
@@ -119,42 +119,104 @@
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
 
+        # Install FluxCD via helm chart
         - name: Install flux helm and source controllers with no prior deployment
-          command: kubectl create -f {{ fluxcd_resource_dir }}
-          retries: "{{ create_fluxcd_ns_retries }}"
+          command: helm upgrade
+                  --install
+                  --namespace {{ fluxcd_namespace }}
+                  --wait
+                  --wait-for-jobs
+                  -f {{ fluxcd_resource_dir }}/values.yaml
+                  fluxcd
+                  {{ flux_charts_path }}
+          retries: "{{ fluxcd_retries }}"
           delay: "{{ delay_time }}"
-          register: create_fluxcd_pods
-          until: create_fluxcd_pods.rc == 0
+          register: install_helm_release
+          until: install_helm_release.rc == 0
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
       when: fluxcd_get_pods.stderr is search('No resources found')
 
     - block:
+        # TODO(ipiresso): Label and annotation updates can be removed once StarlingX
+        # moves to a Helm version equal or higher than 3.17, which introduced the
+        # --take-ownership option.
+        - name: Label resources
+          command: kubectl label
+                   --overwrite
+                   {{ item }}
+                   app.kubernetes.io/managed-by=Helm
+          with_items:
+            - CustomResourceDefinition helmreleases.helm.toolkit.fluxcd.io
+            - CustomResourceDefinition buckets.source.toolkit.fluxcd.io
+            - CustomResourceDefinition gitrepositories.source.toolkit.fluxcd.io
+            - CustomResourceDefinition helmcharts.source.toolkit.fluxcd.io
+            - CustomResourceDefinition helmrepositories.source.toolkit.fluxcd.io
+            - CustomResourceDefinition ocirepositories.source.toolkit.fluxcd.io
+            - ClusterRole flux-edit
+            - ClusterRole flux-view
+            - ClusterRole crd-controller
+            - ClusterRoleBinding cluster-reconciler
+            - ClusterRoleBinding crd-controller
+            - -n flux-helm Service source-controller
+            - -n flux-helm Deployment --all
+          retries: "{{ fluxcd_retries }}"
+          delay: "{{ delay_time }}"
+          register: label_fluxcd_ns
+          until: label_fluxcd_ns.rc == 0
+          failed_when: false
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+        - name: Annotate resources
+          command: kubectl annotate
+                   --overwrite
+                   {{ item }}
+                   meta.helm.sh/release-name=fluxcd
+                   meta.helm.sh/release-namespace=flux-helm
+          with_items:
+            - CustomResourceDefinition helmreleases.helm.toolkit.fluxcd.io
+            - CustomResourceDefinition buckets.source.toolkit.fluxcd.io
+            - CustomResourceDefinition gitrepositories.source.toolkit.fluxcd.io
+            - CustomResourceDefinition helmcharts.source.toolkit.fluxcd.io
+            - CustomResourceDefinition helmrepositories.source.toolkit.fluxcd.io
+            - CustomResourceDefinition ocirepositories.source.toolkit.fluxcd.io
+            - ClusterRole flux-edit
+            - ClusterRole flux-view
+            - ClusterRole crd-controller
+            - ClusterRoleBinding cluster-reconciler
+            - ClusterRoleBinding crd-controller
+            - -n flux-helm Service source-controller
+            - -n flux-helm Deployment --all
+          retries: "{{ fluxcd_retries }}"
+          delay: "{{ delay_time }}"
+          register: annotate_fluxcd_ns
+          until: annotate_fluxcd_ns.rc == 0
+          failed_when: false
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
         # This will scale the deployment up, but will also upgrade FluxCD in case there was a change
-        - name: Install flux helm and source controllers for restore/upgrades over existing deployment
-          command: kubectl apply -f {{ fluxcd_resource_dir }}
-          retries: "{{ create_fluxcd_ns_retries }}"
+        - name: Upgrade flux helm and source controllers for restore/upgrades over existing deployment
+          command: helm upgrade
+                  --install
+                  --namespace {{ fluxcd_namespace }}
+                  --create-namespace
+                  --wait
+                  --wait-for-jobs
+                  --reset-then-reuse-values
+                  -f {{ fluxcd_resource_dir }}/values.yaml
+                  fluxcd
+                  {{ flux_charts_path }}
+          retries: "{{ fluxcd_retries }}"
           delay: "{{ delay_time }}"
-          register: create_fluxcd_pods
-          until: create_fluxcd_pods.rc == 0
+          register: upgrade_helm_release
+          until: upgrade_helm_release.rc == 0
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
 
-      when: (mode is defined and mode == 'restore') and
-            fluxcd_get_pods.stderr is not search('No resources found')
-
-    - block:
-        - name: Install flux helm and source controllers for upgrade activate
-          command: kubectl apply -f {{ fluxcd_resource_dir }}
-          retries: "{{ create_fluxcd_ns_retries }}"
-          delay: "{{ delay_time }}"
-          register: create_fluxcd_pods
-          until: create_fluxcd_pods.rc == 0
-          environment:
-            KUBECONFIG: /etc/kubernetes/admin.conf
-
-      when: (upgrade_activate_from_release is defined and
-             upgrade_activate_from_release != '21.12')
+      when: ((mode is defined and mode == 'restore') and fluxcd_get_pods.stderr is not search('No resources found'))
+            or (upgrade_activate_from_release is defined)
 
   always:
   - name: Clean FluxCD resource directory

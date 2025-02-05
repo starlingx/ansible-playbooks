@@ -1,0 +1,271 @@
+# global
+
+installCRDs: true
+clusterDomain: cluster.local
+
+policies:
+  create: true
+
+rbac:
+  create: true
+  # -- Grant the Kubernetes view, edit and admin roles access to Flux custom resources
+  createAggregation: true
+  # -- Add annotations to all RBAC resources, e.g. "helm.sh/resource-policy": keep
+  annotations: {}
+  roleRef:
+    name: cluster-admin
+
+logEncoding: console
+logLevel: debug
+watchAllNamespaces: true
+
+# -- contents of pod imagePullSecret in form 'name=[secretName]'; applied to all controllers
+imagePullSecrets:
+  - name: default-registry-key
+
+
+# controllers
+
+helmController:
+  create: true
+  image: "{{ local_registry }}/{{ flux_helm_controller_image }}"
+  tag: {{ flux_helm_controller_tag }}
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 0
+      memory: {{ flux_helm_controller_memory_request }}
+  priorityClassName: ""
+  annotations:
+    prometheus.io/port: "8080"
+    prometheus.io/scrape: "true"
+  labels:
+    app.starlingx.io/component: platform
+  container:
+    additionalArgs: "--graceful-shutdown-timeout=10s 2>&1 | tee -a /var/log/helm-controller.log"
+  extraEnv:
+    - name: GOMAXPROCS
+      valueFrom:
+        resourceFieldRef:
+          containerName: manager
+          resource: limits.cpu
+    - name: GOMEMLIMIT
+      valueFrom:
+        resourceFieldRef:
+          containerName: manager
+          resource: limits.memory
+  serviceAccount:
+    create: true
+    automount: true
+    annotations: {}
+  imagePullPolicy: ""
+  terminationGracePeriodSeconds: 10
+  readinessProbe:
+    timeoutSeconds: {{ flux_helm_controller_readiness_timeout }}
+  livenessProbe:
+    timeoutSeconds: {{ flux_helm_controller_liveness_timeout }}
+  nodeSelector:
+    node-role.kubernetes.io/control-plane: ""
+
+  affinity: {}
+  # expects input structure as per specification https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.11/#toleration-v1-core
+  # for example:
+  #   tolerations:
+  #   - key: foo.bar.com/role
+  #     operator: Equal
+  #     value: master
+  #     effect: NoSchedule
+
+  tolerations:
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+  volumeMounts:
+    - mountPath: /var/log
+      name: log-volume
+
+  volumes:
+    - name: log-volume
+      hostPath:
+        path: /var/log/flux
+        type: Directory
+
+imageAutomationController:
+  create: false
+
+imageReflectionController:
+  create: false
+
+kustomizeController:
+  create: false
+  image: ghcr.io/fluxcd/kustomize-controller
+  tag: v1.3.0
+  resources:
+    limits: {}
+    # cpu: 1000m
+    # memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 64Mi
+  priorityClassName: ""
+  annotations:
+    prometheus.io/port: "8080"
+    prometheus.io/scrape: "true"
+  labels: {}
+  container:
+    additionalArgs: []
+  extraEnv: []
+  serviceAccount:
+    create: true
+    automount: true
+    annotations: {}
+  imagePullPolicy: ""
+  secret:
+    # -- Create a secret to use it with extraSecretMounts. Defaults to false.
+    create: false
+    name: ""
+    data: {}
+  # -- Defines envFrom using a configmap and/or secret.
+  envFrom:
+    map:
+      name: ""
+    secret:
+      name: ""
+  # -- Defines additional mounts with secrets.
+  # Secrets must be manually created in the namespace or with kustomizeController.secret
+  extraSecretMounts: []
+  # - name: secret-files
+  #   mountPath: /etc/secrets
+  #   subPath: ""
+  #   secretName: secret-files
+  #   readOnly: true
+
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+
+notificationController:
+  create: false
+  image: ghcr.io/fluxcd/notification-controller
+  tag: v1.3.0
+  resources:
+    limits: {}
+    # cpu: 1000m
+    # memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 64Mi
+  priorityClassName: ""
+  annotations:
+    prometheus.io/port: "8080"
+    prometheus.io/scrape: "true"
+  labels: {}
+  container:
+    additionalArgs: []
+  extraEnv: []
+  serviceAccount:
+    create: true
+    automount: true
+    annotations: {}
+  imagePullPolicy: ""
+  service:
+    labels: {}
+    annotations: {}
+  webhookReceiver:
+    service:
+      labels: {}
+      annotations: {}
+    ingress:
+      create: false
+      # ingressClassName: nginx
+      annotations: {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+      labels: {}
+      hosts:
+        - host: flux-webhook.example.com
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+      tls: []
+      #  - secretName: flux-webhook-tls
+      #    hosts:
+      #      - flux-webhook.example.com
+
+
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+
+sourceController:
+  create: true
+  image: "{{ local_registry }}/{{ flux_source_controller_image }}"
+  tag: {{ flux_source_controller_tag }}
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 0
+      memory: {{ flux_source_controller_memory_request }}
+  priorityClassName: ""
+  annotations:
+    prometheus.io/port: "8080"
+    prometheus.io/scrape: "true"
+  labels:
+    app.starlingx.io/component: platform
+  container:
+    additionalArgs: "2>&1 | tee -a /var/log/source-controller.log"
+  serviceAccount:
+    create: true
+    automount: true
+    annotations: {}
+  imagePullPolicy: ""
+  readinessProbe:
+    timeoutSeconds: {{ flux_source_controller_readiness_timeout }}
+  livenessProbe:
+    timeoutSeconds: {{ flux_source_controller_liveness_timeout }}
+  service:
+    labels: {}
+    annotations: {}
+  nodeSelector:
+    node-role.kubernetes.io/control-plane: ""
+  affinity: {}
+  extraEnv:
+    - name: TUF_ROOT
+      value: /tmp/.sigstore
+    - name: GOMAXPROCS
+      valueFrom:
+        resourceFieldRef:
+          containerName: manager
+          resource: limits.cpu
+    - name: GOMEMLIMIT
+      valueFrom:
+        resourceFieldRef:
+          containerName: manager
+          resource: limits.memory
+  tolerations:
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+  volumeMounts:
+    - mountPath: /var/log
+      name: log-volume
+  volumes:
+    - name: log-volume
+      hostPath:
+        path: /var/log/flux
+        type: Directory
+  priorityClassName: system-cluster-critical
+
+preInstallJob:
+  create: false
