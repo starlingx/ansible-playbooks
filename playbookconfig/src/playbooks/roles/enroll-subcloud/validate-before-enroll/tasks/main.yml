@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -54,9 +54,18 @@
 - name: Merge user and default registries dictionaries
   set_fact:
     docker_registries: "{{ default_docker_registries | combine(docker_registries) }}"
+  no_log: true
 
 - debug:
-    msg: "Docker registries: {{ docker_registries }}"
+    msg: |
+      Docker registries are
+      {%+ for k, v in docker_registries.items() %}
+      {%+ if "password" in v %}
+      {%+ set _ = v.update({"password": "REDACTED"}) %}
+      {%+ endif %}
+        {{ k }}:
+          {{ (v | to_nice_yaml | indent(4)).rstrip() }}
+      {%+ endfor %}
 
 - name: Validate registry configurations
   import_role:

@@ -53,7 +53,15 @@
       - OAM floating ip is {{ external_oam_floating_address }}
       - Management dynamic address allocation is {{ management_dynamic_address_allocation }}
       - Cluster host dynamic address allocation is {{ cluster_host_dynamic_address_allocation }}
-      - Docker registries is {{ docker_registries }}
+      - |
+        Docker registries are
+        {%+ for k, v in docker_registries.items() %}
+        {%+ if "password" in v %}
+        {%+ set _ = v.update({"password": "REDACTED"}) %}
+        {%+ endif %}
+          {{ k }}:
+            {{ (v | to_nice_yaml | indent(4)).rstrip() }}
+        {%+ endfor %}
       - Docker HTTP proxy is {{ docker_http_proxy }}
       - Docker HTTPS proxy is {{ docker_https_proxy }}
       - Docker no proxy list is {{ docker_no_proxy }}
