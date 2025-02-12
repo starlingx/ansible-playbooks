@@ -1,0 +1,59 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This is an example inventory file for use with the
+# usr/share/ansible/stx-ansible/playbooks/update_secure_boot_certificate.yml
+# playbook.
+#
+# To run the playbook, define an overrides file (as shown here)
+# with the required variable settings and pass it as a parameter
+# on the ansible command-line.
+#
+# Example ansible command:
+# ansible-playbook /usr/share/ansible/stx-ansible/playbooks/update_secure_boot_certificate.yml \
+#     -i @my-inventory-file.yml \
+#     --extra-vars "target_list=localhost,subcloud1"
+
+# Use target_list to specify individual subclouds, or a comma-separated
+# list of subclouds such as 'subcloud1,subcloud2'. To target all online
+# subclouds at once, use 'target_list=all_online_subclouds'.
+#
+# To target the system controller or standalone systems, use 'target_list=localhost'.
+#
+all:
+  vars:
+    # The contents to the secure boot certificate to be installed and the KEK
+    # to allow writing in UEFI db.
+    secure_boot_cert: <base64_cert>
+    key_exchange_key: <base64_key>
+
+  children:
+    # This will be applied to all online subclouds.
+    # Use the example below in hosts to override specific settings for a subcloud, such as passwords.
+    target_group:
+      vars:
+        # SSH password to connect to all subclouds
+        ansible_ssh_user: sysadmin
+        ansible_ssh_pass: <sysadmin-pwd>
+        # Sudo password
+        ansible_become_pass: <sysadmin-pwd>
+#      Add a child group, as shown below, if you need individual
+#      overrides for specific subcloud hosts.
+#      Use the hosts section to add the list of hosts.
+#      Use the vars section to override target_group variables,
+#      such as the ssh password.
+#      Note that you can also override multiple hosts at once or
+#      have multiple child groups if necessary.
+#      Example:
+#      children:
+#        different_password_group:
+#          vars:
+#            ansible_ssh_user: sysadmin
+#            ansible_ssh_pass: <sysadmin-pwd>
+#            ansible_become_pass: <sysadmin-pwd>
+#          hosts:
+#            subcloud1:
+#            subcloud2:
