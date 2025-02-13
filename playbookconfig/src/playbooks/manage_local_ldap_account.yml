@@ -55,6 +55,9 @@
       in_user_id: "{{ user_id if user_id is defined else ''}}"
 
   - set_fact:
+      in_project_name: "{{ project_name if project_name is defined else 'admin'}}"
+
+  - set_fact:
       in_mode: "{{ mode if mode is defined else 'create'}}"
 
   - set_fact:
