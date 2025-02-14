@@ -350,6 +350,16 @@
     networking_configurations: "{{ networking_configurations_defaults \
                                | combine(networking_configurations|default({})) }}"
 
+- block:
+  - name: Update controller-manager extraArgs to disable leader election
+    set_fact:
+      controllermanager_extra_args: "{{ controllermanager_extra_args | combine({ 'leader-elect': 'false' }) }}"
+
+  - name: Update scheduler extraArgs to disable leader election
+    set_fact:
+      scheduler_extra_args: "{{ scheduler_extra_args | combine({ 'leader-elect': 'false' }) }}"
+  when: system_mode == 'simplex'
+
 - name: Add OpenID Connect parameter oidc-client-id to apiserver extraArgs section
   set_fact:
     apiserver_extra_args: "{{ apiserver_extra_args | combine({ 'oidc-client-id' : apiserver_oidc.client_id })}}"
