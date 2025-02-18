@@ -220,10 +220,19 @@ data:
         kubectl -n rook-ceph patch configmap rook-ceph-recovery -p '{"data": {"mon_initial_members": "'"${DATA_MON_INIT}"'"}}'
       fi
 
+      # For IPv4
       mon_host_addr=$(kubectl -n rook-ceph get service rook-ceph-mon-${MON_NAME} -o jsonpath='{.spec.clusterIP}')
+      mon_host="[v2:${mon_host_addr}:3300,v1:${mon_host_addr}:6789]"
+
+      # For IPv6
+      ip_family=$(kubectl -n rook-ceph get service rook-ceph-mon-${MON_NAME} -o jsonpath='{.spec.ipFamilies[0]}')
+      if [ $ip_family == 'IPv6' ]; then
+        mon_host_addr="[$mon_host_addr]"
+        mon_host="v2:${mon_host_addr}:3300,v1:${mon_host_addr}:6789"
+      fi
 
       kubectl -n rook-ceph patch configmap rook-ceph-mon-endpoints -p '{"data": {"data": "'"${MON_NAME}"'='"${mon_host_addr}"':6789"}}'
-      kubectl -n rook-ceph patch secret rook-ceph-config -p '{"stringData": {"mon_host": "[v2:'"${mon_host_addr}"':3300,v1:'"${mon_host_addr}"':6789]", "mon_initial_members": "'"${MON_NAME}"'"}}'
+      kubectl -n rook-ceph patch secret rook-ceph-config -p '{"stringData": {"mon_host": "'"${mon_host}"'", "mon_initial_members": "'"${MON_NAME}"'"}}'
 
       if [ $STRUCT == 'ONLY_OSD' ]; then
         kubectl label nodes ${HOSTNAME} ceph-mgr-placement=enabled
@@ -405,8 +414,10 @@ data:
         check_command_rc $?
 
         # Try to recover from some common errors
-        cephfs-journal-tool --rank=${FS_NAME}:0 event recover_dentries summary
-        cephfs-journal-tool --rank=${FS_NAME}:0 journal reset
+        # The timeout command was used because depending on the status of the cluster, it can get stuck
+        # on "cephfs-journal-tool" commands. But this will not cause any problems in recovery.
+        timeout 180 cephfs-journal-tool --rank=${FS_NAME}:0 event recover_dentries summary
+        timeout 180 cephfs-journal-tool --rank=${FS_NAME}:0 journal reset
         cephfs-table-tool ${FS_NAME}:0 reset session
         cephfs-table-tool ${FS_NAME}:0 reset snap
         cephfs-table-tool ${FS_NAME}:0 reset inode
@@ -640,10 +651,27 @@ data:
 
     set -x
 
+    if [ "${MON_HOST}"x == ""x ]; then
+        MON_HOST=$(echo ${ROOK_MONS} | sed 's/[a-z]\\+=//g')
+    fi
+
+    cat > /etc/ceph/ceph.conf << EOF
+    [global]
+    mon_host = ${MON_HOST}
+    EOF
+
+    admin_keyring=$(echo ${ADMIN_KEYRING} | cut -f4 -d' ')
+    cat >  /etc/ceph/ceph.client.admin.keyring << EOF
+    [client.admin]
+    key = $admin_keyring
+    EOF
+
     while true
     do
-      kubectl -n rook-ceph wait --for=jsonpath='{.data.status}'=completed configmap/rook-ceph-recovery
-      if [ $? -eq 0 ]; then
+      # TODO: Instead of sleep, use 'kubectl wait'
+      sleep 30
+      status=$(kubectl -n rook-ceph get configmap rook-ceph-recovery -o jsonpath='{.data.status}')
+      if [ "$status" == "completed" ]; then
         if [ "${STRUCT}" == 'ONE_HOST' ]; then
           break
         fi
@@ -665,6 +693,27 @@ data:
         break
       fi
     done
+
+    if ceph health | grep "mds daemon damaged\\|filesystem is degraded"; then
+      kubectl -n rook-ceph scale deployment -l app=rook-ceph-mds --replicas 0
+      kubectl -n rook-ceph wait --for=delete pod --all=true -l app=rook-ceph-mds --timeout=30s
+      if [ $? -ne 0 ]; then
+        kubectl -n rook-ceph delete pod -l app=rook-ceph-mds --grace-period=0 --force
+      fi
+
+      FS_NAME=kube-cephfs
+      DATA_POOL_NAME=kube-cephfs-data
+      METADATA_POOL_NAME=kube-cephfs-metadata
+
+      ceph fs reset ${FS_NAME} --yes-i-really-mean-it
+      cephfs-journal-tool --rank=${FS_NAME}:0 event recover_dentries summary
+      cephfs-journal-tool --rank=${FS_NAME}:0 journal reset
+      cephfs-table-tool ${FS_NAME}:0 reset session
+      cephfs-table-tool ${FS_NAME}:0 reset snap
+      cephfs-table-tool ${FS_NAME}:0 reset inode
+
+      kubectl -n rook-ceph scale deployment -l app=rook-ceph-mds --replicas 1
+    fi
 
     set +x
     PODS=$(kubectl -n rook-ceph get pods -l app.kubernetes.io/part-of=rook-ceph-recovery --no-headers -o custom-columns=":metadata.name")
@@ -1171,9 +1220,19 @@ spec:
             path: /etc/kubernetes/admin.conf
       containers:
         - name: monitor
-          image: registry.local:9001/docker.io/bitnami/kubectl:1.29
+          image: registry.local:9001/docker.io/openstackhelm/ceph-config-helper:ubuntu_jammy_18.2.2-1-20240312
           command: [ "/bin/bash", "/tmp/mount/monitor.sh" ]
           env:
+          - name: ROOK_MONS
+            valueFrom:
+              configMapKeyRef:
+                key: data
+                name: rook-ceph-mon-endpoints
+          - name: ADMIN_KEYRING
+            valueFrom:
+              secretKeyRef:
+                name: rook-ceph-admin-keyring
+                key: keyring
           - name: STRUCT
             value: $STRUCTURE
           - name: HAS_MON_FLOAT

@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -26,6 +26,20 @@
     - name: Store hosts data script stdout output
       set_fact:
         hosts_data: "{{ get_hosts_data_out.stdout_lines[-1] }}"
+
+    - name: Check Kubernetes health
+      command: sysinv-k8s-health check
+      register: k8s_health_check
+      become: yes
+      failed_when: k8s_health_check.rc != 0
+
+    - name: Log Kubernetes health check failure
+      fail:
+        msg: >-
+          Kubernetes health check failed with return code {{ k8s_health_check.rc }}
+          and error: {{ k8s_health_check.stderr }}. Command "sysinv-k8s-health
+          check" tried 20 attempts to check k8s health and failed.
+      when: k8s_health_check.rc != 0
 
     - name: Recover rook-ceph
       script: recover_rook_ceph.py "{{ hosts_data }}"
