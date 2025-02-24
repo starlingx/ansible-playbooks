@@ -1,0 +1,43 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+
+- name: Do software deploy start
+  block:
+    - name: Execute software deploy start
+      command: "software deploy start {{ sw_deployments_info.target_release_id }}"
+
+    - name: Wait for software deploy start to finish
+      command: software deploy show
+      register: wait_for_start_result
+      until: wait_for_start_result.stdout | regex_search('start-(done|failed)')
+      retries: "{{ (wait_for_start_timeout|int + 9) // 10 }}"
+      delay: 10
+      failed_when: wait_for_start_result | regex_search('start-failed')
+
+  rescue:
+    - name: Failed while attempting software deploy start
+      fail:
+        msg: |
+          {{ software_deploy_error_msg }}
+
+          Step error:
+            {{ ansible_failed_result | to_nice_yaml | indent(2) }}
+
+- name: Do software deploy host
+  block:
+    - name: Execute software deploy host localhost
+      command: software deploy host localhost
+
+  rescue:
+    - name: Fail while attempting software deploy host
+      fail:
+        msg: |
+          {{ software_deploy_error_msg }}
+
+          Step error:
+            {{ ansible_failed_result | to_nice_yaml | indent(2) }}

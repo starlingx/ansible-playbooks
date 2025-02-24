@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -11,7 +11,7 @@
 #       - Reboot the controller if the patching requires it
 #
 
-- name: Exclude patches on AIO-SX
+- name: Exclude patches on AIO-SX by default
   set_fact:
     exclude_sw_deployments: "{{ system_mode == 'simplex' and system_type == 'All-in-one' }}"
   when: exclude_sw_deployments is not defined
@@ -20,6 +20,11 @@
   stat:
     path: "{{ restore_patching_in_progress_flag }}"
   register: in_progress_flag
+
+- name: Check if software deployments restore is marked RR
+  stat:
+    path: "{{ restore_patching_rr_flag }}"
+  register: rr_flag
 
 - name: Check if software deployments restore is already complete
   stat:
@@ -33,8 +38,8 @@
 
       It is recommended to reinstall the system before reattempting.
   when:
-    - not complete_flag.stat.exists
     - in_progress_flag.stat.exists
+    - not rr_flag.stat.exists
 
 - name: Restore software deployments
   block:
@@ -44,15 +49,32 @@
 
     - name: Normalize facts
       set_fact:
-        sw_deployments_info: "{{ sw_deployments_info_result.stdout | from_json }}"
+        sw_deployments_info: "{{ _sw_deployments_info }}"
+        sw_deployments_enabled: "{{ _sw_deployments_info.backup_patched }}"
+        do_sw_deployments_prepare: "{{ not in_progress_flag.stat.exists }}"
+        do_sw_deployments_restore: "{{ _sw_deployments_info.target_release_id is not none }}"
+        do_sw_deployments_begin: "{{ not rr_flag.stat.exists }}"
+        do_sw_deployments_end: true
+        do_sw_deployments_reboot: >-
+          {{
+            not rr_flag.stat.exists and (
+              sw_deployments_force_reboot|bool or _sw_deployments_info.target_reboot_required|bool
+            )
+          }}
+      vars:
+        _sw_deployments_info: "{{ sw_deployments_info_result.stdout | from_json }}"
 
     - name: Display software deployments information from backup
       debug:
-        var: sw_deployments_info
+        msg: |
+          Restore software deployments enabled: {{ sw_deployments_enabled }}
+
+          Software deployments data:
+            {{ sw_deployments_info | to_nice_yaml | indent(2) }}
 
     - name: Restore software deployments
-      include_tasks: restore_sw_deployments.yml
-      when: sw_deployments_info.backup_patched
+      include_tasks: restore.yml
+      when: sw_deployments_enabled|bool
 
   when:
     - not exclude_sw_deployments|bool
