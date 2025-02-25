@@ -28,3 +28,4 @@ snapshot_controller_img: registry.k8s.io/sig-storage/snapshot-controller:v6.3.3
 pause_img: k8s.gcr.io/pause:3.4.1
 flux_helm_controller_img: docker.io/fluxcd/helm-controller:v1.0.1
 flux_source_controller_img: docker.io/fluxcd/source-controller:v1.3.0
+flux_notification_controller_img: ghcr.io/fluxcd/notification-controller:v1.3.0
