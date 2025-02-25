@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -95,6 +95,7 @@
 # create a copy of docker_registries without passwords for debug logging
 - set_fact:
     docker_registries_with_secrets: "{{ docker_registries }}"
+  no_log: true
 
 - set_fact:
     docker_registries: "{{ docker_registries | combine(hide_pw, recursive=true) }}"
@@ -140,63 +141,28 @@
                             recursive=true) }}"
       icr_registry: "{{ icr_registry | combine(docker_registries_with_secrets['defaults'], recursive=true) }}"
     when: docker_registries['defaults'] is defined and docker_registries['defaults'] is not none
+    no_log: true
 
-  - set_fact:
-      k8s_registry:
-        "{{ k8s_registry | combine(docker_registries_with_secrets[default_k8s_registry.url], recursive=true) }}"
-    when: (docker_registries[default_k8s_registry.url]['url'] is not defined or
-           (docker_registries[default_k8s_registry.url]['url'] is not none and
-           docker_registries[default_k8s_registry.url]['url'] != default_k8s_registry.url))
-
-  - set_fact:
-      gcr_registry:
-        "{{ gcr_registry | combine(docker_registries_with_secrets[default_gcr_registry.url], recursive=true) }}"
-    when: (docker_registries[default_gcr_registry.url]['url'] is not defined or
-           (docker_registries[default_gcr_registry.url]['url'] is not none and
-           docker_registries[default_gcr_registry.url]['url'] != default_gcr_registry.url))
-
-  - set_fact:
-      quay_registry:
-        "{{ quay_registry | combine(docker_registries_with_secrets[default_quay_registry.url], recursive=true) }}"
-    when: (docker_registries[default_quay_registry.url]['url'] is not defined or
-           (docker_registries[default_quay_registry.url]['url'] is not none and
-           docker_registries[default_quay_registry.url]['url'] != default_quay_registry.url))
-
-  - set_fact:
-      docker_registry:
-        "{{ docker_registry | combine(docker_registries_with_secrets[default_docker_registry.url], recursive=true) }}"
-    when: (docker_registries[default_docker_registry.url]['url'] is not defined or
-           (docker_registries[default_docker_registry.url]['url'] is not none and
-           docker_registries[default_docker_registry.url]['url'] != default_docker_registry.url))
-
-  - set_fact:
-      elastic_registry:
-        "{{ elastic_registry | combine(docker_registries_with_secrets[default_elastic_registry.url], recursive=true) }}"
-    when: (docker_registries[default_elastic_registry.url]['url'] is not defined or
-           (docker_registries[default_elastic_registry.url]['url'] is not none and
-           docker_registries[default_elastic_registry.url]['url'] != default_elastic_registry.url))
-
-  - set_fact:
-      ghcr_registry:
-        "{{ ghcr_registry | combine(docker_registries_with_secrets[default_ghcr_registry.url], recursive=true) }}"
-    when: (docker_registries[default_ghcr_registry.url]['url'] is not defined or
-           (docker_registries[default_ghcr_registry.url]['url'] is not none and
-           docker_registries[default_ghcr_registry.url]['url'] != default_ghcr_registry.url))
-
-  - set_fact:
-      registryk8s_registry:
-        "{{ registryk8s_registry | combine(docker_registries_with_secrets[default_registryk8s_registry.url],
-        recursive=true) }}"
-    when: (docker_registries[default_registryk8s_registry.url]['url'] is not defined or
-           (docker_registries[default_registryk8s_registry.url]['url'] is not none and
-           docker_registries[default_registryk8s_registry.url]['url'] != default_registryk8s_registry.url))
-
-  - set_fact:
-      icr_registry:
-        "{{ icr_registry | combine(docker_registries_with_secrets[default_icr_registry.url], recursive=true) }}"
-    when: (docker_registries[default_icr_registry.url]['url'] is not defined or
-           (docker_registries[default_icr_registry.url]['url'] is not none and
-           docker_registries[default_icr_registry.url]['url'] != default_icr_registry.url))
+  - name: Add registry secrets if present
+    set_fact:
+      k8s_registry: "{{ k8s_registry | combine(_k8s_registry_secrets, recursive=true) }}"
+      gcr_registry: "{{ gcr_registry | combine(_gcr_registry_secrets, recursive=true) }}"
+      quay_registry: "{{ quay_registry | combine(_quay_registry_secrets, recursive=true) }}"
+      docker_registry: "{{ docker_registry | combine(_docker_registry_secrets, recursive=true) }}"
+      elastic_registry: "{{ elastic_registry | combine(_elastic_registry_secrets, recursive=true) }}"
+      ghcr_registry: "{{ ghcr_registry | combine(_ghcr_registry_secrets, recursive=true) }}"
+      registryk8s_registry: "{{ registryk8s_registry | combine(_registryk8s_registry_secrets, recursive=true) }}"
+      icr_registry: "{{ icr_registry | combine(_icr_registry_secrets, recursive=true) }}"
+    vars:
+      _k8s_registry_secrets: "{{ docker_registries_with_secrets.get(default_k8s_registry.url, {})}}"
+      _gcr_registry_secrets: "{{ docker_registries_with_secrets.get(default_gcr_registry.url, {})}}"
+      _quay_registry_secrets: "{{ docker_registries_with_secrets.get(default_quay_registry.url, {})}}"
+      _docker_registry_secrets: "{{ docker_registries_with_secrets.get(default_docker_registry.url, {})}}"
+      _elastic_registry_secrets: "{{ docker_registries_with_secrets.get(default_elastic_registry.url, {})}}"
+      _ghcr_registry_secrets: "{{ docker_registries_with_secrets.get(default_ghcr_registry.url, {})}}"
+      _registryk8s_registry_secrets: "{{ docker_registries_with_secrets.get(default_registryk8s_registry.url, {})}}"
+      _icr_registry_secrets: "{{ docker_registries_with_secrets.get(default_icr_registry.url, {})}}"
+    no_log: true
 
   - name: Update use_default_registries flag
     set_fact:
