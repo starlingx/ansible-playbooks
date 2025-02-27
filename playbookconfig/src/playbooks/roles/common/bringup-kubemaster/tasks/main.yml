@@ -334,6 +334,13 @@
     dest: /etc/profile.d/kubeconfig.sh
     remote_src: yes
 
+- name: Set permissions to 600 for all .crt files in /etc/kubernetes/pki
+  file:
+    path: "{{ item }}"
+    mode: '0600'
+  with_fileglob:
+    - "{{ kubeadm_pki_dir }}/*.crt"
+
 - block:
   - name: Patch pull secret into kube-proxy service account
     command: >
