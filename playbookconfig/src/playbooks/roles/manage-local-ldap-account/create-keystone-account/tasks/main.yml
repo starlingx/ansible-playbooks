@@ -8,16 +8,16 @@
 
 - name: Create Keystone user
   block:
-  - name: Create the keystone user {{ in_user_id }} in project {{ in_project_name }}
+  - name: Create the keystone user {{ in_user_id }}
     expect:
       command: >-
-        /bin/sh -c 'source /etc/platform/openrc; openstack {{ os_param_region_name }}
-        user create --project {{ in_project_name }} --password-prompt {{ in_user_id }}'
+        /bin/sh -c 'source /etc/platform/openrc; openstack {{ os_param_region_name }} user create --project
+        admin --password-prompt {{ in_user_id }}'
       responses:
         Password: '{{ in_user_password }}'
         "\\~\\$": exit
 
   - name: Add Keystone user to the {{ in_user_role }} role
-    shell: >-
-      source /etc/platform/openrc; openstack {{ os_param_region_name }} role add --user
-      {{ in_user_id }} --project {{ in_project_name }} {{ in_user_role }}
+    shell: |
+      source /etc/platform/openrc
+      openstack {{ os_param_region_name }} role add --user {{ in_user_id }} --project admin {{ in_user_role }}
