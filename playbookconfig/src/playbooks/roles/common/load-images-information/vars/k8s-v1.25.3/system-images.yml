@@ -12,9 +12,8 @@ intel_qat_plugin_img: docker.io/intel/intel-qat-plugin:0.26.0
 intel_gpu_plugin_img: docker.io/intel/intel-gpu-plugin:0.26.0
 intel_gpu_initcontainer_img: docker.io/intel/intel-gpu-initcontainer:0.26.0
 # Nginx images
-nginx_ingress_controller_img: registry.k8s.io/ingress-nginx/controller:v1.11.1
-nginx_kube_webhook_certgen_img: registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.4.1
-nginx_opentelemetry_img: registry.k8s.io/ingress-nginx/opentelemetry:v20230721-3e2062ee5
+nginx_ingress_controller_img: registry.k8s.io/ingress-nginx/controller:v1.12.0
+nginx_kube_webhook_certgen_img: registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.5.0
 default_backend_img: registry.k8s.io/defaultbackend-amd64:1.5
 # Cert-manager images
 cert_manager_acmesolver_img: quay.io/jetstack/cert-manager-acmesolver:v1.16.3
