@@ -27,6 +27,18 @@
   args:
     warn: false
 
+- name: Check if the controller0_hieradata file exists
+  stat:
+    path: "{{ hieradata_workdir }}/controller-0.yaml"
+  register: controller0_hieradata
+
+- name: Fail if controller0_hieradata file does not exist
+  fail:
+    msg: >
+      "{{ hieradata_workdir }}/controller-0.yaml not found.
+      Optimized-restore cannot proceed without it."
+  when: not controller0_hieradata.stat.exists
+
 - name: Read in system.yaml network values
   shell: "grep -E '^platform::network::' {{ hieradata_workdir }}/system.yaml"
   register: system_result
@@ -52,11 +64,6 @@
       platform::network::mgmt::params::controller0_address: 127.0.0.1
       platform::network::mgmt::params::controller1_address: 127.0.0.2
     force: yes
-
-- name: Check for mgmt network controller0 hieradata
-  stat:
-    path: "{{ hieradata_workdir }}/{{ derived_network_params.controller_0_address }}.yaml"
-  register: controller0_hieradata
 
 - name: Add original lv_sizes to runtime configuration
   shell: >
