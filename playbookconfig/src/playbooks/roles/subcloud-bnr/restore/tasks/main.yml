@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2023, 2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -28,7 +28,6 @@
   vars:
     target_host: 'controller-0'
     wait_for_unlock: true
-    distributed_cloud_role: 'subcloud'
 
 # Restore complete can only be sent for AIO-SX currently.
 # During restore for DX/standard deployments, the remaining nodes
