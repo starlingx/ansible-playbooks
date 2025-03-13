@@ -3,6 +3,7 @@ apiVersion: v1
 kind: Namespace
 metadata:
   labels:
+    # STX_change: change pod security
     pod-security.kubernetes.io/enforce: restricted
   # STX_change: configurable namespace
   name: {{ trident_namespace }}
