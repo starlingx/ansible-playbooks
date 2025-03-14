@@ -1,12 +1,11 @@
 ---
 #
-# Copyright (c) 2022-2024 Wind River Systems, Inc.
+# Copyright (c) 2022-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# This playbook copies prestage packages (Centos) or ostree repo (Debian)
-# from the release feed (Centos: /www/pages/feed/rel-<release>,
-# Debian: /var/www/pages/feed/rel-<release>) to the prestage directory
+# This playbook copies  ostree repo (Debian) from
+# /var/www/pages/feed/rel-<release>) to the prestage directory
 # (/opt/platform-backup/<release>).
 # The playbook is meant to be integrated with the dcmanager to provide
 # subcloud prestaging functionality.
@@ -32,11 +31,7 @@
         ansible_become_pass: "{{ ansible_ssh_pass }}"
 
     - role: prestage/prestage-sw-packages
-      when: prestage_reason == 'for_install' and prestage_os_type == 'debian'
-      become: true
-
-    - role: prestage/prestage-sw-packages-centos
-      when: prestage_reason == 'for_install' and prestage_os_type == 'centos'
+      when: prestage_reason == 'for_install'
       become: true
 
     - role: prestage/prestage-patches

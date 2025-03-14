@@ -80,7 +80,6 @@
       Prestaging type: {{ prestage_type }}
       Prestaging reason: {{ prestage_reason }}
       Prestaging source: {{ prestage_source }}
-      Prestaging os type: {{ prestage_os_type }}
       Force ostree dir sync for N-1 subcloud: {{ force_ostree_dir_sync }}
       USM enabled on subcloud: {{ usm_enabled_on_subcloud }}
       Release feed directory (on target): {{ release_feed|default('N/A') }}

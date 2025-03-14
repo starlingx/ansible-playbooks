@@ -1,26 +1,11 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2023, 2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
-#   This role generates container images archive file(s). The archive
-#   format is dependent on the prestage_os_type.
-#
-#   If the subcloud is running Debian, a snapshot of the entire local registry
-#   filesystem is archived for more speedy restore over bootstrap/upgrade later
-#   on.
-#
-#   If the subcloud is running CentOS, the images archive files are created
-#   using docker save. Loading images from these archive files using docker
-#   load takes longer as bootstrap in CentOS cannot handle registry filesystem
-#   archive.
-#
+#   This role generates container images archive file(s).
+
 - name: Archive container images (Debian)
   include_tasks: gen_images_archive_debian.yml
-  when: prestage_os_type == 'debian'
-
-- name: Archive container images (CentOS)
-  include_tasks: gen_images_archive_centos.yml
-  when: prestage_os_type == 'centos'
