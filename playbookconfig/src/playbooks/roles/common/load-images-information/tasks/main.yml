@@ -116,6 +116,7 @@
         - "{{ flux_helm_controller_img }}"
         - "{{ flux_source_controller_img }}"
         - "{{ flux_notification_controller_img }}"
+        - "{{ flux_kustomize_controller_img }}"
       storage_images:
         - "{{ snapshot_controller_img }}"
       security_images:
