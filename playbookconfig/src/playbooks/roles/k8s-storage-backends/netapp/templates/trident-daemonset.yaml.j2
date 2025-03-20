@@ -16,6 +16,8 @@ spec:
         app: node.csi.trident.netapp.io
         # STX_change: add label component
         app.starlingx.io/component: platform
+      annotations:
+        openshift.io/required-scc: trident-node-linux
     spec:
       serviceAccount: trident-node-linux
       hostNetwork: true
@@ -34,7 +36,7 @@ spec:
             add:
             - SYS_ADMIN
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/docker.io/netapp/trident:24.02.0
+        image: {{ local_registry }}/docker.io/netapp/trident:25.02.1
         imagePullPolicy: IfNotPresent
         command:
         - /trident_orchestrator
@@ -63,15 +65,15 @@ spec:
             scheme: HTTPS
             port: 17546
           failureThreshold: 5
-          timeoutSeconds: 1
-          periodSeconds: 5
+          timeoutSeconds: 5
+          periodSeconds: 10
         livenessProbe:
           httpGet:
             path: /liveness
             scheme: HTTPS
             port: 17546
-          failureThreshold: 3
-          timeoutSeconds: 1
+          failureThreshold: 5
+          timeoutSeconds: 5
           periodSeconds: 10
         readinessProbe:
           httpGet:
@@ -79,8 +81,9 @@ spec:
             scheme: HTTPS
             port: 17546
           failureThreshold: 5
-          initialDelaySeconds: 10
+          timeoutSeconds: 5
           periodSeconds: 10
+          initialDelaySeconds: 15
         env:
         - name: KUBE_NODE_NAME
           valueFrom:
@@ -117,7 +120,7 @@ spec:
           readOnly: true
       - name: driver-registrar
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.10.0
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.13.0
         imagePullPolicy: IfNotPresent
         args:
         - "--v=2"

@@ -19,12 +19,14 @@ spec:
         app: controller.csi.trident.netapp.io
         # STX_change: add label component
         app.starlingx.io/component: platform
+      annotations:
+        openshift.io/required-scc: trident-controller
     spec:
       serviceAccount: trident-controller
       containers:
       - name: trident-main
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/docker.io/netapp/trident:24.02.0
+        image: {{ local_registry }}/docker.io/netapp/trident:25.02.1
         imagePullPolicy: IfNotPresent
         securityContext:
           runAsNonRoot: false
@@ -79,6 +81,10 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: spec.nodeName
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         - name: CSI_ENDPOINT
           value: unix://plugin/csi.sock
         - name: TRIDENT_SERVER
@@ -94,7 +100,7 @@ spec:
 
       - name: trident-autosupport
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/docker.io/netapp/trident-autosupport:24.02
+        image: {{ local_registry }}/docker.io/netapp/trident-autosupport:25.02
         imagePullPolicy: IfNotPresent
         securityContext:
           capabilities:
@@ -115,7 +121,7 @@ spec:
           mountPath: /asup
       - name: csi-provisioner
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-provisioner:v4.0.0
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-provisioner:v5.2.0
         imagePullPolicy: IfNotPresent
         securityContext:
           capabilities:
@@ -135,7 +141,7 @@ spec:
           mountPath: /var/lib/csi/sockets/pluginproxy/
       - name: csi-attacher
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-attacher:v4.5.0
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-attacher:v4.8.0
         imagePullPolicy: IfNotPresent
         securityContext:
           capabilities:
@@ -154,8 +160,12 @@ spec:
           mountPath: /var/lib/csi/sockets/pluginproxy/
       - name: csi-resizer
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-resizer:v1.9.3
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-resizer:v1.13.1
         imagePullPolicy: IfNotPresent
+        securityContext:
+          capabilities:
+            drop:
+            - all
         args:
         - "--v=2"
         - "--timeout=300s"
@@ -168,7 +178,7 @@ spec:
           mountPath: /var/lib/csi/sockets/pluginproxy/
       - name: csi-snapshotter
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-snapshotter:v6.3.3
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-snapshotter:v8.2.0
         imagePullPolicy: IfNotPresent
         securityContext:
           capabilities:
