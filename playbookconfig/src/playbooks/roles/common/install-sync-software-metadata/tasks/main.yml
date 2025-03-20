@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -10,14 +10,20 @@
 #   system controller and subcloud are at the same ostree commit.
 #
 
+- name: Retrieve system controller software version number
+  shell: source /etc/build.info; echo $SW_VERSION
+  register: system_controller_sw_version
+  delegate_to: localhost
+
 - name: Retrieve software version number
   shell: source /etc/build.info; echo $SW_VERSION
-  register: sw_version
+  register: subcloud_sw_version
 
 - name: Set software metadata synchronization facts
   set_fact:
     software_sync_required: false
-    ostree_feed_repo_dir: /var/www/pages/feed/rel-{{ sw_version.stdout }}/ostree_repo
+    system_controller_ostree_feed_repo_dir: /var/www/pages/feed/rel-{{ system_controller_sw_version.stdout }}/ostree_repo
+    subcloud_ostree_feed_repo_dir: /var/www/pages/feed/rel-{{ subcloud_sw_version.stdout }}/ostree_repo
     ostree_sysroot_repo_dir: /sysroot/ostree/repo
     ostree_rev: starlingx
     software_dir: /opt/software
@@ -26,24 +32,35 @@
 - block:
 
   - name: Gather system controller ostree commit
-    command: ostree --repo={{ ostree_feed_repo_dir }} rev-parse {{ ostree_rev }}
+    command: ostree --repo={{ system_controller_ostree_feed_repo_dir }} rev-parse {{ ostree_rev }}
     register: ostree_commit_system_controller
     delegate_to: localhost
 
   - name: Gather subcloud ostree commit
-    command: ostree --repo={{ ostree_feed_repo_dir }} rev-parse {{ ostree_rev }}
+    command: ostree --repo={{ subcloud_ostree_feed_repo_dir }} rev-parse {{ ostree_rev }}
     register: ostree_commit_subcloud
 
   - name: Gather system controller updates list
-    shell: software list | grep {{ sw_version.stdout }} | grep -E '(available|deployed|committed)'
+    shell: |
+      software list | \
+        grep "{{ system_controller_sw_version.stdout }}" | \
+        grep -E '(available|deployed|committed)' | \
+        awk '{$1=$1};1' | \
+        tr -d '[:space:]'
     register: system_controller_software_list
     failed_when: false
     delegate_to: localhost
 
   - name: Gather subcloud software list
-    shell: software list | grep {{ sw_version.stdout }} | grep -E '(available|deployed|committed)'
+    shell: |
+      software list | \
+      grep "{{ subcloud_sw_version.stdout }}" | \
+      grep -E '(available|deployed|committed)' | \
+      awk '{$1=$1};1' | \
+      tr -d '[:space:]'
     register: subcloud_software_list
     failed_when: false
+    become: true
 
   - name: Decide if software metadata synchronization is required
     # Conditions:
@@ -59,7 +76,7 @@
   - debug:
       msg:
         - "Software sync required: {{ software_sync_required }}"
-        - "ostree revision from {{ ostree_feed_repo_dir }}:"
+        - "ostree revision from {{ system_controller_ostree_feed_repo_dir }}:"
         - "system controller: {{ ostree_commit_system_controller.stdout }}"
         - "subcloud:          {{ ostree_commit_subcloud.stdout }}"
         - "Software list:"
@@ -108,7 +125,7 @@
       until: software_transfer.rc == 0
 
     - name: Delete patch metadata files not belonging to the current
-            software version ({{ sw_version.stdout }})
+            software version ({{ subcloud_sw_version.stdout }})
       vars:
         paths_to_delete:
           - "{{ software_dir }}/metadata/unavailable"
@@ -145,4 +162,4 @@
 
     when: software_sync_required
 
-  when: sync_software_metadata and sw_version.stdout is version('24.09', '>=')
+  when: sync_software_metadata and subcloud_sw_version.stdout is version('24.09', '>=')
