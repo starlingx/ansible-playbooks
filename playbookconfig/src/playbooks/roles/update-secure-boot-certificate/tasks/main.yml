@@ -1,0 +1,83 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# These tasks add a certificate to UEFI secure boot db.
+#
+- name: Check if Secure Boot is enabled
+  include_tasks: check-secure-boot-enabled.yml
+
+- name: Fail if secure_boot_cert is not defined
+  fail:
+    msg: >-
+      Please provide secure_boot_cert containing base64-encoded file
+  when: secure_boot_cert is undefined
+
+- name: Fail if key_exchange_key is not defined
+  fail:
+    msg: >-
+      Please provide key_exchange_key containing base64-encoded file
+  when: key_exchange_key is undefined
+
+# Precheck to ensure provided certificate is not expired.
+- name: Check if provided certificate is valid
+  include_tasks: check-certificates.yml
+
+- debug:
+    msg: Provided certificate is already installed
+  when: cert_already_installed
+
+- name: Install new UEFI Secure Boot certificate
+  become: yes
+  block:
+    - name: Find db file(s)
+      find:
+        paths: /sys/firmware/efi/efivars
+        patterns: db-*
+      register: db_files
+
+    - name: Make db writable
+      file:
+        path: "{{ item.path }}"
+        attributes: -i
+      loop: "{{ db_files.files }}"
+
+    - name: Make temporary directory
+      tempfile:
+        state: directory
+      register: tempdir
+
+    - name: Save secure boot certificate to a file
+      copy:
+        content: "{{ secure_boot_cert | b64decode }}"
+        dest: "{{ tempdir.path }}/secure_boot_cert.pem"
+
+    - name: Save key exchange key to a file
+      copy:
+        content: "{{ key_exchange_key | b64decode }}"
+        dest: "{{ tempdir.path }}/KEK.key"
+
+    - name: Install secure boot certificate
+      command: >-
+        efi-updatevar -a -c {{ tempdir.path }}/secure_boot_cert.pem -k {{ tempdir.path }}/KEK.key db
+      register: install_cert
+
+    - debug:
+        msg: Secure Boot certificate has been successfully installed.
+      when: install_cert.rc == 0
+
+  always:
+    - name: Restore db file(s) attributes
+      file:
+        path: "{{ item.path }}"
+        attributes: +i
+      loop: "{{ db_files.files }}"
+
+    - name: Delete temporary directory
+      file:
+        path: "{{ tempdir.path }}"
+        state: absent
+
+  when: not cert_already_installed

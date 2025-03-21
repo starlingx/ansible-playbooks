@@ -1,0 +1,15 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- name: Get Secure Boot state
+  command: mokutil --sb-state
+  register: mokutil
+  changed_when: false
+  failed_when: false
+
+- name: Stop execution on this host if Secure Boot is disabled
+  meta: end_host
+  when: "'enabled' not in mokutil.stdout"
