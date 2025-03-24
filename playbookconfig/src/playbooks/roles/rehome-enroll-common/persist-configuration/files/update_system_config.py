@@ -363,6 +363,57 @@ def populate_user_dns_host_records(client):
         print_with_timestamp("Populating/Updating user dns host-records completed.")
 
 
+def populate_registry_dns_host_records(client, section_name):
+    virtual_system = False
+    registry_local = ''
+
+    parameters = client.sysinv.service_parameter.list()
+
+    for parameter in parameters:
+        if parameter.name == sysinv_constants.SERVICE_PARAM_NAME_PLAT_CONFIG_VIRTUAL:
+            virtual_system = True
+
+    if virtual_system:
+        registry_central_address = CONF.get(
+            section_name, "SYSTEM_CONTROLLER_FLOATING_ADDRESS"
+        )
+        registry_local = CONF.get(
+            section_name, "MANAGEMENT_FLOATING_ADDRESS"
+        )
+    else:
+        registry_central_address = CONF.get(
+            section_name, "SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS"
+        )
+
+    parameters = client.sysinv.service_parameter.list()
+    for parameter in parameters:
+        if parameter.name == 'registry.central':
+            client.sysinv.service_parameter.delete(parameter.uuid)
+        elif virtual_system and parameter.name == 'registry.local':
+            client.sysinv.service_parameter.delete(parameter.uuid)
+
+    values = {
+        'service': sysinv_constants.SERVICE_TYPE_DNS,
+        'section': sysinv_constants.SERVICE_PARAM_SECTION_DNS_HOST_RECORD,
+        'personality': None,
+        'resource': None,
+        'parameters': {
+            'registry.central': (
+                f"registry.central,{registry_central_address}"
+            )
+        }
+    }
+
+    if registry_central_address and virtual_system:
+        values['parameters']['registry.local'] = (
+            f"registry.local,{registry_local}"
+        )
+
+    print_with_timestamp("Populating/Updating DNS host record for registry...")
+    client.sysinv.service_parameter.create(**values)
+    print_with_timestamp("DNS host record for registry completed.")
+
+
 def populate_docker_config(client, section_name):
     """
     Update Docker and Kubernetes configuration parameters.
@@ -382,6 +433,7 @@ def populate_service_parameter_config(client, section_name):
         populate_user_dns_host_records(client)
     else:
         print_with_timestamp("Skipping Populating/Updating user dns host-records...")
+    populate_registry_dns_host_records(client, section_name)
 
 
 def edit_dc_role_to_subcloud(client):
