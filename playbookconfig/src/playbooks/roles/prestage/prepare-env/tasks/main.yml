@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2024 Wind River Systems, Inc.
+# Copyright (c) 2022-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -28,10 +28,6 @@
 - name: Set prestage software version and cleanup directores fact
   set_fact:
     cleanup_dirs: "{{ cleanup_dirs|default([]) + [software_version] }}"
-
-- name: Set prestage_os_type
-  set_fact:
-    prestage_os_type: "{{ 'debian' if software_version is version('22.12', '>=') else 'centos' }}"
 
 - name: Set prestage dir and subdirectory facts
   set_fact:

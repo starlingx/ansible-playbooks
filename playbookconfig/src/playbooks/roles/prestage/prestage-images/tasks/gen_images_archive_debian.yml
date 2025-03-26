@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023, 2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -39,18 +39,6 @@
           REGISTRIES: "{{ docker_registries | to_json }}"
           PRESTAGE_DOWNLOAD: yes
 
-    - block:
-      - name: Create a temp file to hold the list of images to be purged
-        tempfile:
-          state: file
-          suffix: prestage_purge
-        register: purge_file
-
-      - name: Set purge images list if subcloud is running CentOS
-        set_fact:
-          prestage_env: "{{ prestage_env|combine({ 'PURGE_IMAGES_LIST_FILE': purge_file.path }) }}"
-      when: host_software_version is version('22.12', '<')
-
     - name: Download container images for prestage
       script: >
         roles/common/push-docker-images/files/download_images.py
@@ -85,28 +73,3 @@
     - name: Clear docker cache
       command: docker image prune -af
       failed_when: false
-
-    - block:
-      - name: Read content of purge file
-        slurp:
-          src: "{{ purge_file.path }}"
-        register: purge_list
-
-      - set_fact:
-          images_to_purge: "{{ (purge_list.content|b64decode|trim).split('\n')|select() }}"
-
-      - debug: var=images_to_purge
-      - block:
-        - name: Remove downloaded images from the local registry (CentOS subcloud only)
-          shell: "source /etc/platform/openrc; system registry-image-delete {{ item }}"
-          loop: "{{ images_to_purge }}"
-
-        - name: Start registry garbage collect
-          shell: source /etc/platform/openrc; system registry-garbage-collect
-        when: images_to_purge|length > 0
-
-      - name: Remove purge temp file
-        file:
-          path: "{{ purge_file.path }}"
-          state: absent
-      when: purge_file is not skipped
