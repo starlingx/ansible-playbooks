@@ -262,25 +262,6 @@ def populate_system_config(client):
     print("System config completed.")
 
 
-def populate_load_config(client):
-    if not INITIAL_POPULATION:
-        return
-
-    print("Populating load config...")
-    patch = {'software_version': CONF.get('BOOTSTRAP_CONFIG', 'SW_VERSION'),
-             'compatible_version': "N/A",
-             'required_patches': "N/A"}
-    try:
-        client.sysinv.load.create(patch)
-    except Exception as e:
-        if INCOMPLETE_BOOTSTRAP:
-            # Load config in previous play went through
-            pass
-        else:
-            raise e
-    print("Load config completed.")
-
-
 def create_addrpool(client, addrpool_data):
     try:
         pool = client.sysinv.address_pool.create(**addrpool_data)
@@ -1735,7 +1716,6 @@ if __name__ == '__main__':
     try:
         client = CgtsClient()
         populate_system_config(client)
-        populate_load_config(client)
         populate_network_config(client)
         populate_dns_config(client)
         populate_service_parameter_config(client)
