@@ -8,6 +8,11 @@
 #   This role is to validate and save host (non secure) config.
 #
 
+# TODO(sgorre): This task is temporary and should be removed once the central cloud region name can be normalized i.e. UUID.
+- set_fact:
+    region_name: "RegionOne"
+  when: distributed_cloud_role == 'systemcontroller' and mode == 'bootstrap'
+
 - block:
   - name: Generate a new UUID4 for region_name
     vars:
@@ -19,10 +24,14 @@
       executable: /usr/bin/python
     register: uuid_output
 
+  # Subcloud's region name is generated in the central cloud and is passed to the playbook as an extra-var
   - name: Set the generated UUID4 as a region_name
     set_fact:
       region_name: "{{ uuid_output.stdout | trim }}"
-  when: distributed_cloud_role != 'systemcontroller' and mode != 'restore' and not replayed
+  when:
+    - distributed_cloud_role == 'none'
+    - mode != 'restore'
+    - not replayed
 
 - block:
   - name: Retrieve openrc region_name
