@@ -18,6 +18,11 @@ flux_notification_controller_tag: v1.3.0
 flux_notification_controller_liveness_timeout: 5
 flux_notification_controller_readiness_timeout: 10
 flux_notification_controller_memory_request: 0
+flux_kustomize_controller_image: ghcr.io/fluxcd/kustomize-controller
+flux_kustomize_controller_tag: v1.3.0
+flux_kustomize_controller_liveness_timeout: 5
+flux_kustomize_controller_readiness_timeout: 10
+flux_kustomize_controller_memory_request: 0
 local_registry: registry.local:9001
 async_timeout: 240
 async_retries: 80
@@ -26,3 +31,4 @@ check_kubernetes_health_retries: 5
 delay_time: 6
 fluxcd_retries: 5
 enable_notification_controller: false
+enable_kustomize_controller: false
