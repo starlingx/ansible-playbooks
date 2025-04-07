@@ -97,28 +97,6 @@ spec:
         - name: certs
           mountPath: /certs
           readOnly: true
-
-      - name: trident-autosupport
-        # STX_change: pull image from local registry
-        image: {{ local_registry }}/docker.io/netapp/trident-autosupport:25.02
-        imagePullPolicy: IfNotPresent
-        securityContext:
-          capabilities:
-            drop:
-            - all
-        command:
-        - /usr/local/bin/trident-autosupport
-        args:
-        - "--k8s-pod"
-        - "--log-format=text"
-        - "--trident-silence-collector=false"
-        #- -debug
-        resources:
-          limits:
-            memory: 1Gi
-        volumeMounts:
-        - name: asup-dir
-          mountPath: /asup
       - name: csi-provisioner
         # STX_change: pull image from local registry
         image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-provisioner:v5.2.0
