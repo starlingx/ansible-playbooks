@@ -9,8 +9,8 @@ multus_img: ghcr.io/k8snetworkplumbingwg/multus-cni:v3.9.2
 sriov_cni_img: ghcr.io/k8snetworkplumbingwg/sriov-cni:v2.6.3
 sriov_network_device_img: ghcr.io/k8snetworkplumbingwg/sriov-network-device-plugin:v3.5.1
 # Nginx images
-nginx_ingress_controller_img: registry.k8s.io/ingress-nginx/controller:v1.12.0
-nginx_kube_webhook_certgen_img: registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.5.0
+nginx_ingress_controller_img: registry.k8s.io/ingress-nginx/controller:v1.12.1
+nginx_kube_webhook_certgen_img: registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.5.2
 default_backend_img: registry.k8s.io/defaultbackend-amd64:1.5
 # Cert-manager images
 cert_manager_acmesolver_img: quay.io/jetstack/cert-manager-acmesolver:v1.16.3
