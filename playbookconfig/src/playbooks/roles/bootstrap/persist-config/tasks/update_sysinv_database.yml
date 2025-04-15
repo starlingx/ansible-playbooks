@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -111,6 +111,44 @@
   failed_when: false
 
 - debug: var=populate_result
+
+- block:
+  - name: Set central registry for subcloud
+    set_fact:
+      # For virtual subclouds (StarlingX in OpenStack Nova VM),
+      # the central registry must be exposed on the MGMT interface,
+      # not OAM, since there's no physical OAM interface. Set
+      # "registry.central" to the system controller's MGMT IP for
+      # image pulls.
+      registry_central_address:
+        "{{ system_controller_floating_address
+          if (virtual_system is defined and virtual_system|bool)
+          else system_controller_oam_floating_address}}"
+
+  - name: Create DNS host record for registry central
+    shell: >-
+        source /etc/platform/openrc;
+        system service-parameter-add dns host-record
+        registry.central=registry.central,{{ registry_central_address }};
+        {% if system_controller_floating_address|ipaddr() and
+        virtual_system is defined and virtual_system|bool %}
+        system service-parameter-add dns host-record
+        registry.local=registry.local,{{ mgmt_floating_virtual }};
+        {% endif %}
+    register: dns_host_record_add
+    failed_when: dns_host_record_add.rc != 0
+
+  - name: Apply dns host record update
+    shell: source /etc/platform/openrc; system service-parameter-apply dns
+
+  when: >
+    (
+      system_controller_floating_address|ipaddr() and
+      virtual_system is defined and virtual_system|bool
+    ) or (
+      system_controller_oam_floating_address|ipaddr() and
+      virtual_system is not defined
+    )
 
 - name: Fail if populate config script throws an exception
   fail:
