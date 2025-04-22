@@ -145,7 +145,10 @@ class OpenStackClient:
         if not self._barbican:
             if not self._session:
                 self._session = self._get_new_keystone_session(self.conf)
-            self._barbican = barbican_client.Client(session=self._session)
+            self._barbican = barbican_client.Client(
+                session=self._session,
+                interface='internal',
+                )
         return self._barbican
 
     def list_secrets(self, secret_name):
