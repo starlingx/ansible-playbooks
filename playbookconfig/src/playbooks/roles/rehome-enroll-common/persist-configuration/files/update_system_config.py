@@ -757,12 +757,19 @@ def update_management_network(client, section_name):
         'ranges': [(
             CONF.get(section_name, "MANAGEMENT_START_ADDRESS"),
             CONF.get(section_name, "MANAGEMENT_END_ADDRESS"),
-            )],
+        )],
         'gateway_address': subcloud_gateway,
         'floating_address': CONF.get(section_name, "MANAGEMENT_FLOATING_ADDRESS"),
-        'controller0_address': CONF.get(section_name, "MANAGEMENT_CONTROLLER0_ADDRESS"),
-        'controller1_address': CONF.get(section_name, "MANAGEMENT_CONTROLLER1_ADDRESS"),
-        }
+    }
+    system_mode = CONF.get(section_name, 'SYSTEM_MODE')
+    if system_mode != sysinv_constants.SYSTEM_MODE_SIMPLEX:
+        values.update({
+            'controller0_address': CONF.get(
+                section_name, 'MANAGEMENT_CONTROLLER0_ADDRESS'),
+            'controller1_address': CONF.get(
+                section_name, 'MANAGEMENT_CONTROLLER1_ADDRESS'),
+        })
+
     if is_equal_with_existing_pool(client, values, pool_id):
         print_with_timestamp(
             f"Management network addrpool {pool_id} is up-to-date.")
