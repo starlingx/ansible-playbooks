@@ -154,14 +154,46 @@
       registryk8s_registry: "{{ registryk8s_registry | combine(_registryk8s_registry_secrets, recursive=true) }}"
       icr_registry: "{{ icr_registry | combine(_icr_registry_secrets, recursive=true) }}"
     vars:
-      _k8s_registry_secrets: "{{ docker_registries_with_secrets.get(default_k8s_registry.url, {})}}"
-      _gcr_registry_secrets: "{{ docker_registries_with_secrets.get(default_gcr_registry.url, {})}}"
-      _quay_registry_secrets: "{{ docker_registries_with_secrets.get(default_quay_registry.url, {})}}"
-      _docker_registry_secrets: "{{ docker_registries_with_secrets.get(default_docker_registry.url, {})}}"
-      _elastic_registry_secrets: "{{ docker_registries_with_secrets.get(default_elastic_registry.url, {})}}"
-      _ghcr_registry_secrets: "{{ docker_registries_with_secrets.get(default_ghcr_registry.url, {})}}"
-      _registryk8s_registry_secrets: "{{ docker_registries_with_secrets.get(default_registryk8s_registry.url, {})}}"
-      _icr_registry_secrets: "{{ docker_registries_with_secrets.get(default_icr_registry.url, {})}}"
+      _k8s_registry_secrets: >-
+        {{ docker_registries_with_secrets.get(default_k8s_registry.url, {})
+          | dict2items
+          | selectattr('value', 'truthy')
+          | items2dict}}
+      _gcr_registry_secrets: >-
+        {{ docker_registries_with_secrets.get(default_gcr_registry.url, {})
+          | dict2items
+          | selectattr('value', 'truthy')
+          | items2dict}}
+      _quay_registry_secrets: >-
+        {{ docker_registries_with_secrets.get(default_quay_registry.url, {})
+          | dict2items
+          | selectattr('value', 'truthy')
+          | items2dict}}
+      _docker_registry_secrets: >-
+        {{ docker_registries_with_secrets.get(default_docker_registry.url, {})
+          | dict2items
+          | selectattr('value', 'truthy')
+          | items2dict}}
+      _elastic_registry_secrets: >-
+        {{ docker_registries_with_secrets.get(default_elastic_registry.url, {})
+          | dict2items
+          | selectattr('value', 'truthy')
+          | items2dict}}
+      _ghcr_registry_secrets: >-
+        {{ docker_registries_with_secrets.get(default_ghcr_registry.url, {})
+          | dict2items
+          | selectattr('value', 'truthy')
+          | items2dict}}
+      _registryk8s_registry_secrets: >-
+        {{ docker_registries_with_secrets.get(default_registryk8s_registry.url, {})
+          | dict2items
+          | selectattr('value', 'truthy')
+          | items2dict}}
+      _icr_registry_secrets: >-
+        {{ docker_registries_with_secrets.get(default_icr_registry.url, {})
+          | dict2items
+          | selectattr('value', 'truthy')
+          | items2dict}}
     no_log: true
 
   - name: Update use_default_registries flag
