@@ -10,8 +10,11 @@
   command: >
     tar --use-compress-program=pigz
     -C /
-    {%+ for v in sw_deployments_info.tar_transforms %}
+    {%+ for v in sw_deployments_info.tar_transforms + extra_tar_transforms %}
     --transform {{ v | quote }}
+    {%+ endfor %}
+    {%+ for v in sw_deployments_info.tar_excludes + extra_tar_excludes %}
+    --exclude {{ v | quote }}
     {%+ endfor %}
     -xpvf {{ restore_data_file | quote }}
     {{ ' '.join(sw_deployments_restore_items | map('quote')) }}
