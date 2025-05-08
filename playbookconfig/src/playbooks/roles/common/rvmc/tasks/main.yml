@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -19,6 +19,9 @@
       --config_file="{{ rvmc_config_file }}"
       {% if eject_image_only | default(false) %}
       --eject_image_only
+      {% endif %}
+      {% if excluded_operations is defined and excluded_operations | length > 0 %}
+      --excluded_operations='{{ excluded_operations }}'
       {% endif %}
 
     # Script return code:

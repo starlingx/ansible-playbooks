@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -11,10 +11,6 @@
 - name: Check service status after enrollment
   include_role:
     name: common/check-services-status
-
-- name: Cleanup the cloud-init services
-  command: /usr/local/bin/enroll-init-cleanup
-  become: yes
 
 # Ensure controller-0 is schedulable in non-simplex systems
 - name: Ensure controller-0 is schedulable and taints are removed
@@ -49,4 +45,14 @@
   file:
     path: /var/run/.enrollment_in_progress
     state: absent
+  become: true
+
+# We need to remove the seed and cloud-init services to avoid
+# the system to be re-enrolled again. Only if the enrollment
+# was successful. For that reason, we are adding this task
+# to the end of the enrollment playbook.
+- name: Clean up cloud-init and seed services
+  shell: |
+    /usr/local/bin/enroll-init-cleanup
+    /var/lib/factory-install/run-cloud-init-from-seed.sh clean
   become: true
