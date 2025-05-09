@@ -17,18 +17,14 @@
 - name: Get previous system controller subnet address
   shell: >-
     source /etc/platform/openrc;
-    system addrpool-list
-    | awk '/system-controller-subnet/{ print$2 }'
-    | xargs -I {} system addrpool-show {}
-    | awk -F'|' '/network/ {gsub(/ /, "", $3);
-    net=$3} /prefix/ {gsub(/ /, "", $3); print net "/" $3}'
+    system addrpool-list --nowrap | awk '/system-controller-subnet/{ print$6"/"$8 }'
   register: previous_system_controller_subnet_addr
 
 - block:
   - name: Get previous system controller host route uuid
     shell: >-
       source /etc/platform/openrc; system host-route-list controller-0
-      | grep {{ previous_system_controller_subnet_addr.stdout }}
+      | grep {{ (previous_system_controller_subnet_addr.stdout | ipaddr(0)).split('/')[0] }}
       | awk '{ print $2 }'
     register: previous_route_uuid_controller_0
 
@@ -76,18 +72,14 @@
   - name: Get previous system controller subnet address
     shell: >-
       source /etc/platform/openrc;
-      system addrpool-list
-      | awk '/system-controller-subnet/{ print$2 }'
-      | xargs -I {} system addrpool-show {}
-      | awk -F'|' '/network/ {gsub(/ /, "", $3);
-      net=$3} /prefix/ {gsub(/ /, "", $3); print net "/" $3}'
+      system addrpool-list --nowrap | awk '/system-controller-subnet/{ print$6"/"$8 }'
     register: previous_system_controller_subnet_addr
 
   - block:
     - name: Get previous system controller host route uuid
       shell: >-
         source /etc/platform/openrc; system host-route-list controller-1
-        | grep {{ previous_system_controller_subnet_addr.stdout }}
+        | grep {{ (previous_system_controller_subnet_addr.stdout | ipaddr(0)).split('/')[0] }}
         | awk '{ print $2 }'
       register: previous_route_uuid_controller_1
 
