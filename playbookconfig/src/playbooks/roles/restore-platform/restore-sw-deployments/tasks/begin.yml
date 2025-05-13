@@ -31,7 +31,7 @@
 - name: Do software deploy host
   block:
     - name: Execute software deploy host localhost
-      command: software deploy host localhost
+      command: software deploy host localhost --yes
 
   rescue:
     - name: Fail while attempting software deploy host

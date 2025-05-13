@@ -219,7 +219,7 @@ function reapplyOpenbao {
     fi
 
     if [[ " applied apply-failed " == *" $state "* ]]; then
-        system application-remove openbao
+        system application-remove openbao --yes
     fi
 
     # Seeing the 'removing' status from a previous operation is
