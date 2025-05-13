@@ -8,13 +8,6 @@
 #   the next step.
 #
 
-- name: Set enrollment_in_progress flag
-  file:
-    path: /var/run/.enrollment_in_progress
-    state: touch
-  become: true
-  when: mode is defined and mode == "enroll"
-
 - name: Set config path facts
   set_fact:
     config_permdir: "{{ platform_path + '/config/' + software_version }}"
