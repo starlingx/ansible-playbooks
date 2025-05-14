@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -61,6 +61,14 @@
   - name: Print the output of platform restore playbook
     debug:
       msg: "{{ platform_restore_output.stdout }}"
+
+  - name: Restore sys_protected ACL on admin.conf
+    acl:
+      path: /etc/kubernetes/admin.conf
+      entity: sys_protected
+      etype: group
+      permissions: r
+      state: present
 
   always:
     - name: Remove subcloud overrides file on {{ inventory_hostname }}
