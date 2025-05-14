@@ -32,3 +32,4 @@ etcd_endpoint: "https://{{ cluster_floating_address | ipwrap }}:2379"
 apiserver_advertise_address: "{{ controller_0_cluster_host }}"
 kubelet_taints: []
 local_registry: registry.local:9001
+calico_chain_insert_mode: "Append"
