@@ -20,6 +20,12 @@
         sync_patch_metadata: "{{ sync_patch_metadata | default(false) }}"
         sync_software_metadata: "{{ sync_software_metadata | default(true) }}"
 
+        # When true, subcloud is only monitored via BMC/IPMI events during install
+        # instead of waiting for SSH access. Used by auto/factory restore.
+        bmc_access_only: "{{ bmc_access_only | default(false) | bool }}"
+        ipmi_event_pattern: "{{ ipmi_install_complete_pattern | default('Unknown #0x01 |  | Asserted') }}"
+        install_complete_ipmi_data: "{{ install_complete_ipmi_data | default('ffffff') }}"
+
     - name: Run RVMC script to insert boot image and power on host
       include_role:
         name: common/rvmc
@@ -36,6 +42,19 @@
           timeout={{ wait_for_timeout }}
           state=started
           msg="Timeout waiting for {{ host_to_check }}:{{ ansible_port }}. Err_code=wait_install"
+      when: not bmc_access_only
+
+    - block:
+      - name: Waiting {{ wait_for_timeout }} seconds for install complete IPMI SEL event
+        include_role:
+          name: common/ipmi_monitor
+        vars:
+          ipmi_data_values: "{{ install_complete_ipmi_data }}"
+          ipmi_timeout: "{{ wait_for_timeout }}"
+
+      - debug:
+          msg: "Subcloud installed successfully"
+      when: bmc_access_only
 
 - name: Run validate host playbook post install
   import_playbook: validate_host.yml
@@ -45,3 +64,4 @@
     check_bootstrap_address: false
     check_patches: false
     enforce_password_change: true
+  when: not bmc_access_only
