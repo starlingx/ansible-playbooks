@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2024 Wind River Systems, Inc.
+# Copyright (c) 2022-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -11,7 +11,7 @@
 - name: Install ssl_ca certificate defined in ssl_ca_certificate
   shell: >-
     source /etc/platform/openrc &&
-    system ca-certificate-install "{{ ssl_ca_cert }}"
+    system ca-certificate-install "{{ ssl_ca_cert }}" --yes
   register: install_cert_output
   until: install_cert_output is not failed
   retries: 3
