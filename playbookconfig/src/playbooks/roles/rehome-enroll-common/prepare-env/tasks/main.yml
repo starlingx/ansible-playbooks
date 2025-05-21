@@ -270,10 +270,6 @@
     derived_network_params:
       'controller_0_address': "{{ controller_floating_address|ipmath(1) }}"
       'controller_1_address': "{{ controller_floating_address|ipmath(2) }}"
-      'controller_0_admin_address': "{{ admin_floating_address|ipmath(1)
-                                        if admin_floating_address is defined }}"
-      'controller_1_admin_address': "{{ admin_floating_address|ipmath(2)
-                                        if admin_floating_address is defined}}"
       'oam_node_0_address': "{{ network_params.external_oam_node_0_address_primary
                            if external_oam_node_0_address != 'derived'
                            else network_params.external_oam_floating_address_primary | ipmath(1) }}"
@@ -332,7 +328,7 @@
 - name: Set subcloud floating address
   set_fact:
     sc_floating_address: "{{ admin_floating_address
-                           if admin_floating_address is defined
+                           if admin_floating_address is defined and admin_floating_address != 'derived'
                            else controller_floating_address }}"
 
 - name: Get existing docker no_proxy
