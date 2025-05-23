@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -93,9 +93,7 @@
     failed_when: false
 
   - name: Failed to establish SAs, restart strongswan service
-    systemd:
-      name: "strongswan-starter"
-      state: restarted
+    include_tasks: roles/configure-ipsec/files/restart-strongswan-locally.yml
     when: host_sas is failed
 
   - name: Recheck SAs for each host
@@ -105,7 +103,27 @@
     until: recheck_host_sas.stdout|int >= 1
     retries: 3
     delay: 30
+    failed_when: false
     when: host_sas is failed
+
+  - name: Verify if there are 200.005 alarms
+    block:
+    - name: Check if 200.005 alarm exists and wait to be cleared
+      shell: |
+        source /etc/platform/openrc;
+        fm alarm-list --query alarm_id=200.005
+      register: mgmt_alarm
+      retries: 3
+      delay: 15
+      until: mgmt_alarm.stdout == ""
+      failed_when: false
+
+    - name: Fail when the alarm remains
+      fail:
+        msg: >-
+          Timed out waiting 200.005 alarm to clear out.
+      when: mgmt_alarm.stdout != ""
+    when: recheck_host_sas is failed
 
   - name: Enable ipsec-server service on controllers
     command: >-
