@@ -854,7 +854,7 @@ spec:
             path: /etc/kubernetes/admin.conf
       initContainers:
         - name: osd-data
-          image: registry.local:9001/quay.io/ceph/ceph:v18.2.2
+          image: registry.local:9001/quay.io/ceph/ceph:v18.2.5
           command: [ "/bin/bash", "-c", "/usr/sbin/ceph-volume raw list > /tmp/ceph/osd_data" ]
           securityContext:
             privileged: true
@@ -973,7 +973,7 @@ spec:
             path: /etc/kubernetes/admin.conf
       initContainers:
         - name: osd-data
-          image: registry.local:9001/quay.io/ceph/ceph:v18.2.2
+          image: registry.local:9001/quay.io/ceph/ceph:v18.2.5
           command: [ "/bin/bash", "-c", "/usr/sbin/ceph-volume raw list > /tmp/ceph/osd_data" ]
           securityContext:
             privileged: true
