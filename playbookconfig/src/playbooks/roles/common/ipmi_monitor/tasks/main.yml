@@ -11,7 +11,7 @@
 
 - name: Run IPMI monitoring script
   script: >
-    /usr/local/bin/monitor_ipmi_events.py
+    /usr/local/bin/ipmi_sel_event_monitor.py
     --config-file "{{ rvmc_config_file }}"
     --pattern "{{ ipmi_event_pattern }}"
     --data-values "{{ ipmi_data_values }}"
