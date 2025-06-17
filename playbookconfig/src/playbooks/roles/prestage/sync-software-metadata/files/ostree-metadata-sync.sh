@@ -509,8 +509,6 @@ sync_metadata_on_subcloud() {
 
     # It is sufficient to check against only one commit hash here - they are all part of the same metadata file
     local commit_hash=${sync_subcloud_commit_hashes[0]}
-    # Default to the central metadata file
-    local new_metadata_file=${central_metadata_file}
     # Default to deployed state
     local new_state="deployed"
     local reason
@@ -531,7 +529,6 @@ sync_metadata_on_subcloud() {
             # we need to check the state. If it is not deployed, we set the state
             # to available. Otherwise, we set the state to deployed.
             subcloud_usm_state=$(get_usm_state_from_path "$subcloud_metadata_file")
-            new_metadata_file=$subcloud_metadata_file
             [ "${subcloud_usm_state}" != "${new_state}" ] && new_state="available"
             reason="exists but keeping it in ${new_state} state."
         fi
@@ -543,7 +540,7 @@ sync_metadata_on_subcloud() {
         run_cmd mkdir -p "${METADATA_DIR}/${new_state}"
     fi
     log_info "${log_hdr} ${reason}"
-    run_cmd cp "${new_metadata_file}" "${METADATA_DIR}/${new_state}"
+    run_cmd cp "${central_metadata_file}" "${METADATA_DIR}/${new_state}"
 }
 
 # Context: INVOKED ON SUBCLOUD
