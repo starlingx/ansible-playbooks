@@ -9,6 +9,7 @@ skip_os_dbs:
   - 'horizon'
   - 'panko'
   - 'gnocchi'
+  - 'sys'
 
 mariadb_pod: mariadb-server-0
 
