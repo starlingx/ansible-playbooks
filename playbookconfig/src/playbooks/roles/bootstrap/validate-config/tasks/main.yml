@@ -1222,13 +1222,13 @@
         system_local_ca_ica_key_provided or
         system_platform_certificate is defined
 
-  - name: Fail if 'system-local-ca' certificates overrides are present in subcloud
-    fail:
+  - name: Warn if 'system-local-ca' certificates overrides are present in subcloud
+    debug:
       msg: >-
-        ERROR: For subclouds, the data for 'system-local-ca' is propagated from the
-        SystemController. Please remove all of the following from the override file:
-        system_root_ca_cert, system_local_ca_cert and system_local_ca_key.
-        You can stil provide custom overrides for the child platform certificates
+        WARNING: For subclouds, the data for 'system-local-ca' is propagated from the
+        SystemController. The following are found in the override file and will be
+        ignored: system_root_ca_cert, system_local_ca_cert and system_local_ca_key.
+        You can still provide custom overrides for the child platform certificates
         using the field 'system_platform_certificate'.
 
     when:
