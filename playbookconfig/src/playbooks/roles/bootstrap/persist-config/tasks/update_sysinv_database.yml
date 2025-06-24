@@ -125,6 +125,33 @@
           if (virtual_system is defined and virtual_system|bool)
           else system_controller_oam_floating_address}}"
 
+  - name: Get existing DNS host records for registry
+    shell: |
+      source /etc/platform/openrc
+      system service-parameter-list --service dns --section host-record \
+        --column uuid --column name --format value
+    register: registry_dns_records
+    changed_when: false
+
+  - name: Get UUIDs of registry DNS records
+    set_fact:
+      registry_dns_uuids: |
+        {{
+          (registry_dns_records.stdout_lines
+            | select("match", "^[0-9a-fA-F-]+ registry\.central$")
+            | union(registry_dns_records.stdout_lines
+              | select("match", "^[0-9a-fA-F-]+ registry\.local$")))
+          | map('regex_search', '^([0-9a-fA-F-]+)')
+          | list
+        }}
+
+  - name: Delete registry DNS host records
+    shell: |
+      source /etc/platform/openrc
+      system service-parameter-delete {{ item }}
+    loop: "{{ registry_dns_uuids }}"
+    when: registry_dns_uuids | length > 0
+
   - name: Create DNS host record for registry central
     shell: >-
         source /etc/platform/openrc;
@@ -133,7 +160,7 @@
         {% if system_controller_floating_address|ipaddr() and
         virtual_system is defined and virtual_system|bool %}
         system service-parameter-add dns host-record
-        registry.local=registry.local,{{ mgmt_floating_virtual }};
+        registry.local=registry.local,{{ controller_floating_address }};
         {% endif %}
     register: dns_host_record_add
     failed_when: dns_host_record_add.rc != 0
