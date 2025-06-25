@@ -197,6 +197,45 @@
       apiserver_cert_list: "{{ apiserver_cert_list + OAM_addresses_secondary}}"
     when: OAM_addresses_secondary is defined
 
+- name: Add primary mgmt addresses to apiserver san list
+  block:
+  - name: Get primary management ip addresses
+    include_tasks: >-
+      roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: mgmt
+      network_stack: primary
+
+  - set_fact:
+      primary_mgmt_ip_list:
+        - "{{ addresses.floating_address }}"
+        - "{{ addresses.controller0_address }}"
+        - "{{ addresses.controller1_address }}"
+
+  - set_fact:
+      apiserver_cert_list: "{{ apiserver_cert_list + primary_mgmt_ip_list | select }}"
+
+- name: Add secondary mgmt addresses to apiserver san list
+  block:
+  - name: Get secondary management ip addresses
+    include_tasks: >-
+      roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: mgmt
+      network_stack: secondary
+
+  - set_fact:
+      secondary_mgmt_ip_list:
+        - "{{ addresses.floating_address if addresses.floating_address is defined }}"
+        - "{{ addresses.controller0_address if addresses.controller0_address is defined }}"
+        - "{{ addresses.controller1_address if addresses.controller1_address is defined }}"
+
+  - set_fact:
+      apiserver_cert_list: "{{ apiserver_cert_list + secondary_mgmt_ip_list | select }}"
+
+- debug:
+    msg: "kube-apiserver san list: {{ apiserver_cert_list }}"
+
 - name: Set taint configuration for non-AIO systems
   set_fact:
     kubelet_taints: "[{key: 'node-role.kubernetes.io/control-plane', effect: 'NoSchedule'}]"
