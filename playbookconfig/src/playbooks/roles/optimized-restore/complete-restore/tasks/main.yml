@@ -76,6 +76,15 @@
     state: touch
   loop: "{{ all_required_flags }}"
 
+- name: Set ACL for sys_protected to access admin.conf
+  acl:
+    path: /etc/kubernetes/admin.conf
+    entity: sys_protected
+    etype: group
+    permissions: r
+    state: present
+  become: yes
+
 # If the system is online, restore was most likely successful.
 # Network instability on management network can
 # cause system to not be online immediately.
