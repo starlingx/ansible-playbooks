@@ -2,6 +2,7 @@ apiVersion: kubeadm.k8s.io/v1beta3
 kind: InitConfiguration
 localAPIEndpoint:
   advertiseAddress: {{ apiserver_advertise_address }}
+  bindPort: 16443
 nodeRegistration:
   criSocket: unix:///var/run/containerd/containerd.sock
   # configure kubeadm to not apply the default
