@@ -260,21 +260,56 @@
 - block:
   - set_fact:
       download_images: "{{ download_images_list | join(',') }}"
+      use_multiprocessing: "{{ download_images_use_multiprocessing | default(false) | bool }}"
 
-  - name: "{{ download_images_task_name }}"
-    script: download_images.py {{ download_images }}
-    register: download_images_output
-    retries: 10
-    delay: 5
-    until: (download_images_output.rc == 0 or "HARD FAIL" in download_images_output.stdout)
-    failed_when: download_images_output.rc != 0
-    environment:
-      REGISTRIES: "{{ registries | to_json }}"
-      ADD_DOCKER_PREFIX: "{{ add_docker_prefix }}"
-      CRICTL_CACHE_IMAGES: "{{ crictl_image_cache_list|default(None) }}"
+  - block:
+    - name: "{{ download_images_task_name }} - multiprocessing disabled"
+      script: download_images.py {{ download_images }}
+      register: download_images_output
+      retries: 10
+      delay: 5
+      until: (download_images_output.rc == 0 or "HARD FAIL" in download_images_output.stdout)
+      failed_when: download_images_output.rc != 0
+      environment:
+        REGISTRIES: "{{ registries | to_json }}"
+        ADD_DOCKER_PREFIX: "{{ add_docker_prefix }}"
+        CRICTL_CACHE_IMAGES: "{{ crictl_image_cache_list|default(None) }}"
 
-  - debug:
-      msg: "{{ download_images_output.stdout_lines }}"
+    - debug:
+        msg: "{{ download_images_output.stdout_lines }}"
+
+    when: not use_multiprocessing | bool
+
+  - block:
+      - name: "{{ download_images_task_name }} - multiprocessing enabled"
+        script: download_images.py {{ download_images }}
+        register: download_images_output
+        failed_when: download_images_output.rc != 0
+        environment:
+          REGISTRIES: "{{ registries | to_json }}"
+          ADD_DOCKER_PREFIX: "{{ add_docker_prefix }}"
+          CRICTL_CACHE_IMAGES: "{{ crictl_image_cache_list|default(None) }}"
+          USE_MULTIPROCESSING: "1"
+
+    rescue:
+      - name: "{{ download_images_task_name }} - multiprocessing fallback"
+        script: download_images.py {{ download_images }}
+        register: download_images_output
+        retries: 9
+        delay: 5
+        until: (download_images_output.rc == 0 or "HARD FAIL" in download_images_output.stdout)
+        failed_when: download_images_output.rc != 0
+        environment:
+          REGISTRIES: "{{ registries | to_json }}"
+          ADD_DOCKER_PREFIX: "{{ add_docker_prefix }}"
+          CRICTL_CACHE_IMAGES: "{{ crictl_image_cache_list|default(None) }}"
+
+    always:
+      - debug:
+          msg: "{{ download_images_output.stdout_lines }}"
+
+    when: use_multiprocessing | bool
+
   when: download_images_list|length > 0
 
 # Disable the log to not expose registry password
