@@ -829,8 +829,12 @@
       derived_network_params:
         'management_interface': lo
         'management_interface_name': lo
-        'controller_0_address': "{{ controller_floating_address|ipmath(1) }}"
-        'controller_1_address': "{{ controller_floating_address|ipmath(2) }}"
+        'controller_0_address': "{{ controller_floating_address|ipmath(1)
+                                    if system_mode != 'simplex'
+                                    else controller_floating_address }}"
+        'controller_1_address': "{{ controller_floating_address|ipmath(2)
+                                    if system_mode != 'simplex'
+                                    else controller_floating_address }}"
         'controller_pxeboot_address_0': "{{ controller_pxeboot_floating_address|ipmath(1) }}"
         'controller_pxeboot_address_1': "{{ controller_pxeboot_floating_address|ipmath(2) }}"
         'controller_admin_floating_address': "{{ admin_start_address }}"
@@ -858,8 +862,16 @@
       set_fact:
         derived_network_params: >-
           {{ derived_network_params | combine({
-          "controller_0_address_secondary": controller_floating_address_secondary|ipmath(1),
+          "controller_0_address_secondary": controller_floating_address_secondary|ipmath(1)
+                                            if network_params.management_start_address_secondary is defined and
+                                               network_params.management_start_address_secondary !=
+                                               network_params.management_end_address_secondary
+                                            else controller_floating_address_secondary,
           "controller_1_address_secondary": controller_floating_address_secondary|ipmath(2)
+                                            if network_params.management_start_address_secondary is defined and
+                                               network_params.management_start_address_secondary !=
+                                               network_params.management_end_address_secondary
+                                            else controller_floating_address_secondary,
           }) }}
       when: controller_floating_address_secondary is defined
 

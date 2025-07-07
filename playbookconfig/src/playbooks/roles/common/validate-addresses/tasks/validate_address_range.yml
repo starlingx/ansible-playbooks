@@ -33,10 +33,12 @@
           end = IPAddress("{{ end_addr }}")
           subnet = IPNetwork("{{ subnet }}")
 
+          start_end_equal_allowed = ['admin','management']
+
           if not start < end:
-            if "{{ network }}" == 'admin' and not start == end:
+            if "{{ network }}" in start_end_equal_allowed and not start == end:
                 raise Exception("Failed validation, {{ network }} start address must be less than or equal to end address.")
-            elif "{{ network }}" != 'admin':
+            elif "{{ network }}" not in start_end_equal_allowed:
                 raise Exception("Failed validation, {{ network }} start address must be less than end address.")
 
           if start not in subnet or end not in subnet:
@@ -53,7 +55,7 @@
               'cluster_service': 65536,
               'pxeboot': 5,
               'multicast': 6,
-              'management': 6,
+              'management': 3,
               'cluster_host': 5,
               'oam': 5,
               'admin': admin_size

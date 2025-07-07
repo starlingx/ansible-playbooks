@@ -69,6 +69,7 @@
     failed_when: (add_mgmt_address.rc != 0) and
                  (not incomplete_bootstrap) and
                  (mgmt_floating_virtual != prev_mgmt_floating_virtual)
+    when: mgmt_floating_virtual != mgmt_virtual
 
   # secondary management
   - block:
@@ -102,7 +103,8 @@
         when: (add_mgmt_address_secondary.rc != 0) and
               (not incomplete_bootstrap) and
               (mgmt_floating_virtual_secondary != prev_mgmt_floating_virtual_secondary)
-      when: mgmt_floating_virtual_secondary is defined
+      when: mgmt_floating_virtual_secondary is defined and
+            mgmt_floating_virtual_secondary != mgmt_virtual_secondary
   when: (not replayed) or (not initial_db_populated) or (reconfigure_endpoints)
 
 - name: Saving config in sysinv database
