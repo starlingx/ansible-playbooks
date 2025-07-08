@@ -101,8 +101,12 @@ items:
     # Add kubernetes cluster ip to make sure certificate has issuer ip in san list
     # https://bugs.launchpad.net/starlingx/+bug/1971500
     - "{{ kubernetes_cluster_floating_ip_primary }}"
+{% if kubernetes_cluster_c0_ip_primary is truthy %}
     - "{{ kubernetes_cluster_c0_ip_primary }}"
+{% endif %}
+{% if kubernetes_cluster_c1_ip_primary is truthy %}
     - "{{ kubernetes_cluster_c1_ip_primary }}"
+{% endif %}
 {% if kubernetes_cluster_floating_ip_secondary is truthy %}
     - "{{ kubernetes_cluster_floating_ip_secondary }}"
 {% endif %}

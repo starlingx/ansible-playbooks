@@ -33,7 +33,7 @@
           end = IPAddress("{{ end_addr }}")
           subnet = IPNetwork("{{ subnet }}")
 
-          start_end_equal_allowed = ['admin','management']
+          start_end_equal_allowed = ['admin','management','cluster_host']
 
           if not start < end:
             if "{{ network }}" in start_end_equal_allowed and not start == end:
@@ -47,18 +47,18 @@
           # min_subnet_size = number of hosts + 1 network address + 1 broadcast address
           # Note: the admin network is currently only used in distributed cloud systems
           # for communication between subcloud (controllers) and the system controller.
-          admin_size = 5
-          if "{{ network }}" == 'admin' and "{{ system_mode }}" == 'simplex':
-            admin_size = 3
+          min_size = 5
+          if "{{ system_mode }}" == 'simplex' and "{{ network }}" in start_end_equal_allowed:
+            min_size = 3
           min_subnet_sizes = {
               'cluster_pod': 65536,
               'cluster_service': 65536,
               'pxeboot': 5,
               'multicast': 6,
-              'management': 3,
-              'cluster_host': 5,
+              'management': min_size,
+              'cluster_host': min_size,
               'oam': 5,
-              'admin': admin_size
+              'admin': min_size
           }
           max_subnet_sizes = {
               'cluster_service': 1048576

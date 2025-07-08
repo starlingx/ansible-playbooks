@@ -33,12 +33,8 @@
         with_items:
           - "{{ controller_floating_address }}\tcontroller controller-platform-nfs"
           - "{{ cluster_floating_address }}\tcontroller-cluster-host"
-          # May not need this entry
-          - "{{ controller_0_cluster_host }}\tcontroller-0-infra"
           - "{{ controller_pxeboot_floating_address }}\tpxecontroller"
           - "{{ network_params.external_oam_floating_address_primary }}\toamcontroller"
-          # May not need this entry
-          - "{{ controller_1_cluster_host }}\tcontroller-1-infra"
 
       - block:
         - name: Check if dnsmasq is running

@@ -192,6 +192,7 @@
       management_gateway_address: "{{ management_gateway_address | default([]) }}"
       cluster_host_start_address: "{{ cluster_host_start_address }}"
       cluster_host_end_address: "{{ cluster_host_end_address }}"
+      cluster_host_floating_address: "{{ cluster_host_floating_address }}"
       cluster_pod_start_address: "{{ cluster_pod_start_address }}"
       cluster_pod_end_address: "{{ cluster_pod_end_address }}"
       cluster_service_start_address: "{{ cluster_service_start_address }}"
@@ -274,6 +275,11 @@
           value: "{{ cluster_host_subnet }}"
       cluster_host_end_address:
         address: "{{ cluster_host_end_address }}"
+        subnet:
+          name: cluster_host_subnet
+          value: "{{ cluster_host_subnet }}"
+      cluster_host_floating_address:
+        address: "{{ cluster_host_floating_address }}"
         subnet:
           name: cluster_host_subnet
           value: "{{ cluster_host_subnet }}"
@@ -486,6 +492,8 @@
       default_cluster_host_end_address_primary: >-
         {{ (network_params.cluster_host_subnet_primary |
             ipaddr(-1 if (network_params.cluster_host_subnet_primary|ipv6) else -2)).split('/')[0] }}
+      default_cluster_host_floating_address_primary: "{{ (network_params.cluster_host_subnet_primary | ipaddr(1))
+                                                         .split('/')[0] }}"
       default_cluster_pod_start_address_primary: "{{ (network_params.cluster_pod_subnet_primary | ipaddr(1))
                                                      .split('/')[0] }}"
       default_cluster_pod_end_address_primary: >-
@@ -532,6 +540,9 @@
                   else (network_params.cluster_host_subnet_secondary |
                         ipaddr(-1 if (network_params.cluster_host_subnet_secondary
                         |ipv6) else -2)).split('/')[0] }}
+      default_cluster_host_floating_address_secondary: >-
+        {{ False if (not network_params.cluster_host_subnet_secondary)
+                  else (network_params.cluster_host_subnet_secondary | ipaddr(1)).split('/')[0] }}
       default_cluster_pod_start_address_secondary: >-
         {{ False if (not network_params.cluster_pod_subnet_secondary)
                   else (network_params.cluster_pod_subnet_secondary | ipaddr(1)).split('/')[0] }}
@@ -620,6 +631,9 @@
           end:
             "{{ network_params.cluster_host_end_address_primary if cluster_host_end_address != 'derived'
             else default_cluster_host_end_address_primary}}"
+          floating:
+            "{{ network_params.cluster_host_floating_address_primary if cluster_host_floating_address != 'derived'
+            else default_cluster_host_floating_address_primary }}"
           subnet: "{{ network_params.cluster_host_subnet_primary }}"
         cluster_pod:
           start:
@@ -709,6 +723,9 @@
           end:
             "{{ network_params.cluster_host_end_address_secondary if cluster_host_end_address != 'derived'
             else default_cluster_host_end_address_secondary}}"
+          floating:
+            "{{ network_params.cluster_host_floating_address_secondary if cluster_host_floating_address != 'derived'
+            else default_cluster_host_floating_address_secondary }}"
           subnet: "{{ network_params.cluster_host_subnet_secondary }}"
         cluster_pod:
           start:
@@ -812,7 +829,7 @@
       # the IP from CIDR input. Resort to string split for now.
       controller_floating_address: "{{ address_pairs['management']['floating'] }}"
       controller_pxeboot_floating_address: "{{ address_pairs['pxeboot']['start'] }}"
-      cluster_floating_address: "{{ address_pairs['cluster_host']['start'] }}"
+      cluster_floating_address: "{{ address_pairs['cluster_host']['floating'] }}"
 
   - name: Set subcloud admin floating address
     set_fact:
@@ -828,7 +845,7 @@
 
     - name: Set secondary cluster floating addresses based on start address
       set_fact:
-        cluster_floating_address_secondary: "{{ address_pairs_secondary['cluster_host']['start'] }}"
+        cluster_floating_address_secondary: "{{ address_pairs_secondary['cluster_host']['floating'] }}"
       when: address_pairs_secondary.cluster_host is defined
 
     - name: Set secondary admin floating address
@@ -869,8 +886,11 @@
       pxe_subnet_prefix: "{{ pxeboot_subnet | ipaddr('prefix') }}"
       cluster_subnet_prefix: "{{ network_params.cluster_host_subnet_primary | ipaddr('prefix') }}"
       cluster_broadcast: "{{ network_params.cluster_host_subnet_primary | ipaddr('broadcast') }}"
-      controller_0_cluster_host: "{{ cluster_floating_address|ipmath(1) }}"
-      controller_1_cluster_host: "{{ cluster_floating_address|ipmath(2) }}"
+      controller_0_cluster_host: "{{ cluster_floating_address|ipmath(1)
+                                      if system_mode != 'simplex'
+                                      else cluster_floating_address }}"
+      controller_1_cluster_host: "{{ cluster_floating_address|ipmath(2)
+                                      if system_mode != 'simplex' }}"
       controller_floating_address_url:
         "{{ controller_floating_address|ipwrap if controller_floating_address|ipv6 != False
         else controller_floating_address}}"
@@ -908,8 +928,11 @@
 
     - name: Set secondary cluster-host addresses for subsequent tasks/roles
       set_fact:
-        controller_0_cluster_host_secondary: "{{ cluster_floating_address_secondary|ipmath(1) }}"
-        controller_1_cluster_host_secondary: "{{ cluster_floating_address_secondary|ipmath(2) }}"
+        controller_0_cluster_host_secondary: "{{ cluster_floating_address_secondary|ipmath(1)
+                                                  if system_mode != 'simplex'
+                                                  else cluster_floating_address_secondary }}"
+        controller_1_cluster_host_secondary: "{{ cluster_floating_address_secondary|ipmath(2)
+                                                  if system_mode != 'simplex' }}"
       when: cluster_floating_address_secondary is defined
 
     - name: Set secondary controller_floating_address_url_secondary addresses for subsequent tasks/roles

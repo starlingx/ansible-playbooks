@@ -33,6 +33,7 @@
     management_floating_address: "{{ management_floating_address | default('derived') }}"
     cluster_host_start_address: "{{ cluster_host_start_address | default('derived') }}"
     cluster_host_end_address: "{{ cluster_host_end_address | default('derived') }}"
+    cluster_host_floating_address: "{{ cluster_host_floating_address | default('derived') }}"
     cluster_pod_start_address: "{{ cluster_pod_start_address | default('derived') }}"
     cluster_pod_end_address: "{{ cluster_pod_end_address | default('derived') }}"
     cluster_service_start_address: "{{ cluster_service_start_address | default('derived') }}"
