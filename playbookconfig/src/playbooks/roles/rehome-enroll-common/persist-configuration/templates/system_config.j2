@@ -75,6 +75,10 @@ ADMIN_GATEWAY_ADDRESS={{ network_params.admin_gateway_address_primary
                         if (network_params.admin_gateway_address_primary is defined
                             and network_params.admin_gateway_address_primary)
                         else 'undef' }}
+ADMIN_FLOATING_ADDRESS={{ network_params.admin_floating_address_primary
+                        if (network_params.admin_floating_address_primary is defined
+                            and network_params.admin_floating_address_primary)
+                        else 'undef' }}
 
 {# -- start of secondary of dual-stack support #}
 ADMIN_SUBNET_SECONDARY={{ address_pairs_secondary['admin']['subnet'] | default('undef') }}
@@ -83,6 +87,10 @@ ADMIN_END_ADDRESS_SECONDARY={{ address_pairs_secondary['admin']['end'] | default
 ADMIN_GATEWAY_ADDRESS_SECONDARY={{ network_params.admin_gateway_address_secondary
                                    if (network_params.admin_gateway_address_secondary is defined
                                       and network_params.admin_gateway_address_secondary)
+                                      else 'undef' }}
+ADMIN_FLOATING_ADDRESS_SECONDARY={{ network_params.admin_floating_address_secondary
+                                   if (network_params.admin_floating_address_secondary is defined
+                                      and network_params.admin_floating_address_secondary)
                                       else 'undef' }}
 
 EXTERNAL_OAM_SUBNET_SECONDARY={{ address_pairs_secondary['oam']['subnet'] | default('undef') }}

@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+import contextlib
 import docker
 import sys
 import time
@@ -12,10 +13,12 @@ import os
 import json
 import keyring
 import subprocess
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor
 
 from random import SystemRandom
 
-MAX_DOWNLOAD_THREAD = 5
+MAX_DOWNLOAD_THREAD = int(os.environ.get("MAX_DOWNLOAD_THREAD", 5))
 
 LOCAL_REGISTRY_URL = 'registry.local:9001/'
 HARD_FAIL_ERRORS = [
@@ -353,29 +356,44 @@ def generate_image_outfile(images, outfile):
             f.write(image + "\n")
 
 
-def map_function(images, function, local_download=False):
-    failed_images = []
-    threads = min(MAX_DOWNLOAD_THREAD, len(images))
+@contextlib.contextmanager
+def _create_mapper(images, local_download, use_multiprocessing):
+    """Return the correct mapper based on mode."""
 
-    if local_download:
-        # monkey_patch is called on the eventlet to improve parallelism when
-        # images are pulled from the local registry. Doing the same when
-        # images are pulled from an external source can have an adverse
-        # effect to large subcloud deployment due to too many concurrent image
-        # pull requests.
-        import eventlet
-        eventlet.monkey_patch(os=False)
-        from eventlet import greenpool  # noqa: E402
+    if use_multiprocessing:
+        threads = min(MAX_DOWNLOAD_THREAD, multiprocessing.cpu_count(), len(images))
+        with ProcessPoolExecutor(max_workers=threads) as executor:
+            yield executor.map
+
     else:
-        from eventlet import greenpool
+        threads = min(MAX_DOWNLOAD_THREAD, len(images))
 
-    pool = greenpool.GreenPool(size=threads)
-    for image, success in pool.imap(function, images):
-        if not success:
-            failed_images.append(image)
-        elif purge_images_list_file and image is not None:
-            with open(purge_images_list_file, 'a+') as f_out:
-                f_out.write(str(image) + '\n')
+        if local_download:
+            # monkey_patch is called on the eventlet to improve parallelism when
+            # images are pulled from the local registry. Doing the same when
+            # images are pulled from an external source can have an adverse
+            # effect to large subcloud deployment due to too many concurrent image
+            # pull requests.
+            import eventlet
+            eventlet.monkey_patch(os=False)
+            from eventlet import greenpool  # noqa: E402
+        else:
+            from eventlet import greenpool
+
+        pool = greenpool.GreenPool(size=threads)
+        yield pool.imap
+
+
+def map_function(images, function, local_download=False, use_multiprocessing=False):
+    failed_images = []
+
+    with _create_mapper(images, local_download, use_multiprocessing) as mapper:
+        for image, success in mapper(function, images):
+            if not success:
+                failed_images.append(image)
+            elif purge_images_list_file and image is not None:
+                with open(purge_images_list_file, 'a+') as f_out:
+                    f_out.write(str(image) + '\n')
 
     return failed_images
 
@@ -404,13 +422,20 @@ if __name__ == '__main__':
     if os.getenv('ADD_DOCKER_PREFIX') is not None:
         add_docker_prefix = (os.environ['ADD_DOCKER_PREFIX'] == 'True')
 
+    use_multiprocessing = os.environ.get('USE_MULTIPROCESSING') == '1'
+    if use_multiprocessing:
+        print("Multiprocessing mode is enabled")
+
     if len(sys.argv) == 2:
         success_msg = "All images downloaded and pushed to the local registry"
         if os.getenv('PRESTAGE_DOWNLOAD') is not None:
             prestage_download = os.environ['PRESTAGE_DOWNLOAD']
 
         if not prestage_download:
-            failed_downloads = map_function(image_list, download_and_push_an_image)
+            failed_downloads = map_function(
+                image_list,
+                download_and_push_an_image,
+                use_multiprocessing=use_multiprocessing)
         else:
             if os.getenv('PURGE_IMAGES_LIST_FILE') is not None:
                 purge_images_list_file = os.environ['PURGE_IMAGES_LIST_FILE']
@@ -419,7 +444,10 @@ if __name__ == '__main__':
             # Remove them before processing.
             images_with_auth = get_image_list_with_auth_info(image_list)
             image_list = [img_tuple[0] for img_tuple in images_with_auth]
-            failed_downloads = map_function(images_with_auth, download_and_push_an_image_for_prestage)
+            failed_downloads = map_function(
+                images_with_auth,
+                download_and_push_an_image_for_prestage,
+                use_multiprocessing=use_multiprocessing)
     else:
         # TODO(tngo): Remove the following logic and related functions post StarlingX 9.0
 
@@ -433,7 +461,11 @@ if __name__ == '__main__':
 
         if local_download == 'True':
             success_msg = "All images retrieved from the local registry"
-            failed_downloads = map_function(image_list, download_a_local_image, True)
+            failed_downloads = map_function(
+                image_list,
+                download_a_local_image,
+                True,
+                use_multiprocessing=use_multiprocessing)
         else:
             # The specified images may also contain the url prefix.
             # Remove them before processing.
@@ -441,7 +473,10 @@ if __name__ == '__main__':
             image_list = [img_tuple[0] for img_tuple in images_with_auth]
 
             success_msg = "All images downloaded successfully"
-            failed_downloads = map_function(images_with_auth, download_an_image)
+            failed_downloads = map_function(
+                images_with_auth,
+                download_an_image,
+                use_multiprocessing=use_multiprocessing)
 
         print("Local download flag: %s" % local_download)
 

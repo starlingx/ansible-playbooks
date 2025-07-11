@@ -13,6 +13,7 @@
     start_addr: "{{ item.value['start'] }}"
     end_addr: "{{ item.value['end'] }}"
     subnet: "{{ item.value['subnet'] }}"
+    system_mode: "{{ item.value['system_mode'] | default(omit) }}"
 
 - block:
   - name: Validate {{ network }} start and end address format
@@ -32,8 +33,13 @@
           end = IPAddress("{{ end_addr }}")
           subnet = IPNetwork("{{ subnet }}")
 
+          start_end_equal_allowed = ['admin','management']
+
           if not start < end:
-            raise Exception("Failed validation, {{ network }} start address must be less than end address.")
+            if "{{ network }}" in start_end_equal_allowed and not start == end:
+                raise Exception("Failed validation, {{ network }} start address must be less than or equal to end address.")
+            elif "{{ network }}" not in start_end_equal_allowed:
+                raise Exception("Failed validation, {{ network }} start address must be less than end address.")
 
           if start not in subnet or end not in subnet:
             raise Exception("Failed validation, {{ network }} start or end address must be within its subnet range.")
@@ -41,15 +47,18 @@
           # min_subnet_size = number of hosts + 1 network address + 1 broadcast address
           # Note: the admin network is currently only used in distributed cloud systems
           # for communication between subcloud (controllers) and the system controller.
+          admin_size = 5
+          if "{{ network }}" == 'admin' and "{{ system_mode }}" == 'simplex':
+            admin_size = 3
           min_subnet_sizes = {
               'cluster_pod': 65536,
               'cluster_service': 65536,
               'pxeboot': 5,
               'multicast': 6,
-              'management': 6,
+              'management': 3,
               'cluster_host': 5,
               'oam': 5,
-              'admin': 5
+              'admin': admin_size
           }
           max_subnet_sizes = {
               'cluster_service': 1048576

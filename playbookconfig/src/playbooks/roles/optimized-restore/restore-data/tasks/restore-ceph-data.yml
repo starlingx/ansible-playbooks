@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2024 Wind River Systems, Inc.
+# Copyright (c) 2022-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -213,7 +213,7 @@
       # ceph is correctly configured after a wipe. This app is automatically
       # applied by conductor when there is ceph backend configured.
       - name: Remove {{ app_name }} application when asked to wipe ceph osd disks
-        shell: source /etc/platform/openrc; system application-remove {{ app_name }} --force
+        shell: source /etc/platform/openrc; system application-remove {{ app_name }} --force --yes
 
       - name: Recover Ceph PVCs when OSDs are wiped
         script: roles/restore-platform/restore-more-data/files/recover_ceph_pvcs.sh

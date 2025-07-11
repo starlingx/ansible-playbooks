@@ -28,7 +28,7 @@
         cmd: |
           ifup $(ls ifcfg-* | sed 's/ifcfg-//') --ignore-errors --force
         chdir: /etc/network/interfaces.d/
-      async: 60
+      async: 120
       poll: 5
 
   when: previous_software_version != '21.12'

@@ -8,13 +8,6 @@
 #   the next step.
 #
 
-- name: Set enrollment_in_progress flag
-  file:
-    path: /var/run/.enrollment_in_progress
-    state: touch
-  become: true
-  when: mode is defined and mode == "enroll"
-
 - name: Set config path facts
   set_fact:
     config_permdir: "{{ platform_path + '/config/' + software_version }}"
@@ -51,6 +44,7 @@
     external_oam_node_1_address: "{{ external_oam_node_1_address | default('derived') }}"
     admin_start_address: "{{ admin_start_address | default('derived') }}"
     admin_end_address: "{{ admin_end_address | default('derived') }}"
+    admin_floating_address: "{{ admin_floating_address | default('derived') }}"
 
 # Network config validation
 - block:
@@ -78,12 +72,14 @@
       management_end_address: "{{ management_end_address }}"
       admin_start_address: "{{ admin_start_address }}"
       admin_end_address: "{{ admin_end_address }}"
+      admin_floating_address: "{{ admin_floating_address }}"
       cluster_service_start_address: "{{ cluster_service_start_address }}"
       management_gateway_address: "{{ management_gateway_address | default([]) }}"
       admin_gateway_address: "{{ admin_gateway_address | default([]) }}"
     loop_control:
       loop_var: network_param
     when: network_param.value != "undef" and network_param.value != "derived"
+
 
   # validate dual-stack address respective to subnet, sequence of ip family (primary and secondary) should
   # match between address and subnet. Both address and respective subnet either should be single-stack or dual-stack.
@@ -162,6 +158,11 @@
           value: "{{ admin_subnet }}"
       admin_gateway_address:
         address: "{{ admin_gateway_address }}"
+        subnet:
+          name: admin_subnet
+          value: "{{ admin_subnet }}"
+      admin_floating_address:
+        address: "{{ admin_floating_address }}"
         subnet:
           name: admin_subnet
           value: "{{ admin_subnet }}"
@@ -269,10 +270,6 @@
     derived_network_params:
       'controller_0_address': "{{ controller_floating_address|ipmath(1) }}"
       'controller_1_address': "{{ controller_floating_address|ipmath(2) }}"
-      'controller_0_admin_address': "{{ admin_floating_address|ipmath(1)
-                                        if admin_floating_address is defined }}"
-      'controller_1_admin_address': "{{ admin_floating_address|ipmath(2)
-                                        if admin_floating_address is defined}}"
       'oam_node_0_address': "{{ network_params.external_oam_node_0_address_primary
                            if external_oam_node_0_address != 'derived'
                            else network_params.external_oam_floating_address_primary | ipmath(1) }}"
@@ -331,7 +328,7 @@
 - name: Set subcloud floating address
   set_fact:
     sc_floating_address: "{{ admin_floating_address
-                           if admin_floating_address is defined
+                           if admin_floating_address is defined and admin_floating_address != 'derived'
                            else controller_floating_address }}"
 
 - name: Get existing docker no_proxy

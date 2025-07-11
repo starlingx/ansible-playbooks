@@ -115,6 +115,7 @@
     management_multicast_end_address: "{{ management_multicast_end_address | default('derived') }}"
     external_oam_node_0_address: "{{ external_oam_node_0_address | default('derived') }}"
     external_oam_node_1_address: "{{ external_oam_node_1_address | default('derived') }}"
+    admin_floating_address: "{{ admin_floating_address | default('derived') }}"
     admin_start_address: "{{ admin_start_address | default('derived') }}"
     admin_end_address: "{{ admin_end_address | default('derived') }}"
 
@@ -188,7 +189,7 @@
       'external_oam_gateway_address': "{{ external_oam_gateway_address }}"
       'external_oam_floating_address': "{{ external_oam_floating_address }}"
       'management_multicast_subnet': "{{ management_multicast_subnet }}"
-      'admin_subnet': '{{ admin_subnet | default([]) }}'
+      'admin_subnet': "{{ admin_subnet | default([]) }}"
     # Set this placeholder here to workaround an Ansible quirk
     derived_network_params:
       place_holder: place_holder
@@ -349,6 +350,16 @@
                             | combine(kubelet_configurations|default({})) }}"
     networking_configurations: "{{ networking_configurations_defaults \
                                | combine(networking_configurations|default({})) }}"
+
+- block:
+  - name: Update controller-manager extraArgs to disable leader election
+    set_fact:
+      controllermanager_extra_args: "{{ controllermanager_extra_args | combine({ 'leader-elect': 'false' }) }}"
+
+  - name: Update scheduler extraArgs to disable leader election
+    set_fact:
+      scheduler_extra_args: "{{ scheduler_extra_args | combine({ 'leader-elect': 'false' }) }}"
+  when: system_mode == 'simplex'
 
 - name: Add OpenID Connect parameter oidc-client-id to apiserver extraArgs section
   set_fact:
@@ -552,6 +563,7 @@
           prev_external_oam_end_address: "{{ prev_external_oam_end_address }}"
           prev_admin_start_address: "{{ prev_admin_start_address }}"
           prev_admin_end_address: "{{ prev_admin_end_address }}"
+          prev_admin_floating_address: "{{ prev_admin_floating_address }}"
           prev_management_multicast_start_address: "{{ prev_management_multicast_start_address }}"
           prev_management_multicast_end_address: "{{ prev_management_multicast_end_address }}"
           prev_external_oam_node_0_address: "{{ prev_external_oam_node_0_address }}"

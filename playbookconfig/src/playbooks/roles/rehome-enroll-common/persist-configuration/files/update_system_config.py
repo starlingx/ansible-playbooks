@@ -145,7 +145,10 @@ class OpenStackClient:
         if not self._barbican:
             if not self._session:
                 self._session = self._get_new_keystone_session(self.conf)
-            self._barbican = barbican_client.Client(session=self._session)
+            self._barbican = barbican_client.Client(
+                session=self._session,
+                interface='internal',
+                )
         return self._barbican
 
     def list_secrets(self, secret_name):
@@ -363,6 +366,57 @@ def populate_user_dns_host_records(client):
         print_with_timestamp("Populating/Updating user dns host-records completed.")
 
 
+def populate_registry_dns_host_records(client, section_name):
+    virtual_system = False
+    registry_local = ''
+
+    parameters = client.sysinv.service_parameter.list()
+
+    for parameter in parameters:
+        if parameter.name == sysinv_constants.SERVICE_PARAM_NAME_PLAT_CONFIG_VIRTUAL:
+            virtual_system = True
+
+    if virtual_system:
+        registry_central_address = CONF.get(
+            section_name, "SYSTEM_CONTROLLER_FLOATING_ADDRESS"
+        )
+        registry_local = CONF.get(
+            section_name, "MANAGEMENT_FLOATING_ADDRESS"
+        )
+    else:
+        registry_central_address = CONF.get(
+            section_name, "SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS"
+        )
+
+    parameters = client.sysinv.service_parameter.list()
+    for parameter in parameters:
+        if parameter.name == 'registry.central':
+            client.sysinv.service_parameter.delete(parameter.uuid)
+        elif virtual_system and parameter.name == 'registry.local':
+            client.sysinv.service_parameter.delete(parameter.uuid)
+
+    values = {
+        'service': sysinv_constants.SERVICE_TYPE_DNS,
+        'section': sysinv_constants.SERVICE_PARAM_SECTION_DNS_HOST_RECORD,
+        'personality': None,
+        'resource': None,
+        'parameters': {
+            'registry.central': (
+                f"registry.central,{registry_central_address}"
+            )
+        }
+    }
+
+    if registry_central_address and virtual_system:
+        values['parameters']['registry.local'] = (
+            f"registry.local,{registry_local}"
+        )
+
+    print_with_timestamp("Populating/Updating DNS host record for registry...")
+    client.sysinv.service_parameter.create(**values)
+    print_with_timestamp("DNS host record for registry completed.")
+
+
 def populate_docker_config(client, section_name):
     """
     Update Docker and Kubernetes configuration parameters.
@@ -382,6 +436,7 @@ def populate_service_parameter_config(client, section_name):
         populate_user_dns_host_records(client)
     else:
         print_with_timestamp("Skipping Populating/Updating user dns host-records...")
+    populate_registry_dns_host_records(client, section_name)
 
 
 def edit_dc_role_to_subcloud(client):
@@ -565,6 +620,7 @@ def update_admin_network(client, section_name):
     delete_network_and_addrpool(client, 'admin', section_name)
 
     admin_subnet = IPNetwork(CONF.get(section_name, "ADMIN_SUBNET"))
+    admin_floating_address = CONF.get(section_name, "ADMIN_FLOATING_ADDRESS")
     admin_start_address = CONF.get(section_name, "ADMIN_START_ADDRESS")
     admin_end_address = CONF.get(section_name, "ADMIN_END_ADDRESS")
     subcloud_gateway = CONF.get(section_name, "ADMIN_GATEWAY_ADDRESS")
@@ -579,6 +635,11 @@ def update_admin_network(client, section_name):
     if (subcloud_gateway != 'undef'):
         values.update({
             'gateway_address': subcloud_gateway,
+        })
+
+    if (admin_floating_address != 'undef'):
+        values.update({
+            'floating_address': admin_floating_address,
         })
 
     print_with_timestamp(f"Creating addrpool with name {values['name']}...")
@@ -696,12 +757,19 @@ def update_management_network(client, section_name):
         'ranges': [(
             CONF.get(section_name, "MANAGEMENT_START_ADDRESS"),
             CONF.get(section_name, "MANAGEMENT_END_ADDRESS"),
-            )],
+        )],
         'gateway_address': subcloud_gateway,
         'floating_address': CONF.get(section_name, "MANAGEMENT_FLOATING_ADDRESS"),
-        'controller0_address': CONF.get(section_name, "MANAGEMENT_CONTROLLER0_ADDRESS"),
-        'controller1_address': CONF.get(section_name, "MANAGEMENT_CONTROLLER1_ADDRESS"),
-        }
+    }
+    system_mode = CONF.get(section_name, 'SYSTEM_MODE')
+    if system_mode != sysinv_constants.SYSTEM_MODE_SIMPLEX:
+        values.update({
+            'controller0_address': CONF.get(
+                section_name, 'MANAGEMENT_CONTROLLER0_ADDRESS'),
+            'controller1_address': CONF.get(
+                section_name, 'MANAGEMENT_CONTROLLER1_ADDRESS'),
+        })
+
     if is_equal_with_existing_pool(client, values, pool_id):
         print_with_timestamp(
             f"Management network addrpool {pool_id} is up-to-date.")

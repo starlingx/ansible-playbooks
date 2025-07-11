@@ -49,12 +49,6 @@
         To: "fm::keystone::authtoken::password: {{ users['fm'] }}" }
     - { From: "^nfv::keystone::auth::password",
         To: "nfv::keystone::auth::password: {{ users['vim'] }}" }
-    - { From: "^patching::api::keystone_password",
-        To: "patching::api::keystone_password: {{ users['patching'] }}" }
-    - { From: "^patching::keystone::auth::password",
-        To: "patching::keystone::auth::password: {{ users['patching'] }}" }
-    - { From: "^patching::keystone::authtoken::password",
-        To: "patching::keystone::authtoken::password: {{ users['patching'] }}" }
     - { From: "^usm::api::keystone_password",
         To: "usm::api::keystone_password: {{ users['usm'] }}" }
     - { From: "^usm::keystone::auth::password",

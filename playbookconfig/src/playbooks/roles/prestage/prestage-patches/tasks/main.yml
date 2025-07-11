@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023, 2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -15,10 +15,6 @@
     state: directory
     owner: root
     mode: 0755
-
-- name: Prestage patch packages and repodata
-  include_tasks: prestage-patch-sw-packages.yml
-  when: prestage_os_type == 'centos'
 
 - name: Prestage patch metadata
   import_tasks: prestage-patch-metadata.yml

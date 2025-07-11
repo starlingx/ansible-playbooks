@@ -466,22 +466,17 @@ sync_metadata_on_subcloud() {
     #
     # For each RELEASE being synchronized from systemController:
     #
-    #     COPY metadata.xml from systemController
-    #         - this will include the 'ostree-commit-id' and 'committed' ATTRIBUTES from systemController
-    #         * this has already been done by ansible
+    #   1 - The extracted commit hash is used to check if the commit exists in the
+    #       local feed and sysroot ostree repo. If it exists, the state is set to
+    #       "deployed" and the metadata file is copied to the deployed state directory.
     #
-    #     We are deleting all files of the release before synchronization to ensure that the
-    #     metadata will be exactly the same as the SC. It is not necessary to update the commits since
-    #     the subcloud repository is a mirror of the SC repository.
+    #   2 - If the commit does not exist in the local feed and sysroot ostree repo,
+    #       the metadata file is checked in the metadata tmp directory. If it exists and
+    #       the state is "deployed", keep it in the same state. Otherwise, set the state
+    #       to "available" and copy the metadata file to the available state directory.
     #
-    #     IF RELEASE does NOT EXIST on subcloud
-    #         IF 'ostree-commit-id' == NULL
-    #             Create it with STATE = available
-    #         ELSE
-    #             Create it with STATE = deployed
-    #
-    # For each RELEASE on SUBCLOUD but NOT synchronized from systemController
-    #     REMOVE RELEASE FROM SUBCLOUD
+    # This mechanism is used to ensure that the metadata files are in the correct
+    # state directory, based on the state of the commit hash and the metadata file.
     #
     local metadata_file=$1
     local central_metadata_file=$2
@@ -490,6 +485,10 @@ sync_metadata_on_subcloud() {
     # See https://mywiki.wooledge.org/BashProgramming?highlight=%28nameref%29#Functions
     local -n sync_subcloud_commit_hashes=$3
 
+    # The metadata_tmp_dir is used to store the metadata files temporarily
+    # before they are copied to the correct state directory.
+    local metadata_tmp_dir=$4
+
     # We already have the metadata file from the system controller
     if [ -z "${central_metadata_file}" ]; then
         # unexpected
@@ -497,41 +496,51 @@ sync_metadata_on_subcloud() {
     fi
 
     # Get current subcloud state from metadata; it may or may not exist
-    local id sw_release central_usm_state subcloud_metadata_file
+    local id sw_version central_usm_state subcloud_metadata_file
     id=$(get_simple_xml_attrib_from_metadata "${central_metadata_file}" "id")
-    sw_release=$(get_simple_xml_attrib_from_metadata "${central_metadata_file}" "sw_release")
+    sw_version=$(get_simple_xml_attrib_from_metadata "${central_metadata_file}" "sw_version")
     central_usm_state=$(get_usm_state_from_path "$central_metadata_file")
-    subcloud_metadata_file=$(find_metadata_file_for_attrib_val "id" "${id}" "${METADATA_DIR}")
 
     local log_hdr="sync_metadata_on_subcloud: id: ${id}"
-    log_info_l "${log_hdr}" "sw_release: ${sw_release}"\
+    log_info_l "${log_hdr}" "sw_version: ${sw_version}"\
         "commit_hashes: ${sync_subcloud_commit_hashes[*]}"\
         "central_metadata_file: ${central_metadata_file}"\
-        "central_usm_state: ${central_usm_state}"\
-        "subcloud_metadata_file: ${subcloud_metadata_file}"
+        "central_usm_state: ${central_usm_state}"
 
-    local new_state
     # It is sufficient to check against only one commit hash here - they are all part of the same metadata file
     local commit_hash=${sync_subcloud_commit_hashes[0]}
-    if [ -z "${subcloud_metadata_file}" ]; then
-        # Not found: RELEASE does NOT EXIST on subcloud
-        if ostree_commit_exists "${commit_hash}"; then
-            # Create it with STATE = deployed
-            log_debug_l "sync_metadata_on_subcloud: commit exists in local ${OSTREE_LOCAL_REF}"\
-                "ref: ${commit_hash}"
-            new_state="deployed"
-        else
-            # Create it with STATE = available
+    # Default to deployed state
+    local new_state="deployed"
+    local reason
+
+    # Check if the commit hash exists in both the local feed and sysroot ostree repo
+    if ostree_commit_exists "${commit_hash}"; then
+        reason="already exists and is deployed. Keeping it in the same state."
+    else
+        subcloud_metadata_file=$(find_metadata_file_for_attrib_val "id" "${id}" "${metadata_tmp_dir}")
+        # If subcloud_metadata_file is empty, it means that the metadata file
+        # does not exist in the metadata tmp directory. In this case, we
+        # set the state to available the metadata file from central.
+        if [ -z "${subcloud_metadata_file}" ]; then
             new_state="available"
+            reason="does not exist. Setting state to available."
+        else
+            # If the metadata file exists in the metadata tmp directory,
+            # we need to check the state. If it is not deployed, we set the state
+            # to available. Otherwise, we set the state to deployed.
+            subcloud_usm_state=$(get_usm_state_from_path "$subcloud_metadata_file")
+            [ "${subcloud_usm_state}" != "${new_state}" ] && new_state="available"
+            reason="exists but keeping it in ${new_state} state."
         fi
-        # Ensures that the new state directory exists
-        if [ ! -d "${METADATA_DIR}/${new_state}" ]; then
-            log_info "Creating ${METADATA_DIR}/${new_state} state directory"
-            run_cmd mkdir -p "${METADATA_DIR}/${new_state}"
-        fi
-        log_info "${log_hdr} does not exist on subcloud, setting to ${new_state}"
-        run_cmd cp "${central_metadata_file}" "${METADATA_DIR}/${new_state}"
     fi
+
+    # Ensures that the new state directory exists
+    if [ ! -d "${METADATA_DIR}/${new_state}" ]; then
+        log_info "Creating ${METADATA_DIR}/${new_state} state directory"
+        run_cmd mkdir -p "${METADATA_DIR}/${new_state}"
+    fi
+    log_info "${log_hdr} ${reason}"
+    run_cmd cp "${central_metadata_file}" "${METADATA_DIR}/${new_state}"
 }
 
 # Context: INVOKED ON SUBCLOUD
@@ -548,14 +557,16 @@ sync_subcloud_metadata() {
     #
     # Synchronization is done on a per-major-release basis.
     # For given major release:
-    # 1) Syncronize ostree repo
-    # 2) Remove the metadata from the specified release to ensure that when synchronized,
+    # 1) Synchronize ostree repo
+    # 2) Make a copy of the metadata directory to a temporary location
+    # 3) Remove the metadata from the specified release to ensure that when synchronized,
     #    it is in the right directory, based on the state.
-    # 3) Get a list of all update metadata files needing to be synchronized
-    # 4) Synchronize the update metadata file into the proper state-based location
+    # 4) Get a list of all update metadata files needing to be synchronized
+    # 5) Synchronize the update metadata file into the proper state-based location
     #    on the subcloud
+    # 6) Remove the temporary metadata directory
     #
-    local metadata_file commit_hash central_metadata_file
+    local metadata_file commit_hash central_metadata_file metadata_tmp_dir
     local sw_version=${1:-$SW_VERSION}
 
     # Configure and sync ostree feed repo
@@ -565,6 +576,12 @@ sync_subcloud_metadata() {
 
     local commit_hashes=()
     local commit_hash
+
+    # Create a temporary directory to backup the metadata files
+    metadata_tmp_dir=$(mktemp --directory ostree-metadata-sync.XXXXX)
+
+    # Copy the metadata directory to a temporary location
+    cp -Rf "${METADATA_DIR}" "${metadata_tmp_dir}"
 
     # Remove current files for specified release
     log_info "Removing directories for release ${sw_version}"
@@ -584,10 +601,11 @@ sync_subcloud_metadata() {
 
         if [ "${#commit_hashes[@]}" -gt 0 ]; then
             # Synchronize the metadata file
-            sync_metadata_on_subcloud "${metadata_file}" "${central_metadata_file}" commit_hashes
+            sync_metadata_on_subcloud "${metadata_file}" "${central_metadata_file}" commit_hashes "${metadata_tmp_dir}"
             commit_hashes=()
         fi
     done
+    rm -Rf "${metadata_tmp_dir}"
 }
 
 ################################################################################

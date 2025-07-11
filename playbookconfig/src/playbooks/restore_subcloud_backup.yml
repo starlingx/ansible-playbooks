@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2023, 2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -15,8 +15,40 @@
 
   roles:
     - common/remote-execution-precheck
-    - common/prepare-env
-    - subcloud-bnr/restore
+
+  tasks:
+    - name: Set facts for auto restore monitoring
+      set_fact:
+        auto_restore_mode: "{{ auto_restore_mode | default('') }}"
+        restore_timeout: "{{ restore_timeout | default(3600) }}"
+        ipmi_event_pattern: "{{ ipmi_install_complete_pattern | default('Unknown #0x01 |  | Asserted') }}"
+        restore_complete_ipmi_data: "{{ restore_complete_ipmi_data | default('fffffe') }}"
+        restore_failed_ipmi_data: "{{ restore_failed_ipmi_data | default('fffffd') }}"
+
+    # Auto or factory restore are triggered automatically inside the subcloud, so we just
+    # need to monitor the IPMI SEL logs and wait for the restore to complete or fail
+    - block:
+        - name: Waiting {{ restore_timeout }} seconds for {{ auto_restore_mode }} restore complete IPMI SEL event
+          include_role:
+            name: common/ipmi_monitor
+          vars:
+            ipmi_data_values: "{{ restore_complete_ipmi_data }},{{ restore_failed_ipmi_data }}"
+            ipmi_success_values: "{{ restore_complete_ipmi_data }}"
+            ipmi_failure_values: "{{ restore_failed_ipmi_data }}"
+            ipmi_timeout: "{{ restore_timeout }}"
+
+        - debug:
+            msg: "{{ auto_restore_mode | capitalize }} restore completed successfully."
+      when: auto_restore_mode in ['factory', 'auto']
+
+    # Standard subcloud restore
+    - block:
+        - include_role:
+            name: common/prepare-env
+
+        - include_role:
+            name: subcloud-bnr/restore
+      when: auto_restore_mode not in ['factory', 'auto']
 
   vars:
     optimized_bnr_supported: true

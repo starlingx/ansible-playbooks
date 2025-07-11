@@ -103,21 +103,22 @@ imageReflectionController:
   create: false
 
 kustomizeController:
-  create: false
-  image: ghcr.io/fluxcd/kustomize-controller
-  tag: v1.3.0
+  create: {{ enable_kustomize_controller }}
+  image: "{{ local_registry }}/{{ flux_kustomize_controller_image }}"
+  tag: {{ flux_kustomize_controller_tag }}
   resources:
-    limits: {}
-    # cpu: 1000m
-    # memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
     requests:
-      cpu: 100m
-      memory: 64Mi
+      cpu: 0
+      memory: {{ flux_kustomize_controller_memory_request }}
   priorityClassName: ""
   annotations:
     prometheus.io/port: "8080"
     prometheus.io/scrape: "true"
-  labels: {}
+  labels:
+    app.starlingx.io/component: platform
   container:
     additionalArgs: []
   extraEnv: []
@@ -126,46 +127,38 @@ kustomizeController:
     automount: true
     annotations: {}
   imagePullPolicy: ""
-  secret:
-    # -- Create a secret to use it with extraSecretMounts. Defaults to false.
-    create: false
-    name: ""
-    data: {}
-  # -- Defines envFrom using a configmap and/or secret.
-  envFrom:
-    map:
-      name: ""
-    secret:
-      name: ""
-  # -- Defines additional mounts with secrets.
-  # Secrets must be manually created in the namespace or with kustomizeController.secret
-  extraSecretMounts: []
-  # - name: secret-files
-  #   mountPath: /etc/secrets
-  #   subPath: ""
-  #   secretName: secret-files
-  #   readOnly: true
-
-  nodeSelector: {}
-  affinity: {}
-  tolerations: []
+  terminationGracePeriodSeconds: 10
+  readinessProbe:
+    timeoutSeconds: {{ flux_kustomize_controller_readiness_timeout }}
+  livenessProbe:
+    timeoutSeconds: {{ flux_kustomize_controller_liveness_timeout }}
+  nodeSelector:
+    node-role.kubernetes.io/control-plane: ""
+  tolerations:
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
 
 notificationController:
-  create: false
-  image: ghcr.io/fluxcd/notification-controller
-  tag: v1.3.0
+  create: {{ enable_notification_controller }}
+  image: "{{ local_registry }}/{{ flux_notification_controller_image }}"
+  tag: {{ flux_notification_controller_tag }}
   resources:
-    limits: {}
-    # cpu: 1000m
-    # memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
     requests:
-      cpu: 100m
-      memory: 64Mi
+      cpu: 0
+      memory: {{ flux_notification_controller_memory_request }}
   priorityClassName: ""
   annotations:
     prometheus.io/port: "8080"
     prometheus.io/scrape: "true"
-  labels: {}
+  labels:
+    app.starlingx.io/component: platform
   container:
     additionalArgs: []
   extraEnv: []
@@ -174,34 +167,20 @@ notificationController:
     automount: true
     annotations: {}
   imagePullPolicy: ""
-  service:
-    labels: {}
-    annotations: {}
-  webhookReceiver:
-    service:
-      labels: {}
-      annotations: {}
-    ingress:
-      create: false
-      # ingressClassName: nginx
-      annotations: {}
-      # kubernetes.io/ingress.class: nginx
-      # kubernetes.io/tls-acme: "true"
-      labels: {}
-      hosts:
-        - host: flux-webhook.example.com
-          paths:
-            - path: /
-              pathType: ImplementationSpecific
-      tls: []
-      #  - secretName: flux-webhook-tls
-      #    hosts:
-      #      - flux-webhook.example.com
-
-
-  nodeSelector: {}
-  affinity: {}
-  tolerations: []
+  terminationGracePeriodSeconds: 10
+  readinessProbe:
+    timeoutSeconds: {{ flux_notification_controller_readiness_timeout }}
+  livenessProbe:
+    timeoutSeconds: {{ flux_notification_controller_liveness_timeout }}
+  nodeSelector:
+    node-role.kubernetes.io/control-plane: ""
+  tolerations:
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
 
 sourceController:
   create: true

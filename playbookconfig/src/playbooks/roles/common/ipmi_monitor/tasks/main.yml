@@ -1,0 +1,67 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#  Monitors the IPMI System Event Log (SEL) for a specific target event and
+#  associated event data. It is primarily used for subcloud auto-restore to
+#  detect when the install and restore operations are completed.
+#
+
+- name: Run IPMI monitoring script
+  script: >
+    /usr/local/bin/ipmi_sel_event_monitor.py
+    --config-file "{{ rvmc_config_file }}"
+    --pattern "{{ ipmi_event_pattern }}"
+    --data-values "{{ ipmi_data_values }}"
+    --interval {{ ipmi_check_interval | default(30) }}
+    --timeout {{ ipmi_timeout | default(3600) }}
+  register: monitoring_result
+  failed_when: false
+  changed_when: false
+  delegate_to: localhost
+
+- name: Parse JSON result from IPMI monitoring
+  set_fact:
+    monitoring_json: "{{ monitoring_result.stdout | from_json }}"
+  delegate_to: localhost
+
+- name: Display IPMI monitoring result
+  debug:
+    msg: "{{ monitoring_json.message }}"
+
+- name: Check if target event was found with expected data
+  block:
+    - name: Set detected event data for later evaluation
+      set_fact:
+        detected_event_data: "{{ monitoring_json.matched_data | default('') }}"
+      when: monitoring_json.success
+
+    - name: Check against success and failure values
+      set_fact:
+        is_success_event: >-
+          {{
+            detected_event_data in (ipmi_success_values | default('')).split(',') if
+            (ipmi_success_values is defined) else
+            (detected_event_data not in (ipmi_failure_values | default('')).split(',') if
+            (ipmi_failure_values is defined) else true)
+          }}
+      when:
+        - monitoring_json.success
+        - detected_event_data | default('') | length > 0
+        - ipmi_success_values is defined or ipmi_failure_values is defined
+
+    - name: Fail if a failure event was detected
+      fail:
+        msg: "A failure event was detected during monitoring: {{ detected_event_data }}"
+      when:
+        - monitoring_json.success
+        - is_success_event is defined
+        - not is_success_event
+
+    - name: Check overall success
+      fail:
+        msg: "IPMI monitoring timed out without detecting target event"
+      when: not monitoring_json.success
+  when: check_event_type | default(true)

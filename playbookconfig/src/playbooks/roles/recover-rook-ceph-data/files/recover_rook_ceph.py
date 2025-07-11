@@ -415,12 +415,15 @@ data:
 
         # Try to recover from some common errors
         # The timeout command was used because depending on the status of the cluster, it can get stuck
-        # on "cephfs-journal-tool" commands. But this will not cause any problems in recovery.
-        timeout 180 cephfs-journal-tool --rank=${FS_NAME}:0 event recover_dentries summary
-        timeout 180 cephfs-journal-tool --rank=${FS_NAME}:0 journal reset
-        cephfs-table-tool ${FS_NAME}:0 reset session
-        cephfs-table-tool ${FS_NAME}:0 reset snap
-        cephfs-table-tool ${FS_NAME}:0 reset inode
+        # on "cephfs" commands. But this will not cause any problems in recovery.
+        CEPHFS_CMD_TIMEOUT=180
+        timeout ${CEPHFS_CMD_TIMEOUT} cephfs-journal-tool --rank=${FS_NAME}:0 event recover_dentries summary
+        if [ $? -eq 0 ]; then
+          timeout ${CEPHFS_CMD_TIMEOUT} cephfs-journal-tool --rank=${FS_NAME}:0 journal reset
+          timeout ${CEPHFS_CMD_TIMEOUT} cephfs-table-tool ${FS_NAME}:0 reset session
+          timeout ${CEPHFS_CMD_TIMEOUT} cephfs-table-tool ${FS_NAME}:0 reset snap
+          timeout ${CEPHFS_CMD_TIMEOUT} cephfs-table-tool ${FS_NAME}:0 reset inode
+        fi
     fi
 
     kubectl -n rook-ceph scale deployment -l app=rook-ceph-osd --replicas 1
@@ -851,7 +854,7 @@ spec:
             path: /etc/kubernetes/admin.conf
       initContainers:
         - name: osd-data
-          image: registry.local:9001/quay.io/ceph/ceph:v18.2.2
+          image: registry.local:9001/quay.io/ceph/ceph:v18.2.5
           command: [ "/bin/bash", "-c", "/usr/sbin/ceph-volume raw list > /tmp/ceph/osd_data" ]
           securityContext:
             privileged: true
@@ -970,7 +973,7 @@ spec:
             path: /etc/kubernetes/admin.conf
       initContainers:
         - name: osd-data
-          image: registry.local:9001/quay.io/ceph/ceph:v18.2.2
+          image: registry.local:9001/quay.io/ceph/ceph:v18.2.5
           command: [ "/bin/bash", "-c", "/usr/sbin/ceph-volume raw list > /tmp/ceph/osd_data" ]
           securityContext:
             privileged: true

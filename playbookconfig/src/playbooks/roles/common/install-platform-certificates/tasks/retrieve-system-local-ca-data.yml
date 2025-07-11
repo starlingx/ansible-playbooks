@@ -27,6 +27,7 @@
     become: yes
 
   when:
+    - distributed_cloud_role != 'subcloud'
     - system_local_ca_overrides
     - not upgrade_in_progress
 

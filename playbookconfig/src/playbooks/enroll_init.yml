@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -16,17 +16,31 @@
   become: no
 
   tasks:
+    # The reboot operation is not needed for the enroll-init stage.
+    # So we set the wait_for_timeout to 240 seconds to allow for
+    # the system to complete the enroll-init stage without rebooting
+    # to give the system enough time to reconfigure the OAM network
+    # and monitor the Sysinv endpoint for the new address.
     - set_fact:
         sysinv_port: "{{ sysinv_port | default(6385) }}"
-        boot_wait_time: "{{ enroll_boot_wait_time | default(150) }}"
-        wait_for_timeout: "{{ enroll_wait_for_timeout | default(1020) }}"
+        cloud_init_wait_time: "{{ cloud_init_wait_time | default(10) }}"
+        wait_for_timeout: "{{ enroll_wait_for_timeout | default(240) }}"
         job_retry_delay: "{{ 120 | random }}"
         protocol: "{{ protocol | default('https') }}"
         operation_string: "enroll-init"
 
-    - name: Run RVMC script to insert seed image and power on host
+    # We need to exclude the set_boot_override and poweroff_host operations
+    # from the RVMC script, as these are not needed for the enroll-init stage.
+    # The set_boot_override operation is not needed as the system is already
+    # booted from the seed image, and the poweroff_host operation is not needed
+    # as the system will not be powered off during the enroll-init stage.
+    # The RVMC script will be run with the --excluded_operations flag set to
+    # exclude these operations.
+    - name: Run RVMC script to execute enroll-init
       include_role:
         name: common/rvmc
+      vars:
+        excluded_operations: "set_boot_override, poweroff_host"
 
     - debug:
         msg: "Waiting for the system to enroll init..."
@@ -38,7 +52,7 @@
         module: wait_for
           port={{ sysinv_port }}
           host={{ enroll_reconfigured_oam }}
-          delay={{ boot_wait_time }}
+          delay={{ cloud_init_wait_time }}
           timeout={{ wait_for_timeout }}
           state=started
           msg="Timeout waiting for {{ enroll_reconfigured_oam }}:{{ sysinv_port }}. Err_code=wait_enroll_init"

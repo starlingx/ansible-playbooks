@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -156,9 +156,9 @@
   - name: Set facts derived from previous admin network configuration
     set_fact:
       prev_admin_subnet_prefix: "{{ prev_network_params.prev_admin_subnet_primary | ipaddr('prefix') }}"
-      prev_controller_admin_floating_address:
-        "{{ default_prev_admin_start_address_primary
-        if prev_admin_start_address == 'derived' else prev_network_params.prev_admin_start_address_primary }}"
+      prev_admin_floating_address:
+        "{{ default_prev_admin_floating_address_primary
+        if prev_admin_floating_address == 'derived' else prev_network_params.prev_admin_floating_address_primary }}"
       prev_admin_broadcast: "{{ prev_network_params.prev_admin_subnet_primary | ipaddr('broadcast') }}"
     when: (prev_admin_network|bool == true)
 
@@ -173,8 +173,8 @@
       set_fact:
         prev_admin_subnet_prefix_secondary: "{{ prev_network_params.prev_admin_subnet_secondary | ipaddr('prefix') }}"
         prev_controller_admin_floating_address_secondary:
-          "{{ default_prev_admin_start_address_secondary
-          if prev_admin_start_address == 'derived' else prev_network_params.prev_admin_start_address_secondary }}"
+          "{{ default_prev_admin_floating_address_secondary
+          if prev_admin_floating_address == 'derived' else prev_network_params.prev_admin_floating_address_secondary }}"
         prev_admin_broadcast_secondary: "{{ prev_network_params.prev_admin_subnet_secondary | ipaddr('broadcast') }}"
       when: ((prev_admin_network|bool == true) and
              prev_network_params.prev_admin_subnet_secondary)
@@ -243,7 +243,7 @@
   - name: Prepare removal items -- Remove loopback interface in sysinv db and associated addresses
     set_fact:
       remove_items:
-        - source /etc/platform/openrc; system host-if-delete controller-0 lo
+        - source /etc/platform/openrc; system host-if-delete controller-0 lo --yes
         - "ip addr delete {{ prev_cluster_floating_virtual }} dev lo scope host"
         - "ip addr delete {{ prev_pxe_virtual }} dev lo scope host"
         - "ip addr delete {{ prev_cluster_virtual }}  brd {{ cluster_broadcast }} dev lo:5 scope host"
