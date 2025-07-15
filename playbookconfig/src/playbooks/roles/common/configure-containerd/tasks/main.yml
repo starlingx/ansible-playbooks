@@ -74,16 +74,27 @@
     mode: 0700
 
 - block:
-  - name: Default mirror directory for all registries
+  - name: Check if /etc/containerd/certs.d/default exists
+    stat:
+      path: /etc/containerd/certs.d/default
+    register: old_default_mirror_dir
+
+  - name: Remove old /etc/containerd/certs.d/default if it exists
     file:
       path: /etc/containerd/certs.d/default
+      state: absent
+    when: old_default_mirror_dir.stat.exists
+
+  - name: Default mirror directory for all registries
+    file:
+      path: /etc/containerd/certs.d/_default
       state: directory
       mode: 0700
 
   - name: Create hosts.toml file for containerd default mirrors configuration
     template:
       src: "mirror-hosts.toml.j2"
-      dest: /etc/containerd/certs.d/default/hosts.toml
+      dest: /etc/containerd/certs.d/_default/hosts.toml
       mode: 0600
 
   when: insecure_registries is defined

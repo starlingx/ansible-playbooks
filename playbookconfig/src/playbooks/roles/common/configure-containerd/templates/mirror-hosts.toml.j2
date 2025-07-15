@@ -4,9 +4,9 @@ version = 2
 
 # Begin of insecure registries
 {% for insecure_registry in insecure_registries %}
-  server = "{{ insecure_registry }}"
+  server = "http://{{ insecure_registry }}"
 
-  [host."{{ insecure_registry }}"]
+  [host."http://{{ insecure_registry }}"]
     capabilities = ["pull", "resolve"]
 {% endfor %}
 # End of insecure registries
