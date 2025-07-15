@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023,2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -116,6 +116,20 @@
         {{ldap_schema_path}}/cn=config/olcDatabase={1}mdb.ldif
       args:
         warn: false
+
+    - name: Delete ldap directory
+      file:
+        path: "{{ ldap_permdir }}"
+        state: absent
+
+    - name: Recreate ldap directory
+      file:
+        path: "{{ ldap_permdir }}"
+        state: directory
+        recurse: yes
+        owner: root
+        group: root
+        mode: 0755
 
     - name: Restore ldap
       command: "slapadd -F {{ ldap_schema_path }} -l {{ staging_dir }}/ldap.db"

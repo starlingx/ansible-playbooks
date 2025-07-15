@@ -20,10 +20,6 @@
     archive_rook_backend_flag: "{{ rook_backend_flag | regex_replace('^\\/', '') }}"
     archive_fernet_keys_permdir: "{{ fernet_keys_permdir | regex_replace('^\\/', '') }}"
 
-- name: Set parameters for ldap different paths by OS
-  set_fact:
-    ldap_permdir: "{{ ldap_permdir_centos if os_release == 'centos' else ldap_permdir_debian }}"
-
 # User postgres needs access files in this folder during restore
 # Permissions will be set back to 0750 when host is unlocked
 - name: Correct staging directory permissions for restore
@@ -271,20 +267,6 @@
 
 - name: Stop openldap service
   shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap stop"
-
-- name: Delete ldap directory
-  file:
-    path: "{{ ldap_permdir }}"
-    state: absent
-
-- name: Recreate ldap directory
-  file:
-    path: "{{ ldap_permdir }}"
-    state: directory
-    recurse: yes
-    owner: root
-    group: root
-    mode: 0755
 
 - name: Check if ldap LDIF configuration file exists in the backup archive
   shell: "tar -tf {{ restore_data_file }} | grep -E 'etc/.*ldap/schema/cn=config.ldif'"
