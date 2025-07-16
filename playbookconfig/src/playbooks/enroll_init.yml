@@ -23,7 +23,7 @@
     # and monitor the Sysinv endpoint for the new address.
     - set_fact:
         sysinv_port: "{{ sysinv_port | default(6385) }}"
-        cloud_init_wait_time: "{{ cloud_init_wait_time | default(10) }}"
+        cloud_init_wait_time: "{{ cloud_init_wait_time | default(40) }}"
         wait_for_timeout: "{{ enroll_wait_for_timeout | default(240) }}"
         job_retry_delay: "{{ 120 | random }}"
         protocol: "{{ protocol | default('https') }}"
