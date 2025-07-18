@@ -62,7 +62,8 @@
       block:
         - name: Set Ceph variables
           set_fact:
-            skip_ceph_osds_wipe_flag: /etc/platform/.skip_ceph_osds_wipe
+            skip_ceph_osds_wipe_flag: >-
+              /opt/platform/config/{{ software_version }}/.skip_ceph_osds_wipe
             ceph_temp_dir: /tmp/ceph/
             restore_system_mode: "{{ system_mode }}"
 
@@ -75,7 +76,7 @@
             mode: 0755
           become: yes
 
-        - name: Create flag file in /etc/platform to skip wiping OSDs
+        - name: Create flag file in /opt/platform to skip wiping OSDs
           file:
             path: "{{ skip_ceph_osds_wipe_flag }}"
             state: touch

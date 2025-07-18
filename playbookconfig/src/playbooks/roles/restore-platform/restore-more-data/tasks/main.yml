@@ -668,9 +668,10 @@
         set_fact:
           restore_system_mode: "{{ restore_system_mode_result.stdout_lines[0] }}"
 
-      - name: Create flag file in /etc/platform to skip wiping OSDs
+      - name: Create flag file in /opt/platform to skip wiping OSDs
         file:
-          path: "{{ skip_ceph_osds_wipe_flag }}"
+          path: >-
+            /opt/platform/config/{{ software_version }}/.skip_ceph_osds_wipe
           state: touch
         when: restore_system_mode != 'simplex'
 
