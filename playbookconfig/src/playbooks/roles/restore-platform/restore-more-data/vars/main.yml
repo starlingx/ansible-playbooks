@@ -4,8 +4,6 @@ deploy_permdir: /opt/platform/deploy
 helm_charts_permdir: /opt/platform/helm_charts
 extension_permdir: /opt/extension
 dc_vault_permdir: /opt/dc-vault
-ldap_permdir_centos: /var/lib/openldap-data
-ldap_permdir_debian: /var/lib/ldap
 fernet_keys_permdir: /opt/platform/keystone/fernet-keys
 crushmap_file: crushmap.bin.backup
 crushmap_file_tmp: crushmap.bin.tmp
