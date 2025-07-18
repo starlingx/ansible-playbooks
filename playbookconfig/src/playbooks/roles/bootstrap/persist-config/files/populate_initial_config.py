@@ -569,6 +569,8 @@ def populate_pxeboot_network(client):
                              'PXEBOOT_START_ADDRESS')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'PXEBOOT_END_ADDRESS')
+    floating_address = CONF.get('BOOTSTRAP_CONFIG',
+                                'PXEBOOT_FLOATING_ADDRESS')
     network_name = 'pxeboot'
     addrpool_name = 'pxeboot'
 
@@ -585,6 +587,10 @@ def populate_pxeboot_network(client):
         'prefix': pxeboot_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
+    if (floating_address != 'undef'):
+        values.update({
+            'floating_address': floating_address,
+        })
     pool = create_addrpool(client, values)
 
     # create the network for the pool

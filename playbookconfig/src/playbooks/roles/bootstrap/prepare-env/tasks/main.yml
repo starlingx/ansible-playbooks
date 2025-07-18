@@ -99,6 +99,7 @@
 
 - name: Set initial address facts if not defined. They will be updated later
   set_fact:
+    pxeboot_floating_address: "{{ pxeboot_floating_address | default('derived') }}"
     pxeboot_start_address: "{{ pxeboot_start_address | default('derived') }}"
     pxeboot_end_address: "{{ pxeboot_end_address | default('derived') }}"
     management_floating_address: "{{ management_floating_address | default('derived') }}"
