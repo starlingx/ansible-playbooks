@@ -567,6 +567,13 @@
       previous_software_version: "{{ software_version }}"
       platform_backup_fqpn: "{{ restore_data_file }}"
 
+  - name: Restore cli environment file
+    import_role:
+      name: optimized-restore/restore-configuration
+      tasks_from: restore-cli-env.yml
+    vars:
+      platform_backup_fqpn: "{{ restore_data_file }}"
+
   - name: Restart services
     systemd:
       name: "{{ item }}"

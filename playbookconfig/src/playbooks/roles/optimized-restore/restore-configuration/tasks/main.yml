@@ -25,3 +25,6 @@
 
 - name: Restore luks
   import_role: name=backup-restore/restore-luks
+
+- name: Restore cli environment file
+  import_tasks: restore-cli-env.yml
