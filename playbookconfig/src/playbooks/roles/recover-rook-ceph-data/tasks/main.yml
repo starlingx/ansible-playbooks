@@ -10,10 +10,15 @@
 - name: Restore Rook Ceph cluster data
   block:
 
+    # TODO: Use the sysinv API to check hosts
+    # Gets data from hosts, such as OSD and monitor, to define recovery type.
+    # Example output:
+    # {"recovery_type": "OSD_AND_MON", "recovery_target_host": "controller-0", "hosts_with_osd": "controller-0 controller-1"}
     - name: Get rook ceph data from hosts
       script: get_hosts_data.sh
       register: get_hosts_data_out
 
+    # No configured OSDs listed in system host-stor-list.
     - name: Fail if there are no rook ceph osd disks
       fail:
         msg: "No rook ceph osd disk found, aborting restore operation"
@@ -27,10 +32,11 @@
       set_fact:
         hosts_data: "{{ get_hosts_data_out.stdout_lines[-1] }}"
 
+    # Check the health of k8s before starting the process,
+    # as all recovery uses kubectl commands.
     - name: Check Kubernetes health
       command: sysinv-k8s-health check
       register: k8s_health_check
-      become: yes
       failed_when: k8s_health_check.rc != 0
 
     - name: Log Kubernetes health check failure
@@ -41,6 +47,7 @@
           check" tried 20 attempts to check k8s health and failed.
       when: k8s_health_check.rc != 0
 
+    # Will configure all the pods required for rook-ceph recovery.
     - name: Recover rook-ceph
       script: recover_rook_ceph.py "{{ hosts_data }}"
       register: recover_rook_ceph_out

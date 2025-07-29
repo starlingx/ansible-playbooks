@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020-2024 Wind River Systems, Inc.
+# Copyright (c) 2020-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -205,10 +205,18 @@
 
       when: rook_backend.rc == 0
 
+    # This task will only be executed if:
+    # 1. The 'mode' variable is set to 'restore'.
+    # 2. The 'wipe_ceph_osds' variable is false or undefined.
+    # 3. At least one of the following conditions is true:
+    #    - 'restore_registry_filesystem' is false or undefined.
+    #    - 'restore_mode' is not equal to 'optimized'.
+    #
+    # Since 'restore_registry_filesystem' is only valid for 'optimized', we need to check the 'restore_mode'.
     when: mode == "restore" and
-          (restore_registry_filesystem is not defined or
-          not restore_registry_filesystem|bool) and
-          not wipe_ceph_osds|bool
+          not wipe_ceph_osds|bool and
+          (not restore_registry_filesystem|default(false) or
+          restore_mode|default(none) != "optimized")
 
   - name: Append additional storage images if rook-ceph backend is configured
     set_fact:
