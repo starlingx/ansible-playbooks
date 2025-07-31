@@ -22,12 +22,37 @@
     # to give the system enough time to reconfigure the OAM network
     # and monitor the Sysinv endpoint for the new address.
     - set_fact:
+        ipmi_monitor_enabled: "{{ ipmi_sel_event_monitoring | default(true) }}"
+
+    - set_fact:
         sysinv_port: "{{ sysinv_port | default(6385) }}"
-        cloud_init_wait_time: "{{ cloud_init_wait_time | default(40) }}"
+        cloud_init_wait_time: "{{ cloud_init_wait_time | default(
+            0 if ipmi_monitor_enabled else 40
+          ) }}"
         wait_for_timeout: "{{ enroll_wait_for_timeout | default(240) }}"
         job_retry_delay: "{{ 120 | random }}"
         protocol: "{{ protocol | default('https') }}"
         operation_string: "enroll-init"
+
+    # Get the last SEL ID before starting the enroll-init process
+    - block:
+        - name: Get last SEL event ID before enroll-init
+          command:
+            argv:
+              - /usr/local/bin/ipmi_sel_event_monitor.py
+              - --config-file
+              - "{{ rvmc_config_file }}"
+              - --get-last-event
+          register: last_sel_result
+          delegate_to: localhost
+
+        - name: Parse last SEL ID from result
+          set_fact:
+            initial_sel_id: "{{ (last_sel_result.stdout | from_json).last_event_id | default('') }}"
+
+        - debug:
+            msg: "Starting IPMI monitoring from SEL ID: {{ initial_sel_id | default('beginning') }}"
+      when: ipmi_monitor_enabled
 
     # We need to exclude the set_boot_override and poweroff_host operations
     # from the RVMC script, as these are not needed for the enroll-init stage.
@@ -44,6 +69,49 @@
 
     - debug:
         msg: "Waiting for the system to enroll init..."
+
+    # Monitor each enroll-init stage sequentially. Can be skipped by setting
+    # ipmi_sel_event_monitoring to false.
+    - block:
+        - name: Set facts for enroll-init IPMI monitoring
+          set_fact:
+            # Pattern used by ipmi_sel_event_monitor.py, called by ipmi_monitor role
+            ipmi_event_pattern: "{{ ipmi_event_pattern | default('Unknown #0x01 |  | Asserted') }}"
+            enroll_init_stages:
+              - name: "factory setup"
+                timeout: "{{ factory_setup_timeout | default(90) }}"
+                success_data: "{{ factory_setup_complete_ipmi_data | default('ffffe0') }}"
+                failure_data: "{{ factory_setup_failed_ipmi_data | default('ffffe1') }}"
+                failure_msg: "Factory setup failed, factory-install stage final file not found"
+              - name: "platform cloud-init"
+                timeout: "{{ platform_cloudinit_timeout | default(300) }}"
+                success_data: "{{ platform_cloudinit_complete_ipmi_data | default('ffffe4') }}"
+                failure_data: "{{ platform_cloudinit_failed_ipmi_data | default('ffffe5') }}"
+                failure_msg: "Platform cloud-init configuration failed during execution"
+              - name: "custom cloud-init"
+                timeout: "{{ custom_cloudinit_timeout | default(300) }}"
+                success_data: "{{ custom_cloudinit_complete_ipmi_data | default('ffffe6') }}"
+                failure_data: "{{ custom_cloudinit_failed_ipmi_data | default('ffffe7') }}"
+                failure_msg: "Custom cloud-init scripts failed during execution"
+
+        - name: "Monitor enroll-init stages"
+          include_role:
+            name: enroll-subcloud/monitor-enroll-init-ipmi
+          loop: "{{ enroll_init_stages }}"
+          loop_control:
+            label: "{{ item.name }}"
+          vars:
+            ipmi_initial_event_id: "{{ initial_sel_id }}"
+            ipmi_check_interval: 15
+
+        - debug:
+            msg: "Enroll-init IPMI monitoring completed successfully"
+
+      when: ipmi_monitor_enabled
+
+    - debug:
+        msg: "IPMI SEL event monitoring disabled, proceeding without stage validation"
+      when: not ipmi_monitor_enabled
 
     # Wait for the sysinv API to open, ensuring that endpoints
     # are reconfigured with the new address.

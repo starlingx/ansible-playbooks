@@ -1,0 +1,30 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This task file monitors a single enroll-init stage by waiting for IPMI SEL events
+# and checking the results. It waits for either success or failure events for the
+# given stage and fails immediately if a failure event is detected.
+#
+# This task file is included by the enroll_init.yml playbook for each monitoring stage
+# (factory setup, platform cloud-init, and custom cloud-init).
+#
+
+- name: "Waiting {{ item.timeout }} seconds for {{ item.name }} IPMI SEL event"
+  include_role:
+    name: common/ipmi_monitor
+  vars:
+    ipmi_data_values: "{{ item.success_data }},{{ item.failure_data }}"
+    ipmi_timeout: "{{ item.timeout }}"
+
+- name: "Check {{ item.name }} IPMI monitoring result"
+  fail:
+    msg: "Enroll-init failed: {{ item.failure_msg }}"
+  when:
+    - detected_event_data is defined
+    - detected_event_data != item.success_data
+
+- debug:
+    msg: "{{ item.name | capitalize }} completed successfully"

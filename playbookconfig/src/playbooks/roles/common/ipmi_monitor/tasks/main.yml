@@ -10,13 +10,16 @@
 #
 
 - name: Run IPMI monitoring script
-  script: >
+  command: >
     /usr/local/bin/ipmi_sel_event_monitor.py
     --config-file "{{ rvmc_config_file }}"
     --pattern "{{ ipmi_event_pattern }}"
     --data-values "{{ ipmi_data_values }}"
-    --interval {{ ipmi_check_interval | default(30) }}
-    --timeout {{ ipmi_timeout | default(3600) }}
+    --interval {{ ipmi_check_interval }}
+    --timeout {{ ipmi_timeout }}
+    {% if ipmi_initial_event_id | length > 0 %}
+    --initial-event-id "{{ ipmi_initial_event_id }}"
+    {% endif %}
   register: monitoring_result
   failed_when: false
   changed_when: false
@@ -64,4 +67,4 @@
       fail:
         msg: "IPMI monitoring timed out without detecting target event"
       when: not monitoring_json.success
-  when: check_event_type | default(true)
+  when: check_event_type
