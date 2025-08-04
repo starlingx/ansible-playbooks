@@ -38,13 +38,13 @@
 
 - name: Remove old etcd database
   file:
-    path: "/opt/etcd/{{ software_version }}/controller.etcd"
+    path: "/opt/etcd/db/controller.etcd"
     state: absent
 
 - name: Restore etcd database from snapshot file to temp folder
   command: >-
     etcdctl snapshot restore etcd-snapshot.db --endpoints=controller:2379
-    --data-dir /opt/etcd/{{ software_version }}/controller.etcd
+    --data-dir /opt/etcd/db/controller.etcd
   args:
     chdir: "{{ etcd_tmp_dir }}"
   environment:
