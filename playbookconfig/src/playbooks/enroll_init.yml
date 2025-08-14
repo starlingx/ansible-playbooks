@@ -77,18 +77,51 @@
           set_fact:
             # Pattern used by ipmi_sel_event_monitor.py, called by ipmi_monitor role
             ipmi_event_pattern: "{{ ipmi_event_pattern | default('Unknown #0x01 |  | Asserted') }}"
+            # Notes on failure handling:
+            # - If a stage has only a single failure condition, specify the message in
+            #   'failure_msg'.
+            # - If a stage can fail for multiple reasons, use 'failure_map' instead.
+            #   In that case, each failure code must be listed with its corresponding
+            #   specific error message.
             enroll_init_stages:
-              - name: "factory setup"
+              - name: "Factory setup"
                 timeout: "{{ factory_setup_timeout | default(90) }}"
                 success_data: "{{ factory_setup_complete_ipmi_data | default('ffffe0') }}"
                 failure_data: "{{ factory_setup_failed_ipmi_data | default('ffffe1') }}"
                 failure_msg: "Factory setup failed, factory-install stage final file not found"
-              - name: "platform cloud-init"
+
+              - name: "Manual CA certificates check"
+                timeout: "{{ manual_cacerts_timeout | default(20) }}"
+                success_data: "{{ cert_manual_ok_ipmi_data | default('ffffe9') }}"
+                failure_data: "{{ cert_manual_fail_ipmi_values | default('ffffec,ffffed,ffffee') }}"
+                failure_map:
+                  ffffec: "Kubernetes Root CA or Front Proxy CA expired"
+                  ffffed: "ETCD Root CA is expired"
+                  ffffee: "ETCD Root CA, Kubernetes Root CA and Front Proxy CA are expired"
+
+              - name: "Kubernetes leaf server/client certificates check"
+                timeout: "{{ k8s_leaf_certs_timeout | default(300) }}"
+                success_data: "{{ cert_leaf_ok_ipmi_data | default('ffffe2') }}"
+                failure_data: "{{ cert_leaf_fail_ipmi_values | default('ffffe3,fffff0,ffffe8,ffffef') }}"
+                failure_map:
+                  ffffe3: "Kubernetes leaf server/client certificates recovery failed. Manual recovery is required"
+                  fffff0: "Kubectl failed to reply within timeout. Manual recovery is required"
+                  ffffe8: "Kubernetes pods failed to reach Running state after restart"
+                  ffffef: "RESTAPI or Docker registry certs did not renew within timeout"
+
+              - name: "Platform system-local-ca certificate check"
+                timeout: "{{ slocal_cert_timeout | default(20) }}"
+                success_data: "{{ cert_slocal_ok_ipmi_data | default('ffffea') }}"
+                failure_data: "{{ cert_slocal_fail_ipmi_data | default('ffffeb') }}"
+                failure_msg: "Platform system-local-ca certificate is expired. Manual recovery is required"
+
+              - name: "Platform cloud-init"
                 timeout: "{{ platform_cloudinit_timeout | default(300) }}"
                 success_data: "{{ platform_cloudinit_complete_ipmi_data | default('ffffe4') }}"
                 failure_data: "{{ platform_cloudinit_failed_ipmi_data | default('ffffe5') }}"
                 failure_msg: "Platform cloud-init configuration failed during execution"
-              - name: "custom cloud-init"
+
+              - name: "Custom cloud-init"
                 timeout: "{{ custom_cloudinit_timeout | default(300) }}"
                 success_data: "{{ custom_cloudinit_complete_ipmi_data | default('ffffe6') }}"
                 failure_data: "{{ custom_cloudinit_failed_ipmi_data | default('ffffe7') }}"
