@@ -188,6 +188,7 @@
       external_oam_floating_address: "{{ external_oam_floating_address }}"
       management_start_address: "{{ management_start_address }}"
       management_end_address: "{{ management_end_address }}"
+      management_floating_address: "{{ management_floating_address }}"
       management_gateway_address: "{{ management_gateway_address | default([]) }}"
       cluster_host_start_address: "{{ cluster_host_start_address }}"
       cluster_host_end_address: "{{ cluster_host_end_address }}"
@@ -251,6 +252,11 @@
         subnet:
           name: external_oam_subnet
           value: "{{ external_oam_subnet }}"
+      management_floating_address:
+        address: "{{ management_floating_address }}"
+        subnet:
+          name: management_subnet
+          value: "{{ management_subnet }}"
       management_start_address:
         address: "{{ management_start_address }}"
         subnet:
@@ -473,6 +479,8 @@
       default_management_end_address_primary: >-
         {{ (network_params.management_subnet_primary |
             ipaddr(-1 if (network_params.management_subnet_primary|ipv6) else -2)).split('/')[0] }}
+      default_management_floating_address_primary: "{{ (network_params.management_subnet_primary |
+                                                        ipaddr(1)).split('/')[0] }}"
       default_cluster_host_start_address_primary: "{{ (network_params.cluster_host_subnet_primary | ipaddr(1))
                                                       .split('/')[0] }}"
       default_cluster_host_end_address_primary: >-
@@ -513,6 +521,9 @@
                   else (network_params.management_subnet_secondary |
                         ipaddr(-1 if (network_params.management_subnet_secondary
                         |ipv6) else -2)).split('/')[0] }}
+      default_management_floating_address_secondary: >-
+        {{ False if (not network_params.management_subnet_secondary)
+                  else (network_params.management_subnet_secondary | ipaddr(1)).split('/')[0] }}
       default_cluster_host_start_address_secondary: >-
         {{ False if (not network_params.cluster_host_subnet_secondary)
                   else (network_params.cluster_host_subnet_secondary | ipaddr(1)).split('/')[0] }}
@@ -597,6 +608,10 @@
           end:
             "{{ network_params.management_end_address_primary if management_end_address != 'derived'
             else default_management_end_address_primary }}"
+          floating:
+            "{{ network_params.management_floating_address_primary if management_floating_address != 'derived'
+            else network_params.management_start_address_primary if management_start_address != 'derived'
+            else default_management_start_address_primary }}"
           subnet: "{{ network_params.management_subnet_primary }}"
         cluster_host:
           start:
@@ -682,6 +697,10 @@
           end:
             "{{ network_params.management_end_address_secondary if management_end_address != 'derived'
             else default_management_end_address_secondary }}"
+          floating:
+            "{{ network_params.management_floating_address_secondary if management_floating_address != 'derived'
+            else network_params.management_start_address_secondary if management_start_address != 'derived'
+            else default_management_start_address_secondary }}"
           subnet: "{{ network_params.management_subnet_secondary }}"
         cluster_host:
           start:
@@ -791,7 +810,7 @@
     set_fact:
       # Not sure why ipaddr('address') and ipsubnet filter did not extract
       # the IP from CIDR input. Resort to string split for now.
-      controller_floating_address: "{{ address_pairs['management']['start'] }}"
+      controller_floating_address: "{{ address_pairs['management']['floating'] }}"
       controller_pxeboot_floating_address: "{{ address_pairs['pxeboot']['start'] }}"
       cluster_floating_address: "{{ address_pairs['cluster_host']['start'] }}"
 
@@ -804,7 +823,7 @@
   - block:
     - name: Set secondary mgmt floating addresses based on start address
       set_fact:
-        controller_floating_address_secondary: "{{ address_pairs_secondary['management']['start'] }}"
+        controller_floating_address_secondary: "{{ address_pairs_secondary['management']['floating'] }}"
       when: address_pairs_secondary.management is defined
 
     - name: Set secondary cluster floating addresses based on start address

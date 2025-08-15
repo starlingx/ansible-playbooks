@@ -392,6 +392,8 @@ def populate_mgmt_network(client):
                              'MANAGEMENT_START_ADDRESS')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'MANAGEMENT_END_ADDRESS')
+    floating_address = CONF.get('BOOTSTRAP_CONFIG',
+                                'MANAGEMENT_FLOATING_ADDRESS')
     mgmt_gateway_address = CONF.get('BOOTSTRAP_CONFIG', 'MANAGEMENT_GATEWAY_ADDRESS')
 
     dynamic_allocation = CONF.getboolean(
@@ -416,6 +418,11 @@ def populate_mgmt_network(client):
         values.update({
             'gateway_address': mgmt_gateway_address,
         })
+    if (floating_address != 'undef'):
+        values.update({
+            'floating_address': floating_address,
+        })
+
     pool = create_addrpool(client, values)
 
     # create the network for the pool
@@ -435,6 +442,8 @@ def populate_mgmt_network_secondary(client):
                              'MANAGEMENT_START_ADDRESS_SECONDARY')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'MANAGEMENT_END_ADDRESS_SECONDARY')
+    floating_address = CONF.get('BOOTSTRAP_CONFIG',
+                                'MANAGEMENT_FLOATING_ADDRESS_SECONDARY')
     mgmt_gateway_address = CONF.get('BOOTSTRAP_CONFIG', 'MANAGEMENT_GATEWAY_ADDRESS_SECONDARY')
 
     network_name = sysinv_constants.NETWORK_TYPE_MGMT
@@ -452,6 +461,11 @@ def populate_mgmt_network_secondary(client):
         values.update({
             'gateway_address': mgmt_gateway_address,
         })
+    if (floating_address != 'undef'):
+        values.update({
+            'floating_address': floating_address,
+        })
+
     pool = create_addrpool(client, values)
 
     # add the pool to the network
