@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023-2024 Wind River Systems, Inc.
+# Copyright (c) 2023-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -8,44 +8,26 @@
 #   subcloud network reconfiguration change
 #
 
-- name: Wrap sc_floating_address in [] brackets if it's an ipv6 address
-  set_fact:
-    parsed_sc_floating_address: "{{ sc_floating_address | ipwrap }}"
-
+# Try to get from sourced credentials and fall back to 'system show' if not available
 - name: Retrieve subcloud endpoint region name
-  shell: >-
-    source /etc/platform/openrc; system show |
-    grep region_name | awk '{ print $4 }'
+  shell: echo "${OS_REGION_NAME:-$(source /etc/platform/openrc && system show | grep region_name | awk '{ print $4 }')}"
+  args:
+    executable: /bin/bash
   register: sc_region_name
+  changed_when: false
 
-- name: Create service endpoint list
-  set_fact:
-    service_list:
-      - { port: "5001", service: "keystone" }
-      - { port: "6386/v1", service: "sysinv" }
-      - { port: "5492", service: "patching" }
-      - { port: "4546", service: "vim" }
-      - { port: "18003", service: "fm" }
-      - { port: "9312", service: "barbican" }
+- name: Update admin endpoints
+  script: update_admin_endpoints.py {{ sc_region_name.stdout }} {{ sc_floating_address }}
+          {{ '--mode enroll' if mode is defined and mode == 'enroll' else '' }}
+  register: update_admin_endpoints_result
+  failed_when: false
 
-- name: Add USM service to endpoint list for software_version > 22.12
-  set_fact:
-    service_list: "{{ service_list + [{ 'port': '5498', 'service': 'usm' }] }}"
-  when: software_version is version('22.12', '>')
+- name: Show update admin endpoints result
+  debug: var=update_admin_endpoints_result
 
-- name: Add dcdbsync service to endpoint list if not enroll
-  set_fact:
-    service_list: "{{ service_list + [{ 'port': '8220/v1.0', 'service': 'dcdbsync' }] }}"
-  when: mode is not defined or mode != "enroll"
-
-- name: Add dcagent service to endpoint list for software_version > 22.12 and not enroll
-  set_fact:
-    service_list: "{{ service_list + [{ 'port': '8326', 'service': 'dcagent' }] }}"
-  when: software_version is version('22.12', '>') and (mode is not defined or mode != "enroll")
-
-- name: Check and update admin endpoints
-  include_tasks: check_and_update_endpoint.yml
-  vars:
-    service: "{{ item.service }}"
-    port: "{{ item.port }}"
-  loop: "{{ service_list }}"
+- name: Fail if update admin endpoints script throws an exception
+  fail:
+    msg: >
+      Failed to update admin endpoints, return code: {{ update_admin_endpoints_result.rc }}
+      Error output: {{ update_admin_endpoints_result.stderr }}
+  when: update_admin_endpoints_result.rc != 0
