@@ -11,7 +11,9 @@
 
 - block:
   - name: Lock host
-    shell: source /etc/platform/openrc; system host-lock {{ target_host }} --yes
+    shell: |
+      source /etc/platform/openrc
+      system host-lock {{ target_host }} {{ cli_confirmation | default('--yes') }}
     retries: 10
     delay: 30
     register: result

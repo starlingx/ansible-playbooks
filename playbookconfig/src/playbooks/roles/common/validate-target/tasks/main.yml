@@ -123,3 +123,7 @@
   set_fact:
     software_version: "{{ host_software_version }}"
     system_type: "{{ host_system_type }}"
+
+- name: Set cli_confirmation facts
+  set_fact:
+    cli_confirmation: "{{ '' if software_version is version('25.09', '<') else '--yes' }}"

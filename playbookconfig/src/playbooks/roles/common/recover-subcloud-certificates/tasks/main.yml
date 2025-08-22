@@ -83,7 +83,9 @@
             else ['controller-1']}}
 
       - name: Lock standby controller and compute nodes
-        shell: source /etc/platform/openrc; system host-lock {{ item }} --force --yes
+        shell: >-
+          source /etc/platform/openrc;
+          system host-lock {{ item }} --force {{ cli_confirmation | default('--yes') }}
         register: host_lock_output
         failed_when: >-
           host_lock_output.stderr != "Avoiding lock action on already 'locked' host item"
@@ -177,7 +179,9 @@
       - name: Do host-lock and unlock of controller-0 to clear up management affecting alarm
         block:
           - name: Trigger a host-swact out of controller-0
-            shell: source /etc/platform/openrc; system host-swact controller-0 --yes
+            shell: >-
+              source /etc/platform/openrc;
+              system host-swact controller-0 {{ cli_confirmation | default('--yes') }}
             register: host_swact_var
             retries: 3
             delay: 15
@@ -197,7 +201,9 @@
             loop: "{{ ['controller-0'] }}"
 
           - name: Trigger a host-swact out of controller-1
-            shell: source /etc/platform/openrc; system host-swact controller-1 --yes
+            shell: >-
+              source /etc/platform/openrc;
+              system host-swact controller-1 {{ cli_confirmation | default('--yes') }}
             register: host_swact_var
             retries: 3
             delay: 15
