@@ -14,6 +14,10 @@ PXEBOOT_END_ADDRESS={{ address_pairs['pxeboot']['end'] }}
 MANAGEMENT_SUBNET={{ address_pairs['management']['subnet'] }}
 MANAGEMENT_START_ADDRESS={{ address_pairs['management']['start'] }}
 MANAGEMENT_END_ADDRESS={{ address_pairs['management']['end'] }}
+MANAGEMENT_FLOATING_ADDRESS={{ network_params.management_floating_address_primary
+                              if (network_params.management_floating_address_primary is defined
+                                  and network_params.management_floating_address_primary)
+                              else 'undef' }}
 MANAGEMENT_GATEWAY_ADDRESS={{ network_params.management_gateway_address_primary
                               if network_params.management_gateway_address_primary
                               else 'undef' }}
@@ -60,6 +64,10 @@ ADMIN_INTERFACE={{ 'lo' if admin_network is defined else 'undef' }}
 MANAGEMENT_SUBNET_SECONDARY={{ address_pairs_secondary['management']['subnet'] | default('undef') }}
 MANAGEMENT_START_ADDRESS_SECONDARY={{ address_pairs_secondary['management']['start'] | default('undef') }}
 MANAGEMENT_END_ADDRESS_SECONDARY={{ address_pairs_secondary['management']['end'] | default('undef') }}
+MANAGEMENT_FLOATING_ADDRESS_SECONDARY={{ network_params.management_floating_address_secondary
+                              if (network_params.management_floating_address_secondary is defined
+                                  and network_params.management_floating_address_secondary)
+                              else 'undef' }}
 MANAGEMENT_GATEWAY_ADDRESS_SECONDARY={{ network_params.management_gateway_address_secondary
                               if network_params.management_gateway_address_secondary
                               else 'undef' }}
