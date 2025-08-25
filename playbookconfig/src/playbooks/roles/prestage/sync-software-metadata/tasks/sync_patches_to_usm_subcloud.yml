@@ -41,12 +41,12 @@
 - name: Perform sync patches to USM subcloud
   # This block is executed for subcloud N and even N-1 scenario with USM support.
   block:
-  - name: Gather subcloud deployed software list
-    shell: software list --release {{ software_version }} --state deployed | \
+  - name: Gather subcloud software list for deployed or unavailable state
+    shell: software list --release {{ software_version }} | egrep -E "deployed|unavailable" | \
           grep {{ software_version }} | sed 's/ //g;'
     register: subcloud_software_list
 
-  - name: Show subcloud deployed software list for release {{ software_version }}
+  - name: Show subcloud software list for release {{ software_version }}
     debug:
       var: subcloud_software_list.stdout
 
