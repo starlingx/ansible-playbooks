@@ -760,6 +760,8 @@ def populate_cluster_host_network(client):
                              'CLUSTER_HOST_START_ADDRESS')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'CLUSTER_HOST_END_ADDRESS')
+    floating_address = CONF.get('BOOTSTRAP_CONFIG',
+                                'CLUSTER_HOST_FLOATING_ADDRESS')
     dynamic_allocation = CONF.getboolean(
         'BOOTSTRAP_CONFIG', 'CLUSTER_HOST_DYNAMIC_ADDRESS_ALLOCATION')
     network_name = 'cluster-host'
@@ -778,6 +780,11 @@ def populate_cluster_host_network(client):
         'prefix': cluster_host_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
+    if (floating_address != 'undef'):
+        values.update({
+            'floating_address': floating_address,
+        })
+
     pool = create_addrpool(client, values)
 
     # create the network for the pool
@@ -797,6 +804,8 @@ def populate_cluster_host_network_secondary(client):
                              'CLUSTER_HOST_START_ADDRESS_SECONDARY')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'CLUSTER_HOST_END_ADDRESS_SECONDARY')
+    floating_address = CONF.get('BOOTSTRAP_CONFIG',
+                                'CLUSTER_HOST_FLOATING_ADDRESS_SECONDARY')
     network_name = sysinv_constants.NETWORK_TYPE_CLUSTER_HOST
 
     print("Populating secondary cluster host network...")
@@ -808,6 +817,11 @@ def populate_cluster_host_network_secondary(client):
         'prefix': cluster_host_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
+    if (floating_address != 'undef'):
+        values.update({
+            'floating_address': floating_address,
+        })
+
     pool = create_addrpool(client, values)
 
     # add the pool to the network

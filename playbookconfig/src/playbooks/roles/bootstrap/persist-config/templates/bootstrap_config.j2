@@ -27,6 +27,10 @@ CONTROLLER_0_ADDRESS={{ derived_network_params.controller_0_address }}
 CLUSTER_HOST_SUBNET={{ address_pairs['cluster_host']['subnet'] }}
 CLUSTER_HOST_START_ADDRESS={{ address_pairs['cluster_host']['start'] }}
 CLUSTER_HOST_END_ADDRESS={{ address_pairs['cluster_host']['end'] }}
+CLUSTER_HOST_FLOATING_ADDRESS={{ network_params.cluster_host_floating_address_primary
+                              if (network_params.cluster_host_floating_address_primary is defined
+                                  and network_params.cluster_host_floating_address_primary)
+                              else 'undef' }}
 CLUSTER_HOST_DYNAMIC_ADDRESS_ALLOCATION={{ cluster_host_dynamic_address_allocation }}
 CLUSTER_POD_SUBNET={{ address_pairs['cluster_pod']['subnet'] }}
 CLUSTER_POD_START_ADDRESS={{ address_pairs['cluster_pod']['start'] }}
@@ -74,6 +78,10 @@ MANAGEMENT_GATEWAY_ADDRESS_SECONDARY={{ network_params.management_gateway_addres
 CLUSTER_HOST_SUBNET_SECONDARY={{ address_pairs_secondary['cluster_host']['subnet']  | default('undef') }}
 CLUSTER_HOST_START_ADDRESS_SECONDARY={{ address_pairs_secondary['cluster_host']['start'] | default('undef') }}
 CLUSTER_HOST_END_ADDRESS_SECONDARY={{ address_pairs_secondary['cluster_host']['end'] | default('undef') }}
+CLUSTER_HOST_FLOATING_ADDRESS_SECONDARY={{ network_params.cluster_host_floating_address_secondary
+                              if (network_params.cluster_host_floating_address_secondary is defined
+                                  and network_params.cluster_host_floating_address_secondary)
+                              else 'undef' }}
 CLUSTER_POD_SUBNET_SECONDARY={{ address_pairs_secondary['cluster_pod']['subnet'] | default('undef') }}
 CLUSTER_POD_START_ADDRESS_SECONDARY={{ address_pairs_secondary['cluster_pod']['start'] | default('undef') }}
 CLUSTER_POD_END_ADDRESS_SECONDARY={{ address_pairs_secondary['cluster_pod']['end'] | default('undef') }}

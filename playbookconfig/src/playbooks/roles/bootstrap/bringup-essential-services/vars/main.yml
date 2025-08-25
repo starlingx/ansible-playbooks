@@ -29,7 +29,9 @@ kubeadm_pki_dir: /etc/kubernetes/pki
 etcd_tmp_dir: /opt/backups/etcd_tmp_dir
 controlplane_endpoint: "{{ cluster_floating_address }}"
 etcd_endpoint: "https://{{ cluster_floating_address | ipwrap }}:2379"
-apiserver_advertise_address: "{{ controller_0_cluster_host }}"
+apiserver_advertise_address: "{{ controller_0_cluster_host
+                                  if system_mode != 'simplex'
+                                  else cluster_floating_address }}"
 kubelet_taints: []
 legacy_restore_exclude_items:
   - etc/ssl/certs/ssl-cert-snakeoil.pem
