@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023,2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -51,6 +51,13 @@ for NAMESPACE in ${PVCS_NAMESPACE_LIST}; do
         done
         if [ $RETRY -eq 15 ]; then
             echo "  Could not delete ${PVC}"
+        fi
+
+        # If the PVC is from a volume snapshot, it should only be deleted, not recreated.
+        if grep -E "snapshot.storage.k8s.io" ${PVC_RECOVER_YAML} 1>/dev/null 2>&1; then
+            echo "  Discarding ${PVC}: VolumeSnapshot"
+            rm -f "${PVC_RECOVER_YAML}"
+            continue
         fi
 
         # Recreate the PVC
