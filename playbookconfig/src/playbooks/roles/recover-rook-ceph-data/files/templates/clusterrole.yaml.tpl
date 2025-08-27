@@ -37,3 +37,6 @@ rules:
 - apiGroups: ["batch"]
   resources: ["jobs"]
   verbs: ["list", "watch", "get", "delete"]
+- apiGroups: ["snapshot.storage.k8s.io"]
+  resources: ["volumesnapshotcontents"]
+  verbs: ["list"]

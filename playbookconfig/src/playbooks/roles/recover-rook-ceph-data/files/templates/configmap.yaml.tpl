@@ -86,11 +86,13 @@ data:
         shift
       fi
 
-      # Check if the command contains "config" or "tool" to adjust the timeout
+      # Check if the command contains "config", "tool" or "scan" to adjust the timeout
       if [[ "$@" =~ "config" ]]; then
         timeout=30   # Timeout for commands related to "config"
       elif [[ "$@" =~ "tool" ]]; then
         timeout=180  # Timeout for commands related to "tool"
+      elif [[ "$@" =~ "scan" ]]; then
+        timeout=600  # Timeout for commands related to "scan"
       fi
 
       # Try running the command 3 times
@@ -104,10 +106,9 @@ data:
         sleep 5
       done
 
-      # If the 'config' command fails, since it is not a critical command,
-      # it does not need to fail.
-      if [[ "$@" =~ "config" ]]; then
-        return 1
+      # Do not fail recovery if it is config or scan command.
+      if [[ "$@" =~ (config|scan) ]]; then
+        return $rc
       fi
       fail "command '$@' failed (rc=${rc}): ${cmd_output}"
     }
@@ -283,6 +284,23 @@ data:
       exec_ceph_cmd cephfs-table-tool ${FS_NAME}:0 reset session
       exec_ceph_cmd cephfs-table-tool ${FS_NAME}:0 reset snap
       exec_ceph_cmd cephfs-table-tool ${FS_NAME}:0 reset inode
+
+      # Check if there are any VolumeSnapshotContent with cephfs driver
+      if exec_k8s_cmd kubectl get volumesnapshotcontents \
+            -o custom-columns="DRIVER:spec.driver" | grep -q "cephfs.csi.ceph.com"; then
+
+        # The cephfs-data-scan command needs to be run more than once
+        # to ensure that all issues are fixed.
+        while true
+        do
+          exec_ceph_cmd OUTPUT cephfs-data-scan scan_links
+          # If the command fails or returns empty, it should exit the loop.
+          if [ $? -ne 0 ] || [ -z "$OUTPUT" ]; then
+            break
+          fi
+          sleep 1
+        done
+      fi
 
       kubectl_scale_deployment app=rook-ceph-mds 1
       exec_ceph_cmd ceph -s
@@ -536,7 +554,6 @@ data:
 
     kubectl_scale_deployment mon=${MON_NAME} 1
     kubectl_scale_deployment app=rook-ceph-osd,topology-location-host=${HOSTNAME} 1
-
     kubectl_scale_deployment app=rook-ceph-mgr 1
 
     exec_ceph_cmd ceph -s
@@ -729,8 +746,10 @@ data:
     for POD_NAME in $PODS_NAME; do
       exec_k8s_cmd POD_STATUS kubectl -n rook-ceph get pod "$POD_NAME" -o=jsonpath='{.status.phase}'
       if [[ "$POD_STATUS" == "Running" || "$POD_STATUS" == "Succeeded" || "$POD_STATUS" == "Failed" ]]; then
+        set +x
         echo -e "\n##############################\n${POD_NAME}\n##############################" >> ${LOG_FILE}
         exec_k8s_cmd kubectl -n rook-ceph logs $POD_NAME >> ${LOG_FILE}
+        set -x
       fi
     done
 
