@@ -476,6 +476,7 @@
     set_fact:
       default_pxeboot_start_address: "{{ (pxeboot_subnet | ipaddr(1)).split('/')[0] }}"
       default_pxeboot_end_address: "{{ (pxeboot_subnet | ipaddr(-2)).split('/')[0] }}"
+      default_pxeboot_floating_address: "{{ (pxeboot_subnet | ipaddr(1)).split('/')[0] }}"
 
   # The provided subnets have passed validation, set the primary default addresses
   # based on the primary subnet values
@@ -611,6 +612,9 @@
           end:
             "{{ pxeboot_end_address if pxeboot_end_address != 'derived'
             else default_pxeboot_end_address }}"
+          floating:
+            "{{ pxeboot_floating_address if pxeboot_floating_address != 'derived'
+            else default_pxeboot_floating_address }}"
           subnet: "{{ network_params.pxeboot_subnet }}"
         management:
           start:
@@ -828,7 +832,7 @@
       # Not sure why ipaddr('address') and ipsubnet filter did not extract
       # the IP from CIDR input. Resort to string split for now.
       controller_floating_address: "{{ address_pairs['management']['floating'] }}"
-      controller_pxeboot_floating_address: "{{ address_pairs['pxeboot']['start'] }}"
+      controller_pxeboot_floating_address: "{{ address_pairs['pxeboot']['floating'] }}"
       cluster_floating_address: "{{ address_pairs['cluster_host']['floating'] }}"
 
   - name: Set subcloud admin floating address
@@ -871,8 +875,12 @@
         'controller_1_address': "{{ controller_floating_address|ipmath(2)
                                     if system_mode != 'simplex'
                                     else controller_floating_address }}"
-        'controller_pxeboot_address_0': "{{ controller_pxeboot_floating_address|ipmath(1) }}"
-        'controller_pxeboot_address_1': "{{ controller_pxeboot_floating_address|ipmath(2) }}"
+        'controller_pxeboot_address_0': "{{ controller_pxeboot_floating_address|ipmath(1)
+                                    if system_mode != 'simplex'
+                                    else controller_pxeboot_floating_address }}"
+        'controller_pxeboot_address_1': "{{ controller_pxeboot_floating_address|ipmath(2)
+                                    if system_mode != 'simplex'
+                                    else controller_pxeboot_floating_address }}"
         'controller_admin_floating_address': "{{ admin_start_address }}"
 
       # Make common facts available to other roles

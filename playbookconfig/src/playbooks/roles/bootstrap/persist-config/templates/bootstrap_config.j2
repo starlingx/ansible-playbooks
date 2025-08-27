@@ -11,6 +11,7 @@ NAMESERVERS={{ dns_servers | join(',') }}
 PXEBOOT_SUBNET={{ pxeboot_subnet }}
 PXEBOOT_START_ADDRESS={{ address_pairs['pxeboot']['start'] }}
 PXEBOOT_END_ADDRESS={{ address_pairs['pxeboot']['end'] }}
+PXEBOOT_FLOATING_ADDRESS={{ address_pairs['pxeboot']['floating'] }}
 MANAGEMENT_SUBNET={{ address_pairs['management']['subnet'] }}
 MANAGEMENT_START_ADDRESS={{ address_pairs['management']['start'] }}
 MANAGEMENT_END_ADDRESS={{ address_pairs['management']['end'] }}

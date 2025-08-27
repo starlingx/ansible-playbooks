@@ -45,7 +45,9 @@
     # our list of already available internal addresses.
     - name: Add missing controller IP addresses
       command: "ip addr add {{ system_values[item] }} dev lo scope host"
-      when: system_values[item] not in all_addr_result.stdout_lines
+      when:
+        - system_values[item] not in all_addr_result.stdout_lines
+        - not (system_mode == 'simplex' and item == 'platform::network::pxeboot::params::controller0_address')
       loop: "{{ network_address_keys }}"
 
 - name: Start dnsmasq for internal FQDN

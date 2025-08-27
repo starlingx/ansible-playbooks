@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019, 2022 Wind River Systems, Inc.
+# Copyright (c) 2019, 2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -33,7 +33,7 @@
           end = IPAddress("{{ end_addr }}")
           subnet = IPNetwork("{{ subnet }}")
 
-          start_end_equal_allowed = ['admin','management','cluster_host']
+          start_end_equal_allowed = ['admin','management','cluster_host','pxeboot']
 
           if not start < end:
             if "{{ network }}" in start_end_equal_allowed and not start == end:
@@ -53,7 +53,7 @@
           min_subnet_sizes = {
               'cluster_pod': 65536,
               'cluster_service': 65536,
-              'pxeboot': 5,
+              'pxeboot': min_size,
               'multicast': 6,
               'management': min_size,
               'cluster_host': min_size,
