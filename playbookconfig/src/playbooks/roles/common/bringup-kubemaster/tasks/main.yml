@@ -237,6 +237,42 @@
   - set_fact:
       apiserver_cert_list: "{{ apiserver_cert_list + secondary_mgmt_ip_list | select }}"
 
+- name: Add primary admin addresses to apiserver san list
+  block:
+  - name: Get primary admin ip addresses
+    include_tasks: >-
+      roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: admin
+      network_stack: primary
+
+  - set_fact:
+      primary_admin_ip_list:
+        - "{{ addresses.floating_address if addresses.floating_address is defined }}"
+        - "{{ addresses.controller0_address if addresses.controller0_address is defined }}"
+        - "{{ addresses.controller1_address if addresses.controller1_address is defined }}"
+
+  - set_fact:
+      apiserver_cert_list: "{{ apiserver_cert_list + primary_admin_ip_list | select }}"
+
+- name: Add secondary admin addresses to apiserver san list
+  block:
+  - name: Get secondary admin ip addresses
+    include_tasks: >-
+      roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: admin
+      network_stack: secondary
+
+  - set_fact:
+      secondary_admin_ip_list:
+        - "{{ addresses.floating_address if addresses.floating_address is defined }}"
+        - "{{ addresses.controller0_address if addresses.controller0_address is defined }}"
+        - "{{ addresses.controller1_address if addresses.controller1_address is defined }}"
+
+  - set_fact:
+      apiserver_cert_list: "{{ apiserver_cert_list + secondary_admin_ip_list | select }}"
+
 - debug:
     msg: "kube-apiserver san list: {{ apiserver_cert_list }}"
 
