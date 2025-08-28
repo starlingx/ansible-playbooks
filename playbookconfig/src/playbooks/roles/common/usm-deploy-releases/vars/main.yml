@@ -15,5 +15,3 @@ deploy_start_delay: 60
 # Delay/retries for all deploy commands, except deploy start
 deploy_retries: 10
 deploy_delay: 60
-
-restart_required: false

@@ -5,7 +5,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #   This role applies software updates (release deployment) on a
 #   target host using USM local installation. Key steps include:
-#     - Set restart_required flag (check releases for RR)
 #     - Execute USM local installation CLI procedure to deploy patches
 #       - RUN Software [install-local, upload, precheck]
 #       - RUN Software deploy [precheck, start, host, activate, complete,
@@ -16,22 +15,9 @@
 #         deploy host
 #
 
-- name: Check if reboot is required
-  shell: software show {{ item }} | grep 'reboot_required' | awk '{print $4}'
-  register: reboot_check
-  with_items: "{{ releases }}"
-  delegate_to: localhost
-  failed_when: false
-
-- name: Set restart_required to true if any release requires a reboot
-  set_fact:
-    restart_required: true
-  with_items: "{{ reboot_check.results }}"
-  when: item.stdout == "True"
 
 # TODO(srana): Running source /etc/platform/openrc for each command could be time
 # consuming due to the keyring lookup. We should look into optimizing this.
-
 - name: Enable local installation mode
   shell: |
     source /etc/platform/openrc
@@ -40,13 +26,13 @@
 - name: Software upload patches
   shell: |
     source /etc/platform/openrc
-    software upload "{{ patches_dir }}/{{ item }}.patch"
-  with_items: "{{ releases }}"
+    software upload "{{ patches_dir }}/{{ item }}"
+  with_items: "{{ patches }}"
 
 - name: Deploy precheck
   shell: |
     source /etc/platform/openrc
-    software deploy precheck "{{ release_id }}"
+    software deploy precheck "{{ target_release_id }}"
   register: deploy_pre_check
   retries: 10
   delay: 30
@@ -63,12 +49,12 @@
 - name: Deploy start
   shell: |
     source /etc/platform/openrc
-    software deploy start "{{ release_id }}"
+    software deploy start "{{ target_release_id }}"
 
 - name: Wait for deploy start
   shell: |
     source /etc/platform/openrc
-    software deploy show | grep "{{ release_version }}" | awk '{print $8}'
+    software deploy show | grep "{{ target_sw_version }}" | awk '{print $8}'
   register: check_deploy_start
   retries: "{{ deploy_start_retries }}"
   delay: "{{ deploy_start_delay }}"
@@ -91,7 +77,7 @@
     name: common/host-lock
   vars:
     target_host: 'controller-0'
-  when: restart_required
+  when: reboot_required
 
 - name: Deploy host
   shell: |
@@ -101,7 +87,7 @@
 - name: Wait for deploy host
   shell: |
     source /etc/platform/openrc
-    software deploy show | grep "{{ release_version }}" | awk '{print $8}'
+    software deploy show | grep "{{ target_sw_version }}" | awk '{print $8}'
   register: check_deploy_host
   retries: "{{ deploy_retries }}"
   delay: "{{ deploy_delay }}"
@@ -125,7 +111,7 @@
   vars:
     target_host: 'controller-0'
     wait_for_unlock: true
-  when: restart_required
+  when: reboot_required
 
 - name: Deploy activate
   shell: |
@@ -135,7 +121,7 @@
 - name: Wait for deploy activate
   shell: |
     source /etc/platform/openrc
-    software deploy show | grep "{{ release_version }}" | awk '{print $8}'
+    software deploy show | grep "{{ target_sw_version }}" | awk '{print $8}'
   register: check_deploy_activate
   retries: "{{ deploy_retries }}"
   delay: "{{ deploy_delay }}"
@@ -161,7 +147,7 @@
 - name: Wait for deploy complete
   shell: |
     source /etc/platform/openrc
-    software deploy show | grep "{{ release_version }}" | awk '{print $8}'
+    software deploy show | grep "{{ target_sw_version }}" | awk '{print $8}'
   register: check_deploy_complete
   retries: "{{ deploy_retries }}"
   delay: "{{ deploy_delay }}"
@@ -189,9 +175,9 @@
 - name: Gather release deploy states
   shell: |
     source /etc/platform/openrc
-    software show {{ item }} | grep 'state' | awk '{print $4}'
+    software show {{ item }} | awk '$2 == "state" { print $4 }'
   register: applied_releases_deploy_state
-  with_items: "{{ releases }}"
+  with_items: "{{ release_ids }}"
   failed_when: false
 
 - name: Verify all releases deployed
