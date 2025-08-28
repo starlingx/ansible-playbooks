@@ -839,6 +839,15 @@
       - name: Result of recovering Ceph PVCs
         debug: var=recover_ceph_pvcs_output.stdout_lines
 
+      - name: Remove Ceph Volume Snapshots when OSDs are wiped
+        script: remove_ceph_snapshots.sh
+        register: remove_ceph_snapshots_output
+        environment:
+          KUBECONFIG: /etc/kubernetes/admin.conf
+
+      - name: Result of removing Ceph Volume Snapshots
+        debug: var=remove_ceph_snapshots_output.stdout_lines
+
       when: wipe_ceph_osds|bool
 
     when: check_online.stdout == "online" and (ceph_backend.rc == 0 or rook_backend.rc == 0)
