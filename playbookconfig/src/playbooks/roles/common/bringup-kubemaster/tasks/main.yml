@@ -420,12 +420,12 @@
   with_fileglob:
     - "{{ kubeadm_pki_dir }}/*.crt"
 
-- block:
-  - name: Patch pull secret into kube-proxy service account
-    command: >
-      kubectl --kubeconfig=/etc/kubernetes/admin.conf patch serviceaccount
-      kube-proxy -p '{"imagePullSecrets": [{"name": "registry-local-secret"}]}' -n kube-system
+- name: Patch pull secret into kube-proxy service account
+  command: >
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf patch serviceaccount
+    kube-proxy -p '{"imagePullSecrets": [{"name": "registry-local-secret"}]}' -n kube-system
 
+- block:
   - name: Find old local registry secret
     shell: "kubectl --kubeconfig=/etc/kubernetes/admin.conf get secrets -n kube-system |
             grep registry-local-secret | awk '{print $1}'"
