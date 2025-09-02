@@ -28,11 +28,140 @@
         msg:
         - "Validating required migration parameters:"
         - "ansible_ssh_pass: {{ ansible_ssh_pass | regex_replace('.', '*') }}"
-        - "external_oam_node_0_address: {{ external_oam_node_0_address }}"
-        - "external_oam_node_1_address: {{ external_oam_node_1_address }}"
+        - "external_oam_node_0_address: {{ external_oam_node_0_address|mandatory }}"
+        - "external_oam_node_1_address: {{ external_oam_node_1_address|mandatory }}"
+        - "external_oam_addrpool_name: {{ external_oam_addrpool_name|mandatory }}"
+        - "management_node_0_address: {{ management_node_0_address|mandatory }}"
+        - "management_node_1_address: {{ management_node_1_address|mandatory }}"
+        - "management_addrpool_name: {{ management_addrpool_name|mandatory }}"
+        - "cluster_host_node_0_address: {{ cluster_host_node_0_address|mandatory }}"
+        - "cluster_host_node_1_address: {{ cluster_host_node_1_address|mandatory }}"
+        - "cluster_host_addrpool_name: {{ cluster_host_addrpool_name|mandatory }}"
+        - "pxeboot_node_0_address: {{ pxeboot_node_0_address|mandatory }}"
+        - "pxeboot_node_1_address: {{ pxeboot_node_1_address|mandatory }}"
+        - "pxeboot_addrpool_name: {{ pxeboot_addrpool_name|mandatory }}"
       failed_when: (ansible_ssh_pass | length == 0) or
-                   (external_oam_node_0_address | ipaddr == false) or
-                   (external_oam_node_1_address | ipaddr == false)
+                   (external_oam_node_0_address | length == 0) or
+                   (external_oam_node_1_address | length == 0) or
+                   (external_oam_addrpool_name | length == 0) or
+                   (management_node_0_address | length == 0) or
+                   (management_node_1_address | length == 0) or
+                   (management_addrpool_name | length == 0) or
+                   (cluster_host_node_0_address | length == 0) or
+                   (cluster_host_node_1_address | length == 0) or
+                   (cluster_host_addrpool_name | length == 0) or
+                   (pxeboot_node_0_address | length == 0) or
+                   (pxeboot_node_1_address | length == 0) or
+                   (pxeboot_addrpool_name | length == 0)
+
+    - name: Validate and parse required address parameters
+      include_tasks: roles/common/validate-addresses/tasks/validate_and_parse_dual_stack.yml
+      with_dict:
+        external_oam_node_0_address: "{{ external_oam_node_0_address }}"
+        external_oam_node_1_address: "{{ external_oam_node_1_address }}"
+        management_node_0_address: "{{ management_node_0_address }}"
+        management_node_1_address: "{{ management_node_1_address }}"
+        cluster_host_node_0_address: "{{ cluster_host_node_0_address }}"
+        cluster_host_node_1_address: "{{ cluster_host_node_1_address }}"
+        pxeboot_node_0_address: "{{ pxeboot_node_0_address }}"
+        pxeboot_node_1_address: "{{ pxeboot_node_1_address }}"
+      loop_control:
+        loop_var: network_param
+
+    - name: Validate and parse required addrpool parameters
+      set_fact:
+        dual_stack_network_params: >-
+          {{
+            dual_stack_network_params | default({}) | combine
+            (
+              {
+                 item.key+'_primary': item.value.split(',')[0],
+                 item.key+'_secondary': item.value.split(',')[1]|default(False),
+              }
+            )
+          }}
+      with_dict:
+        external_oam_addrpool_name: "{{ external_oam_addrpool_name }}"
+        management_addrpool_name: "{{ management_addrpool_name }}"
+        cluster_host_addrpool_name: "{{ cluster_host_addrpool_name }}"
+        pxeboot_addrpool_name: "{{ pxeboot_addrpool_name }}"
+
+    - name: Validate and parse admin address parameters
+      include_tasks: roles/common/validate-addresses/tasks/validate_and_parse_dual_stack.yml
+      with_dict:
+        admin_node_0_address: "{{ admin_node_0_address }}"
+        admin_node_1_address: "{{ admin_node_1_address }}"
+      loop_control:
+        loop_var: network_param
+      when: admin_node_0_address is defined and admin_node_1_address is defined
+
+    - name: Validate and parse admin addrpool parameters
+      set_fact:
+        dual_stack_network_params: >-
+          {{
+            dual_stack_network_params | default({}) | combine
+            (
+              {
+                 item.key+'_primary': item.value.split(',')[0],
+                 item.key+'_secondary': item.value.split(',')[1]|default(False),
+              }
+            )
+          }}
+      with_dict:
+        admin_addrpool_name: "{{ admin_addrpool_name }}"
+      when: admin_node_0_address is defined and admin_node_1_address is defined
+
+    - name: Validate and parse storage address parameters
+      include_tasks: roles/common/validate-addresses/tasks/validate_and_parse_dual_stack.yml
+      with_dict:
+        storage_node_0_address: "{{ storage_node_0_address }}"
+        storage_node_1_address: "{{ storage_node_1_address }}"
+      loop_control:
+        loop_var: network_param
+      when: storage_node_0_address is defined and storage_node_1_address is defined
+
+    - name: Validate and parse storage addrpool parameters
+      set_fact:
+        dual_stack_network_params: >-
+          {{
+            dual_stack_network_params | default({}) | combine
+            (
+              {
+                 item.key+'_primary': item.value.split(',')[0],
+                 item.key+'_secondary': item.value.split(',')[1]|default(False),
+              }
+            )
+          }}
+      with_dict:
+        storage_addrpool_name: "{{ storage_addrpool_name }}"
+      when: storage_node_0_address is defined and storage_node_1_address is defined
+
+    - name: Check primary pool address type
+      set_fact:
+        is_primary_ipv6: "{{ dual_stack_network_params.external_oam_node_0_address_primary|ipv6 }}"
+
+    - name: Query current address-pool list
+      shell: |
+        source /etc/platform/openrc
+        system addrpool-list --nowrap | awk '$8 ~/^[0-9]+$/ { print $4,$2,$16,$18 }'
+      register: addrpool_output
+      failed_when: addrpool_output.rc != 0
+
+    - name: Set address-pool info
+      set_fact:
+        addrpools: >-
+          {{
+            addrpools | default([]) +
+            [
+              {
+                'name': item.split()[0],
+                'uuid': item.split()[1],
+                'c0_ip': item.split()[2],
+                'c1_ip': item.split()[3],
+              }
+            ]
+          }}
+      loop: "{{ addrpool_output.stdout_lines }}"
 
     - name: Query management interface configuration
       shell: |
@@ -78,13 +207,207 @@
       shell: source /etc/platform/openrc; system show | awk '$2 == "system_mode" { print $4 }'
       register: current_system_mode
 
-    - name: Query oam_c0_ip
-      shell: source /etc/platform/openrc; system oam-show | awk '$2 == "oam_c0_ip" { print $4 }'
-      register: current_oam_c0_ip
+    - name: Prepare OAM configuration - addrpool name
+      set_fact:
+        oam_addrpool_ipv4: "{{ dual_stack_network_params.external_oam_addrpool_name_primary if not is_primary_ipv6
+                           else dual_stack_network_params.external_oam_addrpool_name_secondary }}"
+        oam_addrpool_ipv6: "{{ dual_stack_network_params.external_oam_addrpool_name_primary if is_primary_ipv6
+                           else dual_stack_network_params.external_oam_addrpool_name_secondary }}"
 
-    - name: Query oam_c1_ip
-      shell: source /etc/platform/openrc; system oam-show | awk '$2 == "oam_c1_ip" { print $4 }'
-      register: current_oam_c1_ip
+    - name: Prepare OAM configuration
+      set_fact:
+        oam_uuid_ipv4: "{{ (addrpools |
+                          selectattr('name', 'equalto', oam_addrpool_ipv4) |
+                          list | first)['uuid']|default(omit) }}"
+        oam_uuid_ipv6: "{{ (addrpools |
+                          selectattr('name', 'equalto',oam_addrpool_ipv6) |
+                          list | first)['uuid']|default(omit) }}"
+        current_oam_c0_ipv4: "{{ (addrpools |
+                          selectattr('name', 'equalto', oam_addrpool_ipv4) |
+                          list | first)['c0_ip']|default(omit) }}"
+        current_oam_c0_ipv6: "{{ (addrpools |
+                          selectattr('name', 'equalto',oam_addrpool_ipv6) |
+                          list | first)['c0_ip']|default(omit) }}"
+        current_oam_c1_ipv4: "{{ (addrpools |
+                          selectattr('name', 'equalto', oam_addrpool_ipv4) |
+                          list | first)['c1_ip']|default(omit) }}"
+        current_oam_c1_ipv6: "{{ (addrpools |
+                          selectattr('name', 'equalto',oam_addrpool_ipv6) |
+                          list | first)['c1_ip']|default(omit) }}"
+        new_oam_c0_ipv4: "{{ dual_stack_network_params.external_oam_node_0_address_primary if not is_primary_ipv6
+                        else dual_stack_network_params.external_oam_node_0_address_secondary }}"
+        new_oam_c0_ipv6: "{{ dual_stack_network_params.external_oam_node_0_address_primary if is_primary_ipv6
+                        else dual_stack_network_params.external_oam_node_0_address_secondary }}"
+        new_oam_c1_ipv4: "{{ dual_stack_network_params.external_oam_node_1_address_primary if not is_primary_ipv6
+                        else dual_stack_network_params.external_oam_node_1_address_secondary }}"
+        new_oam_c1_ipv6: "{{ dual_stack_network_params.external_oam_node_1_address_primary if is_primary_ipv6
+                        else dual_stack_network_params.external_oam_node_1_address_secondary }}"
+
+    - name: Prepare management configuration - addrpool name
+      set_fact:
+        mgmt_addrpool_ipv4: "{{ dual_stack_network_params.management_addrpool_name_primary if not is_primary_ipv6
+                           else dual_stack_network_params.management_addrpool_name_secondary }}"
+        mgmt_addrpool_ipv6: "{{ dual_stack_network_params.management_addrpool_name_primary if is_primary_ipv6
+                           else dual_stack_network_params.management_addrpool_name_secondary }}"
+
+    - name: Prepare management configuration
+      set_fact:
+        mgmt_uuid_ipv4: "{{ (addrpools |
+                          selectattr('name', 'equalto', mgmt_addrpool_ipv4) |
+                          list | first)['uuid']|default(omit) }}"
+        mgmt_uuid_ipv6: "{{ (addrpools |
+                          selectattr('name', 'equalto', mgmt_addrpool_ipv6) |
+                          list | first)['uuid']|default(omit) }}"
+        current_mgmt_c0_ipv4: "{{ (addrpools |
+                          selectattr('name', 'equalto', mgmt_addrpool_ipv4) |
+                          list | first)['c0_ip']|default(omit) }}"
+        current_mgmt_c0_ipv6: "{{ (addrpools |
+                          selectattr('name', 'equalto', mgmt_addrpool_ipv6) |
+                          list | first)['c0_ip']|default(omit) }}"
+        current_mgmt_c1_ipv4: "{{ (addrpools |
+                          selectattr('name', 'equalto', mgmt_addrpool_ipv4) |
+                          list | first)['c1_ip']|default(omit) }}"
+        current_mgmt_c1_ipv6: "{{ (addrpools |
+                          selectattr('name', 'equalto', mgmt_addrpool_ipv6) |
+                          list | first)['c1_ip']|default(omit) }}"
+        new_mgmt_c0_ipv4: "{{ dual_stack_network_params.management_node_0_address_primary if not is_primary_ipv6
+                        else dual_stack_network_params.management_node_0_address_secondary }}"
+        new_mgmt_c0_ipv6: "{{ dual_stack_network_params.management_node_0_address_primary if is_primary_ipv6
+                        else dual_stack_network_params.management_node_0_address_secondary }}"
+        new_mgmt_c1_ipv4: "{{ dual_stack_network_params.management_node_1_address_primary if not is_primary_ipv6
+                        else dual_stack_network_params.management_node_1_address_secondary }}"
+        new_mgmt_c1_ipv6: "{{ dual_stack_network_params.management_node_1_address_primary if is_primary_ipv6
+                        else dual_stack_network_params.management_node_1_address_secondary }}"
+
+    - name: Prepare admin configuration - addrpool name
+      set_fact:
+        admin_addrpool_ipv4: "{{ dual_stack_network_params.admin_addrpool_name_primary if not is_primary_ipv6
+                           else dual_stack_network_params.admin_addrpool_name_secondary }}"
+        admin_addrpool_ipv6: "{{ dual_stack_network_params.admin_addrpool_name_primary if is_primary_ipv6
+                           else dual_stack_network_params.admin_addrpool_name_secondary }}"
+      when: admin_node_0_address is defined and admin_node_1_address is defined
+
+    - name: Prepare admin configuration
+      set_fact:
+        admin_uuid_ipv4: "{{ (addrpools |
+                          selectattr('name', 'equalto', admin_addrpool_ipv4) |
+                          list | first)['uuid']|default(omit) }}"
+        admin_uuid_ipv6: "{{ (addrpools |
+                          selectattr('name', 'equalto', admin_addrpool_ipv6) |
+                          list | first)['uuid']|default(omit) }}"
+        current_admin_c0_ipv4: "{{ (addrpools |
+                          selectattr('name', 'equalto', admin_addrpool_ipv4) |
+                          list | first)['c0_ip']|default(omit) }}"
+        current_admin_c0_ipv6: "{{ (addrpools |
+                          selectattr('name', 'equalto', admin_addrpool_ipv6) |
+                          list | first)['c0_ip']|default(omit) }}"
+        current_admin_c1_ipv4: "{{ (addrpools |
+                          selectattr('name', 'equalto', admin_addrpool_ipv4) |
+                          list | first)['c1_ip']|default(omit) }}"
+        current_admin_c1_ipv6: "{{ (addrpools |
+                          selectattr('name', 'equalto', admin_addrpool_ipv6) |
+                          list | first)['c1_ip']|default(omit) }}"
+        new_admin_c0_ipv4: "{{ dual_stack_network_params.admin_node_0_address_primary if not is_primary_ipv6
+                        else dual_stack_network_params.admin_node_0_address_secondary }}"
+        new_admin_c0_ipv6: "{{ dual_stack_network_params.admin_node_0_address_primary if is_primary_ipv6
+                        else dual_stack_network_params.admin_node_0_address_secondary }}"
+        new_admin_c1_ipv4: "{{ dual_stack_network_params.admin_node_1_address_primary if not is_primary_ipv6
+                        else dual_stack_network_params.admin_node_1_address_secondary }}"
+        new_admin_c1_ipv6: "{{ dual_stack_network_params.admin_node_1_address_primary if is_primary_ipv6
+                        else dual_stack_network_params.admin_node_1_address_secondary }}"
+      when: admin_node_0_address is defined and admin_node_1_address is defined
+
+    - name: Prepare cluster-host configuration - addrpool name
+      set_fact:
+        cluster_host_addrpool_ipv4: "{{ dual_stack_network_params.cluster_host_addrpool_name_primary if not is_primary_ipv6
+                           else dual_stack_network_params.cluster_host_addrpool_name_secondary }}"
+        cluster_host_addrpool_ipv6: "{{ dual_stack_network_params.cluster_host_addrpool_name_primary if is_primary_ipv6
+                           else dual_stack_network_params.cluster_host_addrpool_name_secondary }}"
+
+    - name: Prepare cluster-host configuration
+      set_fact:
+        cluster_host_uuid_ipv4: "{{ (addrpools |
+                          selectattr('name', 'equalto', cluster_host_addrpool_ipv4) |
+                          list | first)['uuid']|default(omit) }}"
+        cluster_host_uuid_ipv6: "{{ (addrpools |
+                          selectattr('name', 'equalto', cluster_host_addrpool_ipv6) |
+                          list | first)['uuid']|default(omit) }}"
+        current_cluster_host_c0_ipv4: "{{ (addrpools |
+                          selectattr('name', 'equalto', cluster_host_addrpool_ipv4) |
+                          list | first)['c0_ip']|default(omit) }}"
+        current_cluster_host_c0_ipv6: "{{ (addrpools |
+                          selectattr('name', 'equalto', cluster_host_addrpool_ipv6) |
+                          list | first)['c0_ip']|default(omit) }}"
+        current_cluster_host_c1_ipv4: "{{ (addrpools |
+                          selectattr('name', 'equalto', cluster_host_addrpool_ipv4) |
+                          list | first)['c1_ip']|default(omit) }}"
+        current_cluster_host_c1_ipv6: "{{ (addrpools |
+                          selectattr('name', 'equalto', cluster_host_addrpool_ipv6) |
+                          list | first)['c1_ip']|default(omit) }}"
+        new_cluster_host_c0_ipv4: "{{ dual_stack_network_params.cluster_host_node_0_address_primary if not is_primary_ipv6
+                        else dual_stack_network_params.cluster_host_node_0_address_secondary }}"
+        new_cluster_host_c0_ipv6: "{{ dual_stack_network_params.cluster_host_node_0_address_primary if is_primary_ipv6
+                        else dual_stack_network_params.cluster_host_node_0_address_secondary }}"
+        new_cluster_host_c1_ipv4: "{{ dual_stack_network_params.cluster_host_node_1_address_primary if not is_primary_ipv6
+                        else dual_stack_network_params.cluster_host_node_1_address_secondary }}"
+        new_cluster_host_c1_ipv6: "{{ dual_stack_network_params.cluster_host_node_1_address_primary if is_primary_ipv6
+                        else dual_stack_network_params.cluster_host_node_1_address_secondary }}"
+
+    - name: Prepare pxeboot configuration - addrpool name
+      set_fact:
+        pxeboot_addrpool_ipv4: "{{ dual_stack_network_params.pxeboot_addrpool_name_primary }}"
+
+    - name: Prepare pxeboot configuration
+      set_fact:
+        pxeboot_uuid_ipv4: "{{ (addrpools |
+                          selectattr('name', 'equalto', pxeboot_addrpool_ipv4) |
+                          list | first)['uuid']|default(omit) }}"
+        current_pxeboot_c0_ipv4: "{{ (addrpools |
+                                selectattr('name', 'equalto', pxeboot_addrpool_ipv4) |
+                                list | first)['c0_ip']|default(omit) }}"
+        current_pxeboot_c1_ipv4: "{{ (addrpools |
+                                selectattr('name', 'equalto', pxeboot_addrpool_ipv4) |
+                                list | first)['c1_ip']|default(omit) }}"
+        new_pxeboot_c0_ipv4: "{{ dual_stack_network_params.pxeboot_node_0_address_primary }}"
+        new_pxeboot_c1_ipv4: "{{ dual_stack_network_params.pxeboot_node_1_address_primary }}"
+
+    - name: Prepare storage configuration - addrpool name
+      set_fact:
+        storage_addrpool_ipv4: "{{ dual_stack_network_params.storage_addrpool_name_primary if not is_primary_ipv6
+                           else dual_stack_network_params.storage_addrpool_name_secondary }}"
+        storage_addrpool_ipv6: "{{ dual_stack_network_params.storage_addrpool_name_primary if is_primary_ipv6
+                           else dual_stack_network_params.storage_addrpool_name_secondary }}"
+      when: storage_node_0_address is defined and storage_node_1_address is defined
+
+    - name: Prepare storage configuration
+      set_fact:
+        storage_uuid_ipv4: "{{ (addrpools |
+                          selectattr('name', 'equalto', storage_addrpool_ipv4) |
+                          list | first)['uuid']|default(omit) }}"
+        storage_uuid_ipv6: "{{ (addrpools |
+                          selectattr('name', 'equalto', storage_addrpool_ipv6) |
+                          list | first)['uuid']|default(omit) }}"
+        current_storage_c0_ipv4: "{{ (addrpools |
+                          selectattr('name', 'equalto', storage_addrpool_ipv4) |
+                          list | first)['c0_ip']|default(omit) }}"
+        current_storage_c0_ipv6: "{{ (addrpools |
+                          selectattr('name', 'equalto', storage_addrpool_ipv6) |
+                          list | first)['c0_ip']|default(omit) }}"
+        current_storage_c1_ipv4: "{{ (addrpools |
+                          selectattr('name', 'equalto', storage_addrpool_ipv4) |
+                          list | first)['c1_ip']|default(omit) }}"
+        current_storage_c1_ipv6: "{{ (addrpools |
+                          selectattr('name', 'equalto', storage_addrpool_ipv6) |
+                          list | first)['c1_ip']|default(omit) }}"
+        new_storage_c0_ipv4: "{{ dual_stack_network_params.storage_node_0_address_primary if not is_primary_ipv6
+                        else dual_stack_network_params.storage_node_0_address_secondary }}"
+        new_storage_c0_ipv6: "{{ dual_stack_network_params.storage_node_0_address_primary if is_primary_ipv6
+                        else dual_stack_network_params.storage_node_0_address_secondary }}"
+        new_storage_c1_ipv4: "{{ dual_stack_network_params.storage_node_1_address_primary if not is_primary_ipv6
+                        else dual_stack_network_params.storage_node_1_address_secondary }}"
+        new_storage_c1_ipv6: "{{ dual_stack_network_params.storage_node_1_address_primary if is_primary_ipv6
+                        else dual_stack_network_params.storage_node_1_address_secondary }}"
+      when: storage_node_0_address is defined and storage_node_1_address is defined
 
     - block:
       - name: Lock host
@@ -112,14 +435,137 @@
           timeout: 1200
           msg: Timeout waiting for kubernetes duplex migration manifest completion
 
-      - name: Update OAM configuration
+      - name: Update OAM IPv4 configuration
         shell: >-
           source /etc/platform/openrc;
-          system oam-modify oam_c0_ip={{ external_oam_node_0_address }} oam_c1_ip={{ external_oam_node_1_address }}
+          system addrpool-modify {{ oam_uuid_ipv4 }} \
+            --controller0-address {{ new_oam_c0_ipv4 }} \
+            --controller1-address {{ new_oam_c1_ipv4 }}
         args:
           warn: false
-        when: current_oam_c0_ip.stdout != external_oam_node_0_address or
-              current_oam_c1_ip.stdout != external_oam_node_1_address
+        when: oam_uuid_ipv4 is defined and
+             (current_oam_c0_ipv4 != new_oam_c0_ipv4 or
+              current_oam_c1_ipv4 != new_oam_c1_ipv4)
+
+      - name: Update OAM IPv6 configuration
+        shell: >-
+          source /etc/platform/openrc;
+          system addrpool-modify {{ oam_uuid_ipv6 }} \
+            --controller0-address {{ new_oam_c0_ipv6 }} \
+            --controller1-address {{ new_oam_c1_ipv6 }}
+        args:
+          warn: false
+        when: oam_uuid_ipv6 is defined and
+              (current_oam_c0_ipv6 != new_oam_c0_ipv6 or
+               current_oam_c1_ipv6 != new_oam_c1_ipv6)
+
+      - name: Update management IPv4 configuration
+        shell: >-
+          source /etc/platform/openrc;
+          system addrpool-modify {{ mgmt_uuid_ipv4 }} \
+            --controller0-address {{ new_mgmt_c0_ipv4 }} \
+            --controller1-address {{ new_mgmt_c1_ipv4 }}
+        args:
+          warn: false
+        when: mgmt_uuid_ipv4 is defined and
+             (current_mgmt_c0_ipv4 != new_mgmt_c0_ipv4 or
+              current_mgmt_c1_ipv4 != new_mgmt_c1_ipv4)
+
+      - name: Update management IPv6 configuration
+        shell: >-
+          source /etc/platform/openrc;
+          system addrpool-modify {{ mgmt_uuid_ipv6 }} \
+            --controller0-address {{ new_mgmt_c0_ipv6 }} \
+            --controller1-address {{ new_mgmt_c1_ipv6 }}
+        args:
+          warn: false
+        when: mgmt_uuid_ipv6 is defined and
+              (current_mgmt_c0_ipv6 != new_mgmt_c0_ipv6 or
+               current_mgmt_c1_ipv6 != new_mgmt_c1_ipv6)
+
+      - name: Update admin IPv4 configuration
+        shell: >-
+          source /etc/platform/openrc;
+          system addrpool-modify {{ admin_uuid_ipv4 }} \
+            --controller0-address {{ new_admin_c0_ipv4 }} \
+            --controller1-address {{ new_admin_c1_ipv4 }}
+        args:
+          warn: false
+        when: admin_uuid_ipv4 is defined and
+             (current_admin_c0_ipv4 != new_admin_c0_ipv4 or
+              current_admin_c1_ipv4 != new_admin_c1_ipv4)
+
+      - name: Update admin IPv6 configuration
+        shell: >-
+          source /etc/platform/openrc;
+          system addrpool-modify {{ admin_uuid_ipv6 }} \
+            --controller0-address {{ new_admin_c0_ipv6 }} \
+            --controller1-address {{ new_admin_c1_ipv6 }}
+        args:
+          warn: false
+        when: admin_uuid_ipv6 is defined and
+              (current_admin_c0_ipv6 != new_admin_c0_ipv6 or
+               current_admin_c1_ipv6 != new_admin_c1_ipv6)
+
+      - name: Update cluster-host IPv4 configuration
+        shell: >-
+          source /etc/platform/openrc;
+          system addrpool-modify {{ cluster_host_uuid_ipv4 }} \
+            --controller0-address {{ new_cluster_host_c0_ipv4 }} \
+            --controller1-address {{ new_cluster_host_c1_ipv4 }}
+        args:
+          warn: false
+        when: cluster_host_uuid_ipv4 is defined and
+             (current_cluster_host_c0_ipv4 != new_cluster_host_c0_ipv4 or
+              current_cluster_host_c1_ipv4 != new_cluster_host_c1_ipv4)
+
+      - name: Update cluster-host IPv6 configuration
+        shell: >-
+          source /etc/platform/openrc;
+          system addrpool-modify {{ cluster_host_uuid_ipv6 }} \
+            --controller0-address {{ new_cluster_host_c0_ipv6 }} \
+            --controller1-address {{ new_cluster_host_c1_ipv6 }}
+        args:
+          warn: false
+        when: cluster_host_uuid_ipv6 is defined and
+              (current_cluster_host_c0_ipv6 != new_cluster_host_c0_ipv6 or
+               current_cluster_host_c1_ipv6 != new_cluster_host_c1_ipv6)
+
+      - name: Update pxeboot IPv4 configuration
+        shell: >-
+          source /etc/platform/openrc;
+          system addrpool-modify {{ pxeboot_uuid_ipv4 }} \
+            --controller0-address {{ new_pxeboot_c0_ipv4 }} \
+            --controller1-address {{ new_pxeboot_c1_ipv4 }}
+        args:
+          warn: false
+        when: pxeboot_uuid_ipv4 is defined and
+             (current_pxeboot_c0_ipv4 != new_pxeboot_c0_ipv4 or
+              current_pxeboot_c1_ipv4 != new_pxeboot_c1_ipv4)
+
+      - name: Update storage IPv4 configuration
+        shell: >-
+          source /etc/platform/openrc;
+          system addrpool-modify {{ storage_uuid_ipv4 }} \
+            --controller0-address {{ new_storage_c0_ipv4 }} \
+            --controller1-address {{ new_storage_c1_ipv4 }}
+        args:
+          warn: false
+        when: storage_uuid_ipv4 is defined and
+             (current_storage_c0_ipv4 != new_storage_c0_ipv4 or
+              current_storage_c1_ipv4 != new_storage_c1_ipv4)
+
+      - name: Update storage IPv6 configuration
+        shell: >-
+          source /etc/platform/openrc;
+          system addrpool-modify {{ storage_uuid_ipv6 }} \
+            --controller0-address {{ new_storage_c0_ipv6 }} \
+            --controller1-address {{ new_storage_c1_ipv6 }}
+        args:
+          warn: false
+        when: storage_uuid_ipv6 is defined and
+              (current_storage_c0_ipv6 != new_storage_c0_ipv6 or
+               current_storage_c1_ipv6 != new_storage_c1_ipv6)
 
       - name: Unlock host
         include_role:
@@ -137,5 +583,7 @@
         become: yes
 
       when: current_system_mode.stdout == 'simplex' or
-            current_oam_c0_ip.stdout != external_oam_node_0_address or
-            current_oam_c1_ip.stdout != external_oam_node_1_address
+            oam_uuid_ipv4 is defined and
+              (current_oam_c0_ipv4 != new_oam_c0_ipv4 or current_oam_c1_ipv4 != new_oam_c1_ipv4) or
+            oam_uuid_ipv6 is defined and
+              (current_oam_c0_ipv6 != new_oam_c0_ipv6 or current_oam_c1_ipv6 != new_oam_c1_ipv6)
