@@ -260,6 +260,11 @@
           owner: sysadmin
           recurse: yes
 
+      - name: Remove {{ tmp_metadata_dir }} temporary directory
+        file:
+          path: "{{ tmp_metadata_dir }}"
+          state: absent
+
       - name: Synchronize software between controllers
         command: "{{ usm_scripts_dir }}/controllers-software-sync"
 
