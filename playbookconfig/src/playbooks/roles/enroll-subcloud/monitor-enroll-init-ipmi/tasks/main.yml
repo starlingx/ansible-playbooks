@@ -53,7 +53,9 @@
     # Fail when the detected event is in of the failure codes
     - name: "Check {{ item.name }} IPMI monitoring result"
       fail:
-        msg: "Enroll-init failed: {{ stage_failure_msg_effective }}"
+        msg: >-
+          {{ (operation_string | default('Enroll init')) }} failed:
+          {{ stage_failure_msg_effective }}
       when: detected_event_data in (item.failure_data.split(','))
   when:
     - detected_event_data is defined
