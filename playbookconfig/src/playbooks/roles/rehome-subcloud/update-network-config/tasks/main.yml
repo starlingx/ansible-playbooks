@@ -30,7 +30,9 @@
 
   - name: Delete previous system controller network
     shell: >-
-      source /etc/platform/openrc; system host-route-delete "{{ item }}" --yes
+      source /etc/platform/openrc;
+      system host-route-delete "{{ item }}"
+      {{ cli_confirmation | default('--yes') }}
     loop: "{{ previous_route_uuid_controller_0.stdout_lines }}"
     when: previous_route_uuid_controller_0.stdout_lines | length > 0
   when: system_controller_subnet != previous_system_controller_subnet_addr.stdout
@@ -85,7 +87,9 @@
 
     - name: Delete previous system controller network
       shell: >-
-        source /etc/platform/openrc; system host-route-delete "{{ item }}" --yes
+        source /etc/platform/openrc;
+        system host-route-delete "{{ item }}"
+        {{ cli_confirmation | default('--yes') }}
       loop: "{{ previous_route_uuid_controller_1.stdout_lines }}"
       when: previous_route_uuid_controller_1.stdout_lines | length > 0
     when: system_controller_subnet != previous_system_controller_subnet_addr.stdout
