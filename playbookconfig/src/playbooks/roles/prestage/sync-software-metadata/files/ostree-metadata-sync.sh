@@ -576,6 +576,8 @@ sync_subcloud_metadata() {
     )
 
     # Get the highest release version from subcloud metadata files
+    # An empty value means no subcloud metadata files were found
+    # for the specified software version in an N-1 subcloud.
     highest_subcloud_sw_version=$(
         {
             [ -n "$subcloud_metadata_files" ] && basename -a $subcloud_metadata_files || :
@@ -598,7 +600,7 @@ sync_subcloud_metadata() {
         if [[ ! -n "${central_metadata_file}" ]]; then
             usm_state="unavailable"
             reason="Does not exist in SystemController. Setting state to unavailable."
-        elif version_le "${version}" "${highest_subcloud_sw_version}"; then
+        elif [ -n "${highest_subcloud_sw_version}" ] && version_le "${version}" "${highest_subcloud_sw_version}"; then
             usm_state="deployed"
             reason="Setting state to deployed."
         else
