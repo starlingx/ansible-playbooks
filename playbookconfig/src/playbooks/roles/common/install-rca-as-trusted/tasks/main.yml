@@ -62,8 +62,9 @@
   block:
   - name: Install rca_cert as a Trusted CA certificate
     shell: >-
-      source /etc/platform/openrc &&
-      system ca-certificate-install "{{ root_ca_file.path }}" --yes
+      source /etc/platform/openrc;
+      system ca-certificate-install "{{ root_ca_file.path }}"
+      {{ cli_confirmation | default('--yes') }}
     register: install_cert_output
     until: install_cert_output is not failed
     retries: 3

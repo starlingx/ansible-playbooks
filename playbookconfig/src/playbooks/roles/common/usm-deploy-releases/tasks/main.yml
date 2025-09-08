@@ -47,9 +47,10 @@
   when: deploy_pre_check.rc != 0
 
 - name: Deploy start
-  shell: |
-    source /etc/platform/openrc
-    software deploy start "{{ target_release_id }}"
+  shell: >-
+    source /etc/platform/openrc;
+    software deploy start {{ cli_confirmation | default('--yes') }}
+    "{{ target_release_id }}"
 
 - name: Wait for deploy start
   shell: |
@@ -82,7 +83,7 @@
 - name: Deploy host
   shell: |
     source /etc/platform/openrc
-    software deploy host controller-0 --yes
+    software deploy host controller-0 {{ cli_confirmation | default('--yes') }}
 
 - name: Wait for deploy host
   shell: |
@@ -116,7 +117,7 @@
 - name: Deploy activate
   shell: |
     source /etc/platform/openrc
-    software deploy activate
+    software deploy activate {{ cli_confirmation | default('--yes') }}
 
 - name: Wait for deploy activate
   shell: |
@@ -142,7 +143,7 @@
 - name: Issue software deploy complete
   shell: |
     source /etc/platform/openrc
-    software deploy complete
+    software deploy complete {{ cli_confirmation | default('--yes') }}
 
 - name: Wait for deploy complete
   shell: |
