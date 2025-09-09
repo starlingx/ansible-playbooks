@@ -29,28 +29,38 @@
     software upload "{{ patches_dir }}/{{ item }}"
   with_items: "{{ patches }}"
 
-- name: Deploy precheck
-  shell: |
-    {{ source_env_command }}
-    software deploy precheck "{{ target_release_id }}"
-  register: deploy_pre_check
-  retries: 10
-  delay: 30
-  until: deploy_pre_check.rc == 0
-  failed_when: false
+- block:
+  - name: Deploy precheck
+    shell: |
+      {{ source_env_command }}
+      software deploy precheck "{{ target_release_id }}"
+    register: deploy_pre_check
+    retries: 10
+    delay: 30
+    until: deploy_pre_check.rc == 0
+    failed_when: false
 
-- name: Fail if deploy precheck failed
-  fail:
-    msg: |
-      Deploy precheck failed
-      {{ deploy_pre_check.stdout }}
-  when: deploy_pre_check.rc != 0
+  - name: Fail if deploy precheck failed
+    fail:
+      msg: |
+        Deploy precheck failed
+        {{ deploy_pre_check.stdout }}
+    when: deploy_pre_check.rc != 0
+  when: not enrollment_in_progress | default(false)
+
+- name: Set 'force' option
+  set_fact:
+    force: "--force"
+  when:
+    - enrollment_in_progress | default(false)
+    - system_mode is defined
+    - system_mode != "simplex"
 
 - name: Deploy start
   shell: |
     {{ source_env_command }}
-    software deploy start {{ cli_confirmation | default('--yes') }}
-    "{{ target_release_id }}"
+    software deploy start {{ cli_confirmation | default('--yes') }} \
+    {{ force | default('') }} {{ target_release_id }}
 
 - name: Wait for deploy start
   shell: |
