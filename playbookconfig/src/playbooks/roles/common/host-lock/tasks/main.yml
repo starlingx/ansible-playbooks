@@ -1,18 +1,20 @@
 ---
 #
-# Copyright (c) 2021,2024-2025 Wind River Systems, Inc.
+# Copyright (c) 2021, 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 
 - name: Query administrative state
-  shell: source /etc/platform/openrc; system host-show {{ target_host }} --column administrative --format value
+  shell: |
+    {{ source_env_command }}
+    system host-show {{ target_host }} --column administrative --format value
   register: administrative_state
 
 - block:
   - name: Lock host
     shell: |
-      source /etc/platform/openrc
+      {{ source_env_command }}
       system host-lock {{ target_host }} {{ cli_confirmation | default('--yes') }}
     retries: 10
     delay: 30
@@ -20,7 +22,9 @@
     until: result.rc == 0
 
   - name: Wait for lock
-    shell: source /etc/platform/openrc; system host-show {{ target_host }} --column administrative --format value
+    shell: |
+      {{ source_env_command }}
+      system host-show {{ target_host }} --column administrative --format value
     register: check_lock
     failed_when: false
     retries: 30

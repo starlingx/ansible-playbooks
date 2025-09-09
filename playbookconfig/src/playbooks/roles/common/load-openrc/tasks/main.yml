@@ -1,0 +1,76 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#   This role loads the /etc/openrc into the Ansible environment,
+#   sets up necessary URLs and saves a keystone token
+#
+
+- name: Source openrc and capture base environment variables
+  shell: |
+    source /etc/platform/openrc
+    python -c 'import os, json; print(json.dumps({k: v for k, v in os.environ.items() \
+      if k.startswith("OS_")}))'
+  register: openrc_env_json
+  no_log: true
+
+- name: Set initial 'openrc_env' fact
+  set_fact:
+    openrc_env: "{{ openrc_env_json.stdout | from_json }}"
+  no_log: true
+
+- name: Define URL variables
+  set_fact:
+    system_url: 'http://controller.internal:6385/'
+    fm_url: 'http://controller.internal:18002/'
+    software_url: 'http://controller.internal:5497/'
+
+# The clients will check for these env values and will not be able to
+# connect to the services if they are not set when using the token.
+# This list of URLs is not exhaustive, only covering the necessary ones
+# for enrollment.
+- name: Add URLs to the openrc_env
+  set_fact:
+    openrc_env: "{{ openrc_env | combine({
+        'SYSTEM_URL': system_url,
+        'FM_URL': fm_url,
+        'SOFTWARE_URL': software_url
+      }) }}"
+  no_log: true
+
+# Ensure openrc_env doesn't have any token set, otherwise the call to get a
+# new token will fail. When a token is set but the OS_AUTH_TYPE is password,
+# the openstack CLI will error: "__init__() got an unexpected keyword argument 'token'"
+- name: Get an auth token
+  shell: openstack token issue -f value -c id
+  register: token_result
+  environment: "{{ openrc_env | combine({'OS_TOKEN': '', 'OS_AUTH_TOKEN': ''}) }}"
+  no_log: true
+
+# OS_AUTH_TOKEN is used by internal projects (sysinv, fm, software)
+# OS_TOKEN is used by openstack CLI
+# OS_USER_DOMAIN_NAME needs to be clear otherwise the openstack CLI will error out
+- name: Add the new token to the environment
+  set_fact:
+    openrc_env: |
+      {{
+        openrc_env
+        | combine({'OS_AUTH_TOKEN': token_result.stdout | trim})
+        | combine({'OS_TOKEN': token_result.stdout | trim})
+        | combine({'OS_AUTH_TYPE': 'token'})
+        | combine({'OS_USER_DOMAIN_NAME': ''})
+      }}
+  no_log: true
+
+# To make tasks cross compatible between playbooks that uses the openrc_env and those
+# that source /etc/platform/openrc directly, a task should use source_env_command instead.
+# This way, playbooks that doesn't use this role will resolve source_env_command to the correct
+# command and playbooks that uses this role will resolve source_env_command to an empty string,
+# avoiding sourcing credentials multiple times.
+# NOTE: It's important that the playbook imports vars/common/main.yml as source_env_command
+# is defined there.
+- name: Clear the source_env_command variable so future tasks do not source credentials again
+  set_fact:
+    source_env_command: ''

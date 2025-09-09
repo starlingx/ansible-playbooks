@@ -15,7 +15,7 @@
 
 - name: Get subcloud active controller
   shell: |
-    source /etc/platform/openrc
+    {{ source_env_command }}
     system host-show $(cat /etc/hostname) --column hostname --format value
   register: controller_name
 
@@ -246,7 +246,7 @@
 
 - name: Query system_mode
   shell: |
-    source /etc/platform/openrc
+    {{ source_env_command }}
     system show | awk '$2 == "system_mode" { print $4 }'
   register: current_system_mode
 
@@ -335,9 +335,9 @@
                            else controller_floating_address }}"
 
 - name: Get existing docker no_proxy
-  shell: >-
-    source /etc/platform/openrc; system service-parameter-list |
-    awk '($4 == "docker" && $8 == "no_proxy") {print $2}'
+  shell: |
+    {{ source_env_command }}
+    system service-parameter-list | awk '($4 == "docker" && $8 == "no_proxy") {print $2}'
   register: existing_docker_no_proxy_result
 
 - name: Set subcloud docker no_proxy facts
@@ -407,29 +407,30 @@
     docker_no_proxy_combined: "{{ default_no_proxy | union(docker_no_proxy) | ipwrap | unique }}"
 
 - name: Get management interface of controller-0
-  shell: >-
-    source /etc/platform/openrc; system interface-network-list controller-0 |
-    awk '$8 == "mgmt" { print $6 }'
+  shell: |
+    {{ source_env_command }}
+    system interface-network-list controller-0 | awk '$8 == "mgmt" { print $6 }'
   register: controller_0_management_interface_result
 
 - name: Get management interface of controller-1 if the subcloud is not simplex
-  shell: >-
-    source /etc/platform/openrc; system interface-network-list controller-1 |
-    awk '$8 == "mgmt" { print $6 }'
+  shell: |
+    {{ source_env_command }}
+    system interface-network-list controller-1 | awk '$8 == "mgmt" { print $6 }'
   register: controller_1_management_interface_result
   when: system_mode != 'simplex' and mode != "enroll"
 
 - block:
 
   - name: Get previous subcloud admin network name
-    shell: >-
-      source /etc/platform/openrc; system network-list |
-      awk '$8 == "admin" { print $6 }'
+    shell: |
+      {{ source_env_command }}
+      system network-list | awk '$8 == "admin" { print $6 }'
     register: subcloud_admin_network_name
 
   - name: Get ifname of the existing admin network of controller-0
     shell: >-
-      source /etc/platform/openrc; system interface-network-list controller-0 |
+      {{ source_env_command }}
+      system interface-network-list controller-0 |
       awk '$8 == "{{ subcloud_admin_network_name.stdout }}" { print $6 }'
     register: controller_0_admin_network_if
 
@@ -445,7 +446,8 @@
   - block:
     - name: Get ifname of the existing admin network of controller-1
       shell: >-
-        source /etc/platform/openrc; system interface-network-list controller-1 |
+        {{ source_env_command }}
+        system interface-network-list controller-1 |
         awk '$8 == "{{ subcloud_admin_network_name.stdout }}" { print $6 }'
       register: controller_1_admin_network_if
 
@@ -461,20 +463,22 @@
     when: system_mode != "simplex" and mode != "enroll"
 
   - name: Get existing admin address pool
-    shell: >-
-      source /etc/platform/openrc; system network-list |
-      awk '$8 == "admin" { print $12 }'
+    shell: |
+      {{ source_env_command }}
+      system network-list | awk '$8 == "admin" { print $12 }'
     register: admin_address_pool_uuid
 
   - name: Get existing primary admin floating address
-    shell: >-
-      source /etc/platform/openrc; system addrpool-list |
+    shell: |
+      {{ source_env_command }}
+      system addrpool-list |
       awk ' $2 == "{{ admin_address_pool_uuid.stdout }}" && $14 == "{{ admin_floating_address }}" '
     register: check_existing_admin_floating_address_primary
 
   - name: Get existing primary admin gateway
-    shell: >-
-      source /etc/platform/openrc; system addrpool-list |
+    shell: |
+      {{ source_env_command }}
+      system addrpool-list |
       awk ' $2 == "{{ admin_address_pool_uuid.stdout }}" && $20 == "{{ admin_gateway_address_primary }}" '
     register: check_existing_admin_gateway_primary
 
@@ -510,13 +514,15 @@
     - block:
       - name: Get existing secondary admin floating address
         shell: >-
-          source /etc/platform/openrc; system addrpool-list |
+          {{ source_env_command }}
+          system addrpool-list |
           awk ' $2 == "{{ admin_addrpool_secondary }}" && $14 == "{{ admin_floating_address_secondary }}" '
         register: check_existing_admin_floating_address_secondary
 
       - name: Get existing secondary admin gateway
         shell: >-
-          source /etc/platform/openrc; system addrpool-list |
+          {{ source_env_command }}
+          system addrpool-list |
           awk ' $2 == "{{ admin_addrpool_secondary }}" && $20 == "{{ admin_gateway_address_secondary }}" '
         register: check_existing_admin_gateway_secondary
 

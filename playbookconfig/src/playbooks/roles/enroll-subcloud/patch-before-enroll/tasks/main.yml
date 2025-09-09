@@ -30,10 +30,13 @@
     msg: "Subcloud enrollment cannot be done on non-active controller."
   when: not is_active_controller
 
+# Instead of using SOFTWARE_URL, software CLI is using SYSTEM_URL,
+# which is already used by sysinv. To still authenticate with the
+# token, we need to explicitly provide --software-url.
 - name: Run software deploy show
   shell: |
-    source /etc/platform/openrc
-    software deploy show
+    {{ source_env_command }}
+    software --software-url {{ software_url }} deploy show
   register: check_deploy_show
   failed_when: false
 
@@ -56,8 +59,8 @@
 
 - name: Retrieve subcloud software list raw output
   shell: |
-    source /etc/platform/openrc
-    software list --release {{ software_version }}
+    {{ source_env_command }}
+    software --software-url {{ software_url }} list --release {{ software_version }}
   register: subcloud_software_list_raw
 
 # Note: Keep the full release string (format: component-MM.mm.pp) for component filtering

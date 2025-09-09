@@ -12,6 +12,8 @@
   # check block in common/prepare-env role.
   gather_facts: no
   become: yes
+  vars_files:
+    - vars/common/main.yml
 
   roles:
     - common/remote-execution-precheck
