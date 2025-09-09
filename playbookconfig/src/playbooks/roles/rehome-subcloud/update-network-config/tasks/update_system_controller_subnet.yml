@@ -16,8 +16,10 @@
 
 - name: Delete previous system controller OAM subnet
   shell: >-
-    source /etc/platform/openrc; system addrpool-delete
-    {{ system_controller_oam_subnet_uuid.stdout }} --yes
+    source /etc/platform/openrc;
+    system addrpool-delete
+    {{ system_controller_oam_subnet_uuid.stdout }}
+    {{ cli_confirmation | default('--yes') }}
   when: system_controller_oam_subnet_uuid.stdout | length > 0
 
 - name: Add system controller OAM subnet
@@ -65,8 +67,10 @@
 
 - name: Delete previous system controller subnet
   shell: >-
-    source /etc/platform/openrc; system addrpool-delete
-    {{ system_controller_subnet_uuid.stdout }} --yes
+    source /etc/platform/openrc;
+    system addrpool-delete
+    {{ system_controller_subnet_uuid.stdout }}
+    {{ cli_confirmation | default('--yes') }}
   when: system_controller_subnet_uuid.stdout | length > 0
 
 - name: Add system controller subnet
