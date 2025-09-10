@@ -614,7 +614,8 @@
             else default_pxeboot_end_address }}"
           floating:
             "{{ pxeboot_floating_address if pxeboot_floating_address != 'derived'
-            else default_pxeboot_floating_address }}"
+            else pxeboot_start_address if pxeboot_start_address != 'derived'
+            else default_pxeboot_start_address }}"
           subnet: "{{ network_params.pxeboot_subnet }}"
         management:
           start:
@@ -637,7 +638,8 @@
             else default_cluster_host_end_address_primary}}"
           floating:
             "{{ network_params.cluster_host_floating_address_primary if cluster_host_floating_address != 'derived'
-            else default_cluster_host_floating_address_primary }}"
+            else network_params.cluster_host_start_address_primary if cluster_host_start_address != 'derived'
+            else default_cluster_host_start_address_primary }}"
           subnet: "{{ network_params.cluster_host_subnet_primary }}"
         cluster_pod:
           start:
@@ -729,7 +731,8 @@
             else default_cluster_host_end_address_secondary}}"
           floating:
             "{{ network_params.cluster_host_floating_address_secondary if cluster_host_floating_address != 'derived'
-            else default_cluster_host_floating_address_secondary }}"
+            else network_params.cluster_host_start_address_secondary if cluster_host_start_address != 'derived'
+            else default_cluster_host_start_address_secondary }}"
           subnet: "{{ network_params.cluster_host_subnet_secondary }}"
         cluster_pod:
           start:
