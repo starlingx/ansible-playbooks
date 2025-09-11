@@ -310,6 +310,15 @@
 
     when: use_multiprocessing | bool
 
+  - name: Pin kubernetes control plane images
+    command:
+      ctr -n k8s.io images label "{{ local_registry }}"/"{{ item }}" io.cri-containerd.pinned=pinned
+    loop: "{{ kubernetes_images }}"
+    when:
+      - kubernetes_images is defined
+      - "'kube-apiserver' in item or 'kube-controller-manager' in item or 'kube-scheduler' in item"
+    ignore_errors: true
+
   when: download_images_list|length > 0
 
 # Disable the log to not expose registry password
