@@ -30,22 +30,11 @@
     --floating-address {{ system_controller_oam_floating_address }} | awk '/uuid/{ print$4 }'
   register: add_system_controller_oam_subnet_uuid
 
-- name: Read dnsmasq service pid
-  command: cat /var/run/dnsmasq.pid
-  register: current_pid
-
 - name: Add new system-controller OAM network
   shell: >-
     source /etc/platform/openrc;
     system network-add system-controller-oam system-controller-oam false
     {{ add_system_controller_oam_subnet_uuid.stdout }}
-
-- name: Ensure that dnsmasq is restarted before proceeding
-  command: cat /var/run/dnsmasq.pid
-  register: new_pid
-  retries: 10
-  delay: 5
-  until: new_pid.stdout != current_pid.stdout
 
 - name: Verify system-controller OAM network creation and availability
   shell: >
