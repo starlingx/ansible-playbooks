@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2024 Wind River Systems, Inc.
+# Copyright (c) 2022-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -132,16 +132,15 @@
     set_fact:
       admin_floating_ip_secondary: "{{ addresses.floating_address }}"
 
+# Try to get from sourced credentials and fall back to 'system show' if not available
 - name: Get region name
   shell: |
-    source /etc/platform/openrc
-    system show | grep region_name | awk '{ print $4 }'
+    echo "${OS_REGION_NAME:-$(source /etc/platform/openrc && system show | grep region_name | awk '{ print $4 }')}"
   register: region_name_register
 
 - name: Get distributed_cloud role
   shell: |
-    source /etc/platform/openrc
-    system show | grep distributed_cloud_role | awk '{ print $4 }'
+    source /etc/platform/platform.conf; echo $distributed_cloud_role
   register: dc_role
 
 - name: Get cert-manager api version

@@ -21,6 +21,8 @@
 
 - hosts: all
   gather_facts: no
+  vars_files:
+    - vars/common/main.yml
 
   tasks:
     - name: Check required parameters
