@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -43,47 +43,58 @@ class CgtsClient(object):
         self.conf = {}
         self._sysinv = None
 
-        source_command = 'source /etc/platform/openrc && env'
+        self.auth_token = os.getenv('OS_AUTH_TOKEN')
+        self.system_url = os.getenv('SYSTEM_URL')
 
-        with open(os.devnull, "w") as fnull:
-            proc = subprocess.Popen(
-                ['bash', '-c', source_command],
-                stdout=subprocess.PIPE, stderr=fnull,
-                universal_newlines=True)
+        if not (self.auth_token and self.system_url):
+            source_command = 'source /etc/platform/openrc && env'
 
-        for line in proc.stdout:
-            key, _, value = line.partition("=")
-            if key == 'OS_USERNAME':
-                self.conf['admin_user'] = value.strip()
-            elif key == 'OS_PASSWORD':
-                self.conf['admin_pwd'] = value.strip()
-            elif key == 'OS_PROJECT_NAME':
-                self.conf['admin_tenant'] = value.strip()
-            elif key == 'OS_AUTH_URL':
-                self.conf['auth_url'] = value.strip()
-            elif key == 'OS_REGION_NAME':
-                self.conf['region_name'] = value.strip()
-            elif key == 'OS_USER_DOMAIN_NAME':
-                self.conf['user_domain'] = value.strip()
-            elif key == 'OS_PROJECT_DOMAIN_NAME':
-                self.conf['project_domain'] = value.strip()
+            with open(os.devnull, "w") as fnull:
+                proc = subprocess.Popen(
+                    ['bash', '-c', source_command],
+                    stdout=subprocess.PIPE, stderr=fnull,
+                    universal_newlines=True)
 
-        proc.communicate()
+            for line in proc.stdout:
+                key, _, value = line.partition("=")
+                if key == 'OS_USERNAME':
+                    self.conf['admin_user'] = value.strip()
+                elif key == 'OS_PASSWORD':
+                    self.conf['admin_pwd'] = value.strip()
+                elif key == 'OS_PROJECT_NAME':
+                    self.conf['admin_tenant'] = value.strip()
+                elif key == 'OS_AUTH_URL':
+                    self.conf['auth_url'] = value.strip()
+                elif key == 'OS_REGION_NAME':
+                    self.conf['region_name'] = value.strip()
+                elif key == 'OS_USER_DOMAIN_NAME':
+                    self.conf['user_domain'] = value.strip()
+                elif key == 'OS_PROJECT_DOMAIN_NAME':
+                    self.conf['project_domain'] = value.strip()
+
+            proc.communicate()
 
     @property
     def sysinv(self):
         if not self._sysinv:
-            self._sysinv = cgts_client.get_client(
-                self.SYSINV_API_VERSION,
-                os_username=self.conf['admin_user'],
-                os_password=self.conf['admin_pwd'],
-                os_auth_url=self.conf['auth_url'],
-                os_project_name=self.conf['admin_tenant'],
-                os_project_domain_name=self.conf['project_domain'],
-                os_user_domain_name=self.conf['user_domain'],
-                os_region_name=self.conf['region_name'],
-                os_service_type='platform',
-                os_endpoint_type='internal')
+            if self.auth_token and self.system_url:
+                self._sysinv = cgts_client.get_client(
+                    str(self.SYSINV_API_VERSION),
+                    os_auth_token=self.auth_token,
+                    system_url=self.system_url
+                )
+            else:
+                self._sysinv = cgts_client.get_client(
+                    self.SYSINV_API_VERSION,
+                    os_username=self.conf['admin_user'],
+                    os_password=self.conf['admin_pwd'],
+                    os_auth_url=self.conf['auth_url'],
+                    os_project_name=self.conf['admin_tenant'],
+                    os_project_domain_name=self.conf['project_domain'],
+                    os_user_domain_name=self.conf['user_domain'],
+                    os_region_name=self.conf['region_name'],
+                    os_service_type='platform',
+                    os_endpoint_type='internal')
         return self._sysinv
 
 
