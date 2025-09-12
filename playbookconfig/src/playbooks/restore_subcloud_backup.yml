@@ -31,6 +31,18 @@
     # Auto or factory restore are triggered automatically inside the subcloud, so we just
     # need to monitor the IPMI SEL logs and wait for the restore to complete or fail
     - block:
+        # If rvmc_config_file is set we need to mount the seed iso containing the
+        # auto-restore data. The set_boot_override must be excluded because we
+        # don't want to boot from the seed iso but we still need to reboot the
+        # machine so the cloud init gets triggered
+        - name: Run RVMC script to start {{ auto_restore_mode }} restore
+          include_role:
+            name: common/rvmc
+          vars:
+            excluded_operations: "set_boot_override"
+            job_retry_delay: "{{ 120 | random }}"
+          when: rvmc_config_file is defined
+
         - name: Waiting {{ restore_timeout }} seconds for {{ auto_restore_mode }} restore complete IPMI SEL event
           include_role:
             name: common/ipmi_monitor
