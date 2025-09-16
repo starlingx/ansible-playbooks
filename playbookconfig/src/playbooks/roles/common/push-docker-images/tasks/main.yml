@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -141,49 +141,52 @@
     - { default_url: 'registry.k8s.io', replaced_url: "{{ registryk8s_registry.url }}" }
     - { default_url: 'icr.io', replaced_url: "{{ icr_registry.url }}" }
 
-# Disable the log to not expose registry password
-- name: Log in k8s, gcr, quay, ghcr, registryk8s, icr docker registries if credentials exist
-  docker_login:
-    registry: "{{ item['url'] }}"
-    username: "{{ item['username'] }}"
-    password: "{{ item['password'] }}"
-  register: login_result
-  retries: 10
-  delay: 5
-  until: login_result is succeeded
-  with_items:
-    - "{{ k8s_registry }}"
-    - "{{ gcr_registry }}"
-    - "{{ quay_registry }}"
-    - "{{ docker_registry }}"
-    - "{{ ghcr_registry }}"
-    - "{{ registryk8s_registry }}"
-    - "{{ icr_registry }}"
-  when: item.username is defined
-  no_log: true
-  failed_when: false
+- block:
+  # Disable the log to not expose registry password
+  - name: Log in k8s, gcr, quay, ghcr, registryk8s, icr docker registries if credentials exist
+    docker_login:
+      registry: "{{ item['url'] }}"
+      username: "{{ item['username'] }}"
+      password: "{{ item['password'] }}"
+    register: login_result
+    retries: 10
+    delay: 5
+    until: login_result is succeeded
+    with_items:
+      - "{{ k8s_registry }}"
+      - "{{ gcr_registry }}"
+      - "{{ quay_registry }}"
+      - "{{ docker_registry }}"
+      - "{{ ghcr_registry }}"
+      - "{{ registryk8s_registry }}"
+      - "{{ icr_registry }}"
+    when: item.username is defined
+    no_log: true
+    failed_when: false
 
-- name: Initialize registry login error variable
-  set_fact:
-    error_value: ""
+  - name: Initialize registry login error variable
+    set_fact:
+      error_value: ""
 
-# log specific information keeping no_log true to avoid show passwords
-- name: Set login error value if it failed to log in one of the configured registries
-  set_fact:
-    error_value: "{{ error_value + '|' + item.msg }}"
-  when: 'item.msg is defined and "Error" in item.msg'
-  loop: "{{ login_result.results }}"
-  no_log: true
+  # log specific information keeping no_log true to avoid show passwords
+  - name: Set login error value if it failed to log in one of the configured registries
+    set_fact:
+      error_value: "{{ error_value + '|' + item.msg }}"
+    when: 'item.msg is defined and "Error" in item.msg'
+    loop: "{{ login_result.results }}"
+    no_log: true
 
-- name: Display registry login error
-  fail:
-    msg:
-      - "Failed to log in one of the registry. Please check if docker_registries parameter"
-      - "is properly configured in bootstrap overrides yaml file and docker registry certificate (where "
-      - "applicable) is valid."
-      - "Err_code= images_download_failure"
-      - "Possible failures: {{ error_value }}"
-  when: error_value != ""
+  - name: Display registry login error
+    fail:
+      msg:
+        - "Failed to log in one of the registry. Please check if docker_registries parameter"
+        - "is properly configured in bootstrap overrides yaml file and docker registry certificate (where "
+        - "applicable) is valid."
+        - "Err_code= images_download_failure"
+        - "Possible failures: {{ error_value }}"
+    when: error_value != ""
+
+  when: not skip_registry_login
 
 # Retrieve local registry credentials unless it has been already
 - block:
@@ -325,5 +328,5 @@
     - "{{ ghcr_registry }}"
     - "{{ registryk8s_registry }}"
     - "{{ icr_registry }}"
-  when: item.username is defined
+  when: item.username is defined and not skip_registry_login
   no_log: true
