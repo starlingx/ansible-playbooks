@@ -19,6 +19,7 @@
     install_system_open_ldap_certificate: "{{ distributed_cloud_role != 'subcloud' }}"
     install_system_registry_local_certificate: true
     install_system_restapi_gui_certificate: true
+    install_oidc_auth_apps_certificate: "{{ distributed_cloud_role != 'subcloud' }}"
   when: mode == 'bootstrap'
 
 - name: If upgrading, generate required certificates only if they don't exist

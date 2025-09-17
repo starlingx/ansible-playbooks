@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023-2024 Wind River Systems, Inc.
+# Copyright (c) 2023-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -109,6 +109,23 @@
 
 - include_role:
     name: common/install-platform-certificates
+
+# Set the required overrides for the oidc-auth-apps
+- name: Setup oidc-auth-apps default requirements
+  include_tasks: setup_oidc_auth_apps_requirements.yml
+  when: distributed_cloud_role != 'subcloud'
+
+# To apply oidc-auth-apps, it's needed common/install-platform-certificates
+# to be done due the required oidc-auth-apps-certificate
+- name: Apply oidc-auth-apps
+  include_tasks: upload_and_apply_application.yml
+  with_items:
+    - oidc-auth-apps
+  vars:
+    searched_app_name: "{{ item }}"
+  when:
+    - mode != 'restore'
+    - distributed_cloud_role != 'subcloud'
 
 - name: Upload and apply user defined applications
   include_tasks: upload_and_apply_user_applications.yml

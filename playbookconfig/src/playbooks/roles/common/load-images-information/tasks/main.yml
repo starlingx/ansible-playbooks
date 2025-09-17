@@ -125,6 +125,9 @@
         - "{{ cert_manager_controller_img }}"
         - "{{ cert_manager_webhook_img }}"
         - "{{ cert_manager_startupapicheck_img }}"
+        - "{{ oidc_stx_oidc_client_img }}"
+        - "{{ oidc_dex_img }}"
+        - "{{ oidc_curl_img }}"
 
   - block:
     - name: Change security images if upgrading from 22.12

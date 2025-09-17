@@ -1148,6 +1148,14 @@
     use_regex: yes
   register: find_cert_manager_tarball_output
 
+- name: Get the name of the oidc-auth-apps tarball
+  find:
+    paths: "/usr/local/share/applications/helm/"
+    patterns: 'oidc-auth-apps-[^-]*-[^-]*\.tgz'
+    use_regex: yes
+  register: find_oidc_auth_apps_tarball_output
+  when: distributed_cloud_role != 'subcloud'
+
 # we prepend nginx and append cert manager to try and enforce ordering
 # nginx need to be applied before cert manager
 - name: Append default nginx entry if not present
@@ -1161,6 +1169,14 @@
     applications: "{{ applications }} + [ {'{{ item.path }}': None}]"
   with_items: "{{ find_cert_manager_tarball_output.files }}"
   when: item.path not in all_applications
+
+- name: Append default oidc-auth-apps entry if not present
+  set_fact:
+    applications: "{{ applications }} + [ {'{{ item.path }}': None}]"
+  with_items: "{{ find_oidc_auth_apps_tarball_output.files }}"
+  when:
+    - item.path not in all_applications
+    - distributed_cloud_role != 'subcloud'
 
 - block:
   - name: Retrieve list of applications from sysinv
