@@ -42,5 +42,5 @@
       become: yes
     - rehome-enroll-common/persist-configuration
     - role: common/update-sc-admin-endpoints
-      when: admin_floating_address is defined
+      when: admin_floating_address != 'derived'
     - enroll-subcloud/complete-enrollment
