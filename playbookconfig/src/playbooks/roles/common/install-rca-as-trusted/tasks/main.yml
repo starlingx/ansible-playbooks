@@ -38,7 +38,7 @@
   block:
   - name: Check if an 250.001 alarm exists and wait it to be cleared
     shell: |
-      source /etc/platform/openrc;
+      {{ source_env_command }}
       fm alarm-list --query alarm_id=250.001
     register: alarm_subcloud
     retries: 15
@@ -62,7 +62,7 @@
   block:
   - name: Install rca_cert as a Trusted CA certificate
     shell: >-
-      source /etc/platform/openrc;
+      {{ source_env_command }}
       system ca-certificate-install "{{ root_ca_file.path }}"
       {{ cli_confirmation | default('--yes') }}
     register: install_cert_output
@@ -148,7 +148,7 @@
 
   - name: Check if an 250.001 alarm was raised and wait it to be cleared
     shell: |
-      source /etc/platform/openrc;
+      {{ source_env_command }}
       fm alarm-list --query alarm_id=250.001
     register: alarm_subcloud
     retries: 5

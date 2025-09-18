@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2024 Wind River Systems, Inc.
+# Copyright (c) 2022-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -9,15 +9,18 @@
 # kubernetes at a later step
 #
 
-- name: Get distributed_cloud_role if not defined
-  shell: |
-    source /etc/platform/openrc
-    system show | grep distributed_cloud_role | awk '{ print $4 }'
-  register: dc_role
+# During enroll, the distributed_cloud_role is already defined at the playbook level,
+# so no need to get it from the system again
+- block:
+  - name: Get distributed_cloud_role if not defined
+    shell: |
+      source /etc/platform/openrc
+      system show | grep distributed_cloud_role | awk '{ print $4 }'
+    register: dc_role
 
-- name: Set distributed_cloud_role value
-  set_fact:
-    distributed_cloud_role: "{{ dc_role.stdout }}"
+  - name: Set distributed_cloud_role value
+    set_fact:
+      distributed_cloud_role: "{{ dc_role.stdout }}"
   when: mode is not defined or mode != "enroll"
 
 # For subclouds, in normal restore the ca cert must be restored from backup,
