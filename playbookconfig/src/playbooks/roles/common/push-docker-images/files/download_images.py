@@ -191,27 +191,23 @@ def download_and_push_an_image(img):
                   % target_img)
             client.inspect_distribution(local_img, auth_config=auth)
             print("Image %s found on local registry" % target_img)
-            try:
-                if backed_up_crictl_cache_images:
-                    # This excludes the images to download during restore operation
-                    # that are not present in list of cached images pulled
-                    # during backup operation.
-                    if img not in backed_up_crictl_cache_images:
-                        print("Image %s not found on backed_up_crictl_cache_images."
-                              % target_img)
-                        return target_img, True
-                auth_str = '{0}:{1}'.format(auth['username'], auth['password'])
-                subprocess.check_call(["crictl", "pull", "--creds", auth_str,
-                                       local_img])
-            except Exception as e:
-                print(err_msg + str(e))
-                return target_img, False
+            if backed_up_crictl_cache_images:
+                # This excludes the images to download during restore operation
+                # that are not present in list of cached images pulled
+                # during backup operation.
+                if img not in backed_up_crictl_cache_images:
+                    print("Image %s not found on backed_up_crictl_cache_images."
+                          % target_img)
+                    return target_img, True
+            auth_str = '{0}:{1}'.format(auth['username'], auth['password'])
+            subprocess.check_call(["crictl", "pull", "--creds", auth_str,
+                                   local_img])
             print("Image %s download succeeded by containerd." % target_img)
         else:
             print("Image %s already exists in the containerd cache."
                   % target_img)
         return target_img, True
-    except docker.errors.APIError as e:
+    except (docker.errors.APIError, subprocess.CalledProcessError) as e:
         print(str(e))
         print("Image %s not found on local registry, attempt to download..."
               % target_img)
@@ -246,6 +242,11 @@ def download_and_push_an_image(img):
             return target_img, True
         except Exception as e:
             return handle_docker_exception(e, err_msg, target_img)
+
+    except Exception as e:
+        # A catchall for any other unexpected error
+        print("Unexpected error occurred: %s" % str(e))
+        return handle_docker_exception(e, err_msg, target_img)
 
 
 # TODO(tngo): Remove this function post StarlingX 9.0
