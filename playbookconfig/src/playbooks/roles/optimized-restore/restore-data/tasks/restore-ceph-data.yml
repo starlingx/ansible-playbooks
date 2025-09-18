@@ -174,6 +174,7 @@
           - name: Set Ceph variables
             set_fact:
               ceph_monmap_file: monmap.bin
+              helm_overrides_dir: "/opt/platform/helm/{{ software_version }}/rook-ceph"
 
           - name: Get {{ ceph_monmap_file }} file path
             shell: tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep {{ ceph_monmap_file }}
@@ -191,6 +192,22 @@
               name: recover-rook-ceph-data
             when: node_personalities.stdout is not search('storage')
 
+          - name: Get the rook-ceph app version
+            shell: source /etc/platform/openrc; system application-show rook-ceph --format value --column app_version
+            register: rook_ceph_app_version
+
+          - name: Truncate rook-ceph overrides to ensure auto-reapply is triggered
+            copy:
+              content: ""
+              dest: "{{ item }}"
+              force: yes
+            loop: >-
+              {{ lookup(
+                'fileglob',
+                helm_overrides_dir + '/' + rook_ceph_app_version.stdout + '/*.yaml',
+                wantlist=True
+              ) }}
+
           when: not wipe_ceph_osds|bool and rook_backend.rc == 0
 
         # Remove temporary staging area used by the copy module
@@ -200,7 +217,6 @@
             state: absent
 
       when: not wipe_ceph_osds|bool and (ceph_backend.rc == 0 or rook_backend.rc == 0)
-
 
     - block:
       - set_fact:
