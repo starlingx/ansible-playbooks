@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -102,10 +102,10 @@
 
           {% if system_controller_current_patch == subcloud_current_patch %}
           Skipping for software deploy prestage as the subcloud has the same patch level
-          than the system controller.
+          than the system controller for requested software version.
           {% elif subcloud_current_patch > system_controller_current_patch %}
           Skipping for software deploy prestage as the subcloud has a higher patch level
-          than the system controller.
+          than the system controller for requested software version.
           {% endif %}
 
     - name: "Subcloud does not require software prestage. Exiting..."
@@ -155,6 +155,20 @@
       debug:
         var: system_controller_software_metadata_commits
 
+    # When an N-1 patch is uploaded to the System Controller, the metadata files
+    # may not have a commit defined. In this case, we need to check if there
+    # are any empty commit metadata files for the given N-1 release.
+    - name: Gather empty commit metadata files on system controller
+      set_fact:
+        system_controller_metadata_empty_commit: >-
+          {{ system_controller_software_metadata_commits.stdout_lines
+            | select("match", "^[^:]+:$")
+            | list }}
+
+    - name: Show empty commit metadata files on system controller
+      debug:
+        var: system_controller_metadata_empty_commit
+
     # Switch from command to script module to run the ostree-metadata-sync.sh script
     # on the system controller as it does not exist on N-1 release e.g. 22.12
     - name: Gather subcloud metadata commits
@@ -165,6 +179,17 @@
     - name: Show ostree metadata commits on subcloud
       debug:
         var: subcloud_software_metadata_commits
+
+    # See sync_previous_release_updates role description for details
+    - name: Sync previous release updates for unavailable releases
+      include_tasks: sync_previous_release_updates.yml
+      vars:
+        software_updates_dir: "/var/www/pages/updates"
+        rel_updates_dir: "{{ software_updates_dir }}/debian/rel-{{ software_version }}"
+      when:
+        - software_version is version(system_controller_current_sw_version.stdout, '<')
+        - prestage_source == 'local'
+        - system_controller_metadata_empty_commit | length > 0
 
     # It's necessary to temporarily change the owner to sysadmin so that
     # the system controller can push the files to the subcloud, since the files
@@ -193,7 +218,7 @@
     # on the system controller as it does not exist on N-1 release e.g. 22.12
     - name: Synchronizing system controller ostree commits on subcloud
       script: "{{ role_path }}/files/ostree-metadata-sync.sh --sw-version {{ software_version }}
-              sync-subcloud"
+              --sc-sw-version {{ system_controller_current_sw_version.stdout }} sync-subcloud"
       register: sync_software_commits
 
     - name: Show sync output
@@ -205,10 +230,10 @@
           - "stdout: {{ sync_software_commits.stdout }}"
 
     # We want to transfer the rel-MM-mm directories that may exist in the system
-    # controller to the subcloud. There will always be at least one, which corresponds
-    # to the deployed base release, for example rel-24.09.0. This task should not fail,
-    # if it fails the playbook should be aborted.
-    - name: Copy system controller deployed release directory to subcloud
+    # controller to the subcloud. Regardless of whether the provided release is an
+    # N or N-1 release. This task should not fail, if it fails the playbook should
+    # be aborted.
+    - name: Copy system controller release directory to subcloud
       synchronize:
         mode: "push"
         src: "{{ usm_software_dir }}/rel-{{ item }}"

@@ -39,9 +39,13 @@
     host_patch_metadata_dir: "{{ '/opt/patching/metadata' if software_version
                               is version('24.09', '<') else '/opt/software/metadata' }}"
 
+- name: Retrieve current software version of the system controller
+  shell: source /etc/build.info; echo $SW_VERSION
+  register: system_controller_current_sw_version
+  delegate_to: localhost
+
 - name: Retrieve current software version of the host
-  shell: source /etc/platform/openrc;
-    system show | grep software_version | awk '{print $4}'
+  shell: source /etc/build.info; echo $SW_VERSION
   register: current_software_version
 
 - name: Set host_software_version fact

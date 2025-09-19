@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -34,6 +34,7 @@ readonly SCRIPTNAME=$(basename "$0")
 #readonly SCRIPTDIR=$(readlink -m "$(dirname "$0")")
 
 SW_VERSION=${SW_VERSION:-}
+SC_SW_VERSION=${SC_SW_VERSION:-}
 
 DEBUG=${DEBUG:-}
 DRY_RUN=${DRY_RUN:-}
@@ -382,10 +383,6 @@ translate_central_metadata_path() {
     echo "${metadata_file/#"${METADATA_DIR}"/"${METADATA_SYNC_METADATA_DIR}"}"
 }
 
-get_metadata_files_unique_to_central() {
-    cat "${METADATA_SYNC_DIR}"/ostree-metadata-commits.central | awk -F ':' '{print $1;}'
-}
-
 sync_ostree_repo() {
     # Synchronizes the remote ostree repository (system controller) to the local subcloud.
     local tmp_ostree_sync_file="/tmp/sync-ostree-commits.log"
@@ -513,7 +510,6 @@ sync_subcloud_metadata() {
     #
     # When this is invoked, we have the following in place (via ansible):
     #
-    #   - "${METADATA_SYNC_DIR}"/ostree-metadata-commits.central
     #   - "${METADATA_SYNC_DIR}"/metadata
     #       - is a direct copy of the system controller /opt/software/medatada directory
     #       - we use this to ensure that the metadata files exist in the subcloud
@@ -539,11 +535,22 @@ sync_subcloud_metadata() {
     # 10) Remove the temporary metadata directory
     #
     local sw_version=${1:-$SW_VERSION}
+    local sc_sw_version=${2:-$SC_SW_VERSION}
     local metadata_file metadata_tmp_dir
     local central_metadata_file central_metadata_files
     local subcloud_metadata_files
     local last_subcloud_sw_version="" all_unique_releases
     local reason="" source="" usm_state=""
+
+    # software parameter provided by prestage
+    if [ -z "${sw_version}" ]; then
+        die "sync_subcloud_metadata: Prestage software version not specified"
+    fi
+
+    # System Controller software version parameter
+    if [ -z "${sc_sw_version}" ]; then
+        die "sync_subcloud_metadata: System Controller software version not specified"
+    fi
 
     # Configure and sync ostree feed repo
     # This will be able to ostree at the same level between System Controller and subcloud.
@@ -561,9 +568,19 @@ sync_subcloud_metadata() {
     rm -Rf ${SOFTWARE_DIR}/rel-${sw_version}.*
     find ${METADATA_DIR} -type f -name "*${sw_version}*" | xargs rm -f
 
-    # Gets metadata files for both central and subcloud
-    central_metadata_files=$(find_metadata_files_for_release_sorted \
+    # Gets metadata files for central
+    # For N-1 sw_version, there is not state restriction, so get all
+    # metadata files.
+    # For N sw_version, only get metadata files in deployed state.
+    if version_le "${sw_version}" "${sc_sw_version}"; then
+        central_metadata_files=$(find_metadata_files_for_release_sorted \
+        "${sw_version}" "${METADATA_SYNC_METADATA_DIR}")
+    else
+        central_metadata_files=$(find_metadata_files_for_release_sorted \
         "${sw_version}" "${METADATA_SYNC_METADATA_DIR}" | grep deployed)
+    fi
+
+    # Gets metadata files for subcloud in deployed or unavailable state
     subcloud_metadata_files=$(find_metadata_files_for_release_sorted \
         "${sw_version}" "${metadata_tmp_dir}" | egrep -E "deployed|unavailable")
 
@@ -663,6 +680,11 @@ main() {
                 shift
                 SW_VERSION=$1
                 export SW_VERSION
+                ;;
+            -v|--sc-sw-version)
+                shift
+                SC_SW_VERSION=$1
+                export SC_SW_VERSION
                 ;;
             get-commits)
                 shift

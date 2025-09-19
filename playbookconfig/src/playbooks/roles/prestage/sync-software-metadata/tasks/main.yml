@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -62,15 +62,55 @@
   command: ostree --repo={{ ostree_repo_release_feed }} rev-parse {{ ostree_rev }}
   register: ostree_commit_subcloud
 
-- name: Gather system controller deployed software list
+- name: Gather software list for release {{ software_version }} deployed state
   shell: software list --release {{ software_version }} --state deployed | \
          grep {{ software_version }} | sed 's/ //g;'
-  register: system_controller_software_list
+  register: system_controller_software_list_deployed
   delegate_to: localhost
 
-- name: Show system controller deployed software list for release {{ software_version }}
+- name: Override software list if software version {{ software_version }} is an N-1 release
+  shell: software list --release {{ software_version }} | \
+         grep {{ software_version }} | sed 's/ //g;'
+  register: system_controller_software_list_override
+  delegate_to: localhost
+  when:
+    - software_version is version(system_controller_current_sw_version.stdout, '<')
+    - prestage_source == 'local'
+
+# For prestage for-sw-deploy we don't want to prestage an N-1 release to an N subcloud
+- name: Fail if prestage software version is lower than current subcloud software version
+  fail:
+    msg: >-
+      The specified software version {{ software_version }} is lower than the
+      current subcloud software version {{ host_software_version }}.
+      Please provide a valid software version for prestaging.
+  when:
+    - software_version is version(host_software_version, '<')
+    - prestage_source == 'remote'
+
+# If the software_version is an N-1 release and there is no software found
+# for that release, we should fail the playbook.
+- name: Fail if no software found for N-1 release
+  fail:
+    msg: >-
+      No software found for N-1 release version {{ software_version }}.
+      Please provide a valid software version for prestaging.
+  when:
+    - system_controller_software_list_override.skipped is not defined
+    - (system_controller_software_list_override.stdout_lines | default([]) | length) == 0
+
+- name: Build system controller software list for release {{ software_version }}
+  set_fact:
+    system_controller_software_list:
+      stdout_lines: >-
+        {{ (system_controller_software_list_override.stdout_lines
+             if (system_controller_software_list_override is defined
+                 and system_controller_software_list_override.stdout_lines is defined)
+             else system_controller_software_list_deployed.stdout_lines) }}
+
+- name: Show system controller software list for release {{ software_version }}
   debug:
-    var: system_controller_software_list.stdout
+    var: system_controller_software_list.stdout_lines
 
 - name: Extract release part from system controller release list
   set_fact:
