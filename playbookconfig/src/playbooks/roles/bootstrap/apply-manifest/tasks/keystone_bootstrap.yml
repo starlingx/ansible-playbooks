@@ -41,6 +41,23 @@
 - name: Convert keystone variables to a dictionary
   set_fact:
     keystone_var_dict: "{{ keystone_variables.stdout | from_yaml }}"
+  no_log: true
+
+- block:
+  - name: Retrieve the keystone password
+    shell: >-
+      grep -h "platform::client::params::admin_password:" runtime.yaml | awk '{print $2}'
+    args:
+      chdir: /tmp/puppet/hieradata
+    register: keystone_admin_password
+    no_log: true
+
+  - name: Update the keystone password
+    set_fact:
+      keystone_var_dict: "{{ keystone_var_dict |
+        combine({'platform::client::params::admin_password': keystone_admin_password.stdout}) }}"
+    no_log: true
+  when: mode == 'restore'
 
 - name: Create database connection string
   set_fact:
