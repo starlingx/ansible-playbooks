@@ -21,3 +21,8 @@ registry_to_fact:
   k8s.gcr.io: k8s_registry
   quay.io: quay_registry
   registry.k8s.io: registryk8s_registry
+
+# Used by auto-restore to avoid logging into external docker registries
+# when the system has no external connectivity. All images should be
+# pulled from the local registry.
+skip_registry_login: false
