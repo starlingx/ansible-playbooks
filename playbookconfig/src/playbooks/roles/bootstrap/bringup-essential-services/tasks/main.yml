@@ -162,6 +162,7 @@
     args:
       warn: false
     when: bootstrap_registry_filesystem
+    ignore_errors: true
 
   - name: Populate local image registry
     import_role:
