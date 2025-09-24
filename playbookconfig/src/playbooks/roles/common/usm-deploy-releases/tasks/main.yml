@@ -14,26 +14,27 @@
 #       * For RR: Lock the controller before deploy host and unlock after
 #         deploy host
 #
+#   NOTE: Instead of using SOFTWARE_URL, software CLI is using SYSTEM_URL,
+#   which is already used by sysinv. To still authenticate with the
+#   token, we need to explicitly provide --software-url.
+#
 
-
-# TODO(srana): Running source /etc/platform/openrc for each command could be time
-# consuming due to the keyring lookup. We should look into optimizing this.
 - name: Enable local installation mode
   shell: |
     {{ source_env_command }}
-    software install-local
+    software --software-url {{ software_url }} install-local
 
 - name: Software upload patches
   shell: |
     {{ source_env_command }}
-    software upload "{{ patches_dir }}/{{ item }}"
+    software --software-url {{ software_url }} upload "{{ patches_dir }}/{{ item }}"
   with_items: "{{ patches }}"
 
 - block:
   - name: Deploy precheck
     shell: |
       {{ source_env_command }}
-      software deploy precheck "{{ target_release_id }}"
+      software --software-url {{ software_url }} deploy precheck "{{ target_release_id }}"
     register: deploy_pre_check
     retries: 10
     delay: 30
@@ -59,13 +60,14 @@
 - name: Deploy start
   shell: |
     {{ source_env_command }}
-    software deploy start {{ cli_confirmation | default('--yes') }} \
+    software --software-url {{ software_url }} deploy start \
     {{ force | default('') }} {{ target_release_id }}
 
 - name: Wait for deploy start
   shell: |
     {{ source_env_command }}
-    software deploy show | grep "{{ target_sw_version }}" | awk '{print $8}'
+    software --software-url {{ software_url }} deploy show | \
+    grep "{{ target_sw_version }}" | awk '{print $8}'
   register: check_deploy_start
   retries: "{{ deploy_start_retries }}"
   delay: "{{ deploy_start_delay }}"
@@ -93,12 +95,14 @@
 - name: Deploy host
   shell: |
     {{ source_env_command }}
-    software deploy host controller-0 {{ cli_confirmation | default('--yes') }}
+    software --software-url {{ software_url }} deploy host \
+    controller-0 {{ cli_confirmation | default('--yes') }}
 
 - name: Wait for deploy host
   shell: |
     {{ source_env_command }}
-    software deploy show | grep "{{ target_sw_version }}" | awk '{print $8}'
+    software --software-url {{ software_url }} deploy show | \
+    grep "{{ target_sw_version }}" | awk '{print $8}'
   register: check_deploy_host
   retries: "{{ deploy_retries }}"
   delay: "{{ deploy_delay }}"
@@ -132,12 +136,13 @@
 - name: Deploy activate
   shell: |
     {{ source_env_command }}
-    software deploy activate {{ cli_confirmation | default('--yes') }}
+    software --software-url {{ software_url }} deploy activate
 
 - name: Wait for deploy activate
   shell: |
     {{ source_env_command }}
-    software deploy show | grep "{{ target_sw_version }}" | awk '{print $8}'
+    software --software-url {{ software_url }} deploy show | \
+    grep "{{ target_sw_version }}" | awk '{print $8}'
   register: check_deploy_activate
   retries: "{{ deploy_retries }}"
   delay: "{{ deploy_delay }}"
@@ -158,12 +163,13 @@
 - name: Issue software deploy complete
   shell: |
     {{ source_env_command }}
-    software deploy complete {{ cli_confirmation | default('--yes') }}
+    software --software-url {{ software_url }} deploy complete
 
 - name: Wait for deploy complete
   shell: |
     {{ source_env_command }}
-    software deploy show | grep "{{ target_sw_version }}" | awk '{print $8}'
+    software --software-url {{ software_url }} deploy show | \
+    grep "{{ target_sw_version }}" | awk '{print $8}'
   register: check_deploy_complete
   retries: "{{ deploy_retries }}"
   delay: "{{ deploy_delay }}"
@@ -184,14 +190,16 @@
 - name: Delete deployment
   shell: |
     {{ source_env_command }}
-    software deploy delete
+    software --software-url {{ software_url }} deploy delete \
+    {{ cli_confirmation | default('--yes') }}
   register: check_deploy_delete
   failed_when: '"Deploy deleted with success" not in check_deploy_delete.stdout'
 
 - name: Gather release deploy states
   shell: |
     {{ source_env_command }}
-    software show {{ item }} | awk '$2 == "state" { print $4 }'
+    software --software-url {{ software_url }} show {{ item }} | \
+    awk '$2 == "state" { print $4 }'
   register: applied_releases_deploy_state
   with_items: "{{ release_ids }}"
   failed_when: false
