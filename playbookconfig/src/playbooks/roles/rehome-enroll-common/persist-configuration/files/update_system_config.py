@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -34,6 +34,7 @@ CONF.optionxform = str
 
 RECONFIGURE_NETWORK = False
 RECONFIGURE_SERVICE = False
+SOURCE_COMMAND = 'source /etc/platform/openrc && env'
 
 
 def print_with_timestamp(*args, **kwargs):
@@ -52,21 +53,19 @@ def wait_for_file(file_path, timeout=300, interval=5):
     print_with_timestamp(f"File found: {file_path}")
 
 
-# CgtsClient class to handle API interactions
-class CgtsClient(object):
-    SYSINV_API_VERSION = 1
-
+class BaseClient(object):
     def __init__(self):
         self.conf = {}
-        self._sysinv = None
+        self.auth_url = os.getenv("OS_AUTH_URL")
+        self.auth_token = os.getenv("OS_TOKEN")
+        self.system_url = os.getenv("SYSTEM_URL")
+        if not (self.auth_token and self.auth_url):
+            self.source_credentials()
 
-        # Loading credentials and configurations from environment variables
-        # typically set in OpenStack
-        source_command = 'source /etc/platform/openrc && env'
-
+    def source_credentials(self):
         with open(os.devnull, "w") as fnull:
             proc = subprocess.Popen(
-                ['bash', '-c', source_command],
+                ['bash', '-c', SOURCE_COMMAND],
                 stdout=subprocess.PIPE, stderr=fnull,
                 universal_newlines=True)
 
@@ -78,62 +77,67 @@ class CgtsClient(object):
 
         proc.communicate()
 
+
+# CgtsClient class to handle API interactions
+class CgtsClient(BaseClient):
+    SYSINV_API_VERSION = 1
+
+    def __init__(self):
+        super().__init__()
+        self._sysinv = None
+
     @property
     def sysinv(self):
         if not self._sysinv:
-            self._sysinv = cgts_client.get_client(
-                self.SYSINV_API_VERSION,
-                os_username=self.conf['username'],
-                os_password=self.conf['password'],
-                os_auth_url=self.conf['auth_url'],
-                os_project_name=self.conf['project_name'],
-                os_project_domain_name=self.conf['project_domain_name'],
-                os_user_domain_name=self.conf['user_domain_name'],
-                os_region_name=self.conf['region_name'],
-                os_service_type='platform',
-                os_endpoint_type='internal')
+            if self.auth_token and self.system_url:
+                self._sysinv = cgts_client.get_client(
+                    str(self.SYSINV_API_VERSION),
+                    os_auth_token=self.auth_token,
+                    system_url=self.system_url,
+                )
+            else:
+                self._sysinv = cgts_client.get_client(
+                    self.SYSINV_API_VERSION,
+                    os_username=self.conf['username'],
+                    os_password=self.conf['password'],
+                    os_auth_url=self.conf['auth_url'],
+                    os_project_name=self.conf['project_name'],
+                    os_project_domain_name=self.conf['project_domain_name'],
+                    os_user_domain_name=self.conf['user_domain_name'],
+                    os_region_name=self.conf['region_name'],
+                    os_service_type='platform',
+                    os_endpoint_type='internal'
+                )
         return self._sysinv
 
 
-class OpenStackClient:
+class OpenStackClient(BaseClient):
     """Client to interact with OpenStack Barbican."""
 
     def __init__(self) -> None:
-        self.conf = {}
+        super().__init__()
         self._session = None
         self._barbican = None
-
-        # Loading credentials and configurations from environment variables
-        # typically set in OpenStack
-        source_command = 'source /etc/platform/openrc && env'
-
-        with open(os.devnull, "w") as fnull:
-            proc = subprocess.Popen(
-                ['bash', '-c', source_command],
-                stdout=subprocess.PIPE,
-                stderr=fnull,
-                universal_newlines=True,
-            )
-
-        # Strip the configurations starts with 'OS_' and change the value to lower
-        for line in proc.stdout:
-            key, _, value = line.partition("=")
-            if key.startswith("OS_"):
-                self.conf[key[3:].lower()] = value.strip()
-
-        proc.communicate()
 
     def _get_new_keystone_session(self, conf):
         """Create a new keystone session."""
         try:
-            auth = v3.Password(
-                auth_url=conf["auth_url"],
-                username=conf["username"],
-                password=conf["password"],
-                user_domain_name=conf["user_domain_name"],
-                project_name=conf["project_name"],
-                project_domain_name=conf["project_domain_name"],
-            )
+            if self.auth_token and self.auth_url:
+                auth = v3.Token(
+                    auth_url=self.auth_url,
+                    token=self.auth_token,
+                    project_name=os.getenv("OS_PROJECT_NAME", "admin"),
+                    project_domain_name=os.getenv("OS_PROJECT_DOMAIN_NAME", "Default"),
+                )
+            else:
+                auth = v3.Password(
+                    auth_url=conf["auth_url"],
+                    username=conf["username"],
+                    password=conf["password"],
+                    user_domain_name=conf["user_domain_name"],
+                    project_name=conf["project_name"],
+                    project_domain_name=conf["project_domain_name"],
+                )
         except KeyError as e:
             print_with_timestamp(f"Configuration key missing: {e}")
             sys.exit(1)

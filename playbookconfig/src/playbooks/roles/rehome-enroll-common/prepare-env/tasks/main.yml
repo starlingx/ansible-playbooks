@@ -15,8 +15,7 @@
 
 - name: Get subcloud active controller
   shell: |
-    {{ source_env_command }}
-    system host-show $(cat /etc/hostname) --column hostname --format value
+    cat /etc/hostname
   register: controller_name
 
 - name: Check if admin network parameters are defined
@@ -244,10 +243,9 @@
     docker_https_proxy: "{{ docker_https_proxy | default('undef') }}"
     docker_no_proxy: "{{ docker_no_proxy | default([]) }}"
 
-- name: Query system_mode
+- name: Get system_mode
   shell: |
-    {{ source_env_command }}
-    system show | awk '$2 == "system_mode" { print $4 }'
+    source /etc/platform/platform.conf; echo $system_mode
   register: current_system_mode
 
 - name: Set system mode based on the current config
@@ -406,10 +404,15 @@
   set_fact:
     docker_no_proxy_combined: "{{ default_no_proxy | union(docker_no_proxy) | ipwrap | unique }}"
 
-- name: Get management interface of controller-0
+- name: Get interface network list of controller-0
   shell: |
     {{ source_env_command }}
-    system interface-network-list controller-0 | awk '$8 == "mgmt" { print $6 }'
+    system interface-network-list controller-0
+  register: interface_network_list_c0
+
+- name: Get management interface of controller-0
+  shell: |
+    echo "{{ interface_network_list_c0.stdout }}" | awk '$8 == "mgmt" { print $6 }'
   register: controller_0_management_interface_result
 
 - name: Get management interface of controller-1 if the subcloud is not simplex
@@ -421,10 +424,15 @@
 
 - block:
 
-  - name: Get previous subcloud admin network name
+  - name: Get network list
     shell: |
       {{ source_env_command }}
-      system network-list | awk '$8 == "admin" { print $6 }'
+      system network-list
+    register: system_network_list
+
+  - name: Get previous subcloud admin network name
+    shell: |
+      echo "{{ system_network_list.stdout }}" | awk '$8 == "admin" { print $6 }'
     register: subcloud_admin_network_name
 
   - name: Get ifname of the existing admin network of controller-0
@@ -464,21 +472,24 @@
 
   - name: Get existing admin address pool
     shell: |
-      {{ source_env_command }}
-      system network-list | awk '$8 == "admin" { print $12 }'
+      echo "{{ system_network_list.stdout }}" | awk '$8 == "admin" { print $12 }'
     register: admin_address_pool_uuid
+
+  - name: Get address pool list
+    shell: |
+      {{ source_env_command }}
+      system addrpool-list
+    register: address_pool_list
 
   - name: Get existing primary admin floating address
     shell: |
-      {{ source_env_command }}
-      system addrpool-list |
+      echo "{{ address_pool_list.stdout }}" |
       awk ' $2 == "{{ admin_address_pool_uuid.stdout }}" && $14 == "{{ admin_floating_address }}" '
     register: check_existing_admin_floating_address_primary
 
   - name: Get existing primary admin gateway
     shell: |
-      {{ source_env_command }}
-      system addrpool-list |
+      echo "{{ address_pool_list.stdout }}" |
       awk ' $2 == "{{ admin_address_pool_uuid.stdout }}" && $20 == "{{ admin_gateway_address_primary }}" '
     register: check_existing_admin_gateway_primary
 
@@ -514,15 +525,13 @@
     - block:
       - name: Get existing secondary admin floating address
         shell: >-
-          {{ source_env_command }}
-          system addrpool-list |
+          echo "{{ address_pool_list.stdout }}" |
           awk ' $2 == "{{ admin_addrpool_secondary }}" && $14 == "{{ admin_floating_address_secondary }}" '
         register: check_existing_admin_floating_address_secondary
 
       - name: Get existing secondary admin gateway
         shell: >-
-          {{ source_env_command }}
-          system addrpool-list |
+          echo "{{ address_pool_list.stdout }}" |
           awk ' $2 == "{{ admin_addrpool_secondary }}" && $20 == "{{ admin_gateway_address_secondary }}" '
         register: check_existing_admin_gateway_secondary
 

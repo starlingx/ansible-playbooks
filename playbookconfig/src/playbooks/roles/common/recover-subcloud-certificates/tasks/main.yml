@@ -9,24 +9,28 @@
 #   a long period of time
 #
 
-- name: Get system mode
-  shell: source /etc/platform/platform.conf; echo $system_mode
-  register: system_mode_result
 
-- name: Get node type
-  shell: source /etc/platform/platform.conf; echo $nodetype
-  register: node_type_result
-
-- name: Get software version
-  shell: source /etc/platform/platform.conf; echo $sw_version
-  register: sw_version_result
+- name: Source platform.conf and get variables
+  shell: |
+    source /etc/platform/platform.conf
+    printf '{"system_mode": "%s", "nodetype": "%s", "sw_version": "%s"}' \
+      "$system_mode" "$nodetype" "$sw_version"
+  register: platform_conf_result
 
 - set_fact:
-    is_controller: "{{ true if node_type_result.stdout == 'controller' else false }}"
+    system_mode_result: "{{ platform_dict.system_mode }}"
+    node_type_result: "{{ platform_dict.nodetype }}"
+    sw_version_result: "{{ platform_dict.sw_version }}"
+  vars:
+    platform_dict: "{{ platform_conf_result.stdout | from_json }}"
 
 - set_fact:
-    is_compute: "{{ true if node_type_result.stdout == 'worker' else false }}"
+    is_controller: "{{ true if node_type_result == 'controller' else false }}"
+    is_compute: "{{ true if node_type_result == 'worker' else false }}"
 
+# When source_env_command is an empty string, we already sourced credentials
+# before, so we already know we're on the active controller and don't need to
+# check again
 - name: Check if current controller is the active controller
   block:
   - name: Check if admin credentials can be sourced
@@ -39,7 +43,7 @@
         {{ true if 'stdout' in active_controller and active_controller.stdout
         | length == 0 else false }}
 
-  when: is_controller
+  when: is_controller and (source_env_command is defined and source_env_command | length > 0)
 
 - name: Verify certificate expiration status
   import_tasks: verify-certificate-expiration-status.yml
