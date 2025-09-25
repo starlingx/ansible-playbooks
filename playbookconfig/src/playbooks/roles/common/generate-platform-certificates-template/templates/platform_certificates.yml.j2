@@ -66,12 +66,8 @@ items:
     duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
     ipAddresses:
     - "{{ oam_ip_primary }}"
-    - "{{ management_floating_ip_primary }}"
 {% if oam_ip_secondary is truthy %}
     - "{{ oam_ip_secondary }}"
-{% endif %}
-{% if management_floating_ip_secondary is truthy %}
-    - "{{ management_floating_ip_secondary }}"
 {% endif %}
     issuerRef:
       kind: ClusterIssuer
