@@ -9,6 +9,7 @@
 #
 
 # Create a temporary directory and copy FluxCD resource files for kubectl.
+
 - name: Set up FluxCD resource files
   block:
   - name: Create FluxCD resource directory
@@ -36,11 +37,18 @@
       failed_when: false
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
+      when: fluxcd_namespace_created is not defined or not fluxcd_namespace_created|bool
 
     - name: Fail if creating namespace fails
       fail:
         msg: "Failed to create {{ fluxcd_namespace }} namespace. Error: {{ create_fluxcd_ns.stderr }}"
-      when: create_fluxcd_ns.rc !=0 and create_fluxcd_ns.stderr is not search('AlreadyExists')
+      when: (fluxcd_namespace_created is defined and not fluxcd_namespace_created|bool)
+            or (
+              create_fluxcd_ns.rc is defined and
+              create_fluxcd_ns.rc != 0 and
+              create_fluxcd_ns.stderr is defined and
+              create_fluxcd_ns.stderr is not search('AlreadyExists')
+            )
 
     # Label FluxCD namespace with PSAC labels
     - name: Label namespace for FluxCD with PSAC labels
@@ -139,16 +147,6 @@
       when: fluxcd_get_pods.stderr is search('No resources found')
 
     - block:
-        - name: Check if Flux Helm release already exists
-          command: helm status -n flux-helm {{ flux_helm_release_name }}
-          retries: "{{ fluxcd_retries }}"
-          delay: "{{ delay_time }}"
-          register: fluxcd_release_status
-          until: fluxcd_release_status.rc == 0
-          failed_when: false
-          environment:
-            KUBECONFIG: /etc/kubernetes/admin.conf
-
         # This will scale the deployment up, but will also migrate FluxCD over to a Helm release
         - name: Migrate Flux to Helm-managed resources
           command: helm upgrade
@@ -168,7 +166,8 @@
           until: migrate_helm_release.rc == 0
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
-          when: fluxcd_release_status.rc == 1
+          when: fluxcd_helm_release_not_installed is defined
+                and fluxcd_helm_release_not_installed|bool
 
         - name: Upgrade Flux controllers for restore/upgrades over existing deployment
           command: helm upgrade
