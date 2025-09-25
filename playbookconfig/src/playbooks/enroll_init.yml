@@ -75,70 +75,54 @@
     - block:
         - name: Set facts for enroll-init IPMI monitoring
           set_fact:
-            # Pattern used by ipmi_sel_event_monitor.py, called by ipmi_monitor role
-            ipmi_event_pattern: "{{ ipmi_event_pattern | default('Unknown #0x01 |  | Asserted') }}"
-            # Notes on failure handling:
-            # - If a stage has only a single failure condition, specify the message in
-            #   'failure_msg'.
-            # - If a stage can fail for multiple reasons, use 'failure_map' instead.
-            #   In that case, each failure code must be listed with its corresponding
-            #   specific error message.
             enroll_init_stages:
               - name: "Factory setup"
                 timeout: "{{ factory_setup_timeout | default(90) }}"
-                success_data: "{{ factory_setup_complete_ipmi_data | default('ffffe0') }}"
-                failure_data: "{{ factory_setup_failed_ipmi_data | default('ffffe1') }}"
-                failure_msg: "Factory setup failed, factory-install stage final file not found"
+                success_code: "cc10e0"
+                failure_codes:
+                  cc10e1: "Factory setup failed, factory-install completion flag not found"
 
               - name: "Manual CA certificates check"
                 timeout: "{{ manual_cacerts_timeout | default(20) }}"
-                success_data: "{{ cert_manual_ok_ipmi_data | default('ffffe9') }}"
-                failure_data: "{{ cert_manual_fail_ipmi_values | default('ffffec,ffffed,ffffee') }}"
-                failure_map:
-                  ffffec: "Kubernetes Root CA or Front Proxy CA expired"
-                  ffffed: "ETCD Root CA is expired"
-                  ffffee: "ETCD Root CA, Kubernetes Root CA and Front Proxy CA are expired"
+                success_code: "cc10e7"
+                failure_codes:
+                  cc10e8: "Kubernetes Root CA or Front Proxy CA expired"
+                  cc10e9: "ETCD Root CA is expired"
+                  cc10ea: "ETCD Root CA, Kubernetes Root CA and Front Proxy CA are expired"
 
               - name: "Kubernetes leaf server/client certificates check"
                 timeout: "{{ k8s_leaf_certs_timeout | default(300) }}"
-                success_data: "{{ cert_leaf_ok_ipmi_data | default('ffffe2') }}"
-                failure_data: "{{ cert_leaf_fail_ipmi_values | default('ffffe3,fffff0,ffffe8,ffffef') }}"
-                failure_map:
-                  ffffe3: "Kubernetes leaf server/client certificates recovery failed. Manual recovery is required"
-                  fffff0: "Kubectl failed to reply within timeout. Manual recovery is required"
-                  ffffe8: "Kubernetes pods failed to reach Running state after restart"
-                  ffffef: "RESTAPI or Docker registry certs did not renew within timeout"
+                success_code: "cc10e2"
+                failure_codes:
+                  cc10e3: "Kubernetes leaf server/client certificates recovery failed. Manual recovery is required"
+                  cc10e4: "Kubectl failed to reply within timeout. Manual recovery is required"
+                  cc10e5: "Kubernetes pods failed to reach Running state after restart"
+                  cc10e6: "RESTAPI or Docker registry certs did not renew within timeout"
 
               - name: "Platform system-local-ca certificate check"
                 timeout: "{{ slocal_cert_timeout | default(20) }}"
-                success_data: "{{ cert_slocal_ok_ipmi_data | default('ffffea') }}"
-                failure_data: "{{ cert_slocal_fail_ipmi_data | default('ffffeb') }}"
-                failure_msg: "Platform system-local-ca certificate is expired. Manual recovery is required"
+                success_code: "cc10eb"
+                failure_codes:
+                  cc10ec: "Platform system-local-ca certificate is expired. Manual recovery is required"
 
               - name: "Platform cloud-init"
                 timeout: "{{ platform_cloudinit_timeout | default(300) }}"
-                success_data: "{{ platform_cloudinit_complete_ipmi_data | default('ffffe4') }}"
-                failure_data: "{{ platform_cloudinit_failed_ipmi_data | default('ffffe5') }}"
-                failure_msg: "Platform cloud-init configuration failed during execution"
+                success_code: "cc10ed"
+                failure_codes:
+                  cc10ee: "Platform cloud-init configuration failed during execution"
 
               - name: "Custom cloud-init"
                 timeout: "{{ custom_cloudinit_timeout | default(300) }}"
-                success_data: "{{ custom_cloudinit_complete_ipmi_data | default('ffffe6') }}"
-                failure_data: "{{ custom_cloudinit_failed_ipmi_data | default('ffffe7') }}"
-                failure_msg: "Custom cloud-init scripts failed during execution"
+                success_code: "cc10ef"
+                failure_codes:
+                  cc10d0: "Custom cloud-init scripts failed during execution"
 
-        - name: "Monitor enroll-init stages"
+        - name: Monitor enroll-init stages
           include_role:
             name: enroll-subcloud/monitor-enroll-init-ipmi
-          loop: "{{ enroll_init_stages }}"
-          loop_control:
-            label: "{{ item.name }}"
           vars:
             ipmi_initial_event_id: "{{ initial_sel_id }}"
-            ipmi_check_interval: 15
-
-        - debug:
-            msg: "Enroll-init IPMI monitoring completed successfully"
+            ipmi_check_interval: 5
 
       when: ipmi_monitor_enabled
 
