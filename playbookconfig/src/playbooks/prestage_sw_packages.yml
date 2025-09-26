@@ -21,6 +21,7 @@
     prestage_type: "packages"
     prestage_reason: for_install
     platform_backup_dir: /opt/platform-backup
+    for_install_flag_file: ".ostree_rsync_completed"
 
   roles:
     - role: prestage/prepare-env

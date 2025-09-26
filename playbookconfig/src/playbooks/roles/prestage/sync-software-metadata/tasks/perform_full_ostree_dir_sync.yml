@@ -18,6 +18,14 @@
 
 - name: Perform full ostree repo sync
   block:
+
+  # We need to remove the existing feed directory, then create a new one for
+  # the prestaged release.
+  - name: Remove feed directory from subcloud to ensure a clean sync
+    file:
+      path: "{{ release_feed }}"
+      state: absent
+
   # It's necessary to temporarily change the owner to sysadmin so that
   # the system controller can push the files to the subcloud, since the files
   # are in the folders only the root can access but the synchronize only
