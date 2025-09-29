@@ -13,7 +13,8 @@
   command: >
     /usr/local/bin/ipmi_sel_event_monitor.py
     --config-file "{{ rvmc_config_file }}"
-    --pattern "{{ ipmi_event_pattern }}"
+    --sensor-type "{{ ipmi_sensor_type }}"
+    --sensor-number "{{ ipmi_sensor_number }}"
     --data-values "{{ ipmi_data_values }}"
     --interval {{ ipmi_check_interval }}
     --timeout {{ ipmi_timeout }}

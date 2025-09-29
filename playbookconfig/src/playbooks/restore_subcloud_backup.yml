@@ -24,11 +24,13 @@
         auto_restore_mode: "{{ auto_restore_mode | default('') }}"
         restore_timeout: "{{ restore_timeout | default(3600) }}"
         ipmi_event_pattern: "{{ ipmi_install_complete_pattern | default('Unknown #0x01 |  | Asserted') }}"
-        restore_complete_ipmi_data: "{{ restore_complete_ipmi_data | default('fffffd') }}"
-        restore_failed_ipmi_data: "{{ restore_failed_ipmi_data | default('fffffc') }}"
-        restore_failed_backup_missing_ipmi_data: "{{ restore_failed_backup_missing_ipmi_data | default('fffffb') }}"
-        restore_failed_images_missing_ipmi_data: "{{ restore_failed_images_missing_ipmi_data | default('fffffa') }}"
-        restore_failed_both_missing_ipmi_data: "{{ restore_failed_both_missing_ipmi_data | default('fffff9') }}"
+        ipmi_sensor_type: "System Event"
+        ipmi_sensor_number: "CC"
+        restore_complete_ipmi_data: "{{ restore_complete_ipmi_data | default('cc10f1') }}"
+        restore_failed_ipmi_data: "{{ restore_failed_ipmi_data | default('cc10f2') }}"
+        restore_failed_backup_missing_ipmi_data: "{{ restore_failed_backup_missing_ipmi_data | default('cc10f3') }}"
+        restore_failed_images_missing_ipmi_data: "{{ restore_failed_images_missing_ipmi_data | default('cc10f4') }}"
+        restore_failed_both_missing_ipmi_data: "{{ restore_failed_both_missing_ipmi_data | default('cc10f5') }}"
 
     # Auto or factory restore are triggered automatically inside the subcloud, so we just
     # need to monitor the IPMI SEL logs and wait for the restore to complete or fail
@@ -47,7 +49,7 @@
 
         - name: Waiting {{ restore_timeout }} seconds for {{ auto_restore_mode }} restore complete IPMI SEL event
           include_role:
-            name: common/ipmi_monitor
+            name: common/ipmi-monitor
           vars:
             ipmi_data_values: |
               {{ restore_complete_ipmi_data }},
