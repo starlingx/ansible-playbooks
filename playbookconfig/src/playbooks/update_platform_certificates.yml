@@ -31,6 +31,8 @@
 
 - hosts: localhost
   gather_facts: no
+  vars_files:
+    - vars/common/main.yml
   tasks:
     - name: Fail if target_list is not defined
       fail:
@@ -68,6 +70,7 @@
   gather_facts: no
   vars_files:
   - host_vars/update-platform-certificates/default.yml
+  - vars/common/main.yml
 
   # for mode=check the output is too messy with free strategy
   strategy: "{{ 'linear' if mode == 'check' else 'free' }}"
@@ -82,6 +85,8 @@
 # for it to clear, running it as a last step. No side effects of doing this.
 - hosts: localhost
   gather_facts: no
+  vars_files:
+    - vars/common/main.yml
   tasks:
     - block:
       # If 'localhost' wasn't included in the target_list, we need the
