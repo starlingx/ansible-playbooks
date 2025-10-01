@@ -6,6 +6,9 @@ metadata:
   namespace: rook-ceph
 data:
   provision.sh: |-
+    #!/bin/bash
+    set -x
+
     if [ "${MON_HOST}"x == ""x ]; then
       MON_HOST=$(echo ${ROOK_MONS} | sed 's/[a-z]\+=//g')
     fi
@@ -23,6 +26,7 @@ data:
 
   common.sh: |-
     #!/bin/bash
+    set -x
 
     TIME_AFTER_SCALE=$([ "${RECOVERY_TYPE}" == "SINGLE_HOST" ] && echo "1s" || echo "10s")
     TIME_WAIT_DELETE=$([ "${RECOVERY_TYPE}" == "SINGLE_HOST" ] && echo "1s" || echo "30s")
@@ -182,13 +186,13 @@ data:
       exec_k8s_cmd kubectl -n rook-ceph patch configmap rook-ceph-recovery --type=merge -p "$patch"
     }
 
-    # When a failure occurs, the status is changed to 'recovery failed'
+    # When a failure occurs, the status is changed to 'recovery-failed'
     # and the reason is set in the 'failure' field.
     fail() {
       if ! check_status "recovery-failed"; then
         failure="$@"
-        failure_escaped=$(printf '%s' "$failure" | sed 's/["\\]/\\&/g')
-        exec_k8s_cmd kubectl -n rook-ceph patch configmap rook-ceph-recovery -p "{\"data\": {\"failure\": \"$failure_escaped\", \"status\": \"recovery-failed\"}}"
+        json_payload=$(jq -n --arg failure "$failure" --arg status "recovery-failed" '{data: {failure: $failure, status: $status}}')
+        exec_k8s_cmd kubectl -n rook-ceph patch configmap rook-ceph-recovery --patch "$json_payload"
       fi
       exit 0
     }
@@ -399,7 +403,7 @@ data:
       fi
 
       # Change the configmap and secret with only the host data to have quorum.
-      exec_k8s_cmd kubectl -n rook-ceph patch configmap rook-ceph-mon-endpoints -p '{"data": {"data": "'"${MON_NAME}"'='"${mon_host_addr}"':6789"}}'
+      exec_k8s_cmd kubectl -n rook-ceph patch configmap rook-ceph-mon-endpoints -p '{"data": {"data": "'"${MON_NAME}"'='"${MON_HOST_ADDR}"':6789"}}'
       exec_k8s_cmd kubectl -n rook-ceph patch secret rook-ceph-config -p '{"stringData": {"mon_host": "'"${mon_host}"'", "mon_initial_members": "'"${MON_NAME}"'"}}'
 
       # If the host only has OSD, it means it needs to "steal" the monitor from another host.
@@ -415,7 +419,7 @@ data:
         rm -rf /var/lib/rook/mon-float/mon-float
       fi
 
-      kubectl_scale_deployment mon=${MON_NAME} 1
+      kubectl_scale_deployment app=rook-ceph-mon mon=${MON_NAME} 1
     fi
 
     exec_ceph_cmd ceph -s
