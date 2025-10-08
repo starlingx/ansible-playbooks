@@ -122,10 +122,11 @@
       #
       # Use the existing ostree_metadata_commits_central file if:
       # 1) It exists, and
-      # 2) There are no new commits. Compare last line of the ostree_metadata_commits_central
-      #    file against current ostree repo commit.
+      # 2) There are no new commits. Compare last commit of the
+      #    ostree_metadata_commits_central file against current ostree repo commit.
+      #    If the commit is empty it is ignored.
       # Otherwise, we generate a new ostree_metadata_commits_central file using the
-      # get-commits target to our script.
+      # get-commits target to our script for provided software version.
       #
       # Get the commits from the metadata, in the same way that software list does,
       # avoiding ambiguous queries.
@@ -134,14 +135,30 @@
       # in parallel on system controller. flock behaviour:
       #   - acquire lock on /tmp/ostree_metadata_commits_central.lock
       #   - the timeout is long just to ensure we never deadlock for any reason
+      #
+      # The generated ostree_metadata_commits_central file contains the list of
+      # metadata files and their commits for the given software version in this format:
+      # metadata_file_path:<commit hash>. For example:
+      #    /opt/software/metadata/deployed/component-MM.mm.0:<commit hash 1>
+      #    /opt/software/metadata/deployed/component-MM.mm.1:<commit hash 2>
+      #
+      # When the N System Controller has N-1 patches, the metadata files for the N-1
+      # patches may not have a commit defined. In this case, the commit field is empty.
+      # For example:
+      #    /opt/software/metadata/unavailable/component-MM.mm.100:<commit hash 1>
+      #    /opt/software/metadata/unavailable/component-MM.mm.200:
+      #
+      # The empty commit is to determine if the Unavailable patches and related files
+      # should be synced to the subcloud.
+      #
       shell: |
         exec 3>/tmp/ostree_metadata_commits_central.lock
         flock --exclusive --timeout 180 3 || \
         { echo "ERROR: $? - flock failed while trying to get the commits."; exit 1; }
         if [ ! -f "{{ ostree_metadata_commits_central }}" ] \
           || ! diff -q <(echo {{ ostree_commit_system_controller.stdout }}) \
-          <(tail --lines=1 "{{ ostree_metadata_commits_central }}" | awk -F':' '{ print $2; }') > \
-          /dev/null 2>&1 ; then
+          <(awk -F':' 'length($2) > 0 {commit=$2} END {print commit}' \
+          "{{ ostree_metadata_commits_central }}") > /dev/null 2>&1 ; then
           {{ role_path }}/files/ostree-metadata-sync.sh --sw-version "{{ software_version }}" \
           --output "{{ ostree_metadata_commits_central }}" get-commits
         else
