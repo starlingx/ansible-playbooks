@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -338,6 +338,12 @@ def download_and_push_an_image_for_prestage(img_tuple):
             client.tag(target_img, local_img)
             client.push(local_img, auth_config=local_auth)
             print("Image push succeeded: %s" % local_img)
+
+            if os.environ.get('PRESTAGE_REASON', None) == "for_sw_deploy":
+                auth_str = '{0}:{1}'.format(local_auth['username'], local_auth['password'])
+                subprocess.check_call(["crictl", "pull", "--creds", auth_str, local_img])
+                print("Image %s download succeeded by containerd." % target_img)
+
             # Clean up docker cache
             if client.images(target_img):
                 client.remove_image(target_img)
