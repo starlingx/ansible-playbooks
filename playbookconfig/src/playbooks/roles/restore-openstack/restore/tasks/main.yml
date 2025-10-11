@@ -64,9 +64,24 @@
     state: touch
 
 - block:
+  - name: Determine software version of the backup
+    shell: >-
+      tar -tf {{ target_backup_dir }}/{{ backup_filename }} |
+      grep 'platform/fluxcd' |
+      sed -E 's|.*/fluxcd/([^/]+).*|\1|' |
+      head -n 1
+    register: backup_version_output
+    changed_when: false
+    args:
+      warn: false
+
+  - name: Set backup_software_version value
+    set_fact:
+      backup_software_version: "{{ backup_version_output.stdout }}"
+
   - name: Set config path facts
     set_fact:
-      fluxcd_permdir: "{{ platform_path }}/fluxcd/{{ software_version }}"
+      fluxcd_permdir: "{{ platform_path }}/fluxcd/{{ backup_software_version }}"
       helm_charts_permdir: "{{ platform_path }}/helm_charts"
 
   - name: Restore Helm charts, fluxcd manifests and extension filesystem
