@@ -26,3 +26,8 @@
   # the service is immediately ready to receive requests after restart
   retries: 10
   delay: 3
+
+- name: Delete skip_keystone_password_update flag
+  file:
+    path: /var/run/.skip_keystone_password_update
+    state: absent
