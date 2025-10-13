@@ -23,10 +23,11 @@ spec:
         openshift.io/required-scc: trident-controller
     spec:
       serviceAccount: trident-controller
+      priorityClassName: system-cluster-critical
       containers:
       - name: trident-main
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/docker.io/netapp/trident:25.02.1
+        image: {{ local_registry }}/docker.io/netapp/trident:25.10.0
         imagePullPolicy: IfNotPresent
         securityContext:
           runAsNonRoot: false
@@ -58,10 +59,10 @@ spec:
         - "--port={{ trident_rest_api_port }}"
         - "--http_request_timeout=1m30s"
         - "--enable_force_detach=false"
+        - "--enable_concurrency=false"
         - "--metrics"
         # STX_change: change metrics port
         - "--metrics_port={{ trident_metrics_port }}"
-
         #- -debug
         livenessProbe:
           exec:
@@ -75,6 +76,10 @@ spec:
           initialDelaySeconds: 120
           periodSeconds: 120
           timeoutSeconds: 90
+        resources:
+          requests:
+            cpu: 10m
+            memory: 80Mi
         env:
         - name: KUBE_NODE_NAME
           valueFrom:
@@ -90,16 +95,16 @@ spec:
         - name: TRIDENT_SERVER
           # STX_change: change port
           value: "127.0.0.1:{{ trident_rest_api_port }}"
-
         volumeMounts:
         - name: socket-dir
           mountPath: /plugin
         - name: certs
           mountPath: /certs
           readOnly: true
+
       - name: csi-provisioner
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-provisioner:v5.2.0
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-provisioner:v5.3.0
         imagePullPolicy: IfNotPresent
         securityContext:
           capabilities:
@@ -111,6 +116,11 @@ spec:
         - "--csi-address=$(ADDRESS)"
         - "--retry-interval-start=8s"
         - "--retry-interval-max=30s"
+        - "--worker-threads=100"
+        resources:
+          requests:
+            cpu: 2m
+            memory: 20Mi
         env:
         - name: ADDRESS
           value: /var/lib/csi/sockets/pluginproxy/csi.sock
@@ -119,7 +129,7 @@ spec:
           mountPath: /var/lib/csi/sockets/pluginproxy/
       - name: csi-attacher
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-attacher:v4.8.0
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-attacher:v4.10.0
         imagePullPolicy: IfNotPresent
         securityContext:
           capabilities:
@@ -129,16 +139,22 @@ spec:
         - "--v=2"
         - "--timeout=60s"
         - "--retry-interval-start=10s"
+        - "--worker-threads=100"
         - "--csi-address=$(ADDRESS)"
+        resources:
+          requests:
+            cpu: 2m
+            memory: 20Mi
         env:
         - name: ADDRESS
           value: /var/lib/csi/sockets/pluginproxy/csi.sock
         volumeMounts:
         - name: socket-dir
           mountPath: /var/lib/csi/sockets/pluginproxy/
+
       - name: csi-resizer
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-resizer:v1.13.1
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-resizer:v1.14.0
         imagePullPolicy: IfNotPresent
         securityContext:
           capabilities:
@@ -147,16 +163,22 @@ spec:
         args:
         - "--v=2"
         - "--timeout=300s"
+        - "--workers=100"
         - "--csi-address=$(ADDRESS)"
+        resources:
+          requests:
+            cpu: 3m
+            memory: 20Mi
         env:
         - name: ADDRESS
           value: /var/lib/csi/sockets/pluginproxy/csi.sock
         volumeMounts:
         - name: socket-dir
           mountPath: /var/lib/csi/sockets/pluginproxy/
+
       - name: csi-snapshotter
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-snapshotter:v8.2.0
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-snapshotter:v8.3.0
         imagePullPolicy: IfNotPresent
         securityContext:
           capabilities:
@@ -165,7 +187,12 @@ spec:
         args:
         - "--v=2"
         - "--timeout=300s"
+        - "--worker-threads=100"
         - "--csi-address=$(ADDRESS)"
+        resources:
+          requests:
+            cpu: 2m
+            memory: 20Mi
         env:
         - name: ADDRESS
           value: /var/lib/csi/sockets/pluginproxy/csi.sock

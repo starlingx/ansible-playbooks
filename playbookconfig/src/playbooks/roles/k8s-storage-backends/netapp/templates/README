@@ -15,5 +15,6 @@ Files changed:
 - trident-deployment.yaml.j2
 - trident-namespace.yaml.j2
 - trident-node-linux-serviceaccount.yaml.j2
+- trident-node-remediation-template.yaml.j2
 - trident-resourcequota.yaml.j2
 - trident-service.yaml.j2
