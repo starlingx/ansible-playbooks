@@ -52,10 +52,7 @@
 - name: Set 'force' option
   set_fact:
     force: "--force"
-  when:
-    - enrollment_in_progress | default(false)
-    - system_mode is defined
-    - system_mode != "simplex"
+  when: enrollment_in_progress | default(false)
 
 - name: Deploy start
   shell: |
