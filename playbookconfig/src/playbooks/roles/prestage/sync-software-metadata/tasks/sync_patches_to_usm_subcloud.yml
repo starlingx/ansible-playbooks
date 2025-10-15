@@ -60,6 +60,14 @@
       recurse: yes
     delegate_to: localhost
 
+  # The subcloud's tmp_metadata_sync_dir must be cleared. If it contains
+  # stale metadata from previous prestage operations, it will cause duplicate
+  # file errors during metadata synchronization.
+  - name: Remove subcloud {{ tmp_metadata_sync_dir }} to ensure clean state
+    file:
+      path: "{{ tmp_metadata_sync_dir }}"
+      state: absent
+
   - name: Ensure subcloud {{ tmp_metadata_sync_dir }} exists (sysadmin)
     file:
       path: "{{ tmp_metadata_sync_dir }}"
