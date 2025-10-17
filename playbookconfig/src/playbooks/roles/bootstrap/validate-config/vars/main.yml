@@ -8,7 +8,7 @@ private_pxeboot_subnet: 169.254.202.0/24
 pxecontroller_floating_hostname: pxecontroller
 use_entire_pxeboot_subnet: true
 
-fresh_install_k8s_version: 1.32.2
+fresh_install_k8s_version: 1.33.0
 
 # These variables are only used for subcloud configuration and are set
 # automatically by dcmanager
