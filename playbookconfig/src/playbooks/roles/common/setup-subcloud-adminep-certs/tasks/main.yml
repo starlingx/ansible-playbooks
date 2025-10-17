@@ -1,6 +1,6 @@
 ---
 #
-# copyright (c) 2020-2022 Wind River Systems, Inc.
+# copyright (c) 2020-2022,2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -104,6 +104,7 @@
     mode: 0400
   with_items:
     - "/etc/pki/ca-trust/source/anchors/{{ dc_adminep_root_ca_cert }}"
+  when: mode == 'bootstrap'
 
 - name: Cleanup temporary working directory
   file:
