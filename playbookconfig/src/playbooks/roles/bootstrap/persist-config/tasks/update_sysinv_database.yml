@@ -167,6 +167,33 @@
     register: dns_host_record_add
     failed_when: dns_host_record_add.rc != 0
 
+  - block:
+    - name: Get existing DNS local domain for registry.central if exists
+      shell: |
+        source /etc/platform/openrc
+        system service-parameter-list --service dns --section local \
+          --column uuid --column name --format value
+      register: registry_dns_locals
+      changed_when: false
+
+    - name: Get UUID of registry.central DNS local domain if exists
+      set_fact:
+        registry_central_local_uuids: >-
+          {{ registry_dns_locals.stdout_lines
+            | select('match', '^[0-9a-fA-F-]+ registry\.central$')
+            | map('regex_search', '^([0-9a-fA-F-]+)')
+            | list }}
+
+    - name: Create DNS local domain for registry central if it does not exist
+      shell: >-
+          source /etc/platform/openrc;
+          system service-parameter-add dns local registry.central=registry.central;
+      register: dns_local_add
+      failed_when: dns_local_add.rc != 0
+      when: registry_central_local_uuids | length == 0
+
+    when: software_version is version('26.03', '>=')
+
   - name: Apply dns host record update
     shell: source /etc/platform/openrc; system service-parameter-apply dns
 

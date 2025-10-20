@@ -124,7 +124,7 @@
 - name: Check existing dns host record for registry central
   shell: >-
     source /etc/platform/openrc;
-    system service-parameter-list | awk '/dns/ && /registry.central/'
+    system service-parameter-list | awk '/dns/ && /host-record/ && /registry.central/'
   register: existing_dns_registry_central
 
 - name: Extract current dns host record for registry central
