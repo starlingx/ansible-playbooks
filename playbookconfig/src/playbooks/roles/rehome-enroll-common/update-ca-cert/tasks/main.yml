@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2024 Wind River Systems, Inc.
+# Copyright (c) 2022-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -32,3 +32,10 @@
   include_role:
     name: common/delete-kubernetes-resources
   loop: "{{ certs_to_renew.stdout_lines | map('from_yaml') | unique | list }}"
+
+# For duplex subcloud enrollment, the ipsec certificate must be updated
+- name: Update ipsec certificate
+  command: /usr/bin/ipsec-client -o 2 pxecontroller
+  when:
+    - system_mode == 'duplex'
+    - mode == 'enroll'
