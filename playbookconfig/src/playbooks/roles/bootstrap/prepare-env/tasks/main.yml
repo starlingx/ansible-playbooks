@@ -364,6 +364,49 @@
       scheduler_extra_args: "{{ scheduler_extra_args | combine({ 'leader-elect': 'false' }) }}"
   when: system_mode == 'simplex'
 
+- name: Set OIDC issuer IP address based on distributed cloud role
+  set_fact:
+    oidc_issuer_address: >-
+      {{
+        system_controller_oam_floating_address if distributed_cloud_role == 'subcloud'
+        else external_oam_floating_address
+      }}
+
+- name: Check if oidc_issuer_address is ipv6.
+  set_fact:
+    is_oidc_issuer_address_ipv6: "{{ ':' in oidc_issuer_address }}"
+
+- block:
+  - name: Normalize oidc_issuer_address to the expected ipv6 format supported by kubeapi server
+    set_fact:
+      normalize_address_cmd: |
+        python3 -c "import ipaddress,os; s='{{ oidc_issuer_address }}';
+        ip=ipaddress.IPv6Address(s)
+        print(ip.compressed)
+        "
+
+  - name: Register normalize_address_cmd_result
+    shell: "{{ normalize_address_cmd }}"
+    register: normalize_address_cmd_result
+
+  - name: Set oidc_issuer_floating_address
+    set_fact:
+      oidc_issuer_address: "{{ normalize_address_cmd_result.stdout }}"
+  when: is_oidc_issuer_address_ipv6
+
+- name: Set default apiserver_oidc when undefined
+  set_fact:
+    apiserver_oidc:
+      client_id: stx-oidc-client-app
+      username_claim: email
+      groups_claim: groups
+      issuer_url: >-
+        {{
+          ('https://[' ~ oidc_issuer_address ~ ']:30556/dex') if is_oidc_issuer_address_ipv6
+          else ('https://' ~ oidc_issuer_address ~ ':30556/dex')
+        }}
+  when: (apiserver_oidc | length) == 0
+
 - name: Add OpenID Connect parameter oidc-client-id to apiserver extraArgs section
   set_fact:
     apiserver_extra_args: "{{ apiserver_extra_args | combine({ 'oidc-client-id' : apiserver_oidc.client_id })}}"
