@@ -392,12 +392,16 @@ def populate_registry_dns_host_records(client, section_name):
             section_name, "SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS"
         )
 
-    parameters = client.sysinv.service_parameter.list()
+    registry_central_as_local_scope = False
     for parameter in parameters:
-        if parameter.name == 'registry.central':
+        if parameter.name == 'registry.central' and \
+           parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DNS_HOST_RECORD:
             client.sysinv.service_parameter.delete(parameter.uuid)
         elif virtual_system and parameter.name == 'registry.local':
             client.sysinv.service_parameter.delete(parameter.uuid)
+        elif parameter.name == 'registry.central' and \
+            parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DNS_LOCAL:
+            registry_central_as_local_scope = True
 
     values = {
         'service': sysinv_constants.SERVICE_TYPE_DNS,
@@ -419,6 +423,22 @@ def populate_registry_dns_host_records(client, section_name):
     print_with_timestamp("Populating/Updating DNS host record for registry...")
     client.sysinv.service_parameter.create(**values)
     print_with_timestamp("DNS host record for registry completed.")
+
+    if not registry_central_as_local_scope:
+        values = {
+            'service': sysinv_constants.SERVICE_TYPE_DNS,
+            'section': sysinv_constants.SERVICE_PARAM_SECTION_DNS_LOCAL,
+            'personality': None,
+            'resource': None,
+            'parameters': {
+                'registry.central': (
+                    "registry.central"
+                )
+            }
+        }
+        print_with_timestamp("Populating/Updating DNS local domain for registry.central...")
+        client.sysinv.service_parameter.create(**values)
+        print_with_timestamp("DNS host local domain for registry.central completed.")
 
 
 def populate_docker_config(client, section_name):
