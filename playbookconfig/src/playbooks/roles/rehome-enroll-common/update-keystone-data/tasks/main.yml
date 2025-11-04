@@ -10,61 +10,48 @@
 #   restarts these services
 #
 
-- name: Disable keystone lockout
-  import_role:
-    name: rehome-enroll-common/disable-keystone-lockout
-
-- name: Update keystone passwords post disabling lockout
+- name: Update keystone passwords
   block:
     - name: Prepare user list
       set_fact:
         user_list:
-          - { username: 'barbican', password: "{{ users['barbican'] }}", service: 'barbican-keystone-listener' }
           # dcmanager related services are not running on the subcloud.
-          - { username: 'dcmanager', password: "{{ users['dcmanager'] }}", service: 'dcmanager' }
-          - { username: 'fm', password: "{{ users['fm'] }}", service: 'fm-mgr' }
-          - { username: 'mtce', password: "{{ users['mtce'] }}", service: 'mtc-agent' }
-          - { username: 'usm', password: "{{ users['usm'] }}", service: 'software-controller-daemon' }
-          - { username: 'vim', password: "{{ users['vim'] }}", service: 'vim' }
+          - { username: 'admin', password: "{{ admin_password }}" }
+          - { username: 'sysinv', password: "{{ users['sysinv'] }}" }
+          - { username: 'barbican', password: "{{ users['barbican'] }}" }
+          - { username: 'dcmanager', password: "{{ users['dcmanager'] }}" }
+          - { username: 'fm', password: "{{ users['fm'] }}" }
+          - { username: 'mtce', password: "{{ users['mtce'] }}" }
+          - { username: 'usm', password: "{{ users['usm'] }}" }
+          - { username: 'vim', password: "{{ users['vim'] }}" }
 
     # Dcagent password is not created in the system controller, so we pass an empty
     # string to the script and let it create the password to store in keystone/keyring.
     - name: Add dcagent user to user list during enrollment
       set_fact:
-        user_list: "{{ user_list + [{'username': 'dcagent', 'password': '', 'service': 'dcagent'}] }}"
+        user_list: "{{ [{'username': 'dcagent', 'password': ''}] + user_list }}"
       when: mode == "enroll"
 
     - name: Update keystone passwords in secure hieradata
       import_tasks: update_secure_hieradata.yml
 
-    - name: Migrate keystone passwords
-      import_tasks: migrate_keystone_passwords.yml
-
     - name: Migrate keystone IDs
       import_tasks: migrate_keystone_ids.yml
 
+    - name: Migrate keystone passwords
+      import_tasks: migrate_keystone_passwords.yml
+
   rescue:
+    # In a success path, the flag is remove at the end of rehoming and during unlock
+    # of enrollment. In a failure path, we need to remove the flag here to allow
+    # puppet to run again during a possible recovery operation
+    - name: Remove skip_keystone_password_update flag
+      file:
+        path: /var/run/.skip_keystone_password_update
+        state: absent
+
     - name: Fail the playbook with message
       fail:
         msg: >-
           Failed to update the keystone data, check the reason of the failure
           and retry.
-
-  always:
-    - name: Restore keystone lockout after updating keystone data
-      import_role:
-        name: rehome-enroll-common/restore-keystone-lockout
-
-- name: Restart keystone service post config update
-  import_role:
-    name: rehome-enroll-common/restart-keystone-service
-
-- name: Restart vim service
-  command: "sm-restart service vim"
-
-- name: Check vim enabled after restart
-  shell: sm-query service vim | grep -c enabled-active
-  register: service_status
-  until: service_status.stdout == '1'
-  retries: 12
-  delay: 10
