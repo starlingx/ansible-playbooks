@@ -1004,15 +1004,15 @@
             network_params.admin_subnet_secondary
 
 - set_fact:
-    use_default_registries: true
-    k8s_registry: "{{ default_k8s_registry }}"
-    gcr_registry: "{{ default_gcr_registry }}"
-    quay_registry: "{{ default_quay_registry }}"
-    docker_registry: "{{ default_docker_registry }}"
-    elastic_registry: "{{ default_elastic_registry }}"
-    ghcr_registry: "{{ default_ghcr_registry }}"
-    registryk8s_registry: "{{ default_registryk8s_registry }}"
-    icr_registry: "{{ default_icr_registry }}"
+    use_public_registries: true
+    k8s_registry: "{{ default_docker_registries['k8s.gcr.io'] }}"
+    gcr_registry: "{{ default_docker_registries['gcr.io'] }}"
+    quay_registry: "{{ default_docker_registries['quay.io'] }}"
+    docker_registry: "{{ default_docker_registries['docker.io'] }}"
+    elastic_registry: "{{ default_docker_registries['docker.elastic.co'] }}"
+    ghcr_registry: "{{ default_docker_registries['ghcr.io'] }}"
+    registryk8s_registry: "{{ default_docker_registries['registry.k8s.io'] }}"
+    icr_registry: "{{ default_docker_registries['icr.io'] }}"
     default_no_proxy:
       - localhost
       - 127.0.0.1

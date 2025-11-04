@@ -1,19 +1,23 @@
 ---
 enroll_init_finalized: /var/lib/factory-install/state/enroll-init
-central_registry: "registry.central:9001"
-default_k8s_registry:
-  url: k8s.gcr.io
-default_gcr_registry:
-  url: gcr.io
-default_quay_registry:
-  url: quay.io
-default_docker_registry:
-  url: docker.io
-default_elastic_registry:
-  url: docker.elastic.co
-default_ghcr_registry:
-  url: ghcr.io
-default_registryk8s_registry:
-  url: registry.k8s.io
-default_icr_registry:
-  url: icr.io
+
+use_defaults_from_user_provided_docker_registries: false
+
+# Update this fact if default registries are expected to private registries
+default_docker_registries:
+  k8s.gcr.io:
+    url: k8s.gcr.io
+  gcr.io:
+    url: gcr.io
+  quay.io:
+    url: quay.io
+  docker.io:
+    url: docker.io
+  docker.elastic.co:
+    url: docker.elastic.co
+  ghcr.io:
+    url: ghcr.io
+  registry.k8s.io:
+    url: registry.k8s.io
+  icr.io:
+    url: icr.io
