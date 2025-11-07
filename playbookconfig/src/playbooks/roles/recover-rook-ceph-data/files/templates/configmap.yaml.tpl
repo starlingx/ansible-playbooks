@@ -263,48 +263,51 @@ data:
 
       exec_ceph_cmd ceph -s
 
-      FS_NAME="kube-cephfs"
-      DATA_POOL_NAME="kube-cephfs-data"
-      METADATA_POOL_NAME="kube-cephfs-metadata"
+      exec_k8s_cmd CEPHFS_SC kubectl get storageclasses -o jsonpath='{range .items[?(@.provisioner=="rook-ceph.cephfs.csi.ceph.com")]}{.metadata.name}{" "}{end}'
+      for SC in $CEPHFS_SC; do
+        FS_NAME="kube-${SC}"
+        DATA_POOL_NAME="kube-${SC}-data"
+        METADATA_POOL_NAME="kube-${SC}-metadata"
 
-      # Use existing metadata/data pools to recover cephfs
-      exec_ceph_cmd ceph fs new ${FS_NAME} ${METADATA_POOL_NAME} ${DATA_POOL_NAME} --force
+        # Use existing metadata/data pools to recover cephfs
+        exec_ceph_cmd ceph fs new ${FS_NAME} ${METADATA_POOL_NAME} ${DATA_POOL_NAME} --force
 
-      # Recover MDS state from filesystem
-      exec_ceph_cmd ceph fs reset ${FS_NAME} --yes-i-really-mean-it
+        # Recover MDS state from filesystem
+        exec_ceph_cmd ceph fs reset ${FS_NAME} --yes-i-really-mean-it
 
-      # Wait to ensure reset propagation
-      exec_k8s_cmd MONS kubectl -n rook-ceph get pods -l app=rook-ceph-mon -o name
-      MON_COUNT=$(echo "$MONS" | wc -w)
-      if [ "$MON_COUNT" -le 3 ]; then
-        sleep 15
-      else
-        sleep 30
-      fi
+        # Wait to ensure reset propagation
+        exec_k8s_cmd MONS kubectl -n rook-ceph get pods -l app=rook-ceph-mon -o name
+        MON_COUNT=$(echo "$MONS" | wc -w)
+        if [ "$MON_COUNT" -le 3 ]; then
+            sleep 15
+        else
+            sleep 30
+        fi
 
-      # Try to recover from some common errors
-      exec_ceph_cmd cephfs-journal-tool --rank=${FS_NAME}:0 event recover_dentries summary
-      exec_ceph_cmd cephfs-journal-tool --rank=${FS_NAME}:0 journal reset
-      exec_ceph_cmd cephfs-table-tool ${FS_NAME}:0 reset session
-      exec_ceph_cmd cephfs-table-tool ${FS_NAME}:0 reset snap
-      exec_ceph_cmd cephfs-table-tool ${FS_NAME}:0 reset inode
+        # Try to recover from some common errors
+        exec_ceph_cmd cephfs-journal-tool --rank=${FS_NAME}:0 event recover_dentries summary
+        exec_ceph_cmd cephfs-journal-tool --rank=${FS_NAME}:0 journal reset
+        exec_ceph_cmd cephfs-table-tool ${FS_NAME}:0 reset session
+        exec_ceph_cmd cephfs-table-tool ${FS_NAME}:0 reset snap
+        exec_ceph_cmd cephfs-table-tool ${FS_NAME}:0 reset inode
 
-      # Check if there are any VolumeSnapshotContent with cephfs driver
-      if exec_k8s_cmd kubectl get volumesnapshotcontents \
-            -o custom-columns="DRIVER:spec.driver" | grep -q "cephfs.csi.ceph.com"; then
+        # Check if there are any VolumeSnapshotContent with cephfs driver
+        if exec_k8s_cmd kubectl get volumesnapshotcontents \
+                -o custom-columns="DRIVER:spec.driver" | grep -q "cephfs.csi.ceph.com"; then
 
-        # The cephfs-data-scan command needs to be run more than once
-        # to ensure that all issues are fixed.
-        while true
-        do
-          exec_ceph_cmd OUTPUT cephfs-data-scan scan_links
-          # If the command fails or returns empty, it should exit the loop.
-          if [ $? -ne 0 ] || [ -z "$OUTPUT" ]; then
-            break
-          fi
-          sleep 1
-        done
-      fi
+            # The cephfs-data-scan command needs to be run more than once
+            # to ensure that all issues are fixed.
+            while true
+            do
+            exec_ceph_cmd OUTPUT cephfs-data-scan scan_links --filesystem ${FS_NAME}
+            # If the command fails or returns empty, it should exit the loop.
+            if [ $? -ne 0 ] || [ -z "$OUTPUT" ]; then
+                break
+            fi
+            sleep 1
+            done
+        fi
+      done
 
       kubectl_scale_deployment app=rook-ceph-mds 1
       exec_ceph_cmd ceph -s
