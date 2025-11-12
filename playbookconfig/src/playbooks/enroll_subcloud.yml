@@ -31,13 +31,11 @@
     - common/prepare-env
     - common/validate-target
     - common/load-openrc
-    - common/recover-subcloud-certificates
     - enroll-subcloud/patch-before-enroll
     - rehome-enroll-common/prepare-env
     - enroll-subcloud/validate-before-enroll
     - rehome-enroll-common/update-ca-cert
-    - role: common/update-sc-cert
-      when: subcloud_dc_admin_ep_cert_chain_recovered is undefined
+    - common/update-sc-cert
     - role: rehome-enroll-common/update-keystone-data
       become: yes
     - rehome-enroll-common/persist-configuration
