@@ -1,12 +1,16 @@
 ---
 #
-# Copyright (c) 2020-2024 Wind River Systems, Inc.
+# Copyright (c) 2020-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
 #   This role is to bring up NetApp and configure all its backends
 #
+
+# Check if the backends are valid
+- name: Check backends
+  include_tasks: validate-backends.yml
 
 # Initialize containers
 - name: Ensures trident setup folder is present
@@ -79,6 +83,12 @@
     KUBECONFIG: "/etc/kubernetes/admin.conf"
   when: trident_get_secret_response.rc != 0
   no_log: true
+
+- name: Apply DaemonSet to multipath configuration update
+  command: >
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f
+    {{ trident_setup_dir }}/setup/{{ multipath_config_updater_ds_name }}-daemonset.yaml
+  when: (run_multipath_check | default(false))
 
 - name: Install trident services
   command: tridentctl -n {{ trident_namespace }} install --use-custom-yaml {{ trident_install_extra_params }}

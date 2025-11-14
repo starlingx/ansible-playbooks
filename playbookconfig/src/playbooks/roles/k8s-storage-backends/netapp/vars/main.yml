@@ -1,10 +1,12 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019,2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
+
 trident_setup_dir: /tmp/trident
+multipath_config_updater_ds_name: stx-multipath-config-updater
 
 # When we do a remote play, we don't want to change
 # the sysadmin user password.

@@ -1,0 +1,69 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: stx-multipath-config-updater
+  namespace: {{ trident_namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: stx-multipath-config-updater
+  template:
+    metadata:
+      labels:
+        app: stx-multipath-config-updater
+    spec:
+      hostPID: true
+      containers:
+      - name: multipath-updater
+        image: {{ local_registry }}/docker.io/library/busybox:1.37.0
+        command:  ["/bin/sh", "-c"]
+        args:
+        - |
+          set -e
+
+          MULTIPATH_CONF="/host/etc/multipath.conf"
+
+          # Print the verification time
+          date
+
+          # Check if the file exists
+          if [ -f "$MULTIPATH_CONF" ]; then
+            # Extract the find_multipaths value
+            FIND_MULTIPATHS=$(grep -E "^[[:space:]]*find_multipaths" "$MULTIPATH_CONF" | awk '{print $2}')
+
+            # If the find_multipaths was not found
+            if [ -z "$FIND_MULTIPATHS" ]; then
+                echo "The option find_multipaths was not found in the config file. \
+                By default, the value is already 'no'."
+            # If the value is different from 'no'
+            elif [ "$FIND_MULTIPATHS" != "no" ]; then
+                echo "find_multipaths is currently set to '$FIND_MULTIPATHS'. Changing it to 'no'..."
+
+                sed -i '/^[[:space:]]*find_multipaths[[:space:]]\+yes/s/yes/no/' "$MULTIPATH_CONF"
+                echo "Updated find_multipaths to 'no' in $MULTIPATH_CONF"
+
+                echo "Restarting multipathd service..."
+                chroot /host /bin/systemctl restart multipathd
+
+                echo "Update completed."
+            else
+                echo "find_multipaths is already set to 'no'. Nothing to do."
+            fi
+          else
+            echo "$MULTIPATH_CONF not found."
+          fi
+
+          echo "Sleeping until the next boot..."
+          sleep infinity
+        volumeMounts:
+        - name: host-system
+          mountPath: /host
+        securityContext:
+          privileged: true
+      volumes:
+      - name: host-system
+        hostPath:
+          path: /
+      tolerations:
+      - operator: "Exists"
