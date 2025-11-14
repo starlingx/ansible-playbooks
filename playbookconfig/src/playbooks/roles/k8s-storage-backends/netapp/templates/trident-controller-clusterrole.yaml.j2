@@ -29,13 +29,13 @@ rules:
     verbs: ["get", "list", "delete", "patch"]
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch", "delete"]
   - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["storage.k8s.io"]
     resources: ["volumeattachments"]
-    verbs: ["get", "list", "watch", "update", "patch"]
+    verbs: ["get", "list", "watch", "update", "patch", "delete"]
   - apiGroups: ["storage.k8s.io"]
     resources: ["volumeattachments/status"]
     verbs: ["update", "patch"]
@@ -48,6 +48,18 @@ rules:
   - apiGroups: ["snapshot.storage.k8s.io"]
     resources: ["volumesnapshotcontents"]
     verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["groupsnapshot.storage.k8s.io"]
+    resources: ["volumegroupsnapshots"]
+    verbs: ["list"]
+  - apiGroups: ["groupsnapshot.storage.k8s.io"]
+    resources: ["volumegroupsnapshotclasses"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["groupsnapshot.storage.k8s.io"]
+    resources: ["volumegroupsnapshotcontents/status"]
+    verbs: ["update"]
+  - apiGroups: ["groupsnapshot.storage.k8s.io"]
+    resources: ["volumegroupsnapshotcontents"]
+    verbs: ["get", "list", "watch", "patch"]
   - apiGroups: ["storage.k8s.io"]
     resources: ["csinodes"]
     verbs: ["get", "list", "watch"]
@@ -57,7 +69,10 @@ rules:
 "tridentmirrorrelationships", "tridentmirrorrelationships/status", "tridentsnapshotinfos",
 "tridentsnapshotinfos/status", "tridentvolumepublications", "tridentvolumereferences",
 "tridentactionmirrorupdates", "tridentactionmirrorupdates/status",
-"tridentactionsnapshotrestores", "tridentactionsnapshotrestores/status"]
+"tridentactionsnapshotrestores", "tridentactionsnapshotrestores/status",
+"tridentnoderemediations", "tridentnoderemediations/status",
+"tridentnoderemediationtemplates", "tridentnoderemediationtemplates/status",
+"tridentgroupsnapshots", "tridentgroupsnapshots/status"]
     verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
   - apiGroups: ["policy"]
     resources: ["podsecuritypolicies"]

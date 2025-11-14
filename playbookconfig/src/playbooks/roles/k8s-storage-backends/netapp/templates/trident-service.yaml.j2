@@ -19,3 +19,8 @@ spec:
     port: 9220
     #STX_change: change metrics port
     targetPort: {{ trident_metrics_port }}
+  - name: https-metrics
+    protocol: TCP
+    port: 8444
+    #STX_change: change https metrics port
+    targetPort: {{ trident_https_metrics_port }}

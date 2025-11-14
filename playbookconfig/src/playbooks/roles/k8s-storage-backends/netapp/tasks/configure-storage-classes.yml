@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020,2023-2024 Wind River Systems, Inc.
+# Copyright (c) 2020,2023-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -24,7 +24,7 @@
     storageclass_headers:
       apiVersion: storage.k8s.io/v1
       kind: StorageClass
-      provisioner: "{{ netapp_k8s_storageclass[0].provisioner }}"
+      provisioner: "{{ trident_provisioner }}"
 
 - name: Prepare StorageClass content
   set_fact:
