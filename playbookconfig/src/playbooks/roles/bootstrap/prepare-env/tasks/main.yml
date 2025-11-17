@@ -369,7 +369,7 @@
     oidc_issuer_address: >-
       {{
         system_controller_oam_floating_address if distributed_cloud_role == 'subcloud'
-        else external_oam_floating_address
+        else (external_oam_floating_address.split(',') | first | trim)
       }}
 
 - name: Check if oidc_issuer_address is ipv6.
