@@ -66,4 +66,6 @@ spec:
         hostPath:
           path: /
       tolerations:
-      - operator: "Exists"
+        - operator: "Exists"
+      imagePullSecrets:
+        - name: {{ trident_secret_name }}
