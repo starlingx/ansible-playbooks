@@ -53,6 +53,7 @@
           include_role:
             name: common/ipmi-monitor
           vars:
+            ipmi_timeout: "{{ restore_timeout }}"
             ipmi_data_values: |
               {{ restore_complete_ipmi_data }},
               {{ restore_failed_ipmi_data }},
