@@ -127,6 +127,7 @@
   when: vault_docker_registries is defined
 
 - name: Set default registries dictionary
+  # Update this fact if default registries are expected to private registries
   set_fact:
     default_docker_registries:
       k8s.gcr.io:
@@ -163,7 +164,7 @@
     save_password: true
     save_config_to_db: true
     use_docker_proxy: false
-    use_defaults_registry: false
+    use_defaults_from_user_provided_docker_registries: false
     restart_services: false
     reconfigure_endpoints: false
     dc_role_changed: false
@@ -206,25 +207,6 @@
     use_docker_proxy: true
   when: (docker_http_proxy is defined and docker_http_proxy is not none) or
         (docker_https_proxy is defined and docker_https_proxy is not none)
-
-- name: Set default values for individual platform registries and registry secrets
-  set_fact:
-    default_k8s_registry:
-      url: k8s.gcr.io
-    default_gcr_registry:
-      url: gcr.io
-    default_quay_registry:
-      url: quay.io
-    default_docker_registry:
-      url: docker.io
-    default_elastic_registry:
-      url: docker.elastic.co
-    default_ghcr_registry:
-      url: ghcr.io
-    default_registryk8s_registry:
-      url: registry.k8s.io
-    default_icr_registry:
-      url: icr.io
 
 - name: Set default values for additional images list
   set_fact:

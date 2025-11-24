@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -1129,8 +1129,8 @@ def populate_docker_kube_config(client):
         client.sysinv.service_parameter.create(**values)
         print("Docker proxy config completed.")
 
-    use_default_registries = CONF.getboolean(
-        'BOOTSTRAP_CONFIG', 'USE_DEFAULT_REGISTRIES')
+    use_public_registries = CONF.getboolean(
+        'BOOTSTRAP_CONFIG', 'USE_PUBLIC_REGISTRIES')
 
     # Get rid of any faulty docker registry entries that might have been
     # created in the previous failed run.
@@ -1146,7 +1146,8 @@ def populate_docker_kube_config(client):
                 parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_ICR_REGISTRY):
             client.sysinv.service_parameter.delete(parameter.uuid)
 
-    if not use_default_registries:
+    # avoid creating service parameters if using public registries
+    if not use_public_registries:
         parameters = {}
 
         registries_map = {

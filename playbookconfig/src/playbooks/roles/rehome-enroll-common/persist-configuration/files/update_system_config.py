@@ -254,8 +254,8 @@ def update_barbican_secrets(client, registry_name, username, password):
 
 def update_docker_registry_config(client, section_name):
     """Handle Docker registry configurations."""
-    use_default_registries = CONF.getboolean(
-        section_name, 'USE_DEFAULT_REGISTRIES')
+    use_public_registries = CONF.getboolean(
+        section_name, 'USE_PUBLIC_REGISTRIES')
     # Get rid of any faulty docker registry entries that might have been
     # created in the previous failed run.
     parameters = client.sysinv.service_parameter.list()
@@ -270,7 +270,8 @@ def update_docker_registry_config(client, section_name):
                 parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_ICR_REGISTRY):
             client.sysinv.service_parameter.delete(parameter.uuid)
 
-    if not use_default_registries:
+    # avoid creating service parameters if using public registries
+    if not use_public_registries:
         parameters = {}
 
         registries_map = {
