@@ -1,10 +1,10 @@
-# SRIOV device CNI plugin version 3.6.2
+# SRIOV device CNI plugin Version v3.10.0
 # Based on:
-# https://raw.githubusercontent.com/k8snetworkplumbingwg/sriov-network-device-plugin/v3.6.2/
+# https://raw.githubusercontent.com/k8snetworkplumbingwg/sriov-network-device-plugin/v3.10.0/
 #                deployments/sriovdp-daemonset.yaml
 #
 # This file is licensed under Apache 2.0.  You can obtain a copy of the license at:
-# https://github.com/k8snetworkplumbingwg/sriov-network-device-plugin/blob/v3.6.2/LICENSE
+# https://github.com/k8snetworkplumbingwg/sriov-network-device-plugin/blob/v3.10.0/LICENSE
 #
 # The following modifications have been made:
 #
@@ -23,7 +23,7 @@
 # - Set memory request to zero, otherwise it interferes with the ability of application pods
 #   to reserve the full amount of memory that K8s says is available.
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -78,19 +78,12 @@ spec:
         - --log-level=10
         securityContext:
           privileged: true
-        resources:
-          requests:
-            cpu: 0
-            memory: "0"
-          limits:
-            cpu: 1
-            memory: "200Mi"
         volumeMounts:
         - name: devicesock
-          mountPath: /var/lib/kubelet/device-plugins/
+          mountPath: /var/lib/kubelet/device-plugins
           readOnly: false
         - name: plugins-registry
-          mountPath: /var/lib/kubelet/plugins_registry/
+          mountPath: /var/lib/kubelet/plugins_registry
           readOnly: false
         - name: log
           mountPath: /var/log
@@ -102,10 +95,10 @@ spec:
       volumes:
         - name: devicesock
           hostPath:
-            path: /var/lib/kubelet/device-plugins/
+            path: /var/lib/kubelet/device-plugins
         - name: plugins-registry
           hostPath:
-            path: /var/lib/kubelet/plugins_registry/
+            path: /var/lib/kubelet/plugins_registry
         - name: log
           hostPath:
             path: /var/log

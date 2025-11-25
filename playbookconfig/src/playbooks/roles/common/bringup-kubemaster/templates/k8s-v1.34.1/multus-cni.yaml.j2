@@ -1,11 +1,11 @@
 ---
-# Multus Version v3.9.3
+# Multus Version v4.2.3
 # Based on:
-# https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v3.9.3/deployments/
+# https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v4.2.3/deployments/
 #             multus-daemonset.yml
 #
 # This file is licensed under Apache 2.0.  You can obtain a copy of the license at:
-# https://github.com/k8snetworkplumbingwg/multus-cni/blob/v3.9.3/LICENSE
+# https://github.com/k8snetworkplumbingwg/multus-cni/blob/v4.2.3/LICENSE
 #
 # The following modifications have been made:
 #
@@ -26,8 +26,10 @@
 #   to reserve the full amount of memory that K8s says is available.
 # - Add a watcher script in a sidecar container to monitor the ServiceAccount token expiry
 #   and re-generate the Kubeconfig file accordingly.
+# - Multus conf file permission is set to 600 to comply with CIS Benchmark Standards
+# - Use "-debug" image to allow shell command execution in the Multus pod
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -215,18 +217,23 @@ data:
     MULTUS_KUBECONFIG=/etc/cni/net.d/multus.d/multus.kubeconfig
     MULTUS_TEMP_KUBECONFIG="$MULTUS_KUBECONFIG.tmp"
     SERVICE_ACCOUNT_PATH=/var/run/secrets/kubernetes.io/serviceaccount
-    echo "Monitoring token and CA for changes"
+    echo "$(date) - Monitoring token and CA for changes"
     while true; do
         kube_token_md5=$(grep "token:" "/host$MULTUS_KUBECONFIG" | awk '{gsub(/"/, "", $2); print $2}' | tr -d '\n' | md5sum | awk '{print $1}')
         kube_ca_md5=$(grep "certificate-authority-data:" "/host$MULTUS_KUBECONFIG" | awk '{print $2}' | base64 -d | md5sum | awk '{print $1}')
         token_md5=$(md5sum "$SERVICE_ACCOUNT_PATH/token" | awk '{print $1}')
         ca_md5=$(md5sum "$SERVICE_ACCOUNT_PATH/ca.crt" | awk '{print $1}')
         if [ "$token_md5" != "$kube_token_md5" ] || [ "$ca_md5" != "$kube_ca_md5" ]; then
-            echo "Detected change in service account token or CA. Regenerating kubeconfig..."
+            echo "$(date) - Detected change in service account token or CA. Regenerating kubeconfig..."
             touch "$MULTUS_TEMP_KUBECONFIG"
             chmod 600 "$MULTUS_TEMP_KUBECONFIG"
             SERVICEACCOUNT_TOKEN=$(cat "$SERVICE_ACCOUNT_PATH/token")
             TLS_CFG="certificate-authority-data: $(cat $SERVICE_ACCOUNT_PATH/ca.crt | base64 | tr -d '\n')"
+            if [[ "${KUBERNETES_SERVICE_HOST}" == *:* ]]; then
+                APISERVER="${KUBERNETES_SERVICE_PROTOCOL:-https}://[${KUBERNETES_SERVICE_HOST}]:${KUBERNETES_SERVICE_PORT}"
+            else
+                APISERVER="${KUBERNETES_SERVICE_PROTOCOL:-https}://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}"
+            fi
             cat > "$MULTUS_TEMP_KUBECONFIG" <<EOF
     # Kubeconfig file for Multus CNI plugin.
     apiVersion: v1
@@ -234,7 +241,7 @@ data:
     clusters:
     - name: local
       cluster:
-        server: ${KUBERNETES_SERVICE_PROTOCOL:-https}://[${KUBERNETES_SERVICE_HOST}]:${KUBERNETES_SERVICE_PORT}
+        server: ${APISERVER}
         ${TLS_CFG}
     users:
     - name: multus
@@ -300,22 +307,19 @@ spec:
               fieldRef:
                 fieldPath: spec.nodeName
         command:
-          - /bin/bash
+          - sh
           - -cex
+        args:
           - |
-            #!/bin/bash
             sed "s|__KUBERNETES_NODE_NAME__|${KUBERNETES_NODE_NAME}|g" /tmp/multus-conf/05-multus.conf > /usr/src/multus-cni/05-multus.conf
+            chmod 0600 /usr/src/multus-cni/05-multus.conf
             {% if cluster_network_ipv6 -%}
-            sed -i 's#//\${KUBERNETES_SERVICE_HOST}#//\[\${KUBERNETES_SERVICE_HOST}\]#' /entrypoint.sh
+            sed -i 's#//\${KUBERNETES_SERVICE_HOST}#//\[\${KUBERNETES_SERVICE_HOST}\]#' /thin_entrypoint
             {% endif -%}
-            /entrypoint.sh --multus-conf-file=/usr/src/multus-cni/05-multus.conf
-        resources:
-          requests:
-            memory: "0"
-          limits:
-            memory: "50Mi"
+            /thin_entrypoint --multus-conf-file=/usr/src/multus-cni/05-multus.conf
         securityContext:
           privileged: true
+        terminationMessagePolicy: FallbackToLogsOnError
         volumeMounts:
         - name: cni
           mountPath: /host/etc/cni/net.d
@@ -325,13 +329,15 @@ spec:
           mountPath: /tmp/multus-conf
       - name: multus-watcher
         image: "{{ local_registry }}/{{ multus_img }}"
-        command: ["/bin/bash", "-c"]
+        command:
+          - sh
+          - -cex
         args:
           - |
-            echo "Watcher Script Starting" &&
-            cp /scripts/watcher-script.sh /tmp/watcher-script.sh &&
-            chmod +x /tmp/watcher-script.sh &&
-            /tmp/watcher-script.sh
+            echo "$(date) - Watcher Script Starting"
+            cp /scripts/watcher-script.sh /tmp/watcher-script.sh
+            chmod +x /tmp/watcher-script.sh
+            sh /tmp/watcher-script.sh
         volumeMounts:
         - name: watcher-script
           mountPath: /scripts
@@ -342,16 +348,13 @@ spec:
       initContainers:
         - name: install-multus-binary
           image: "{{ local_registry }}/{{ multus_img }}"
-          command:
-            - "cp"
-            - "/usr/src/multus-cni/bin/multus"
-            - "/host/opt/cni/bin/multus"
-          resources:
-            requests:
-              cpu: "0"
-              memory: "0"
+          command: ["/install_multus"]
+          args:
+            - "--type"
+            - "thin"
           securityContext:
             privileged: true
+          terminationMessagePolicy: FallbackToLogsOnError
           volumeMounts:
             - name: cnibin
               mountPath: /host/opt/cni/bin
