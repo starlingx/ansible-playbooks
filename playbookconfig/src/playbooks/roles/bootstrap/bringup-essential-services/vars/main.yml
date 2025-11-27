@@ -36,3 +36,5 @@ kubelet_taints: []
 legacy_restore_exclude_items:
   - etc/ssl/certs/ssl-cert-snakeoil.pem
   - etc/ssl/private/ssl-cert-snakeoil.key
+  - etc/sysctl.d/05-default-sysctl.conf
+  - etc/sysctl.d/100-custom-user.conf
