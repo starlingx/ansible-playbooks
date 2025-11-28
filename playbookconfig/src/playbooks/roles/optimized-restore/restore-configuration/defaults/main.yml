@@ -23,6 +23,7 @@ restore_items:
   - etc/group-
   - etc/haproxy
   - etc/hosts
+  - etc/kdump
   - etc/keystone
   - etc/kubernetes
   - etc/lighttpd
