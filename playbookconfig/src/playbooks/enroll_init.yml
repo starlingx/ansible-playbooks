@@ -83,7 +83,7 @@
                   cc10e1: "Factory setup failed, factory-install completion flag not found"
 
               - name: "Manual CA certificates check"
-                timeout: "{{ manual_cacerts_timeout | default(20) }}"
+                timeout: "{{ manual_cacerts_timeout | default(90) }}"
                 success_code: "cc10e7"
                 failure_codes:
                   cc10e8: "Kubernetes Root CA or Front Proxy CA expired"
