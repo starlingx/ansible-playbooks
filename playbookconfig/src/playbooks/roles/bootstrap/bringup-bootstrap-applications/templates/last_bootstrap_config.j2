@@ -40,9 +40,6 @@ prev_management_multicast_start_address: {{ management_multicast_start_address }
 prev_management_multicast_end_address: {{ management_multicast_end_address }}
 prev_external_oam_node_0_address: {{ external_oam_node_0_address }}
 prev_external_oam_node_1_address: {{ external_oam_node_1_address }}
-prev_apiserver_cert_sans: {{ apiserver_cert_sans | to_yaml }}
-prev_k8s_root_ca_cert: {{ k8s_root_ca_cert | default("''", true) }}
-prev_k8s_root_ca_key: {{ k8s_root_ca_key | default("''", true) }}
 prev_apiserver_oidc: {{ apiserver_oidc | to_yaml }}
 prev_etcd_root_ca_cert: {{ etcd_root_ca_cert | default("''", true) }}
 prev_etcd_root_ca_key: {{ etcd_root_ca_key | default("''", true) }}

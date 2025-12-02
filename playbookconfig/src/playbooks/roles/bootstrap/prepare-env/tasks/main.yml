@@ -229,26 +229,11 @@
 
 - name: Define k8s/etcd/system-local-ca certificate parameters if not defined
   set_fact:
-    apiserver_cert_sans: "{{ apiserver_cert_sans | default([]) }}"
     etcd_root_ca_cert: "{{ etcd_root_ca_cert | default('') }}"
     etcd_root_ca_key: "{{ etcd_root_ca_key | default('') }}"
     system_local_ca_cert: "{{ system_local_ca_cert | default('', true) }}"
     system_local_ca_key: "{{ system_local_ca_key | default('', true) }}"
     system_root_ca_cert: "{{ system_root_ca_cert | default('', true) }}"
-  no_log: true
-
-- name: Define k8s root CA certificate parameters for subcloud role
-  set_fact:
-    k8s_root_ca_cert: "{{ k8s_root_ca_cert | default(default_subcloud_k8s_root_ca_cert) }}"
-    k8s_root_ca_key: "{{ k8s_root_ca_key | default(default_subcloud_k8s_root_ca_key) }}"
-  when: distributed_cloud_role == 'subcloud'
-  no_log: true
-
-- name: Define k8s root CA certificate parameters for non subcloud roles
-  set_fact:
-    k8s_root_ca_cert: "{{ k8s_root_ca_cert | default('') }}"
-    k8s_root_ca_key: "{{ k8s_root_ca_key | default('') }}"
-  when: distributed_cloud_role != 'subcloud'
   no_log: true
 
 - name: Check if external certificates were embedded as strings and install them
@@ -657,8 +642,33 @@
           prev_docker_no_proxy:
             "{{ (prev_docker_no_proxy.split(',') | sort) if prev_docker_no_proxy else [] }}"
 
-      - name: If replayed, don't change K8S and ETCD CA filepaths if content doesn't change
-        include_tasks: verify_k8s_etcd_certs_changed.yml
+      - name: If replayed, don't change ETCD CA filepaths if content doesn't change
+        block:
+        - name: Check if ETCD CA data is the same as before
+          shell: >-
+            diff <(cat "{{ lookup('vars','prev_' + cert_override[1]) }}" | awk NF)
+            <(cat "{{ cert_tmp_file_names.results[cert_override[0]].path }}" | awk NF)
+          register: cert_data_diff_return
+          failed_when: false
+          with_indexed_items: "{{ external_cert_overrides_list }}"
+          loop_control:
+            loop_var: cert_override
+          when:
+          - cert_override[1].startswith('etcd_')
+          - lookup('vars', cert_override[1], default='') | length > 0
+          - lookup('vars','prev_' + cert_override[1], default='') != ''
+
+        - name: Reassign override variables with the prev file paths
+          set_fact: "{{ cert_override[1] }}={{ lookup('vars','prev_' + cert_override[1]) }}"
+          with_indexed_items: "{{ external_cert_overrides_list }}"
+          loop_control:
+            loop_var: cert_override
+          when:
+          - cert_override[1].startswith('etcd_')
+          - lookup('vars', cert_override[1], default='') | length > 0
+          - lookup('vars','prev_' + cert_override[1], default='') != ''
+          - cert_data_diff_return.results[cert_override[0]].stdout == ''
+          - cert_data_diff_return.results[cert_override[0]].stderr == ''
 
       - name: Remove 'password' keys from prev_docker_registries before comparing with docker_registries
         set_fact:
@@ -682,9 +692,6 @@
                (prev_docker_http_proxy != docker_http_proxy or
                 prev_docker_https_proxy != docker_https_proxy or
                 prev_docker_no_proxy != docker_no_proxy | sort)) or
-              (prev_apiserver_cert_sans != apiserver_cert_sans) or
-              (prev_k8s_root_ca_cert != k8s_root_ca_cert) or
-              (prev_k8s_root_ca_key != k8s_root_ca_key) or
               (prev_etcd_root_ca_cert != etcd_root_ca_cert) or
               (prev_etcd_root_ca_key != etcd_root_ca_key)
 

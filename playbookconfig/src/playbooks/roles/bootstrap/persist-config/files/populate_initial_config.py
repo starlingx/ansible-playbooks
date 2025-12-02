@@ -1224,32 +1224,9 @@ def populate_docker_kube_config(client):
 
     parameters = client.sysinv.service_parameter.list()
     for parameter in parameters:
-        if (parameter.name in [
-                sysinv_constants.SERVICE_PARAM_NAME_KUBERNETES_API_SAN_LIST,
-                sysinv_constants.SERVICE_PARAM_NAME_KUBERNETES_POD_MAX_PIDS]):
+        if (parameter.name == sysinv_constants.SERVICE_PARAM_NAME_KUBERNETES_POD_MAX_PIDS or
+                parameter.section in kube_sections):
             client.sysinv.service_parameter.delete(parameter.uuid)
-        elif parameter.section in kube_sections:
-            client.sysinv.service_parameter.delete(parameter.uuid)
-
-    apiserver_san_list = CONF.get('BOOTSTRAP_CONFIG', 'APISERVER_SANS')
-    if apiserver_san_list:
-        parameters = {}
-
-        parameters[
-            sysinv_constants.SERVICE_PARAM_NAME_KUBERNETES_API_SAN_LIST] = \
-            apiserver_san_list
-
-        values = {
-            'service': sysinv_constants.SERVICE_TYPE_KUBERNETES,
-            'section':
-                sysinv_constants.SERVICE_PARAM_SECTION_KUBERNETES_CERTIFICATES,
-            'personality': None,
-            'resource': None,
-            'parameters': parameters
-        }
-
-        print("Populating/Updating kubernetes san list...")
-        client.sysinv.service_parameter.create(**values)
 
     parameters = {
         sysinv_constants.SERVICE_PARAM_NAME_KUBERNETES_POD_MAX_PIDS:

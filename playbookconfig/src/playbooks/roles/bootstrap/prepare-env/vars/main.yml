@@ -10,8 +10,6 @@ temp_k8s_plugins_dir: "/tmp"
 
 external_cert_overrides_list:
 - ssl_ca_cert
-- k8s_root_ca_cert
-- k8s_root_ca_key
 - etcd_root_ca_cert
 - etcd_root_ca_key
 - system_root_ca_cert
@@ -103,7 +101,3 @@ ca_cert_dir: "/etc/pki/ca-trust/source/anchors"
 # Registry filesystem
 bootstrap_registry_filesystem: false
 bootstrap_registry_filesystem_fqpn: null
-
-# Default k8s root CA cert and key for subcloud
-default_subcloud_k8s_root_ca_cert: /etc/kubernetes/pki/ca.crt
-default_subcloud_k8s_root_ca_key: /etc/kubernetes/pki/ca.key
