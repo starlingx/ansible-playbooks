@@ -147,28 +147,7 @@
       when: fluxcd_get_pods.stderr is search('No resources found')
 
     - block:
-        # This will scale the deployment up, but will also migrate FluxCD over to a Helm release
-        - name: Migrate Flux to Helm-managed resources
-          command: helm upgrade
-                  --install
-                  --namespace {{ fluxcd_namespace }}
-                  --create-namespace
-                  --wait
-                  --wait-for-jobs
-                  --reset-then-reuse-values
-                  --take-ownership
-                  -f {{ fluxcd_resource_dir }}/values_legacy.yaml
-                  {{ flux_helm_release_name }}
-                  {{ flux_legacy_charts_path }}
-          retries: "{{ fluxcd_retries }}"
-          delay: "{{ delay_time }}"
-          register: migrate_helm_release
-          until: migrate_helm_release.rc == 0
-          environment:
-            KUBECONFIG: /etc/kubernetes/admin.conf
-          when: fluxcd_helm_release_not_installed is defined
-                and fluxcd_helm_release_not_installed|bool
-
+        # This will scale the deployment up, but will also upgrade the Helm release
         - name: Upgrade Flux controllers for restore/upgrades over existing deployment
           command: helm upgrade
                   --namespace {{ fluxcd_namespace }}
