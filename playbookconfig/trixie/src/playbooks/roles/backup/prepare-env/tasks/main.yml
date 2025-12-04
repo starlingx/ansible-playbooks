@@ -113,6 +113,8 @@
       set_fact:
         recommended_k8s_versions: "{{ result.stdout }}"
 
+    # TODO(jgauld) - extended etcd version check
+
     - name: Check if K8s version is in the recommended version list for backup
       fail:
         msg: |

@@ -36,6 +36,30 @@
   args:
     warn: false
 
+# TODO(JGAULD): DEBUG.
+# NOTE we have already called Link etcd stage0 directory.
+# Did it already have etcd_version defined? Maybe
+
+- name: Extract etcd version from the backup tarball
+  command: >-
+    tar --use-compress-program=pigz -xOf {{ platform_backup_fqpn }}
+    --wildcards '*etcd-binary-version'
+  args:
+    warn: false
+  failed_when: false
+  register: etcd_version_ex
+
+- name: Read etcd_version value from the backup tarball
+  set_fact:
+    etcd_version: "{{ etcd_version_ex.stdout_lines | first | trim }}"
+  when: etcd_version_ex.rc == 0
+
+# TODO(jgauld): Check was this this already done?
+# restore_etcd_version from restore-platform/prepare-env
+- name: Create symlinks for current etcd version
+  import_role:
+    name: common/etcd-symlinks
+
 - name: Remove old etcd database
   file:
     path: "/opt/etcd/db/controller.etcd"

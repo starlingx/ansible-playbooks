@@ -83,6 +83,11 @@
       set_fact:
         previous_software_version: "{{ software_version }}"
 
+    - name: Set etcd_version for restores
+      set_fact:
+        etcd_version: "{{ restore_etcd_version }}"
+      when: restore_etcd_version is defined and restore_etcd_version|length > 0
+
   when: not upgrade_in_progress
 
 - name: Check if the prestaged registry filesystem exists

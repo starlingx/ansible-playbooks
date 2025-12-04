@@ -773,6 +773,10 @@
       set_fact:
         etcd_snapshot_file: "{{ etcd_snapshot_dir.path }}/etcd-snapshot.db"
 
+    - name: Name etcd binary version backup
+      set_fact:
+        etcd_version_file: "{{ etcd_snapshot_dir.path }}/etcd-binary-version"
+
     - block:
       - name: Get etcd endpoints -- primary cluster-host floating ip address
         include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
@@ -796,6 +800,12 @@
                 --key=/etc/etcd/etcd-client.key --cacert=/etc/etcd/ca.crt snapshot save {{ etcd_snapshot_file }}"
       environment:
         ETCDCTL_API: 3
+
+    - name: Create etcd binary version file
+      shell: |
+        etcd --version 2>/dev/null | awk '/etcd Version:/ {print $NF}' > {{ etcd_version_file }}
+      register: etcd_result
+      failed_when: etcd_result.rc != 0
 
     - name: Notify applications that etcd-backup succeeded
       command: /usr/bin/sysinv-utils notify post-etcd-backup-action success
@@ -893,6 +903,7 @@
       set_fact:
         final_backup_targets: "{{ (backup_targets + [
           etcd_snapshot_file,
+          etcd_version_file,
           helm_overrides_sqldump_dir.path,
           override_backup_file,
           ldap_db_backup_,

@@ -154,11 +154,13 @@
 
   # Add etcd security info to static hieradata so that etcd is configured with security
   # when etc puppet manifest is applied before Kubernetes master is initialized in the later role.
+  # Add etcd version info to static hieradata so that etcd version can be dynamically symlinked.
 - name: Write security settings to static hieradata
   lineinfile:
     path: "{{ hieradata_workdir }}/static.yaml"
     line: "{{ item }}"
   with_items:
+    - "platform::etcd::params::etcd_version: {{ etcd_version }}"
     - "platform::etcd::params::bind_address: {{ cluster_floating_address }}"
     - "platform::etcd::params::bind_address_version: {{ etcd_listen_address_version }}"
 
