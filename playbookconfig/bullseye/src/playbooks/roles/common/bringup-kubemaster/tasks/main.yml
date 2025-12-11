@@ -162,6 +162,11 @@
   set_fact:
     apiserver_cert_list: "{{ [ cluster_floating_address, loopback_ip ] + OAM_addresses_primary }}"
 
+- name: Add primary cluster-host controller addresses to apiserver SAN list
+  set_fact:
+    apiserver_cert_list: "{{ apiserver_cert_list + [controller_0_cluster_host, controller_1_cluster_host] }}"
+  when: system_mode != 'simplex'
+
 # add secondary to apiserver SAN list
 - block:
   - name: Set secondary loopback ip for kubeadm configuration
@@ -173,6 +178,12 @@
     set_fact:
       apiserver_cert_list: "{{ apiserver_cert_list + [cluster_floating_address_secondary] }}"
     when: cluster_floating_address_secondary is defined
+
+  - name: Add secondary cluster-host controller addresses to apiserver SAN list
+    set_fact:
+      apiserver_cert_list: >-
+        {{ apiserver_cert_list + [controller_0_cluster_host_secondary, controller_1_cluster_host_secondary] }}
+    when: system_mode != 'simplex' and controller_0_cluster_host_secondary is defined
 
   - name: Add secondary OAM on apiserver SAN list
     set_fact:
