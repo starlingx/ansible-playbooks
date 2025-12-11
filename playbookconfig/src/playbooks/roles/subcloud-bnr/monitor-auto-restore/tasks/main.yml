@@ -1,0 +1,76 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role monitors the subcloud auto-restore operation by waiting
+#   for the subcloud to become available and then checking if the
+#   auto-restore flag exists. It's used by the auto-restore operation
+#   on systems that does not support SEL event monitoring.
+#
+
+- name: Record restore start time
+  set_fact:
+    restore_start: "{{ now(fmt='%s') }}"
+
+- name: Wait for {{ ansible_host }} to become reachable
+  wait_for_connection:
+    delay: "{{ boot_wait_time }}"
+    timeout: "{{ restore_timeout }}"
+    sleep: 5
+
+- name: Get current time for timeout calculation
+  set_fact:
+    now_epoch: "{{ now(fmt='%s') }}"
+
+- name: Calculate elapsed time
+  set_fact:
+    elapsed_time: "{{ now_epoch | int - restore_start | int }}"
+
+- name: Calculate remaining timeout for auto-restore flag
+  set_fact:
+    remaining_timeout: "{{ [restore_timeout | int - elapsed_time | int, 1] | max }}"
+
+- name: Wait for auto-restore completion flag
+  block:
+    - name: Wait for auto-restore completion flag
+      wait_for:
+        path: /var/run/.auto_restore_complete
+        state: present
+        timeout: "{{ remaining_timeout }}"
+        msg: "Timeout waiting for auto-restore completion"
+
+  rescue:
+    # The system might become offline due to the post-unlock reboot,
+    # so we wait for it to become available again
+    - name: Wait for system to come back after reboot
+      wait_for_connection:
+        delay: 30
+        timeout: "{{ unlock_timeout | default(900) }}"
+
+    - name: Get current time after reboot
+      set_fact:
+        now_epoch_after_reboot: "{{ now(fmt='%s') }}"
+
+    - name: Calculate elapsed time after reboot
+      set_fact:
+        elapsed_time_after_reboot: "{{ now_epoch_after_reboot | int - restore_start | int }}"
+
+    - name: Calculate remaining timeout after reboot
+      set_fact:
+        remaining_timeout_after_reboot: "{{ [restore_timeout | int - elapsed_time_after_reboot | int, 1] | max }}"
+
+    - name: Continue waiting for auto-restore flag after reboot
+      wait_for:
+        path: /var/run/.auto_restore_complete
+        state: present
+        timeout: "{{ remaining_timeout_after_reboot }}"
+        msg: "Timeout waiting for auto-restore completion after reboot"
+
+- name: Remove auto-restore completion flag
+  become: yes
+  file:
+    path: /var/run/.auto_restore_complete
+    state: absent
