@@ -16,11 +16,11 @@ nginx_ingress_controller_img: registry.k8s.io/ingress-nginx/controller:v1.13.3
 nginx_kube_webhook_certgen_img: registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.3
 default_backend_img: registry.k8s.io/defaultbackend-amd64:1.5
 # Cert-manager images
-cert_manager_acmesolver_img: quay.io/jetstack/cert-manager-acmesolver:v1.17.2
-cert_manager_cainjector_img: quay.io/jetstack/cert-manager-cainjector:v1.17.2
-cert_manager_controller_img: quay.io/jetstack/cert-manager-controller:v1.17.2
-cert_manager_webhook_img: quay.io/jetstack/cert-manager-webhook:v1.17.2
-cert_manager_startupapicheck_img: quay.io/jetstack/cert-manager-startupapicheck:v1.17.2
+cert_manager_acmesolver_img: quay.io/jetstack/cert-manager-acmesolver:v1.18.3
+cert_manager_cainjector_img: quay.io/jetstack/cert-manager-cainjector:v1.18.3
+cert_manager_controller_img: quay.io/jetstack/cert-manager-controller:v1.18.3
+cert_manager_webhook_img: quay.io/jetstack/cert-manager-webhook:v1.18.3
+cert_manager_startupapicheck_img: quay.io/jetstack/cert-manager-startupapicheck:v1.18.3
 # Keep the snapshot-controller image in sync with the one provided at:
 # cluster/addons/volumesnapshots/volume-snapshot-controller/volume-snapshot-controller-deployment.yaml
 # in the kubernetes github repo
