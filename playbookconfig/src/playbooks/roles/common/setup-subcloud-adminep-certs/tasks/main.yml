@@ -104,7 +104,7 @@
     mode: 0400
   with_items:
     - "/etc/pki/ca-trust/source/anchors/{{ dc_adminep_root_ca_cert }}"
-  when: mode == 'bootstrap'
+  when: mode is defined and mode == 'bootstrap'
 
 - name: Cleanup temporary working directory
   file:
