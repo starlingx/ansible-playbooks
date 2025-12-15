@@ -18,6 +18,7 @@
         check_load: "{{ check_load | default(true) }}"
         check_bootstrap_address: "{{ check_bootstrap_address | default(true) }}"
         check_patches: "{{ check_patches | default(true) }}"
+        sync_patch_metadata: "{{ sync_patch_metadata | default(false) }}"
         sync_software_metadata: "{{ sync_software_metadata | default(false) }}"
         password_change: "{{ password_change | default(true) }}"
         password_change_responses:
@@ -31,6 +32,11 @@
 
   roles:
     - common/prepare-env
+    - role: common/sync-patch-metadata
+      # TODO turn this off for >= 24.09 targets:
+      when: sync_patch_metadata and os_release == "debian"
+      vars:
+        ansible_become_pass: "{{ ansible_ssh_pass }}"
     - role: common/install-sync-software-metadata
       when: sync_software_metadata
       vars:
