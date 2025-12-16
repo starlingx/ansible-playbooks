@@ -19,7 +19,7 @@ import tarfile
 from defusedxml import ElementTree as ET
 from typing import Dict, List, Tuple, Any
 from packaging.version import parse as parse_version
-from software_client import client as sclient  # pylint: disable=import-error
+from software_client import auth as sclient  # pylint: disable=import-error
 
 
 def get_os_env() -> Dict[str, str]:
@@ -48,7 +48,7 @@ def get_releases(software_version: str) -> List[Dict[str, Any]]:
 
     client = sclient.get_client(
         api_version="1",
-        auth_mode="keystone",
+        auth_type="keystone",
         os_username=conf.get("username"),
         os_password=conf.get("password"),
         os_auth_url=conf.get("auth_url"),
