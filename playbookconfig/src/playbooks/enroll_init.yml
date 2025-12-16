@@ -17,7 +17,7 @@
 
   tasks:
     # The reboot operation is not needed for the enroll-init stage.
-    # So we set the wait_for_timeout to 240 seconds to allow for
+    # So we set the wait_for_timeout to 420 seconds to allow for
     # the system to complete the enroll-init stage without rebooting
     # to give the system enough time to reconfigure the OAM network
     # and monitor the Sysinv endpoint for the new address.
@@ -29,7 +29,7 @@
         cloud_init_wait_time: "{{ cloud_init_wait_time | default(
             0 if ipmi_monitor_enabled else 40
           ) }}"
-        wait_for_timeout: "{{ enroll_wait_for_timeout | default(240) }}"
+        wait_for_timeout: "{{ enroll_wait_for_timeout | default(420) }}"
         job_retry_delay: "{{ 120 | random }}"
         protocol: "{{ protocol | default('https') }}"
         operation_string: "enroll-init"
