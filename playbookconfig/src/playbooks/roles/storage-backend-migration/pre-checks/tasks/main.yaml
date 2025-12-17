@@ -1,0 +1,21 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Main execution block
+  block:
+    - include_tasks: "{{ role_path_common }}/tasks/checkpoint.yaml"
+
+  rescue:
+    - name: Clear Facts Cache (Ansible Cache)
+      meta: clear_facts
+
+    - name: Show that cleanup is complete
+      debug:
+        msg: "The checkpoint tasks failed and the Ansible facts cache has been cleared."
+
+    - name: Force play failure after cleanup
+      fail:
+        msg: "Final failure after cache cleanup."

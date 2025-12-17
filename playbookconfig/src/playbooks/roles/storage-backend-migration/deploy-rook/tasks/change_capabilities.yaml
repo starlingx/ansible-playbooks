@@ -1,0 +1,25 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Update capabilities to include monitor and osd
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv
+    -c "UPDATE host_fs SET capabilities='{\"functions\": [\"monitor\", \"osd\"]}'
+        WHERE forihostid=(SELECT id FROM i_host WHERE hostname='{{ item }}')
+        AND name='ceph';"
+  loop: "{{ hosts_to_fix_capabilities }}"
+  register: update_results
+  changed_when: update_results is defined
+  failed_when: update_results is failed
+
+- name: Summarize capability updates
+  when: update_results is defined
+  debug:
+    msg: >
+      Updated {{ update_results.results | selectattr('rc', 'eq', 0) | list | length }}
+      host_fs entries successfully.

@@ -1,0 +1,29 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get CRUSH map tree to map OSDs to their hosts/chassis
+  command: timeout 30 ceph osd tree --format json
+  register: ceph_osd_tree_json
+  changed_when: false
+
+- name: Generate OSD to Chassis mapping
+  set_fact:
+    osd_to_chassis: "{{ osd_to_chassis | default({}) | combine({ item.osd_id | string: item.chassis_name }) }}"
+  vars:
+    nodes: "{{ (ceph_osd_tree_json.stdout | from_json).nodes }}"
+    osd_list: >-
+      {%- set results = [] -%}
+      {%- for osd in nodes if osd.type == 'osd' -%}
+        {%- set host = nodes | selectattr('children', 'defined') | selectattr('children', 'contains', osd.id) | first -%}
+        {%- set chassis = nodes | selectattr('type', 'equalto', 'chassis') | selectattr('children', 'contains', host.id) | first | default(none) -%}
+        {%- if chassis -%}
+          {%- set _ = results.append({'osd_id': osd.id, 'chassis_name': chassis.name}) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ results }}
+  loop: "{{ osd_list }}"
+  loop_control:
+    label: "OSD {{ item.osd_id }} -> Chassis {{ item.chassis_name }}"

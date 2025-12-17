@@ -1,0 +1,26 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Ensure {{ tmp_workspace }} exist"
+  delegate_to: "{{ system.active_controller }}"
+  file:
+    path: "{{ tmp_workspace }}"
+    state: directory
+
+- name: Create rook-ceph-recovery pod
+  include_tasks: create_recovery_pod.yaml
+
+- name: Recovery data
+  include_tasks: recover_data.yaml
+
+- name: Delete rook-ceph-recovery pod
+  include_tasks: delete_recovery_pod.yaml
+
+- name: Cleanup temporary rook-ceph folder
+  delegate_to: "{{ system.active_controller }}"
+  file:
+    path: "{{ tmp_workspace }}"
+    state: absent

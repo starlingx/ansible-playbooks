@@ -1,0 +1,20 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Check if deployment-manager is applied
+  include_tasks: "{{ role_path_common }}/tasks/check_app_status.yaml"
+  vars:
+    app_name_to_check: "deployment-manager"
+    failed_when: false
+
+- name: Fail if deployment-manager not applied
+  fail:
+    msg: |
+      deployment-manager must be applied to proceed.
+  when: >
+    app_status_check is not defined or
+    app_status_check.rc != 0 or
+    (app_status_check.stdout | default('') | trim) != 'applied'

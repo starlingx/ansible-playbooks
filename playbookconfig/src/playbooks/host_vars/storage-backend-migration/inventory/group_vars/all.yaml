@@ -1,0 +1,44 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+kubeconfig: "/etc/kubernetes/admin.conf"
+
+storage_backend_migration_target: "rook-ceph" # default
+tmp_path: "/tmp/{{ storage_backend_migration_target }}-migration"
+
+storage_backend_migration_backup_dir: "/opt/platform-backup/storage-backend-migration"
+
+rook_base_pacific: "/var/lib/rook"
+rook_base_pod_pacific: "{{ rook_base_pacific }}/rook-ceph"
+rook_base_host_pacific: "{{ rook_base_pacific }}/rook-ceph"
+
+rook_base_reef: "/var/lib/ceph/data"
+rook_base_pod_reef: "/var/lib/rook/rook-ceph"
+rook_base_host_reef: "{{ rook_base_reef }}/rook-ceph"
+
+images:
+  csi_attacher: registry.local:9001/registry.k8s.io/sig-storage/csi-attacher:v4.8.1
+  cephcsi: registry.local:9001/quay.io/cephcsi/cephcsi:v3.14.2
+  csi_provisioner: registry.local:9001/registry.k8s.io/sig-storage/csi-provisioner:v5.2.0
+  csi_node_driver_registrar: registry.local:9001/registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.13.0
+  csi_resizer: registry.local:9001/registry.k8s.io/sig-storage/csi-resizer:v1.13.2
+  csi_snapshotter: registry.local:9001/registry.k8s.io/sig-storage/csi-snapshotter:v8.2.1
+  rook_ceph:
+    pacific: registry.local:9001/docker.io/rook/ceph:v1.12.11
+    reef: registry.local:9001/docker.io/rook/ceph:v1.17.8
+  ceph:
+    pacific: registry.local:9001/quay.io/ceph/ceph:v16.2.15
+    reef: registry.local:9001/quay.io/ceph/ceph:v18.2.7
+  ceph_config_helper: registry.local:9001/docker.io/openstackhelm/ceph-config-helper:ubuntu_jammy_18.2.2-1-20241210
+  kubectl: registry.local:9001/docker.io/bitnamilegacy/kubectl:1.33.4
+  stx_ceph_manager: registry.local:9001/docker.io/starlingx/stx-ceph-manager:stx.12.0-v18.2.2-0
+  rsync: registry.local:9001/docker.io/starlingx/stx-debian-dev:stx.9.0-v1.0.0
+
+cgts_vg_min_required_free_gib: "20"
+
+osd_usage_safety_margin_percent: 25 # for SX in-service check
+
+erase_rbd_snapshots: false

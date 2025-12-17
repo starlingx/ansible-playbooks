@@ -1,0 +1,9 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+tmp_workspace: "{{ tmp_path }}/{{ role_name }}"
+local_registry: "registry.local:9001"
+max_parallel_download: 5

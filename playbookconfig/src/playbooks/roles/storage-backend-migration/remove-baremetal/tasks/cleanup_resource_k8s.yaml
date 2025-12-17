@@ -1,0 +1,29 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Delete StorageClasses, Secrets and ConfigMaps
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  shell: |
+    kubectl delete sc cephfs --ignore-not-found=true
+    kubectl delete sc general --ignore-not-found=true
+    kubectl get ns -o jsonpath='{.items[*].metadata.name}' | xargs -n 1 kubectl delete secret ceph-pool-kube-cephfs-data --ignore-not-found=true -n
+    kubectl get ns -o jsonpath='{.items[*].metadata.name}' | xargs -n 1 kubectl delete secret ceph-pool-kube-rbd --ignore-not-found=true -n
+    kubectl get ns -o jsonpath='{.items[*].metadata.name}' | xargs -n 1 kubectl delete secret ceph-admin --ignore-not-found=true -n
+    kubectl get ns -o jsonpath='{.items[*].metadata.name}' | xargs -n 1 kubectl delete cm ceph-etc-pools-audit --ignore-not-found=true -n
+    kubectl get ns -o jsonpath='{.items[*].metadata.name}' | xargs -n 1 kubectl delete cm cephfs-storage-init --ignore-not-found=true -n
+  register: delete_k8s_result
+
+- name: Debug StorageClasses, Secrets and ConfigMaps cleanup
+  debug:
+    var: delete_k8s_result.stdout_lines
+  when: delete_k8s_result.stdout_lines | length > 0
+
+- name: Cleanup Snapshots
+  include_tasks: "cleanup_snapshots.yaml"
+  when: >
+    migration_type == "redeploy" or
+    (migration_type == "export_import" and erase_rbd_snapshots_cache | bool)

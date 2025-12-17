@@ -1,0 +1,122 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Map OSD for their chassis
+  include_tasks: "map_osd_chassis.yaml"
+
+- name: Obtain ceph df information
+  command: timeout 30 ceph df --format json
+  register: ceph_df_json
+  changed_when: false
+
+- name: Register available and used space and OSD count
+  set_fact:
+    ceph_total_bytes: "{{ (ceph_df_json.stdout | from_json).stats.total_bytes }}"
+    ceph_used_bytes: "{{ (ceph_df_json.stdout | from_json).stats.total_used_raw_bytes  }}"
+    ceph_avail_bytes: "{{ (ceph_df_json.stdout | from_json).stats.total_avail_bytes }}"
+    osd_count: "{{ hostvars[system.active_controller]['disks_by_host'].values() | map('length') | sum }}"
+
+- name: Show Ceph storage summary
+  debug:
+    msg:
+    - "Total space --- : {{ ceph_total_bytes | int | human_readable }} ({{ ceph_total_bytes }} bytes)"
+    - "Used space ---- : {{ ceph_used_bytes | int | human_readable }} ({{ ceph_used_bytes }} bytes)"
+    - "Available space : {{ ceph_avail_bytes | int | human_readable }} ({{ ceph_avail_bytes }} bytes)"
+    - "OSD count ----- : {{ osd_count }}"
+
+- name: Get per-OSD usage
+  command: timeout 30 ceph osd df --format json
+  register: ceph_osd_df_json
+  changed_when: false
+
+- name: Set OSD usage safety margin for calculation
+  set_fact:
+    osd_usage_safety_margin_calc: "{{ (osd_usage_safety_margin_percent | float / 100.0) + 1.0 | float }}"
+
+- name: Display OSD safety margin for calculation
+  debug:
+    var: osd_usage_safety_margin_calc
+
+- name: Compute OSD stats and group by Chassis
+  set_fact:
+    chassis_stats: >-
+      {{
+        chassis_stats | default({})
+        | combine({
+          chassis: {
+            'total_avail_bytes': (chassis_stats[chassis].total_avail_bytes | default(0)) + (item.kb_avail | int * 1024),
+            'osd_usage': (chassis_stats[chassis].osd_usage | default([])) + [{
+              'id': item.id | string,
+              'used': (item.kb_used | int) * 1024,
+              'used_safety_margin': (((item.kb_used | int) * 1024) * (osd_usage_safety_margin_calc | float)) | int,
+              'avail': item.kb_avail | int * 1024
+            }]
+          }
+        })
+      }}
+  loop: "{{ ceph_osd_df_json.stdout | from_json | json_query('nodes[*]') }}"
+  vars:
+    chassis: "{{ osd_to_chassis[item.id | string] | default('unknown') }}"
+  loop_control:
+    label: "Aggregating stats for OSD {{ item.id }} into Chassis {{ chassis }}"
+
+- name: Fail if we have less than 2 OSDs PER CHASSIS
+  fail:
+    msg: "Chassis '{{ item.key }}' has only {{ item.value.osd_usage | length }} OSD(s). Sx requires at least 2 OSDs per chassis to proceed with safe migration."
+  when: item.value.osd_usage | length | int < 2
+  loop: "{{ chassis_stats | dict2items }}"
+  loop_control:
+    label: "Checking minimum OSD count in Chassis = {{ item.key }}"
+
+- name: Compute worst-case OSD and free space after removal FOR EACH CHASSIS
+  set_fact:
+    chassis_stats: >-
+      {{
+        chassis_stats
+        | combine({
+          item.key: {
+            'total_avail_bytes': item.value.total_avail_bytes,
+            'worst_osd': item.value.osd_usage
+              | sort(attribute='used', reverse=true)
+              | first,
+            'free_after_removal': [
+              item.value.total_avail_bytes - (item.value.osd_usage
+                | sort(attribute='used', reverse=true)
+                | first).avail,
+              0
+            ] | max
+          }
+        })
+      }}
+  loop: "{{ chassis_stats | dict2items }}"
+  loop_control:
+    label: "Calculating removal impact for Chassis {{ item.key }}"
+
+- name: Show PER-CHASSIS calculations summary
+  debug:
+    msg:
+      - "--- Chassis {{ item.key }} ---"
+      - "Total available space ------ : {{ item.value.total_avail_bytes | int | human_readable }}"
+      - "Worst-case OSD (ID {{ item.value.worst_osd.id }}) data - : {{ item.value.worst_osd.used | int | human_readable }} (+{{ osd_usage_safety_margin_percent }}% : {{ item.value.worst_osd.used_safety_margin | int | human_readable }})"
+      - "Free space on worst OSD ---- : {{ item.value.worst_osd.avail | int | human_readable }}"
+      - "Effective free after removal : {{ item.value.free_after_removal | int | human_readable }}"
+  loop: "{{ chassis_stats | dict2items }}"
+  loop_control:
+    label: "Chassis = {{ item.key }}"
+
+- name: Check if enough free space to mark one OSD out PER CHASSIS
+  fail:
+    msg: |
+      FAILED: Not enough free space in Chassis '{{ item.key }}' to safely mark one OSD out at a time.
+      Total available space in chassis: {{ item.value.total_avail_bytes | int | human_readable }}
+      Worst-case OSD (ID {{ item.value.worst_osd.id }}) data - : {{ item.value.worst_osd.used | int | human_readable }} (+{{ osd_usage_safety_margin_percent }}% : {{ item.value.worst_osd.used_safety_margin | int | human_readable }})
+      Free space on worst OSD: {{ item.value.worst_osd.avail | int | human_readable }}
+      Effective free after removal: {{ item.value.free_after_removal | int | human_readable }}
+      The free space ({{ item.value.free_after_removal | int | human_readable }}) must be greater than the worst OSD data + margin ({{ item.value.worst_osd.used_safety_margin | int | human_readable }}) for this chassis."
+  when: item.value.free_after_removal | int < item.value.worst_osd.used_safety_margin | int
+  loop: "{{ chassis_stats | dict2items }}"
+  loop_control:
+    label: "Chassis = {{ item.key }}"

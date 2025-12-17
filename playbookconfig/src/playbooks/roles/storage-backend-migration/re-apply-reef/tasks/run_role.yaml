@@ -1,0 +1,103 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Ensure {{ tmp_workspace }} exist"
+  file:
+    path: "{{ tmp_workspace }}"
+    state: directory
+
+- name: Check storage backend capabilities before changing it
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -c
+    "SELECT capabilities FROM storage_backend;"
+  register: backend_capabilities
+  changed_when: false
+
+- name: Debug backend_capabilities
+  debug:
+    var: backend_capabilities.stdout_lines
+
+- name: Enable auto-scale for all pools
+  include_tasks: "{{ role_path_common }}/tasks/ceph/toggle_auto_scale_pgs.yaml"
+  vars:
+    action: "on"
+
+- name: Wait for Ceph HEALTH_OK
+  include_tasks: "{{ role_path_common }}/tasks/ceph/check_ceph_health.yaml"
+  vars:
+    ceph_desired_status:
+      - "HEALTH_OK"
+
+- name: Get rook-ceph app status
+  include_tasks: "{{ role_path_common }}/tasks/check_app_status.yaml"
+  vars:
+    app_name_to_check: "rook-ceph"
+
+- name: Abort rook-ceph apply if not in apply-failed
+  block:
+    - name: Abort app apply
+      environment: "{{ system_env }}"
+      command: system application-abort rook-ceph
+
+    - name: Wait for rook-ceph to reach 'apply-failed' status
+      include_tasks: "{{ role_path_common }}/tasks/check_app_status.yaml"
+      vars:
+        app_name_to_check: "rook-ceph"
+        success_statuses: "apply-failed"
+        retries: 60
+        delay: 10
+  when: app_status_check.stdout | trim not in ['apply-failed', 'applied']
+
+# This in needed to allow us to lock and unlock, otherwise it complains about
+# app in transition
+- name: Re-apply rook-ceph app before adding floating monitor to DX
+  block:
+    - name: Apply Rook-Ceph application before adding float monitor
+      environment: "{{ system_env }}"
+      command: system application-apply rook-ceph
+      register: app_apply_result
+      failed_when:
+        - app_apply_result.rc != 0
+        - ("applying" not in app_apply_result.stderr)
+        - ("in progress" not in app_apply_result.stderr)
+
+    - name: Wait for rook-ceph to reach applied status
+      include_tasks: "{{ role_path_common }}/tasks/check_app_status.yaml"
+      vars:
+        app_name_to_check: "rook-ceph"
+        success_statuses:
+          - "applied"
+        failure_statuses:
+          - "apply-failed"
+        retries: 366 # 1 hour and 1 minute, good luck
+        delay: 10
+
+  when: system.system_deployment == "AIO-DX"
+
+- name: Add monitors
+  include_tasks: "{{ roles_dir_path }}/deploy-rook/tasks/add_monitors.yaml"
+
+- name: Change capabilities for hosts with OSDs and monitors
+  include_tasks: "{{ roles_dir_path }}/deploy-rook/tasks/change_capabilities.yaml"
+
+- name: Apply Rook-Ceph application
+  environment: "{{ system_env }}"
+  command: system application-apply rook-ceph
+  register: app_apply_result
+  failed_when: >
+    app_apply_result.rc != 0 and
+    ("applying" not in app_apply_result.stderr and
+    "in progress" not in app_apply_result.stderr)
+
+- name: Clean recovery reef
+  include_tasks: clean_recovery_reef.yaml
+
+- name: Cleanup temporary rook-ceph folder
+  file:
+    path: "{{ tmp_workspace }}"
+    state: absent

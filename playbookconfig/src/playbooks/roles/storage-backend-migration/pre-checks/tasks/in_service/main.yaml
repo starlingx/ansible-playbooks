@@ -1,0 +1,27 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Fail if is migration is not supported on this system
+  fail:
+    msg: "In-service migration not supported in {{ system.system_deployment }} deployment"
+  when: system.system_deployment == "STORAGE"
+
+- name: Check SX can mark out one OSD at a time
+  include_tasks: sx_osd_checks.yaml
+  when:
+    - system.system_deployment == "AIO-SX"
+    - pool_size | int < 2
+
+- name: Fail if there is no enough space available for backups
+  fail:
+    msg: >-
+      There is no enough space available for backups.
+      The {{ backups_dest_name }} has {{ avail_space_bytes | int | human_readable }} of free space.
+      But ceph data requires {{ backups_required_bytes | int | human_readable }}
+      (total ceph used data + 256MiB of safety margin).
+  when:
+    - old_pool_exist
+    - avail_space_bytes | int < backups_required_bytes | int

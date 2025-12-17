@@ -1,0 +1,28 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Delete PV {{ pv_name }}"
+  include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+  vars:
+    kind: PersistentVolume
+    name: "{{ pv_name }}"
+
+- name: Render recreate_pv.py using template
+  template:
+    src: recreate_pv.py.j2
+    dest: "{{ tmp_workspace }}/recreate_pv.py"
+    mode: 0644
+  register: python_script_creation
+  failed_when: python_script_creation.failed
+
+- name: "Execute recreate PV script for {{ pv_name }}"
+  command: "python {{ tmp_workspace }}/recreate_pv.py"
+
+- name: "Apply new PV {{ pv_name }} file"
+  command: "kubectl apply -f {{ tmp_workspace }}/{{ pv_name }}.yaml"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  when: ( pv_check.rc | default(0) != 0 ) or ( 'old' not in pv_name )

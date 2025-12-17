@@ -1,0 +1,42 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Show storage backend migration backup destination
+  debug:
+    msg: >
+      {{ 'Using storage_backend_migration_backup_dir: ' ~ storage_backend_migration_backup_dir }}
+
+- name: "Ensure {{ storage_backend_migration_backup_dir }} exist"
+  file:
+    path: "{{ storage_backend_migration_backup_dir }}"
+    state: directory
+    mode: "0644"
+
+- name: Register total available bytes for storage backend migration backup path
+  shell: |
+    # Find the nearest existing path to pass to df
+    path="{{ storage_backend_migration_backup_dir }}"
+    while [ ! -e "$path" ]; do
+      path=$(dirname "$path")
+    done
+
+    df --block-size=1 --output=avail "$path" | tail -1
+  changed_when: false
+  register: backend_backup_df_avail
+
+- name: Register available space for storage backend migration backup
+  set_fact:
+    storage_backend_backups_avail_space_bytes: "{{ backend_backup_df_avail.stdout }}"
+    storage_backend_backups_required_bytes: "268435456" # 256 MiB
+
+- name: Fail if there is no enough space available for storage backend migration backup
+  fail:
+    msg: >-
+      There is no enough space available for backups.
+      The {{ storage_backend_migration_backup_dir }} has
+      {{ storage_backend_backups_avail_space_bytes | int | human_readable }} of free space.
+      But the required is {{ storage_backend_backups_required_bytes | int | human_readable }}
+  when: storage_backend_backups_avail_space_bytes | int < storage_backend_backups_avail_space_bytes | int

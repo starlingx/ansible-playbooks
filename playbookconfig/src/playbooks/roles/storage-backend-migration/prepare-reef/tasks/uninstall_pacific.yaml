@@ -1,0 +1,53 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Copy rook-ceph manifests to remote
+  copy:
+    src: "{{ role_path_common }}/files/{{ item }}"
+    dest: "{{ tmp_workspace }}/{{ item }}"
+  loop: "{{ rook_ceph_manifests }}"
+
+- name: Render rook-ceph manifests to remote
+  template:
+    src: "{{ role_path_common }}/templates/{{ item.name }}.j2"
+    dest: "{{ tmp_workspace }}/{{ item.name }}"
+  loop: "{{ rook_ceph_template_manifests }}"
+
+- name: Remove finalizer from secrets rook-ceph-mon
+  command: >
+    kubectl patch -n rook-ceph secrets rook-ceph-mon
+    -p '{"metadata":{"finalizers":null}}'
+    --type=merge
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  ignore_errors: true
+
+- name: Delete cephfilesystem kube-cephfs
+  include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+  vars:
+    manifest_path: "{{ tmp_workspace }}/filesystem.yaml"
+
+- name: Delete rook-ceph manifests
+  command: kubectl delete -f {{ tmp_workspace }}/{{ item }} --ignore-not-found
+  loop: "{{ rook_ceph_manifests_to_delete }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+
+- name: Remove ceph-mon label from {{ hostvars[system.active_controller].host_with_mon_and_osd }}
+  shell: kubectl label node {{ hostvars[system.active_controller].host_with_mon_and_osd }} ceph-mon- --overwrite
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+
+- name: Delete old Pacific dir and metadata
+  shell: rm -rvf {{ rook_base_pacific }}
+  register: removed_old_pacific_files
+  args:
+    warn: false
+
+- name: Display removed Pacific files
+  debug:
+    var: removed_old_pacific_files.stdout_lines
+  when : removed_old_pacific_files.stdout_lines | length > 0

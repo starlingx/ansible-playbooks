@@ -1,0 +1,85 @@
+- name: Cache erase_rbd_snapshots
+  set_fact:
+    erase_rbd_snapshots_cache: "{{ erase_rbd_snapshots }}"
+    cacheable: true
+  when: erase_rbd_snapshots_cache is undefined
+
+- name: Get VolumeSnapshotContent for RBD and set var
+  block:
+    - name: Get VolumeSnapshotContent for RBD
+      shell: >
+        kubectl get volumesnapshotcontents
+        -o jsonpath='{range .items[?(@.spec.driver=="rbd.csi.ceph.com")]}{.metadata.name}{"\n"}{end}'
+      register: rbd_vsc_output
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Set rbd_vsc
+      set_fact:
+        rbd_vsc: "{{ rbd_vsc_output.stdout_lines }}"
+        cacheable: true
+  when: rbd_vsc is undefined
+
+- name: Display rbd VolumeSnapshotContents
+  debug:
+    var: rbd_vsc
+
+- name: Get VolumeSnapshot for RBD and set var
+  block:
+    - name: Get VolumeSnapshot for RBD
+      shell: >
+        kubectl get VolumeSnapshot
+        -o jsonpath='{range .items[?(@.spec.volumeSnapshotClassName=="rbd-snapshot")]}{.metadata.name}{"\n"}{end}'
+      register: rbd_vs_output
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Set rbd_vs
+      set_fact:
+        rbd_vs: "{{ rbd_vs_output.stdout_lines }}"
+        cacheable: true
+  when: rbd_vs is undefined
+
+- name: Display rbd VolumeSnapshot
+  debug:
+    var: rbd_vs
+
+- name: Get VolumeSnapshotContent for CephFs and set var
+  block:
+    - name: Get VolumeSnapshotContent for CephFs
+      shell: >
+        kubectl get volumesnapshotcontents
+        -o jsonpath='{range .items[?(@.spec.driver=="cephfs.csi.ceph.com")]}{.metadata.name}{"\n"}{end}'
+      register: cephfs_vsc_output
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Set cephfs_vsc
+      set_fact:
+        cephfs_vsc: "{{ cephfs_vsc_output.stdout_lines }}"
+        cacheable: true
+  when: cephfs_vsc is undefined
+
+- name: Display CephFs VolumeSnapshotContents
+  debug:
+    var: cephfs_vsc
+
+- name: Get VolumeSnapshot for CephFs and set var
+  block:
+    - name: Get VolumeSnapshot for CephFs
+      shell: >
+        kubectl get VolumeSnapshot
+        -o jsonpath='{range .items[?(@.spec.volumeSnapshotClassName=="cephfs-snapshot")]}{.metadata.name}{"\n"}{end}'
+      register: cephfs_vs_output
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Set cephfs_vs
+      set_fact:
+        cephfs_vs: "{{ cephfs_vs_output.stdout_lines }}"
+        cacheable: true
+  when: cephfs_vs is undefined
+
+- name: Display CephFs VolumeSnapshot
+  debug:
+    var: cephfs_vs

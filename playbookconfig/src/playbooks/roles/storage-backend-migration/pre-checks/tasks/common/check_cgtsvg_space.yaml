@@ -1,0 +1,56 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Debug hosts_list_sql
+  debug:
+    msg: "SQL List is: {{ groups.with_monitor | map('regex_replace', '^(.*)$', \"'\\1'\") | join(', ') }}"
+
+- name: Get LVM data for all monitored hosts (cgts-vg) in one query
+  vars:
+    hosts_list_sql: "{{ groups.with_monitor | map('regex_replace', '^(.*)$', \"'\\1'\") | join(', ') }}"
+  shell: |
+    psql -d sysinv -t -A -F ':' -c \
+      "SELECT i_host.hostname, lvm_vg_size, lvm_vg_total_pe, lvm_vg_free_pe \
+       FROM i_lvg \
+       JOIN i_host ON i_lvg.forihostid = i_host.id \
+       WHERE lvm_vg_name = 'cgts-vg' AND i_host.hostname IN ({{ hosts_list_sql }})"
+  register: db_lvm_data_multi
+  become: true
+  become_user: postgres
+  changed_when: false
+  failed_when: db_lvm_data_multi.rc != 0 or not db_lvm_data_multi.stdout
+
+- name: Debug LVM metrics
+  debug:
+    var: item_parts
+  loop: "{{ db_lvm_data_multi.stdout_lines }}"
+  vars:
+    item_parts: "{{ item.split(':') }}"
+
+- name: Parse LVM metrics and calculate free space (GiB) for each host
+  set_fact:
+    lvm_metrics: "{{ lvm_metrics | default({}) | combine({
+        (item_parts.0 | trim): {
+          'cgtsvg_max_free_gib': ((item_parts.1 | int) * (item_parts.3 | int) // (item_parts.2 | int) // (1024 * 1024)) // 1024
+        }
+      }) }}"
+  loop: "{{ db_lvm_data_multi.stdout_lines }}"
+  vars:
+    item_parts: "{{ item.split(':') }}"
+
+- name: Fail if cgts-vg free space is insufficient for any host
+  vars:
+    host_metrics: "{{ lvm_metrics[item] }}"
+    cgtsvg_max_free_gib: "{{ host_metrics.cgtsvg_max_free_gib }}"
+
+  fail:
+    msg: |
+      For host {{ item }}: Volume Group 'cgts-vg' has only {{ cgtsvg_max_free_gib }} GiB free, which is insufficient for the required monitor with {{ min_required_free_gib }} GiB.
+      Please free up space to proceed.
+  when: cgtsvg_max_free_gib | int < min_required_free_gib | int
+  loop: "{{ groups.with_monitor }}"
+  loop_control:
+    label: "Checking insufficient space on {{ item }} for ceph monitor"

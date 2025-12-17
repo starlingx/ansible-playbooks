@@ -1,0 +1,34 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get ceph storage_backend
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -F '|' -c
+    "
+    SELECT JSON_BUILD_OBJECT(
+      'id', id,
+      'uuid', uuid
+    )
+    FROM storage_backend WHERE backend='ceph' AND name='ceph-store'
+    "
+  register: storage_backend_result
+  changed_when: false
+  when: storage_backend is undefined
+
+- name: Set storage_backend
+  become: true
+  become_user: postgres
+  set_fact:
+    storage_backend: "{{ storage_backend_result.stdout | from_json }}"
+    cacheable: true
+  changed_when: false
+  when: storage_backend is undefined
+
+- name: Show storage_backend
+  debug:
+    var: storage_backend

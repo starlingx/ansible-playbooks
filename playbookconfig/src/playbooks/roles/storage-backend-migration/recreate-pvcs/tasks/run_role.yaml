@@ -1,0 +1,18 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Recover Ceph PVCs after host redeployed
+  shell: /usr/share/ansible/stx-ansible/playbooks/roles/restore-platform/restore-more-data/files/recover_ceph_pvcs.sh
+  register: recover_ceph_pvcs_output
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  args:
+    chdir: /usr/share/ansible/stx-ansible/playbooks/roles/restore-platform/restore-more-data/files/
+
+- name: Show recreate script output
+  debug:
+    msg: "{{ recover_ceph_pvcs_output.stdout_lines }}"
+

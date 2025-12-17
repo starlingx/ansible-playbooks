@@ -1,0 +1,21 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+valid_migration_types:
+  - export_import
+  - in_service
+  - redeploy
+
+ceph_allowed_pools:
+ - .mgr
+ - kube-rbd
+ - kube-cephfs-data
+ - kube-cephfs-metadata
+ - images
+ - cinder.backups
+ - cinder-volumes
+ - ephemeral
+ - kube-rbdkube-system

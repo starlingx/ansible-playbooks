@@ -1,0 +1,12 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Get PV and PVC information from PV {{ pv_name }}"
+  include_tasks: get_pv.yaml
+  when: ( '-old' not in pv_name )
+
+- name: "Recreate PV and PVCs from PV {{ pv_name }}"
+  include_tasks: recreate_procedure.yaml

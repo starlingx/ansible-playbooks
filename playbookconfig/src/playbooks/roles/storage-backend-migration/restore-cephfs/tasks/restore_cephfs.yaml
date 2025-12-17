@@ -1,0 +1,140 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Copy rook-ceph manifests to remote
+  copy:
+    src: "{{ role_path_common }}/files/{{ item }}"
+    dest: "{{ tmp_workspace }}/{{ item }}"
+  loop: "{{ rook_ceph_manifests }}"
+
+- name: Get rook-ceph-tool pod name
+  shell: kubectl get pods -n rook-ceph | awk '/rook-ceph-tool/ {print $1}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: tool_pod
+  changed_when: false
+
+- name: "Wait {{ tool_pod.stdout }} pod to be Running"
+  command: kubectl get pods {{ tool_pod.stdout }} -n rook-ceph -o 'jsonpath={.status.phase}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: tool_pod_running
+  until: "'Running' in tool_pod_running.stdout"
+  retries: 60
+  delay: 10
+  changed_when: false
+  failed_when:
+    - "'Running' not in tool_pod_running.stdout"
+
+- name: Delete cephfilesystem kube-cephfs
+  include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+  vars:
+    manifest_path: "{{ tmp_workspace }}/filesystem.yaml"
+
+- name: Remove existing Ceph filesystem if present
+  command: ceph fs rm {{ fs_name }} --yes-i-really-mean-it
+  register: filesystem_remove
+  changed_when:
+    - filesystem_remove.rc == 0
+    - ("does not exist" not in filesystem_remove.stderr)
+
+- name: Create and reset CephFS
+  shell: |
+    ceph fs new {{ fs_name }} {{ metadata_pool_name }} {{ data_pool_name }} --force
+    ceph fs reset {{ fs_name }} --yes-i-really-mean-it
+
+- name: Recover CephFS journals and reset tables
+  shell: |
+    kubectl exec -n rook-ceph {{ tool_pod.stdout }} -- bash -c "
+    cephfs-journal-tool --rank={{ fs_name }}:0 event recover_dentries summary
+    cephfs-journal-tool --rank={{ fs_name }}:0 journal reset \
+      {{ '--yes-i-really-really-mean-it' if require_osd_release == 'reef' else '' }}
+    cephfs-table-tool {{ fs_name }}:0 reset session
+    cephfs-table-tool {{ fs_name }}:0 reset snap
+    cephfs-table-tool {{ fs_name }}:0 reset inode
+    "
+  register: recover_cephfs_output
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+
+- name: Debug recover_cephfs_output var
+  debug:
+    var: recover_cephfs_output.stdout_lines
+
+- name: Update cephfs snap references to prevent mds damaged
+  shell: |
+    set -o pipefail
+    # Check if there are any VolumeSnapshotContent with cephfs driver
+    if kubectl get volumesnapshotcontents \
+      -o custom-columns="DRIVER:spec.driver" | grep -q "cephfs.csi.ceph.com"; then
+
+      kubectl exec -n rook-ceph {{ tool_pod.stdout }} -- bash -c '
+      # The cephfs-data-scan command needs to be run more than once
+      # to ensure that all issues are fixed.
+      while true; do
+        OUTPUT=$(cephfs-data-scan scan_links --filesystem {{ fs_name }} 2>&1)
+        RC=$?
+        echo "$OUTPUT"
+
+        # If the command fails or returns empty, it should exit the loop.
+        if [ $RC -ne 0 ] || [ -z "$OUTPUT" ]; then
+            break
+        fi
+        sleep 1
+      done
+      '
+    fi
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+
+- name: Apply filesystem YAML
+  shell: kubectl apply -f {{ tmp_workspace }}/filesystem.yaml
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+
+- name: Scale rook-ceph-operator and rook-ceph-mds deployments to replica 1
+  include_tasks: "{{ role_path_common }}/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "name"
+        name: "rook-ceph-operator"
+        namespace: "rook-ceph"
+        kind: Deployment
+        replicas: 1
+      - method: "label"
+        label: "app=rook-ceph-mds"
+        namespace: "rook-ceph"
+        kind: Deployment
+        replicas: 1
+
+- name: Wait until all Ceph MDS pods are running
+  shell: |
+    set -e -o pipefail
+    total=$(kubectl -n rook-ceph get pods -l app=rook-ceph-mds --no-headers | wc -l)
+    running=$(kubectl -n rook-ceph get pods -l app=rook-ceph-mds \
+      --field-selector=status.phase==Running --no-headers | wc -l)
+    if [ "$total" -gt 0 ] && [ "$total" -eq "$running" ]; then
+      exit 0
+    else
+      echo "$running/$total MDS pods running"
+      exit 1
+    fi
+  register: mds_pods_check
+  until: mds_pods_check.rc == 0
+  retries: 60
+  delay: 10
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  changed_when: false
+
+- name: Repair MDS
+  command: ceph mds repaired 0
+  register: ceph_mds_repair_output
+
+- name: Debug MDS repair
+  debug:
+    var: ceph_mds_repair_output.stdout_lines
+  when: ceph_mds_repair_output.stdout_lines | length > 0

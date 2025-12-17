@@ -1,0 +1,35 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# `software deploy show` outputs a table with the content from key `deploy` in
+# /opt/software/software.json.
+# When `deploy` is empty it means there is no upgrade/patching in progress.
+
+- name: Check if software.json exist
+  stat:
+    path: /opt/software/software.json
+  register: software_json_file
+  changed_when: false
+
+- name: Parse software.json
+  slurp:
+    src: /opt/software/software.json
+  register: software_json
+  when: software_json_file.stat.exists
+
+- name: Set deploy fact
+  set_fact:
+    deploy: "{{ (software_json.content | b64decode | from_json).deploy }}"
+  when: software_json_file.stat.exists
+
+- name: Fail if there is a upgrade in progress
+  fail:
+    msg: >-
+      Upgrade to {{ to_release }} release is in progress.
+      Please complete the upgrade before migrating.
+  vars:
+    to_release: "{{ (deploy | first).to_release | default('unknown') }}"
+  when: software_json_file.stat.exists and deploy is defined and deploy | length > 0

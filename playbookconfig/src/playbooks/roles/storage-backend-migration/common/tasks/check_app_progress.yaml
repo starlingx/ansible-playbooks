@@ -1,0 +1,54 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# Reusable task to check application status directly from sysinv DB
+# Required: app_name_to_check
+# Optional:  db_field_to_check, comparison_operator, target_values, retries, delay, ignore_errors
+
+- name: Check {{ app_name_to_check }} {{ db_field_to_check | default('progress') }} field in sysinv DB
+  vars:
+    db_field_to_check: "{{ db_field_to_check | default('progress') }}"
+    comparison_operator: "{{ comparison_operator | default('==') }}"
+    target_values: "{{ target_values | default(['applied']) }}"
+
+  set_fact:
+    sql_condition: >
+      {% set field = db_field_to_check | default('progress') %}
+      {% set op = comparison_operator | default('==') %}
+      {% set values = target_values | default(['applied']) %}
+      {% set formatted_values = values | map('quote') | join(', ') %}
+
+      {% if op == '==' %}
+        {{ field }} = '{{ values[0] }}'
+      {% elif op == '!=' %}
+        {{ field }} != '{{ values[0] }}'
+      {% elif op == 'IN' %}
+        {{ field }} IN ({{ formatted_values }})
+      {% elif op == 'NOT IN' %}
+        {{ field }} NOT IN ({{ formatted_values }})
+      {% elif op == 'LIKE' %}
+        {{ field }} LIKE '{{ values[0] }}'
+      {% else %}
+        {{ field }} = '{{ values[0] }}'
+      {% endif %}
+
+- name: Execute dynamic DB check
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -c
+    "SELECT {{ db_field_to_check | default('progress') }} FROM kube_app WHERE name='{{ app_name_to_check }}' AND {{ sql_condition }};"
+  register: app_status_check
+  changed_when: false
+  retries: "{{ retries | default(1) }}"
+  delay: "{{ delay | default(5) }}"
+  until:
+    - app_status_check.rc == 0
+    - app_status_check.stdout is defined
+    - app_status_check.stdout.strip() != ''
+  failed_when: app_status_check.rc != 0
+  ignore_errors: "{{ ignore_errors | default(false) }}"
+

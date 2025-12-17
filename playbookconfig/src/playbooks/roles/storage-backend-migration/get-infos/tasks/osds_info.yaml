@@ -1,0 +1,93 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Set disks_by_host_db
+  block:
+    - name: Get OSD information from database
+      become: true
+      become_user: postgres
+      command: >
+        psql -d sysinv -t -A -F '|' -c
+        "SELECT JSON_OBJECT_AGG(hostname, devices)
+        FROM (
+          SELECT
+            i_host.hostname,
+            JSON_AGG(
+              JSON_BUILD_OBJECT(
+                'disk_device_path', i_idisk.device_path,
+                'disk_uuid', i_idisk.uuid,
+                'osd_id', i_istor.osdid,
+                'tier_uuid', storage_tiers.uuid,
+                'tier_name', storage_tiers.name
+              )
+            ) AS devices
+          FROM i_idisk
+          LEFT JOIN i_host ON i_idisk.forihostid = i_host.id
+          LEFT JOIN i_istor ON i_idisk.uuid = i_istor.idisk_uuid
+          LEFT JOIN storage_tiers ON i_istor.fortierid = storage_tiers.id
+          WHERE i_idisk.uuid IN (SELECT idisk_uuid FROM i_istor)
+          GROUP BY i_host.hostname
+        ) sub;"
+      register: db_osd_info
+      changed_when: false
+
+    - name: Set fact from SQL JSON output
+      set_fact:
+        disks_by_host_db: "{{ db_osd_info.stdout | from_json }}"
+        cacheable: true
+  when: disks_by_host_db is undefined
+
+- name: Debug OSDs from database
+  debug:
+    var: disks_by_host_db
+
+- name: Add hosts with disks to dynamic group
+  add_host:
+    name: "{{ item.key }}"
+    groups: with_osds
+    ansible_become_pass: "{{ ansible_become_pass }}"
+    ansible_password: "{{ ansible_password }}"
+    system: "{{ system }}"
+  loop: "{{ disks_by_host_db | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Debug with_osds group
+  debug:
+    var: groups.with_osds
+
+- name: Add main host group with mon and OSD
+  add_host:
+    name: "{{ item }}"
+    groups: with_mon_and_osds
+    ansible_become_pass: "{{ ansible_become_pass }}"
+    ansible_password: "{{ ansible_password }}"
+    system: "{{ system }}"
+  loop: "{{ groups.with_osds | intersect(groups.with_monitor) }}"
+
+- name: Debug with_mon_and_osd group
+  debug:
+    var: groups.with_mon_and_osds
+
+# NOTE: For storage, since we don't have OSDs on controllers, the
+#       host_with_mon_and_osd must be the storage-0 after setting the host-fs (mon).
+- name: Set main host with mon and OSD
+  set_fact:
+    host_with_mon_and_osd: "{{ groups.with_mon_and_osds | first }}"
+    cacheable: true
+  when: host_with_mon_and_osd is undefined
+
+- name: Debug host_with_mon_and_osd
+  debug:
+    var: host_with_mon_and_osd
+
+- name: Set disks_by_host if undefined
+  include_tasks: osd_format_info.yaml
+  when: disks_by_host is undefined
+
+- name: Debug disks_by_host
+  debug:
+    var: disks_by_host

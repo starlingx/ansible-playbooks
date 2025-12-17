@@ -1,0 +1,53 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Render align_resources.py using template
+  template:
+    src: align_resources.py.j2
+    dest: "{{ tmp_workspace }}/align_resources.py"
+    mode: 0644
+  vars:
+    pvc_name: "{{ pvc_map[pv_name].name }}"
+  register: python_script_creation
+  failed_when: python_script_creation.failed
+
+- name: "Execute align script for PV {{ pvc_map[pv_name].name }}"
+  command: "python {{ tmp_workspace }}/align_resources.py"
+  register: subvolume_result
+
+- name: "Set Fact"
+  set_fact:
+    subvolume_map: "{{ subvolume_map | default({}) | combine({subvolume_result.stdout.split()[1]: subvolume_result.stdout.split()[0]}) }}"
+    cacheable: true
+  when:
+    - subvolume_result.stdout.split()[0] not in (subvolume_map | default({}))
+
+- name: "Delete PV {{ pv_name }}"
+  include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+  vars:
+    kind: PersistentVolume
+    name: "{{ pv_name }}-old"
+
+- name: "Delete PV {{ pv_name }}"
+  include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+  vars:
+    kind: PersistentVolume
+    name: "{{ new_pv_name }}"
+
+- name: "Apply PV {{ new_pv_name }} resource"
+  command: "kubectl apply -f {{ tmp_workspace }}/{{ new_pv_name }}.yaml"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+
+- name: "Delete PVC {{ pvc_map[pv_name].name }}-old resource"
+  command: "kubectl delete -f {{ tmp_workspace }}/{{ pvc_map[pv_name].name }}.yaml --ignore-not-found"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+
+- name: "Delete PVC {{ new_pvc_name }} resource"
+  command: "kubectl delete -f {{ tmp_workspace }}/{{ pvc_map[pv_name].name }}.yaml.bkp --ignore-not-found"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"

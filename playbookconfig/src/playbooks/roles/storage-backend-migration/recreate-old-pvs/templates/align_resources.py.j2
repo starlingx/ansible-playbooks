@@ -1,0 +1,79 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+import yaml
+
+tmp_workspace = "{{ tmp_workspace }}"
+pvc_name = "{{ pvc_name }}"
+new_pvc_name = "{{ new_pvc_name }}"
+
+filename=f"{tmp_workspace}/{new_pvc_name}.yaml"
+
+with open(filename, 'r') as f:
+    data = yaml.safe_load(f)
+
+pv_name = data['spec']['volumeName']
+
+#################
+
+filename=f"{tmp_workspace}/{pvc_name}.yaml.initial"
+
+with open(filename, 'r') as f:
+    data = yaml.safe_load(f)
+
+pv_info = {
+    'apiVersion': data['apiVersion'],
+    'kind': data['kind'],
+    'name': data['metadata']['name'],
+    'namespace': data['metadata']['namespace'],
+    'resourceVersion': data['metadata']['resourceVersion'],
+    'uid': data['metadata']['uid']
+}
+
+final_pv_name = data['spec']['volumeName']
+
+##################
+
+filename=f"{tmp_workspace }/{final_pv_name}.yaml.bkp"
+
+with open(filename, 'r') as f:
+    data = yaml.safe_load(f)
+
+old_subVolumeName = data['metadata']['annotations']['cephShare']
+
+##################
+
+filename=f"{tmp_workspace }/{pv_name}.yaml"
+
+with open(filename, 'r') as f:
+    data = yaml.safe_load(f)
+
+subVolumeName = data['spec']['csi']['volumeAttributes']['subvolumeName']
+
+data['metadata']['name'] = final_pv_name
+
+if 'claimRef' not in data['spec']:
+    data['spec']['claimRef'] = {}
+
+data['spec']['claimRef'] = {
+    'apiVersion': pv_info['apiVersion'],
+    'kind': pv_info['kind'],
+    'name': pv_info['name'],
+    'namespace': pv_info['namespace'],
+    'resourceVersion': pv_info['resourceVersion'],
+    'uid': pv_info['uid']
+}
+
+with open(filename, 'w') as f:
+  yaml.dump(
+      data,
+      f,
+      default_flow_style=False,
+      sort_keys=False,
+      indent=2
+  )
+
+print(old_subVolumeName, subVolumeName)

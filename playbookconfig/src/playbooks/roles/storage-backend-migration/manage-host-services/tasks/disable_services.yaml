@@ -1,0 +1,72 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Retrieve current heartbeat_failure_action
+  block:
+    - name: Query DB
+      become: true
+      become_user: postgres
+      command: >
+        psql -d sysinv -t -A -c "
+        SELECT value FROM service_parameter
+        WHERE service = 'platform'
+        AND section = 'maintenance'
+        AND name = 'heartbeat_failure_action';"
+      register: heartbeat_failure_action_current
+      changed_when: false
+
+    - name: Save current heartbeat_failure_action
+      set_fact:
+        heartbeat_failure_action_before: "{{ heartbeat_failure_action_current.stdout | trim }}"
+        cacheable: true
+  when:
+    - inventory_hostname in groups.active_controller
+    - heartbeat_failure_action_before is undefined
+
+- name: Debug heartbeat_failure_action_before
+  debug:
+    var: heartbeat_failure_action_before
+  when: inventory_hostname in groups.active_controller
+
+- name: Retrieve current autoreapply_apps_after_apply_runtime_manifest_before
+  block:
+    - name: Query DB
+      become: true
+      become_user: postgres
+      command: >
+        psql -d sysinv -t -A -c "
+        SELECT value FROM service_parameter
+        WHERE service = 'platform'
+        AND section = 'config'
+        AND name = 'autoreapply_apps_after_apply_runtime_manifest';"
+      register: autoreapply_apps_after_apply_runtime_manifest_current
+      changed_when: false
+
+    - name: Save current autoreapply_apps_after_apply_runtime_manifest_before
+      set_fact:
+        autoreapply_apps_after_apply_runtime_manifest_before: "{{ autoreapply_apps_after_apply_runtime_manifest_current.stdout | trim }}"
+        cacheable: true
+  when:
+    - inventory_hostname in groups.active_controller
+    - autoreapply_apps_after_apply_runtime_manifest_before is undefined
+
+- name: Debug autoreapply_apps_after_apply_runtime_manifest_before
+  debug:
+    var: autoreapply_apps_after_apply_runtime_manifest_before
+  when: inventory_hostname in groups.active_controller
+
+- name: Disable swacts with heartbeat_failure_action=none and k8s_application_audit
+  environment: "{{ system_env }}"
+  shell: |
+    system service-parameter-modify platform maintenance heartbeat_failure_action=none
+    system service-parameter-modify platform config autoreapply_apps_after_apply_runtime_manifest=disabled
+    system service-parameter-apply platform
+  when: inventory_hostname in groups.active_controller
+
+- name: Disable hostw.service
+  systemd:
+    name: "hostw.service"
+    state: stopped

@@ -1,0 +1,22 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Ensure migration_type is defined and valid
+  assert:
+    that:
+      - migration_type is defined
+      - migration_type in valid_migration_types
+    fail_msg: >-
+      Invalid or missing migration_type.
+      Must be one of: {{ valid_migration_types | join(', ') }}.
+      Current value: {{ migration_type | default('undefined') }}
+    success_msg: "Migration type validated: {{ migration_type }}"
+
+- name: Run common pre-checks
+  include_tasks: "common/main.yaml"
+
+- name: Run migration-specific pre-checks
+  include_tasks: "{{ migration_type }}/main.yaml"

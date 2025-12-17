@@ -1,0 +1,48 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+import yaml
+
+sufix = "-{{ sufix | default('old') }}"
+new_volume = {{ new_volume | default(false) }}
+is_backup = {{ is_backup | default(false) }}
+filename = "{{ tmp_workspace }}/{{ pvc_name }}.yaml"
+if is_backup:
+    filename += ".bkp"
+
+with open(filename, 'r') as f:
+    data = yaml.safe_load(f)
+
+if 'metadata' in data and 'annotations' in data['metadata']:
+    keys_to_remove = [
+        'pv.kubernetes.io/bind-completed',
+        'pv.kubernetes.io/bound-by-controller',
+        'kubectl.kubernetes.io/last-applied-configuration'
+    ]
+    for key in keys_to_remove:
+        data['metadata']['annotations'].pop(key, None)
+
+data['metadata'].pop('creationTimestamp', None)
+data.pop('status', None)
+
+if f'{sufix}' not in data['metadata']['name']:
+    data['metadata']['name'] += f'{sufix}'
+
+if 'volumeName' in data['spec']:
+    if f'{sufix}' not in data['spec']['volumeName']:
+        data['spec']['volumeName'] += f'{sufix}'
+
+    if new_volume:
+        data['spec'].pop('volumeName', None)
+
+with open(filename, 'w') as f:
+  yaml.dump(
+      data,
+      f,
+      default_flow_style=False,
+      sort_keys=False,
+      indent=2
+  )

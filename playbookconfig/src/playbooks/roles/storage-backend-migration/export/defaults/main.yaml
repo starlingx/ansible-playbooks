@@ -1,0 +1,8 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+backups_cephfs_path: "{{ backups_path }}/cephfs"
+backups_rbd_path: "{{ backups_path }}/rbd"

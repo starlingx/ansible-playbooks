@@ -1,0 +1,13 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Create backup folder for rbd
+  file:
+    path: "{{ backups_rbd_path }}"
+    state: directory
+    owner: "root"
+    group: "root"
+    mode: "0700"

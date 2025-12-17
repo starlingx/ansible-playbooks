@@ -1,0 +1,27 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Enable swacts with heartbeat_failure_action_before
+  environment: "{{ system_env }}"
+  shell: system service-parameter-modify platform maintenance heartbeat_failure_action={{ heartbeat_failure_action_before }}
+  when: inventory_hostname in groups.active_controller
+
+- name: Restore app auto apply with autoreapply_apps_after_apply_runtime_manifest_before
+  environment: "{{ system_env }}"
+  shell: system service-parameter-modify platform config autoreapply_apps_after_apply_runtime_manifest={{ autoreapply_apps_after_apply_runtime_manifest_before }}
+  when: inventory_hostname in groups.active_controller
+
+- name: Apply new service parameters
+  environment: "{{ system_env }}"
+  shell: |
+    system service-parameter-apply platform
+  when: inventory_hostname in groups.active_controller
+
+- name: Enable hostw.service
+  systemd:
+    name: "hostw.service"
+    state: started
+    enabled: true

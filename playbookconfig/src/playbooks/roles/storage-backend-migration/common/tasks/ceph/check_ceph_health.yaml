@@ -1,0 +1,17 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Wait for Ceph cluster to reach desired health status
+  command: timeout 30 ceph health detail
+  register: ceph_health
+  until: ceph_health.stdout is search(ceph_desired_status | join('|'))
+  retries: 60
+  delay: 10
+  changed_when: false
+
+- name: Ceph Cluster health result
+  debug:
+    var: ceph_health.stdout_lines
