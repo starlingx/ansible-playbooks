@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023,2025 Wind River Systems, Inc.
 #
 # SUB-TASKS DESCRIPTION:
 #   These tasks configure TridentBackendConfig custom resource
@@ -29,6 +29,17 @@
 
     - name: Create K8s TridentBackendConfig
       command: "kubectl -n {{ trident_namespace }} --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ tbc_file }}"
+
+    - name: Wait for TridentBackendConfig to be created
+      command: >-
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf
+        -n {{ trident_namespace }}
+        get tridentbackendconfig {{ backend.metadata.name }}
+      register: check
+      until: check.rc == 0
+      retries: 60
+      delay: 10
+      changed_when: false
 
   always:
     - name: Remove Trident backend config yaml file

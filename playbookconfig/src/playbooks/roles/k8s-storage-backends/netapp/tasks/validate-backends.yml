@@ -18,19 +18,19 @@
   fail:
     msg: |
       "Backend '{{ item.metadata.name }}' has invalid storageDriverName: {{ item.spec.storageDriverName }}".
-  when: >
-    ('ontap-nas' not in item.spec.storageDriverName) and
-    ('ontap-san' not in item.spec.storageDriverName)
+  when:
+    - "'ontap-nas' not in item.spec.storageDriverName"
+    - "'ontap-san' not in item.spec.storageDriverName"
   loop: "{{ netapp_backends }}"
   changed_when: false
 
 - name: Validate nasType if present (ontap-nas)
   fail:
     msg: "Invalid 'nasType={{ item.spec.nasType }}' in backend {{ item.metadata.name }}. It must be 'nfs'."
-  when: >
-    ('ontap-nas' in item.spec.storageDriverName) and
-    ('nasType' in item.spec) and
-    (item.spec.nasType != 'nfs')
+  when:
+    - "'ontap-nas' in item.spec.storageDriverName"
+    - "'nasType' in item.spec"
+    - item.spec.nasType != 'nfs'
   loop: "{{ netapp_backends }}"
   changed_when: false
 
@@ -39,21 +39,22 @@
     msg: |
       "Backend '{{ item.metadata.name }}' uses 'ontap-nas' but contains an invalid field: sanType={{ item.spec.sanType }}.
       Remove 'sanType' from this backend or replace it with 'nasType'."
-  when: >
-    ('ontap-nas' in item.spec.storageDriverName) and
-    ('sanType' in item.spec)
+  when:
+    - "'ontap-nas' in item.spec.storageDriverName"
+    - "'sanType' in item.spec"
   loop: "{{ netapp_backends }}"
   changed_when: false
 
+# The nvme protocol has not been validated/tested.
 - name: Validate sanType if present (ontap-san)
   fail:
     msg: |
       "Invalid 'sanType={{ item.spec.sanType }}' in backend {{ item.metadata.name }}.
       It must be 'iscsi', 'nvme' or 'fcp'."
-  when: >
-    ('ontap-san' in item.spec.storageDriverName) and
-    ('sanType' in item.spec) and
-    (item.spec.sanType not in ['iscsi', 'nvme', 'fcp'])
+  when:
+    - "'ontap-san' in item.spec.storageDriverName"
+    - "'sanType' in item.spec"
+    - item.spec.sanType not in ['iscsi', 'nvme', 'fcp']
   loop: "{{ netapp_backends }}"
   changed_when: false
 
@@ -62,19 +63,18 @@
     msg: |
       "Backend '{{ item.metadata.name }}' uses 'ontap-san' but contains an invalid field: nasType={{ item.spec.nasType }}.
       Remove 'nasType' from this backend or replace it with 'sanType'."
-  when: >
-    ('ontap-san' in item.spec.storageDriverName) and
-    ('nasType' in item.spec)
+  when:
+    - "'ontap-san' in item.spec.storageDriverName"
+    - "'nasType' in item.spec"
   loop: "{{ netapp_backends }}"
   changed_when: false
 
 - name: Determine if multipath check is required
   set_fact:
     run_multipath_check: true
-  when: >
-    (not run_multipath_check | default(false)) and
-    ('ontap-san' in item.spec.storageDriverName) and
-    (('sanType' not in item.spec) or (item.spec.sanType == 'iscsi'))
+  when:
+    - not run_multipath_check | default(false)
+    - "'ontap-san' in item.spec.storageDriverName"
   loop: "{{ netapp_backends }}"
 
 - name: Check if the DaemonSet to update multipath configuration exists
