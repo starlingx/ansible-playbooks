@@ -31,6 +31,6 @@ flux_source_controller_img: docker.io/fluxcd/source-controller:v1.5.0
 flux_notification_controller_img: ghcr.io/fluxcd/notification-controller:v1.5.0
 flux_kustomize_controller_img: ghcr.io/fluxcd/kustomize-controller:v1.5.1
 # oidc-auth-apps images
-oidc_stx_oidc_client_img: docker.io/starlingx/stx-oidc-client:stx.11.0-v1.0.9
-oidc_dex_img: ghcr.io/dexidp/dex:v2.42.0
-oidc_curl_img: docker.io/curlimages/curl:8.13.0
+oidc_stx_oidc_client_img: docker.io/starlingx/stx-oidc-client:stx.12.0-v1.0.10
+oidc_dex_img: ghcr.io/dexidp/dex:v2.44.0
+oidc_curl_img: docker.io/curlimages/curl:8.17.0
