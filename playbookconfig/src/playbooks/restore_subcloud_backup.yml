@@ -19,7 +19,7 @@
     - common/remote-execution-precheck
 
   tasks:
-    - name: Set facts for auto restore monitoring
+    - name: Set facts for restore monitoring
       set_fact:
         auto_restore_mode: "{{ auto_restore_mode | default('') }}"
         restore_timeout: "{{ restore_timeout | default(3600) }}"
@@ -31,6 +31,7 @@
         restore_failed_backup_missing_ipmi_data: "{{ restore_failed_backup_missing_ipmi_data | default('cc10f3') }}"
         restore_failed_images_missing_ipmi_data: "{{ restore_failed_images_missing_ipmi_data | default('cc10f4') }}"
         restore_failed_both_missing_ipmi_data: "{{ restore_failed_both_missing_ipmi_data | default('cc10f5') }}"
+        ipmi_monitor_enabled: "{{ ipmi_sel_event_monitoring | default(true) }}"
 
     # Auto or factory restore are triggered automatically inside the subcloud, so we just
     # need to monitor the IPMI SEL logs and wait for the restore to complete or fail
@@ -93,7 +94,9 @@
           debug:
             msg: "{{ auto_restore_mode | capitalize }} restore completed successfully."
           when: is_success_event
-      when: auto_restore_mode in ['factory', 'auto']
+      when:
+        - auto_restore_mode in ['factory', 'auto']
+        - ipmi_monitor_enabled
 
     # Standard subcloud restore
     - block:
@@ -102,7 +105,15 @@
 
         - include_role:
             name: subcloud-bnr/restore
-      when: auto_restore_mode not in ['factory', 'auto']
+      when: (auto_restore_mode not in ['factory', 'auto']) or (auto_restore_mode == 'factory' and not ipmi_monitor_enabled)
+
+    # Auto-restore without SEL event monitoring
+    - name: Monitor for auto-restore completion
+      include_role:
+        name: subcloud-bnr/monitor-auto-restore
+      when:
+        - auto_restore_mode == 'auto'
+        - not ipmi_monitor_enabled
 
   vars:
     optimized_bnr_supported: true
