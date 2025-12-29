@@ -40,8 +40,8 @@ MONSTORE_REBUILD_JOB_RESOURCE_FILENAME = "job-monstore-rebuild.yaml"
 OSD_KEYRING_UPDATE_JOB_RESOURCE_FILENAME = "job-osd-keyring-update-{}.yaml"
 
 REGISTRY = "registry.local:9001"
-CEPH_IMAGE = "/".join([REGISTRY, "quay.io/ceph/ceph:v18.2.5"])
-CEPH_CONFIG_HELPER_IMAGE = "/".join([REGISTRY, "docker.io/openstackhelm/ceph-config-helper:ubuntu_jammy_18.2.2-1-20240312"])
+CEPH_IMAGE = "/".join([REGISTRY, "quay.io/ceph/ceph:v18.2.7"])
+CEPH_CONFIG_HELPER_IMAGE = "/".join([REGISTRY, "docker.io/openstackhelm/ceph-config-helper:ubuntu_jammy_18.2.2-1-20241210"])
 
 os.environ["KUBECONFIG"] = "/etc/kubernetes/admin.conf"
 
