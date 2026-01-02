@@ -9,6 +9,7 @@ crushmap_file: crushmap.bin.backup
 crushmap_file_tmp: crushmap.bin.tmp
 restore_items:
   - etc/systemd/system
+  - etc/kdump
   - var/rootdirs/root
 restore_extra_items: []
 
