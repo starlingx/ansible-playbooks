@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020 Wind River Systems, Inc.
+# Copyright (c) 2020,2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -34,5 +34,28 @@
     kubectl --kubeconfig=/etc/kubernetes/admin.conf delete volumesnapshotclass {{ snapshot_storage_class.metadata.name }}
   failed_when: false
 
+- name: Wait for VolumeSnapshotClass to be deleted
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf
+    -n {{ trident_namespace }}
+    get volumesnapshotclass {{ snapshot_storage_class.metadata.name }}
+  register: check
+  until: check.rc == 1
+  retries: 60
+  delay: 10
+  failed_when: check.rc != 1
+  changed_when: false
+
 - name: Create K8s VolumeSnapshotClass
   command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ snapshotstorageclass_file }}"
+
+- name: Wait for VolumeSnapshotClass to be created
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf
+    -n {{ trident_namespace }}
+    get volumesnapshotclass {{ snapshot_storage_class.metadata.name }}
+  register: check
+  until: check.rc == 0
+  retries: 60
+  delay: 10
+  changed_when: false
