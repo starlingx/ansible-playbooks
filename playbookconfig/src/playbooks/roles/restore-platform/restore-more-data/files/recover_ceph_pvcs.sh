@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2023,2025 Wind River Systems, Inc.
+# Copyright (c) 2023,2025-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -33,6 +33,10 @@ for NAMESPACE in ${PVCS_NAMESPACE_LIST}; do
             continue
         fi
 
+        # Store PV name
+        PV_NAME=$(kubectl -n "${NAMESPACE}" get "${PVC}" -o jsonpath='{.spec.volumeName}')
+        PV="persistentvolume/${PV_NAME}"
+
         # Remove bind information
         sed -i -e '/volumeName:/d' -e '/pv.kubernetes.io\/bind-completed:/d' \
             -e '/pv.kubernetes.io\/bound-by-controller:/d' "${PVC_RECOVER_YAML}"
@@ -42,10 +46,17 @@ for NAMESPACE in ${PVCS_NAMESPACE_LIST}; do
         kubectl -n "${NAMESPACE}" patch "${PVC}" \
                 -p '{"metadata":{"finalizers":null}}' --type=merge
 
+        # Delete the PV
+        kubectl -n "${NAMESPACE}" delete "${PV}" --wait=false
+        kubectl -n "${NAMESPACE}" patch "${PV}" \
+                -p '{"metadata":{"finalizers":null}}' --type=merge
+
         # Check if it has been deleted
         for RETRY in {1..15}; do
             if ! kubectl -n "${NAMESPACE}" get "${PVC}" 1>/dev/null 2>&1; then
-                break
+                if ! kubectl -n "${NAMESPACE}" get "${PV}" 1>/dev/null 2>&1; then
+                    break
+                fi
             fi
             sleep 1
         done
