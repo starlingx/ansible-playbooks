@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -34,6 +34,7 @@ CONF.optionxform = str
 
 RECONFIGURE_NETWORK = False
 RECONFIGURE_SERVICE = False
+SOURCE_COMMAND = 'source /etc/platform/openrc && env'
 
 
 def print_with_timestamp(*args, **kwargs):
@@ -52,21 +53,19 @@ def wait_for_file(file_path, timeout=300, interval=5):
     print_with_timestamp(f"File found: {file_path}")
 
 
-# CgtsClient class to handle API interactions
-class CgtsClient(object):
-    SYSINV_API_VERSION = 1
-
+class BaseClient(object):
     def __init__(self):
         self.conf = {}
-        self._sysinv = None
+        self.auth_url = os.getenv("OS_AUTH_URL")
+        self.auth_token = os.getenv("OS_TOKEN")
+        self.system_url = os.getenv("SYSTEM_URL")
+        if not (self.auth_token and self.auth_url):
+            self.source_credentials()
 
-        # Loading credentials and configurations from environment variables
-        # typically set in OpenStack
-        source_command = 'source /etc/platform/openrc && env'
-
+    def source_credentials(self):
         with open(os.devnull, "w") as fnull:
             proc = subprocess.Popen(
-                ['bash', '-c', source_command],
+                ['bash', '-c', SOURCE_COMMAND],
                 stdout=subprocess.PIPE, stderr=fnull,
                 universal_newlines=True)
 
@@ -78,62 +77,67 @@ class CgtsClient(object):
 
         proc.communicate()
 
+
+# CgtsClient class to handle API interactions
+class CgtsClient(BaseClient):
+    SYSINV_API_VERSION = 1
+
+    def __init__(self):
+        super().__init__()
+        self._sysinv = None
+
     @property
     def sysinv(self):
         if not self._sysinv:
-            self._sysinv = cgts_client.get_client(
-                self.SYSINV_API_VERSION,
-                os_username=self.conf['username'],
-                os_password=self.conf['password'],
-                os_auth_url=self.conf['auth_url'],
-                os_project_name=self.conf['project_name'],
-                os_project_domain_name=self.conf['project_domain_name'],
-                os_user_domain_name=self.conf['user_domain_name'],
-                os_region_name=self.conf['region_name'],
-                os_service_type='platform',
-                os_endpoint_type='internal')
+            if self.auth_token and self.system_url:
+                self._sysinv = cgts_client.get_client(
+                    str(self.SYSINV_API_VERSION),
+                    os_auth_token=self.auth_token,
+                    system_url=self.system_url,
+                )
+            else:
+                self._sysinv = cgts_client.get_client(
+                    self.SYSINV_API_VERSION,
+                    os_username=self.conf['username'],
+                    os_password=self.conf['password'],
+                    os_auth_url=self.conf['auth_url'],
+                    os_project_name=self.conf['project_name'],
+                    os_project_domain_name=self.conf['project_domain_name'],
+                    os_user_domain_name=self.conf['user_domain_name'],
+                    os_region_name=self.conf['region_name'],
+                    os_service_type='platform',
+                    os_endpoint_type='internal'
+                )
         return self._sysinv
 
 
-class OpenStackClient:
+class OpenStackClient(BaseClient):
     """Client to interact with OpenStack Barbican."""
 
     def __init__(self) -> None:
-        self.conf = {}
+        super().__init__()
         self._session = None
         self._barbican = None
-
-        # Loading credentials and configurations from environment variables
-        # typically set in OpenStack
-        source_command = 'source /etc/platform/openrc && env'
-
-        with open(os.devnull, "w") as fnull:
-            proc = subprocess.Popen(
-                ['bash', '-c', source_command],
-                stdout=subprocess.PIPE,
-                stderr=fnull,
-                universal_newlines=True,
-            )
-
-        # Strip the configurations starts with 'OS_' and change the value to lower
-        for line in proc.stdout:
-            key, _, value = line.partition("=")
-            if key.startswith("OS_"):
-                self.conf[key[3:].lower()] = value.strip()
-
-        proc.communicate()
 
     def _get_new_keystone_session(self, conf):
         """Create a new keystone session."""
         try:
-            auth = v3.Password(
-                auth_url=conf["auth_url"],
-                username=conf["username"],
-                password=conf["password"],
-                user_domain_name=conf["user_domain_name"],
-                project_name=conf["project_name"],
-                project_domain_name=conf["project_domain_name"],
-            )
+            if self.auth_token and self.auth_url:
+                auth = v3.Token(
+                    auth_url=self.auth_url,
+                    token=self.auth_token,
+                    project_name=os.getenv("OS_PROJECT_NAME", "admin"),
+                    project_domain_name=os.getenv("OS_PROJECT_DOMAIN_NAME", "Default"),
+                )
+            else:
+                auth = v3.Password(
+                    auth_url=conf["auth_url"],
+                    username=conf["username"],
+                    password=conf["password"],
+                    user_domain_name=conf["user_domain_name"],
+                    project_name=conf["project_name"],
+                    project_domain_name=conf["project_domain_name"],
+                )
         except KeyError as e:
             print_with_timestamp(f"Configuration key missing: {e}")
             sys.exit(1)
@@ -145,7 +149,10 @@ class OpenStackClient:
         if not self._barbican:
             if not self._session:
                 self._session = self._get_new_keystone_session(self.conf)
-            self._barbican = barbican_client.Client(session=self._session)
+            self._barbican = barbican_client.Client(
+                session=self._session,
+                interface='internal',
+                )
         return self._barbican
 
     def list_secrets(self, secret_name):
@@ -247,8 +254,8 @@ def update_barbican_secrets(client, registry_name, username, password):
 
 def update_docker_registry_config(client, section_name):
     """Handle Docker registry configurations."""
-    use_default_registries = CONF.getboolean(
-        section_name, 'USE_DEFAULT_REGISTRIES')
+    use_public_registries = CONF.getboolean(
+        section_name, 'USE_PUBLIC_REGISTRIES')
     # Get rid of any faulty docker registry entries that might have been
     # created in the previous failed run.
     parameters = client.sysinv.service_parameter.list()
@@ -263,7 +270,8 @@ def update_docker_registry_config(client, section_name):
                 parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_ICR_REGISTRY):
             client.sysinv.service_parameter.delete(parameter.uuid)
 
-    if not use_default_registries:
+    # avoid creating service parameters if using public registries
+    if not use_public_registries:
         parameters = {}
 
         registries_map = {
@@ -363,6 +371,77 @@ def populate_user_dns_host_records(client):
         print_with_timestamp("Populating/Updating user dns host-records completed.")
 
 
+def populate_registry_dns_host_records(client, section_name):
+    virtual_system = False
+    registry_local = ''
+
+    parameters = client.sysinv.service_parameter.list()
+
+    for parameter in parameters:
+        if parameter.name == sysinv_constants.SERVICE_PARAM_NAME_PLAT_CONFIG_VIRTUAL:
+            virtual_system = True
+
+    if virtual_system:
+        registry_central_address = CONF.get(
+            section_name, "SYSTEM_CONTROLLER_FLOATING_ADDRESS"
+        )
+        registry_local = CONF.get(
+            section_name, "MANAGEMENT_FLOATING_ADDRESS"
+        )
+    else:
+        registry_central_address = CONF.get(
+            section_name, "SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS"
+        )
+
+    registry_central_as_local_scope = False
+    for parameter in parameters:
+        if parameter.name == 'registry.central' and \
+           parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DNS_HOST_RECORD:
+            client.sysinv.service_parameter.delete(parameter.uuid)
+        elif virtual_system and parameter.name == 'registry.local':
+            client.sysinv.service_parameter.delete(parameter.uuid)
+        elif parameter.name == 'registry.central' and \
+            parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DNS_LOCAL:
+            registry_central_as_local_scope = True
+
+    values = {
+        'service': sysinv_constants.SERVICE_TYPE_DNS,
+        'section': sysinv_constants.SERVICE_PARAM_SECTION_DNS_HOST_RECORD,
+        'personality': None,
+        'resource': None,
+        'parameters': {
+            'registry.central': (
+                f"registry.central,{registry_central_address}"
+            )
+        }
+    }
+
+    if registry_central_address and virtual_system:
+        values['parameters']['registry.local'] = (
+            f"registry.local,{registry_local}"
+        )
+
+    print_with_timestamp("Populating/Updating DNS host record for registry...")
+    client.sysinv.service_parameter.create(**values)
+    print_with_timestamp("DNS host record for registry completed.")
+
+    if not registry_central_as_local_scope:
+        values = {
+            'service': sysinv_constants.SERVICE_TYPE_DNS,
+            'section': sysinv_constants.SERVICE_PARAM_SECTION_DNS_LOCAL,
+            'personality': None,
+            'resource': None,
+            'parameters': {
+                'registry.central': (
+                    "registry.central"
+                )
+            }
+        }
+        print_with_timestamp("Populating/Updating DNS local domain for registry.central...")
+        client.sysinv.service_parameter.create(**values)
+        print_with_timestamp("DNS host local domain for registry.central completed.")
+
+
 def populate_docker_config(client, section_name):
     """
     Update Docker and Kubernetes configuration parameters.
@@ -382,6 +461,7 @@ def populate_service_parameter_config(client, section_name):
         populate_user_dns_host_records(client)
     else:
         print_with_timestamp("Skipping Populating/Updating user dns host-records...")
+    populate_registry_dns_host_records(client, section_name)
 
 
 def edit_dc_role_to_subcloud(client):
@@ -565,6 +645,7 @@ def update_admin_network(client, section_name):
     delete_network_and_addrpool(client, 'admin', section_name)
 
     admin_subnet = IPNetwork(CONF.get(section_name, "ADMIN_SUBNET"))
+    admin_floating_address = CONF.get(section_name, "ADMIN_FLOATING_ADDRESS")
     admin_start_address = CONF.get(section_name, "ADMIN_START_ADDRESS")
     admin_end_address = CONF.get(section_name, "ADMIN_END_ADDRESS")
     subcloud_gateway = CONF.get(section_name, "ADMIN_GATEWAY_ADDRESS")
@@ -579,6 +660,11 @@ def update_admin_network(client, section_name):
     if (subcloud_gateway != 'undef'):
         values.update({
             'gateway_address': subcloud_gateway,
+        })
+
+    if (admin_floating_address != 'undef'):
+        values.update({
+            'floating_address': admin_floating_address,
         })
 
     print_with_timestamp(f"Creating addrpool with name {values['name']}...")
@@ -696,12 +782,19 @@ def update_management_network(client, section_name):
         'ranges': [(
             CONF.get(section_name, "MANAGEMENT_START_ADDRESS"),
             CONF.get(section_name, "MANAGEMENT_END_ADDRESS"),
-            )],
+        )],
         'gateway_address': subcloud_gateway,
         'floating_address': CONF.get(section_name, "MANAGEMENT_FLOATING_ADDRESS"),
-        'controller0_address': CONF.get(section_name, "MANAGEMENT_CONTROLLER0_ADDRESS"),
-        'controller1_address': CONF.get(section_name, "MANAGEMENT_CONTROLLER1_ADDRESS"),
-        }
+    }
+    system_mode = CONF.get(section_name, 'SYSTEM_MODE')
+    if system_mode != sysinv_constants.SYSTEM_MODE_SIMPLEX:
+        values.update({
+            'controller0_address': CONF.get(
+                section_name, 'MANAGEMENT_CONTROLLER0_ADDRESS'),
+            'controller1_address': CONF.get(
+                section_name, 'MANAGEMENT_CONTROLLER1_ADDRESS'),
+        })
+
     if is_equal_with_existing_pool(client, values, pool_id):
         print_with_timestamp(
             f"Management network addrpool {pool_id} is up-to-date.")

@@ -1,5 +1,5 @@
 ---
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -22,13 +22,13 @@
 
   when: user_dns_host_records
 
-- block:
-  - name: Lock controller-0 for network update
-    include_role:
-      name: common/host-lock
-    vars:
-      target_host: 'controller-0'
+- name: Lock controller-0 for network update
+  include_role:
+    name: common/host-lock
+  vars:
+    target_host: 'controller-0'
 
+- block:
   - name: Generate config file for python sysinv db population script
     template:
       src: system_config.j2
@@ -41,16 +41,8 @@
   - name: Update system configurations
     script: update_system_config.py {{ script_input }}
     register: update_result
-    failed_when: false
 
   - debug: var=update_result
-
-  - name: Fail if update config script throws an exception
-    fail:
-      msg: |
-        Failed to update system configuration.
-        Waiting for the system to unlock before retry.
-    when: update_result.rc != 0
 
   rescue:
   - name: Unlock controller-0
@@ -58,6 +50,12 @@
       name: common/host-unlock
     vars:
       target_host: 'controller-0'
+
+  - name: Force failure post rescue of system config update failure
+    fail:
+      msg: |
+        Failed to update system configuration.
+        Waiting for the system to unlock before retry.
 
 - name: Copy central registy cert
   import_tasks: copy_central_registry_cert.yml

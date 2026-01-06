@@ -36,7 +36,7 @@ spec:
             add:
             - SYS_ADMIN
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/docker.io/netapp/trident:25.02.1
+        image: {{ local_registry }}/docker.io/netapp/trident:25.10.0
         imagePullPolicy: IfNotPresent
         command:
         - /trident_orchestrator
@@ -84,6 +84,10 @@ spec:
           timeoutSeconds: 5
           periodSeconds: 10
           initialDelaySeconds: 15
+        resources:
+          requests:
+            cpu: 10m
+            memory: 60Mi
         env:
         - name: KUBE_NODE_NAME
           valueFrom:
@@ -118,14 +122,18 @@ spec:
         - name: certs
           mountPath: /certs
           readOnly: true
-      - name: driver-registrar
+      - name: node-driver-registrar
         # STX_change: pull image from local registry
-        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.13.0
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.15.0
         imagePullPolicy: IfNotPresent
         args:
         - "--v=2"
         - "--csi-address=$(ADDRESS)"
         - "--kubelet-registration-path=$(REGISTRATION_PATH)"
+        resources:
+          requests:
+            cpu: 1m
+            memory: 10Mi
         env:
         - name: ADDRESS
           value: /plugin/csi.sock

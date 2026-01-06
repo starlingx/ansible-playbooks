@@ -1,0 +1,36 @@
+---
+# System images that are pre-pulled and pushed to local registry
+n3000_opae_img: docker.io/starlingx/n3000-opae:stx.8.0-v1.0.2
+kubernetes_entrypoint_img: quay.io/stackanetes/kubernetes-entrypoint:v0.3.1
+calico_cni_img: quay.io/calico/cni:v3.30.0
+calico_node_img: quay.io/calico/node:v3.30.0
+calico_kube_controllers_img: quay.io/calico/kube-controllers:v3.30.0
+multus_img: ghcr.io/k8snetworkplumbingwg/multus-cni:v4.2.0-debug
+sriov_cni_img: ghcr.io/k8snetworkplumbingwg/sriov-cni:v2.9.0
+sriov_network_device_img: ghcr.io/k8snetworkplumbingwg/sriov-network-device-plugin:v3.9.0
+intel_qat_plugin_img: docker.io/intel/intel-qat-plugin:0.26.0
+intel_gpu_plugin_img: docker.io/intel/intel-gpu-plugin:0.26.0
+intel_gpu_initcontainer_img: docker.io/intel/intel-gpu-initcontainer:0.26.0
+# Nginx images
+nginx_ingress_controller_img: registry.k8s.io/ingress-nginx/controller:v1.14.0
+nginx_kube_webhook_certgen_img: registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.4
+default_backend_img: registry.k8s.io/defaultbackend-amd64:1.5
+# Cert-manager images
+cert_manager_acmesolver_img: quay.io/jetstack/cert-manager-acmesolver:v1.18.3
+cert_manager_cainjector_img: quay.io/jetstack/cert-manager-cainjector:v1.18.3
+cert_manager_controller_img: quay.io/jetstack/cert-manager-controller:v1.18.3
+cert_manager_webhook_img: quay.io/jetstack/cert-manager-webhook:v1.18.3
+cert_manager_startupapicheck_img: quay.io/jetstack/cert-manager-startupapicheck:v1.18.3
+# Keep the snapshot-controller image in sync with the one provided at:
+# cluster/addons/volumesnapshots/volume-snapshot-controller/volume-snapshot-controller-deployment.yaml
+# in the kubernetes github repo
+snapshot_controller_img: registry.k8s.io/sig-storage/snapshot-controller:v8.1.0
+pause_img: k8s.gcr.io/pause:3.4.1
+flux_helm_controller_img: docker.io/fluxcd/helm-controller:v1.4.5
+flux_source_controller_img: docker.io/fluxcd/source-controller:v1.7.4
+flux_notification_controller_img: ghcr.io/fluxcd/notification-controller:v1.7.5
+flux_kustomize_controller_img: ghcr.io/fluxcd/kustomize-controller:v1.7.3
+# oidc-auth-apps images
+oidc_stx_oidc_client_img: docker.io/starlingx/stx-oidc-client:stx.12.0-v1.0.10
+oidc_dex_img: ghcr.io/dexidp/dex:v2.44.0
+oidc_curl_img: docker.io/curlimages/curl:8.17.0

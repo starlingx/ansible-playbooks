@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -24,19 +24,21 @@
     mode: "enroll"
     distributed_cloud_role: "subcloud"
 
+  # Cannot use ansible_env here because gather_facts is set to 'no'
+  environment: "{{ openrc_env | default({}) }}"
+
   roles:
     - common/prepare-env
     - common/validate-target
-    - common/recover-subcloud-certificates
+    - common/load-openrc
     - enroll-subcloud/patch-before-enroll
     - rehome-enroll-common/prepare-env
     - enroll-subcloud/validate-before-enroll
     - rehome-enroll-common/update-ca-cert
-    - role: common/update-sc-cert
-      when: subcloud_dc_admin_ep_cert_chain_recovered is undefined
+    - common/update-sc-cert
     - role: rehome-enroll-common/update-keystone-data
       become: yes
     - rehome-enroll-common/persist-configuration
     - role: common/update-sc-admin-endpoints
-      when: admin_floating_address is defined
+      when: admin_floating_address != 'derived'
     - enroll-subcloud/complete-enrollment

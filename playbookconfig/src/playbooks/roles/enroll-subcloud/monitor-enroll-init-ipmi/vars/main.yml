@@ -1,0 +1,9 @@
+---
+ipmi_sensor_type: "System Event"
+ipmi_sensor_number: "CC"
+ipmi_check_interval: 10
+ipmi_initial_event_id: ""
+
+all_failure_codes: []
+failure_code_to_message: { }
+failed_stage_name: "Unknown"

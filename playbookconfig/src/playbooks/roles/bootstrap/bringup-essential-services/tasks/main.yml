@@ -61,9 +61,15 @@
   - name: Add IPs
     set_fact:
       add_items:
-        - ip addr add {{ cluster_virtual }}  brd {{ cluster_broadcast }} dev lo scope host label lo:5
         - ip addr add {{ pxe_virtual }} dev lo scope host
         - ip addr add {{ cluster_floating_virtual }} dev lo scope host
+
+  - name: Add cluster virtual IP for loopback interface if not simplex
+    set_fact:
+      add_items: "{{ add_items + [item] }}"
+    with_items:
+      - ip addr add {{ cluster_virtual }}  brd {{ cluster_broadcast }} dev lo scope host label lo:5
+    when: system_mode != 'simplex'
 
   - name: Add admin IP for loopback interface if configured
     set_fact:
@@ -79,7 +85,7 @@
         add_items: "{{ add_items + [item] }}"
       with_items:
         - "ip addr add {{ cluster_virtual_secondary }}  brd {{ cluster_broadcast_secondary }} dev lo scope host label lo:5"
-      when: cluster_virtual_secondary is defined and cluster_broadcast_secondary is defined
+      when: system_mode != 'simplex' and cluster_virtual_secondary is defined and cluster_broadcast_secondary is defined
 
     - name: Add secondary cluster floating on the loopback interface
       set_fact:
@@ -156,6 +162,7 @@
     args:
       warn: false
     when: bootstrap_registry_filesystem
+    ignore_errors: true
 
   - name: Populate local image registry
     import_role:

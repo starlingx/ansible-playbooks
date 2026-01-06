@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -41,12 +41,12 @@
 - name: Perform sync patches to USM subcloud
   # This block is executed for subcloud N and even N-1 scenario with USM support.
   block:
-  - name: Gather subcloud deployed software list
-    shell: software list --release {{ software_version }} --state deployed | \
+  - name: Gather subcloud software list for deployed or unavailable state
+    shell: software list --release {{ software_version }} | egrep -E "deployed|unavailable" | \
           grep {{ software_version }} | sed 's/ //g;'
     register: subcloud_software_list
 
-  - name: Show subcloud deployed software list for release {{ software_version }}
+  - name: Show subcloud software list for release {{ software_version }}
     debug:
       var: subcloud_software_list.stdout
 
@@ -59,6 +59,14 @@
       mode: 0755
       recurse: yes
     delegate_to: localhost
+
+  # The subcloud's tmp_metadata_sync_dir must be cleared. If it contains
+  # stale metadata from previous prestage operations, it will cause duplicate
+  # file errors during metadata synchronization.
+  - name: Remove subcloud {{ tmp_metadata_sync_dir }} to ensure clean state
+    file:
+      path: "{{ tmp_metadata_sync_dir }}"
+      state: absent
 
   - name: Ensure subcloud {{ tmp_metadata_sync_dir }} exists (sysadmin)
     file:
@@ -102,10 +110,10 @@
 
           {% if system_controller_current_patch == subcloud_current_patch %}
           Skipping for software deploy prestage as the subcloud has the same patch level
-          than the system controller.
+          than the system controller for requested software version.
           {% elif subcloud_current_patch > system_controller_current_patch %}
           Skipping for software deploy prestage as the subcloud has a higher patch level
-          than the system controller.
+          than the system controller for requested software version.
           {% endif %}
 
     - name: "Subcloud does not require software prestage. Exiting..."
@@ -122,10 +130,11 @@
       #
       # Use the existing ostree_metadata_commits_central file if:
       # 1) It exists, and
-      # 2) There are no new commits. Compare last line of the ostree_metadata_commits_central
-      #    file against current ostree repo commit.
+      # 2) There are no new commits. Compare last commit of the
+      #    ostree_metadata_commits_central file against current ostree repo commit.
+      #    If the commit is empty it is ignored.
       # Otherwise, we generate a new ostree_metadata_commits_central file using the
-      # get-commits target to our script.
+      # get-commits target to our script for provided software version.
       #
       # Get the commits from the metadata, in the same way that software list does,
       # avoiding ambiguous queries.
@@ -134,14 +143,30 @@
       # in parallel on system controller. flock behaviour:
       #   - acquire lock on /tmp/ostree_metadata_commits_central.lock
       #   - the timeout is long just to ensure we never deadlock for any reason
+      #
+      # The generated ostree_metadata_commits_central file contains the list of
+      # metadata files and their commits for the given software version in this format:
+      # metadata_file_path:<commit hash>. For example:
+      #    /opt/software/metadata/deployed/component-MM.mm.0:<commit hash 1>
+      #    /opt/software/metadata/deployed/component-MM.mm.1:<commit hash 2>
+      #
+      # When the N System Controller has N-1 patches, the metadata files for the N-1
+      # patches may not have a commit defined. In this case, the commit field is empty.
+      # For example:
+      #    /opt/software/metadata/unavailable/component-MM.mm.100:<commit hash 1>
+      #    /opt/software/metadata/unavailable/component-MM.mm.200:
+      #
+      # The empty commit is to determine if the Unavailable patches and related files
+      # should be synced to the subcloud.
+      #
       shell: |
         exec 3>/tmp/ostree_metadata_commits_central.lock
         flock --exclusive --timeout 180 3 || \
         { echo "ERROR: $? - flock failed while trying to get the commits."; exit 1; }
         if [ ! -f "{{ ostree_metadata_commits_central }}" ] \
           || ! diff -q <(echo {{ ostree_commit_system_controller.stdout }}) \
-          <(tail --lines=1 "{{ ostree_metadata_commits_central }}" | awk -F':' '{ print $2; }') > \
-          /dev/null 2>&1 ; then
+          <(awk -F':' 'length($2) > 0 {commit=$2} END {print commit}' \
+          "{{ ostree_metadata_commits_central }}") > /dev/null 2>&1 ; then
           {{ role_path }}/files/ostree-metadata-sync.sh --sw-version "{{ software_version }}" \
           --output "{{ ostree_metadata_commits_central }}" get-commits
         else
@@ -155,6 +180,20 @@
       debug:
         var: system_controller_software_metadata_commits
 
+    # When an N-1 patch is uploaded to the System Controller, the metadata files
+    # may not have a commit defined. In this case, we need to check if there
+    # are any empty commit metadata files for the given N-1 release.
+    - name: Gather empty commit metadata files on system controller
+      set_fact:
+        system_controller_metadata_empty_commit: >-
+          {{ system_controller_software_metadata_commits.stdout_lines
+            | select("match", "^[^:]+:$")
+            | list }}
+
+    - name: Show empty commit metadata files on system controller
+      debug:
+        var: system_controller_metadata_empty_commit
+
     # Switch from command to script module to run the ostree-metadata-sync.sh script
     # on the system controller as it does not exist on N-1 release e.g. 22.12
     - name: Gather subcloud metadata commits
@@ -165,6 +204,17 @@
     - name: Show ostree metadata commits on subcloud
       debug:
         var: subcloud_software_metadata_commits
+
+    # See sync_previous_release_updates role description for details
+    - name: Sync previous release updates for unavailable releases
+      include_tasks: sync_previous_release_updates.yml
+      vars:
+        software_updates_dir: "/var/www/pages/updates"
+        rel_updates_dir: "{{ software_updates_dir }}/debian/rel-{{ software_version }}"
+      when:
+        - software_version is version(system_controller_current_sw_version.stdout, '<')
+        - prestage_source == 'local'
+        - system_controller_metadata_empty_commit | length > 0
 
     # It's necessary to temporarily change the owner to sysadmin so that
     # the system controller can push the files to the subcloud, since the files
@@ -193,7 +243,7 @@
     # on the system controller as it does not exist on N-1 release e.g. 22.12
     - name: Synchronizing system controller ostree commits on subcloud
       script: "{{ role_path }}/files/ostree-metadata-sync.sh --sw-version {{ software_version }}
-              sync-subcloud"
+              --sc-sw-version {{ system_controller_current_sw_version.stdout }} sync-subcloud"
       register: sync_software_commits
 
     - name: Show sync output
@@ -205,10 +255,10 @@
           - "stdout: {{ sync_software_commits.stdout }}"
 
     # We want to transfer the rel-MM-mm directories that may exist in the system
-    # controller to the subcloud. There will always be at least one, which corresponds
-    # to the deployed base release, for example rel-24.09.0. This task should not fail,
-    # if it fails the playbook should be aborted.
-    - name: Copy system controller deployed release directory to subcloud
+    # controller to the subcloud. Regardless of whether the provided release is an
+    # N or N-1 release. This task should not fail, if it fails the playbook should
+    # be aborted.
+    - name: Copy system controller release directory to subcloud
       synchronize:
         mode: "push"
         src: "{{ usm_software_dir }}/rel-{{ item }}"
@@ -259,6 +309,11 @@
           state: directory
           owner: sysadmin
           recurse: yes
+
+      - name: Remove {{ tmp_metadata_dir }} temporary directory
+        file:
+          path: "{{ tmp_metadata_dir }}"
+          state: absent
 
       - name: Synchronize software between controllers
         command: "{{ usm_scripts_dir }}/controllers-software-sync"

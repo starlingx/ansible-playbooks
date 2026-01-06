@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -219,7 +219,7 @@ function reapplyVault {
     fi
 
     if [[ " applied apply-failed " == *" $state "* ]]; then
-        system application-remove vault
+        system application-remove vault --yes
     fi
 
     # Seeing the 'removing' status from a previous operation is

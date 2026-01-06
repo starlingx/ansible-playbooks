@@ -9,6 +9,7 @@ kubelet_pmond_template: /usr/share/puppet/modules/platform/templates/kubelet-pmo
 kubelet_cni_bin_dir: /var/opt/cni/bin
 lighttpd_conf_template: /usr/share/puppet/modules/openstack/templates/lighttpd.conf.erb
 lighttpd_inc_conf_template: /usr/share/puppet/modules/openstack/templates/lighttpd-inc.conf.erb
+local_registry_host: registry.local
 registry_config_template: /usr/share/puppet/modules/platform/templates/dockerdistribution.conf.erb
 registry_runtime_config_file: /etc/docker-distribution/registry/runtime_config.yml
 registry_readonly_config_file: /etc/docker-distribution/registry/readonly_config.yml
@@ -29,8 +30,12 @@ kubeadm_pki_dir: /etc/kubernetes/pki
 etcd_tmp_dir: /opt/backups/etcd_tmp_dir
 controlplane_endpoint: "{{ cluster_floating_address }}"
 etcd_endpoint: "https://{{ cluster_floating_address | ipwrap }}:2379"
-apiserver_advertise_address: "{{ controller_0_cluster_host }}"
+apiserver_advertise_address: "{{ controller_0_cluster_host
+                                  if system_mode != 'simplex'
+                                  else cluster_floating_address }}"
 kubelet_taints: []
 legacy_restore_exclude_items:
   - etc/ssl/certs/ssl-cert-snakeoil.pem
   - etc/ssl/private/ssl-cert-snakeoil.key
+  - etc/sysctl.d/05-default-sysctl.conf
+  - etc/sysctl.d/100-custom-user.conf

@@ -27,7 +27,7 @@
 
 - name: Setup iptables for Kubernetes
   lineinfile:
-    path: /etc/sysctl.d/k8s.conf
+    path: /etc/sysctl.d/80-k8s.conf
     line: "{{ item }}"
     create: yes
   with_items:
@@ -130,12 +130,16 @@
 
 - name: Set kubelet node configuration if single-stack
   set_fact:
-    node_ip: "{{ controller_0_cluster_host }}"
+    node_ip: "{{ controller_0_cluster_host
+                 if system_mode != 'simplex'
+                 else cluster_floating_address }}"
   when: not cluster_floating_address_secondary is defined
 
 - name: Set kubelet node configuration if dual-stack
   set_fact:
-    node_ip: "{{ controller_0_cluster_host }},{{ controller_0_cluster_host_secondary }}"
+    node_ip: "{{ controller_0_cluster_host + ',' + controller_0_cluster_host_secondary
+                  if system_mode != 'simplex'
+                  else cluster_floating_address + ',' + cluster_floating_address_secondary }}"
   when: cluster_floating_address_secondary is defined
 
 - name: Create kubelet override config file
@@ -196,6 +200,81 @@
     set_fact:
       apiserver_cert_list: "{{ apiserver_cert_list + OAM_addresses_secondary}}"
     when: OAM_addresses_secondary is defined
+
+- name: Add primary mgmt addresses to apiserver san list
+  block:
+  - name: Get primary management ip addresses
+    include_tasks: >-
+      roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: mgmt
+      network_stack: primary
+
+  - set_fact:
+      primary_mgmt_ip_list:
+        - "{{ addresses.floating_address }}"
+        - "{{ addresses.controller0_address }}"
+        - "{{ addresses.controller1_address }}"
+
+  - set_fact:
+      apiserver_cert_list: "{{ apiserver_cert_list + primary_mgmt_ip_list | select }}"
+
+- name: Add secondary mgmt addresses to apiserver san list
+  block:
+  - name: Get secondary management ip addresses
+    include_tasks: >-
+      roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: mgmt
+      network_stack: secondary
+
+  - set_fact:
+      secondary_mgmt_ip_list:
+        - "{{ addresses.floating_address if addresses.floating_address is defined }}"
+        - "{{ addresses.controller0_address if addresses.controller0_address is defined }}"
+        - "{{ addresses.controller1_address if addresses.controller1_address is defined }}"
+
+  - set_fact:
+      apiserver_cert_list: "{{ apiserver_cert_list + secondary_mgmt_ip_list | select }}"
+
+- name: Add primary admin addresses to apiserver san list
+  block:
+  - name: Get primary admin ip addresses
+    include_tasks: >-
+      roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: admin
+      network_stack: primary
+
+  - set_fact:
+      primary_admin_ip_list:
+        - "{{ addresses.floating_address if addresses.floating_address is defined }}"
+        - "{{ addresses.controller0_address if addresses.controller0_address is defined }}"
+        - "{{ addresses.controller1_address if addresses.controller1_address is defined }}"
+
+  - set_fact:
+      apiserver_cert_list: "{{ apiserver_cert_list + primary_admin_ip_list | select }}"
+
+- name: Add secondary admin addresses to apiserver san list
+  block:
+  - name: Get secondary admin ip addresses
+    include_tasks: >-
+      roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: admin
+      network_stack: secondary
+
+  - set_fact:
+      secondary_admin_ip_list:
+        - "{{ addresses.floating_address if addresses.floating_address is defined }}"
+        - "{{ addresses.controller0_address if addresses.controller0_address is defined }}"
+        - "{{ addresses.controller1_address if addresses.controller1_address is defined }}"
+
+  - set_fact:
+      apiserver_cert_list: "{{ apiserver_cert_list + secondary_admin_ip_list | select }}"
+
+- debug:
+    msg: "kube-apiserver san list: {{ apiserver_cert_list }}"
 
 - name: Set taint configuration for non-AIO systems
   set_fact:
@@ -341,12 +420,12 @@
   with_fileglob:
     - "{{ kubeadm_pki_dir }}/*.crt"
 
-- block:
-  - name: Patch pull secret into kube-proxy service account
-    command: >
-      kubectl --kubeconfig=/etc/kubernetes/admin.conf patch serviceaccount
-      kube-proxy -p '{"imagePullSecrets": [{"name": "registry-local-secret"}]}' -n kube-system
+- name: Patch pull secret into kube-proxy service account
+  command: >
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf patch serviceaccount
+    kube-proxy -p '{"imagePullSecrets": [{"name": "registry-local-secret"}]}' -n kube-system
 
+- block:
   - name: Find old local registry secret
     shell: "kubectl --kubeconfig=/etc/kubernetes/admin.conf get secrets -n kube-system |
             grep registry-local-secret | awk '{print $1}'"

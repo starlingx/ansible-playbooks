@@ -18,10 +18,11 @@ trident_namespace: "trident"
 trident_rest_api_port: 8677
 trident_https_rest_api_port: 8678
 
-# The default port opened by the service for metrics gathering is 8001.
+# The default port opened by the service for metrics gathering is 8001 and 8444 (https).
 # For now, this doesn't seem to conflict with anything on our system,
 # but it's better to have it configurable.
 trident_metrics_port: 8001
+trident_https_metrics_port: 8444
 
 # We don't yet know if trident pods need to run on all nodes or just controllers,
 # so we add a parameter to easily switch between the two
@@ -43,15 +44,18 @@ mode: "trident_install"
 # Defaults to true, but you can set it to false for debug purposes
 trident_clean_folder: true
 
+# Trident provisioner name
+trident_provisioner: "csi.trident.netapp.io"
+
 # Images that need to be pulled to the local registry
 trident_images:
-  - docker.io/netapp/trident:25.02.1
-  - docker.io/netapp/trident-autosupport:25.02
-  - registry.k8s.io/sig-storage/csi-provisioner:v5.2.0
-  - registry.k8s.io/sig-storage/csi-attacher:v4.8.0
-  - registry.k8s.io/sig-storage/csi-resizer:v1.13.1
-  - registry.k8s.io/sig-storage/csi-snapshotter:v8.2.0
-  - registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.13.0
+  - docker.io/library/busybox:1.37.0
+  - docker.io/netapp/trident:25.10.0
+  - registry.k8s.io/sig-storage/csi-provisioner:v5.3.0
+  - registry.k8s.io/sig-storage/csi-attacher:v4.10.0
+  - registry.k8s.io/sig-storage/csi-resizer:v1.14.0
+  - registry.k8s.io/sig-storage/csi-snapshotter:v8.3.0
+  - registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.15.0
 
 # OVERRIDE FILES DIRECTORY
 # ========================
@@ -77,7 +81,7 @@ override_files_dir: "{{ lookup('env', 'HOME') }}"
 # in the host overrides file
 # See trident-installer/sample-input in trident-installer-X.Y.X.tar.gz
 #
-# 1. netapp_k8s_storageclass: Kubernetes storage class leads to a StorageClass e.g.:
+# 1. netapp_k8s_storageclasses: Kubernetes storage class leads to a StorageClass e.g.:
 #
 #    apiVersion: storage.k8s.io/v1
 #    kind: StorageClass
@@ -115,10 +119,10 @@ override_files_dir: "{{ lookup('env', 'HOME') }}"
 # file named "secrets.yml" under override files directory. Configuration parameters
 # stored in vault must start with vault_ prefix (i.e. vault_netapp_backends).
 
-netapp_k8s_storageclass:
+netapp_k8s_storageclasses:
   - metadata:
       name: netapp-nas-backend
-    provisioner: csi.trident.netapp.io
+    provisioner: "{{ trident_provisioner }}"
     parameters:
       backendType: "ontap-nas"    # should be the same as config_options.storageDriverName
 

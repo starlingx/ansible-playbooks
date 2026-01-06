@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -34,6 +34,7 @@ readonly SCRIPTNAME=$(basename "$0")
 #readonly SCRIPTDIR=$(readlink -m "$(dirname "$0")")
 
 SW_VERSION=${SW_VERSION:-}
+SC_SW_VERSION=${SC_SW_VERSION:-}
 
 DEBUG=${DEBUG:-}
 DRY_RUN=${DRY_RUN:-}
@@ -55,7 +56,7 @@ The script behaves differently depending on the 'get-commits' or 'sync-subcloud'
   sync-subcloud : Synchronize /opt/software/metadata directory on the subcloud.
                   This subcommand *must be run as root*, and is executed on the subcloud
                   via ansible, after setting up proper contents of the \$METADATA_SYNC_DIR
-                  See documentation in sync_metadata_on_subcloud() for algorithm details.
+                  See documentation in sync_subcloud_metadata() for algorithm details.
 
 OPTIONS:
 
@@ -219,7 +220,7 @@ find_metadata_files_for_release_sorted() {
     local -A metadata_files_map=()  # key: sw_version, value: metadata file
     local found_sw_version
     while IFS= read -r meta_file; do
-        found_sw_version=$(get_simple_xml_attrib_from_metadata "${meta_file}" "sw_version")
+        found_sw_version=$(xml_attrib_metadata "${meta_file}" "get" "sw_version")
         metadata_files_map[${found_sw_version}]=${meta_file}
     done < <(grep --recursive --files-with-matches --fixed-strings "<sw_version>${sw_version}" "${metadata_dir}")
 
@@ -257,35 +258,69 @@ find_metadata_file_for_attrib_val() {
     fi
 }
 
-get_simple_xml_attrib_from_metadata() {
-    # Get the value of given XML attribute.
+xml_attrib_metadata() {
+    # Get or set the value of an XML element from a metadata file.
     # We embed Python to parse the XML within script.
     # Params:
     #      $1 = the metadata file path
-    #      $2 = the xml attribute to find. can be a path that
+    #      $2 = action: "get" or "set"
+    #      $3 = the xml attribute to find. can be a path that
     #           specifies the element. For example:
     #               /root/item/subitem1
-    # Returns the value of the element if it exists.
-    local meta_file=$1
-    local attrib=$2
-    local val
+    #      $4 = value (only for "set")
+    #
+    # Returns: The value of the attribute if action is "get".
+    #          If action is "set", it modifies the XML file in place and
+    #          returns nothing.
 
-val=$(python - <<END
+    local meta_file="$1"
+    local action="$2"
+    local attrib="$3"
+    local value="${4:-}"
+    local return_value=""
+
+return_value=$(python - <<END
 import defusedxml.ElementTree as et
+import xml.etree.ElementTree as safe_et
 import sys
 
 try:
     tree = et.parse('$meta_file')
     root = tree.getroot()
-    tag = root.find(".//$attrib")
 
-    print(tag.text)
-except:
+    if "$action" == "get":
+        tag = root.find(".//$attrib")
+        print(tag.text)
+
+    elif "$action" == "set":
+        elem = root.find(".//$attrib")
+        if elem is not None:
+            elem.text = "$value"
+        else:
+            xml_str = safe_et.tostring(root, encoding="utf-8")
+            tree = safe_et.ElementTree(safe_et.fromstring(xml_str))
+            root = tree.getroot()
+
+            parts = "$attrib".strip("/").split("/")
+            parent = root
+
+            for part in parts[:-1]:
+                child = parent.find(part)
+                if child is None:
+                    child = safe_et.Element(part)
+                    parent.append(child)
+                parent = child
+
+            new_elem = safe_et.Element(parts[-1])
+            new_elem.text = "$value"
+            parent.append(new_elem)
+
+        tree.write('$meta_file')
+except Exception as e:
     sys.exit()
 END
 )
-    log_debug "metadata GET ${attrib}: ${val}"
-    echo "${val}"
+    [ "${action}" == "get" ] && echo "${return_value}"
 }
 
 get_commit_hashes_from_metadata() {
@@ -297,7 +332,7 @@ get_commit_hashes_from_metadata() {
     local commit
     local commit_path="contents/ostree/commit1/commit"
 
-    from_metadata_commit_hashes=$(get_simple_xml_attrib_from_metadata "${meta_file}" "${commit_path}")
+    from_metadata_commit_hashes=$(xml_attrib_metadata "${meta_file}" "get" "${commit_path}")
 }
 
 get_usm_state_from_path() {
@@ -346,10 +381,6 @@ translate_central_metadata_path() {
     # translate the /opt/software/metadata/... path to /opt/software/tmp/metadata-sync/metadata...
     local metadata_file=$1
     echo "${metadata_file/#"${METADATA_DIR}"/"${METADATA_SYNC_METADATA_DIR}"}"
-}
-
-get_metadata_files_unique_to_central() {
-    cat "${METADATA_SYNC_DIR}"/ostree-metadata-commits.central | awk -F ':' '{print $1;}'
 }
 
 sync_ostree_repo() {
@@ -436,102 +467,40 @@ find_all_ostree_commits_for_release() {
     #
     local sw_version=${1:-$SW_VERSION}
     local metadata_dir=${2:-$METADATA_DIR}
-    local number_of_commits metadata_file
+    local metadata_file
 
     for metadata_file in $(find_metadata_files_for_release_sorted "${sw_version}" "${metadata_dir}"); do
         if [ ! -f "${metadata_file}" ]; then
             return
         fi
 
-        release_state=$(get_usm_state_from_path "${metadata_file}")
-        if [ "$release_state" = "deployed" ]; then
-            number_of_commits=$(get_simple_xml_attrib_from_metadata "${metadata_file}" "number_of_commits")
-
-            local commit_hashes=()
-            get_commit_hashes_from_metadata commit_hashes "${metadata_file}"
-            if [ "${#commit_hashes[@]}" -gt 0 ]; then
-                # We only need to supply the first commit here.
-                echo "${metadata_file}:${commit_hashes[0]}"
-            fi
+        local commit_hashes=()
+        get_commit_hashes_from_metadata commit_hashes "${metadata_file}"
+        if [ "${#commit_hashes[@]}" -gt 0 ]; then
+            # We only need to supply the first commit here.
+            echo "${metadata_file}:${commit_hashes[0]}"
         fi
     done
 }
 
-sync_metadata_on_subcloud() {
-    #
-    # This function peforms metadata / ostree commit synchronizaton on the subcloud
-    #
-    # The algorithm for syncing the /opt/software/metadata/<STATE>/<RELEASE>-metadata.xml
-    # is as follows:
-    #
-    # For each RELEASE being synchronized from systemController:
-    #
-    #     COPY metadata.xml from systemController
-    #         - this will include the 'ostree-commit-id' and 'committed' ATTRIBUTES from systemController
-    #         * this has already been done by ansible
-    #
-    #     We are deleting all files of the release before synchronization to ensure that the
-    #     metadata will be exactly the same as the SC. It is not necessary to update the commits since
-    #     the subcloud repository is a mirror of the SC repository.
-    #
-    #     IF RELEASE does NOT EXIST on subcloud
-    #         IF 'ostree-commit-id' == NULL
-    #             Create it with STATE = available
-    #         ELSE
-    #             Create it with STATE = deployed
-    #
-    # For each RELEASE on SUBCLOUD but NOT synchronized from systemController
-    #     REMOVE RELEASE FROM SUBCLOUD
-    #
-    local metadata_file=$1
-    local central_metadata_file=$2
+version_le() {
+    [[ "$1" == "$2" || "$(printf '%s\n%s' "$1" "$2" | sort -V | head -n1)" == "$1" ]];
+}
 
-    # Using a namedref: use different name to avoid name collision
-    # See https://mywiki.wooledge.org/BashProgramming?highlight=%28nameref%29#Functions
-    local -n sync_subcloud_commit_hashes=$3
+get_central_metadata_file_for_release() {
+    local release="$1"
+    find_metadata_file_for_attrib_val "id" "${release}" "${METADATA_SYNC_METADATA_DIR}"
+}
 
-    # We already have the metadata file from the system controller
-    if [ -z "${central_metadata_file}" ]; then
-        # unexpected
-        die "no metadata file found for ostree commit(s): ${sync_subcloud_commit_hashes[*]}"
-    fi
+get_subcloud_metadata_file_for_release(){
+    local release="$1"
+    local metadata_dir="$2"
+    find "${metadata_dir}" -type f -name "*${release}-metadata.xml"
+}
 
-    # Get current subcloud state from metadata; it may or may not exist
-    local id sw_release central_usm_state subcloud_metadata_file
-    id=$(get_simple_xml_attrib_from_metadata "${central_metadata_file}" "id")
-    sw_release=$(get_simple_xml_attrib_from_metadata "${central_metadata_file}" "sw_release")
-    central_usm_state=$(get_usm_state_from_path "$central_metadata_file")
-    subcloud_metadata_file=$(find_metadata_file_for_attrib_val "id" "${id}" "${METADATA_DIR}")
-
-    local log_hdr="sync_metadata_on_subcloud: id: ${id}"
-    log_info_l "${log_hdr}" "sw_release: ${sw_release}"\
-        "commit_hashes: ${sync_subcloud_commit_hashes[*]}"\
-        "central_metadata_file: ${central_metadata_file}"\
-        "central_usm_state: ${central_usm_state}"\
-        "subcloud_metadata_file: ${subcloud_metadata_file}"
-
-    local new_state
-    # It is sufficient to check against only one commit hash here - they are all part of the same metadata file
-    local commit_hash=${sync_subcloud_commit_hashes[0]}
-    if [ -z "${subcloud_metadata_file}" ]; then
-        # Not found: RELEASE does NOT EXIST on subcloud
-        if ostree_commit_exists "${commit_hash}"; then
-            # Create it with STATE = deployed
-            log_debug_l "sync_metadata_on_subcloud: commit exists in local ${OSTREE_LOCAL_REF}"\
-                "ref: ${commit_hash}"
-            new_state="deployed"
-        else
-            # Create it with STATE = available
-            new_state="available"
-        fi
-        # Ensures that the new state directory exists
-        if [ ! -d "${METADATA_DIR}/${new_state}" ]; then
-            log_info "Creating ${METADATA_DIR}/${new_state} state directory"
-            run_cmd mkdir -p "${METADATA_DIR}/${new_state}"
-        fi
-        log_info "${log_hdr} does not exist on subcloud, setting to ${new_state}"
-        run_cmd cp "${central_metadata_file}" "${METADATA_DIR}/${new_state}"
-    fi
+disable_prepatched_iso_flag() {
+    local metadata_file="$1"
+    xml_attrib_metadata "$metadata_file" "set" "prepatched_iso" "N"
 }
 
 # Context: INVOKED ON SUBCLOUD
@@ -541,53 +510,149 @@ sync_subcloud_metadata() {
     #
     # When this is invoked, we have the following in place (via ansible):
     #
-    #   - "${METADATA_SYNC_DIR}"/ostree-metadata-commits.central
-    #   - "${METADATA_SYNC_DIR}/metadata
+    #   - "${METADATA_SYNC_DIR}"/metadata
     #       - is a direct copy of the system controller /opt/software/medatada directory
     #       - we use this to ensure that the metadata files exist in the subcloud
     #
     # Synchronization is done on a per-major-release basis.
     # For given major release:
-    # 1) Syncronize ostree repo
-    # 2) Remove the metadata from the specified release to ensure that when synchronized,
+    # 1) Synchronize ostree repo
+    # 2) Make a copy of the metadata directory to a temporary location
+    # 3) Remove the metadata from the specified release to ensure that when synchronized,
     #    it is in the right directory, based on the state.
-    # 3) Get a list of all update metadata files needing to be synchronized
-    # 4) Synchronize the update metadata file into the proper state-based location
-    #    on the subcloud
+    # 4) Get a list of central metadata files in deployed state
+    # 5) Get a list of subcloud metadata files in deployed or unavailable state
+    # 6) Collect all unique releases matching the given release version from both central
+    #    and subcloud metadata list.
+    # 7) Get the highest release version from subcloud metadata list
+    # 8) Get the lowest release version from central metadata list
+    # 9) Synchronize metadata files by determining the correct USM state (unavailable,
+    #    deployed, or available) for each unique release, and copy the corresponding
+    #    metadata file to the appropriate state directory.
+    #    We need to disable the prestaged_iso flag (set to N) if the release state is
+    #    available after subcloud prestage and if it corresponds to the lowest release
+    #    in the central.
+    # 10) Remove the temporary metadata directory
     #
-    local metadata_file commit_hash central_metadata_file
     local sw_version=${1:-$SW_VERSION}
+    local sc_sw_version=${2:-$SC_SW_VERSION}
+    local metadata_file metadata_tmp_dir
+    local central_metadata_file central_metadata_files
+    local subcloud_metadata_files
+    local last_subcloud_sw_version="" all_unique_releases
+    local reason="" source="" usm_state=""
+
+    # software parameter provided by prestage
+    if [ -z "${sw_version}" ]; then
+        die "sync_subcloud_metadata: Prestage software version not specified"
+    fi
+
+    # System Controller software version parameter
+    if [ -z "${sc_sw_version}" ]; then
+        die "sync_subcloud_metadata: System Controller software version not specified"
+    fi
 
     # Configure and sync ostree feed repo
     # This will be able to ostree at the same level between System Controller and subcloud.
     configure_ostree_repo_for_central_pull
     sync_ostree_repo
 
-    local commit_hashes=()
-    local commit_hash
+    # Create a temporary directory to backup the metadata files
+    metadata_tmp_dir=$(mktemp --directory ostree-metadata-sync.XXXXX)
+
+    # Copy the metadata directory to a temporary location
+    cp -Rf "${METADATA_DIR}" "${metadata_tmp_dir}"
 
     # Remove current files for specified release
     log_info "Removing directories for release ${sw_version}"
     rm -Rf ${SOFTWARE_DIR}/rel-${sw_version}.*
     find ${METADATA_DIR} -type f -name "*${sw_version}*" | xargs rm -f
 
-    # Get list of metadata files requiring sync
-    for metadata_file in $(get_metadata_files_unique_to_central); do
-        log_info "sync_subcloud_metadata: processing ${metadata_file} from central (sync)"
-        central_metadata_file=$(translate_central_metadata_path "${metadata_file}")
+    # Gets metadata files for central
+    # For N-1 sw_version, there is not state restriction, so get all
+    # metadata files.
+    # For N sw_version, only get metadata files in deployed state.
+    if version_le "${sw_version}" "${sc_sw_version}"; then
+        central_metadata_files=$(find_metadata_files_for_release_sorted \
+        "${sw_version}" "${METADATA_SYNC_METADATA_DIR}")
+    else
+        central_metadata_files=$(find_metadata_files_for_release_sorted \
+        "${sw_version}" "${METADATA_SYNC_METADATA_DIR}" | grep deployed)
+    fi
 
-        get_commit_hashes_from_metadata commit_hashes "${central_metadata_file}"
-        log_debug_l "sync_subcloud_metadata from central: "\
-            "metadata_file: ${metadata_file}"\
-            "central_metadata_file: ${central_metadata_file}"\
-            "commit_hashes: ${commit_hashes[*]}"
+    # Gets metadata files for subcloud in deployed or unavailable state
+    subcloud_metadata_files=$(find_metadata_files_for_release_sorted \
+        "${sw_version}" "${metadata_tmp_dir}" | egrep -E "deployed|unavailable")
 
-        if [ "${#commit_hashes[@]}" -gt 0 ]; then
-            # Synchronize the metadata file
-            sync_metadata_on_subcloud "${metadata_file}" "${central_metadata_file}" commit_hashes
-            commit_hashes=()
+    # All unique releases from both central and subcloud metadata files
+    all_unique_releases=$(
+        {
+            [ -n "$central_metadata_files" ] && basename -a $central_metadata_files || :
+            [ -n "$subcloud_metadata_files" ] && basename -a $subcloud_metadata_files || :
+        } | sed -E 's/-metadata\.xml$//' | sort -uV
+    )
+
+    # Get the highest release version from subcloud metadata files
+    # An empty value means no subcloud metadata files were found
+    # for the specified software version in an N-1 subcloud.
+    highest_subcloud_sw_version=$(
+        {
+            [ -n "$subcloud_metadata_files" ] && basename -a $subcloud_metadata_files || :
+        } | tail -1 | awk -F"-" '{print $2}'
+    )
+
+    # Get the lowest release version from central metadata files
+    lowest_central_sw_version=$(
+        {
+            [ -n "$central_metadata_files" ] && basename -a $central_metadata_files || :
+        } | head -1 | awk -F"-" '{print $2}'
+    )
+
+    # Sync metadata files
+    while IFS= read -r release; do
+        version="$(echo ${release} | awk -F'-' '{print $2;}')"
+
+        central_metadata_file=$(get_central_metadata_file_for_release "${release}")
+
+        if [[ ! -n "${central_metadata_file}" ]]; then
+            usm_state="unavailable"
+            reason="Does not exist in SystemController. Setting state to unavailable."
+        elif [ -n "${highest_subcloud_sw_version}" ] && version_le "${version}" "${highest_subcloud_sw_version}"; then
+            usm_state="deployed"
+            reason="Setting state to deployed."
+        else
+            usm_state="available"
+            reason="Does not exist in Subcloud. Setting state to available."
+
+            if [[ "${version}" == "${lowest_central_sw_version}" ]]; then
+                disable_prepatched_iso_flag "${central_metadata_file}"
+                reason+=" Disabling prepathed_iso flag for this release."
+            fi
         fi
-    done
+
+        if [[ "${usm_state}" == "unavailable" ]]; then
+            metadata_file=$(get_subcloud_metadata_file_for_release "${release}" "${metadata_tmp_dir}")
+            source="subcloud_metadata_file"
+        else
+            metadata_file=$(translate_central_metadata_path "${central_metadata_file}")
+            source="central_metadata_file"
+        fi
+
+        log_info_l "sync_subcloud_metadata: id: ${release}" \
+            "sw_version: ${version}"\
+            "Using ${source}: ${metadata_file}"\
+            "${reason}"
+
+        # Ensures that the new state directory exists
+        if [ ! -d "${METADATA_DIR}/${usm_state}" ]; then
+            log_info "Creating ${METADATA_DIR}/${usm_state} state directory"
+            run_cmd mkdir -p "${METADATA_DIR}/${usm_state}"
+        fi
+        run_cmd cp "${metadata_file}" "${METADATA_DIR}/${usm_state}"
+
+    done <<< "$all_unique_releases"
+
+    rm -Rf "${metadata_tmp_dir}"
 }
 
 ################################################################################
@@ -615,6 +680,11 @@ main() {
                 shift
                 SW_VERSION=$1
                 export SW_VERSION
+                ;;
+            -v|--sc-sw-version)
+                shift
+                SC_SW_VERSION=$1
+                export SC_SW_VERSION
                 ;;
             get-commits)
                 shift

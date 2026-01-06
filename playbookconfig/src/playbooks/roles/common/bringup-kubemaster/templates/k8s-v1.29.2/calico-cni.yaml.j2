@@ -5241,6 +5241,15 @@ spec:
   natOutgoing: True
   vxlanMode: "Never"
 {% endif -%}
+{% if calico_chain_insert_mode is defined and calico_chain_insert_mode %}
+---
+apiVersion: crd.projectcalico.org/v1
+kind: FelixConfiguration
+metadata:
+  name: default
+spec:
+  chainInsertMode: "{{ calico_chain_insert_mode }}"
+{% endif %}
 ---
 # Source: calico/templates/calico-etcd-secrets.yaml
 

@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -150,6 +150,11 @@
     set_fact:
       region_name: "{{ os_region_name_search.stdout.split('=')[1] | trim }}"
     when: os_region_name_search.stdout != ""
+
+  - name: Validate that region_name matches the expected one
+    fail:
+      msg: "Backup and inventory region names don't match"
+    when: expected_region_name is defined and region_name != expected_region_name
 
   - name: Look for override backup file in the backup tarball
     shell:

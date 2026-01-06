@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -392,7 +392,9 @@ def populate_mgmt_network(client):
                              'MANAGEMENT_START_ADDRESS')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'MANAGEMENT_END_ADDRESS')
-    subcloud_gateway = CONF.get('BOOTSTRAP_CONFIG', 'MANAGEMENT_GATEWAY_ADDRESS')
+    floating_address = CONF.get('BOOTSTRAP_CONFIG',
+                                'MANAGEMENT_FLOATING_ADDRESS')
+    mgmt_gateway_address = CONF.get('BOOTSTRAP_CONFIG', 'MANAGEMENT_GATEWAY_ADDRESS')
 
     dynamic_allocation = CONF.getboolean(
         'BOOTSTRAP_CONFIG', 'MANAGEMENT_DYNAMIC_ADDRESS_ALLOCATION')
@@ -412,10 +414,15 @@ def populate_mgmt_network(client):
         'prefix': management_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
-    if (is_subcloud() and subcloud_gateway != 'undef'):
+    if (mgmt_gateway_address != 'undef'):
         values.update({
-            'gateway_address': subcloud_gateway,
+            'gateway_address': mgmt_gateway_address,
         })
+    if (floating_address != 'undef'):
+        values.update({
+            'floating_address': floating_address,
+        })
+
     pool = create_addrpool(client, values)
 
     # create the network for the pool
@@ -435,7 +442,9 @@ def populate_mgmt_network_secondary(client):
                              'MANAGEMENT_START_ADDRESS_SECONDARY')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'MANAGEMENT_END_ADDRESS_SECONDARY')
-    subcloud_gateway = CONF.get('BOOTSTRAP_CONFIG', 'MANAGEMENT_GATEWAY_ADDRESS_SECONDARY')
+    floating_address = CONF.get('BOOTSTRAP_CONFIG',
+                                'MANAGEMENT_FLOATING_ADDRESS_SECONDARY')
+    mgmt_gateway_address = CONF.get('BOOTSTRAP_CONFIG', 'MANAGEMENT_GATEWAY_ADDRESS_SECONDARY')
 
     network_name = sysinv_constants.NETWORK_TYPE_MGMT
 
@@ -448,10 +457,15 @@ def populate_mgmt_network_secondary(client):
         'prefix': management_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
-    if (is_subcloud() and subcloud_gateway != 'undef'):
+    if (mgmt_gateway_address != 'undef'):
         values.update({
-            'gateway_address': subcloud_gateway,
+            'gateway_address': mgmt_gateway_address,
         })
+    if (floating_address != 'undef'):
+        values.update({
+            'floating_address': floating_address,
+        })
+
     pool = create_addrpool(client, values)
 
     # add the pool to the network
@@ -477,11 +491,10 @@ def populate_admin_network(client):
 
     admin_subnet = IPNetwork(
         CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_SUBNET'))
-    start_address = CONF.get('BOOTSTRAP_CONFIG',
-                             'ADMIN_START_ADDRESS')
-    end_address = CONF.get('BOOTSTRAP_CONFIG',
-                           'ADMIN_END_ADDRESS')
-    subcloud_gateway = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_GATEWAY_ADDRESS')
+    start_address = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_START_ADDRESS')
+    end_address = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_END_ADDRESS')
+    floating_address = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_FLOATING_ADDRESS')
+    admin_gateway_address = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_GATEWAY_ADDRESS')
 
     # create the address pool
     values = {
@@ -490,10 +503,15 @@ def populate_admin_network(client):
         'prefix': admin_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
-    if (is_subcloud() and subcloud_gateway != 'undef'):
+    if (admin_gateway_address != 'undef'):
         values.update({
-            'gateway_address': subcloud_gateway,
+            'gateway_address': admin_gateway_address,
         })
+    if (floating_address != 'undef'):
+        values.update({
+            'floating_address': floating_address,
+        })
+
     pool = create_addrpool(client, values)
 
     # create the network for the pool
@@ -507,13 +525,15 @@ def populate_admin_network(client):
 
 
 def populate_admin_network_secondary(client):
-    admin_subnet = IPNetwork(
-        CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_SUBNET_SECONDARY'))
-    start_address = CONF.get('BOOTSTRAP_CONFIG',
-                             'ADMIN_START_ADDRESS_SECONDARY')
-    end_address = CONF.get('BOOTSTRAP_CONFIG',
-                           'ADMIN_END_ADDRESS_SECONDARY')
-    subcloud_gateway = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_GATEWAY_ADDRESS_SECONDARY')
+    admin_subnet = IPNetwork(CONF.get(
+        'BOOTSTRAP_CONFIG', 'ADMIN_SUBNET_SECONDARY'))
+    start_address = CONF.get(
+        'BOOTSTRAP_CONFIG', 'ADMIN_START_ADDRESS_SECONDARY')
+    end_address = CONF.get(
+        'BOOTSTRAP_CONFIG', 'ADMIN_END_ADDRESS_SECONDARY')
+    floating_address = CONF.get(
+        'BOOTSTRAP_CONFIG', 'ADMIN_FLOATING_ADDRESS_SECONDARY')
+    admin_gateway_address = CONF.get('BOOTSTRAP_CONFIG', 'ADMIN_GATEWAY_ADDRESS_SECONDARY')
     network_name = sysinv_constants.NETWORK_TYPE_ADMIN
 
     print("Populating secondary admin network...")
@@ -525,9 +545,13 @@ def populate_admin_network_secondary(client):
         'prefix': admin_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
-    if (is_subcloud() and subcloud_gateway != 'undef'):
+    if (admin_gateway_address != 'undef'):
         values.update({
-            'gateway_address': subcloud_gateway,
+            'gateway_address': admin_gateway_address,
+        })
+    if (floating_address != 'undef'):
+        values.update({
+            'floating_address': floating_address,
         })
     pool = create_addrpool(client, values)
 
@@ -545,6 +569,8 @@ def populate_pxeboot_network(client):
                              'PXEBOOT_START_ADDRESS')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'PXEBOOT_END_ADDRESS')
+    floating_address = CONF.get('BOOTSTRAP_CONFIG',
+                                'PXEBOOT_FLOATING_ADDRESS')
     network_name = 'pxeboot'
     addrpool_name = 'pxeboot'
 
@@ -561,6 +587,10 @@ def populate_pxeboot_network(client):
         'prefix': pxeboot_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
+    if (floating_address != 'undef'):
+        values.update({
+            'floating_address': floating_address,
+        })
     pool = create_addrpool(client, values)
 
     # create the network for the pool
@@ -736,6 +766,8 @@ def populate_cluster_host_network(client):
                              'CLUSTER_HOST_START_ADDRESS')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'CLUSTER_HOST_END_ADDRESS')
+    floating_address = CONF.get('BOOTSTRAP_CONFIG',
+                                'CLUSTER_HOST_FLOATING_ADDRESS')
     dynamic_allocation = CONF.getboolean(
         'BOOTSTRAP_CONFIG', 'CLUSTER_HOST_DYNAMIC_ADDRESS_ALLOCATION')
     network_name = 'cluster-host'
@@ -754,6 +786,11 @@ def populate_cluster_host_network(client):
         'prefix': cluster_host_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
+    if (floating_address != 'undef'):
+        values.update({
+            'floating_address': floating_address,
+        })
+
     pool = create_addrpool(client, values)
 
     # create the network for the pool
@@ -773,6 +810,8 @@ def populate_cluster_host_network_secondary(client):
                              'CLUSTER_HOST_START_ADDRESS_SECONDARY')
     end_address = CONF.get('BOOTSTRAP_CONFIG',
                            'CLUSTER_HOST_END_ADDRESS_SECONDARY')
+    floating_address = CONF.get('BOOTSTRAP_CONFIG',
+                                'CLUSTER_HOST_FLOATING_ADDRESS_SECONDARY')
     network_name = sysinv_constants.NETWORK_TYPE_CLUSTER_HOST
 
     print("Populating secondary cluster host network...")
@@ -784,6 +823,11 @@ def populate_cluster_host_network_secondary(client):
         'prefix': cluster_host_subnet.prefixlen,
         'ranges': [(start_address, end_address)],
     }
+    if (floating_address != 'undef'):
+        values.update({
+            'floating_address': floating_address,
+        })
+
     pool = create_addrpool(client, values)
 
     # add the pool to the network
@@ -795,17 +839,33 @@ def populate_cluster_host_network_secondary(client):
 
 
 def populate_system_controller_network(client):
-    system_controller_subnet = IPNetwork(CONF.get(
-        'BOOTSTRAP_CONFIG', 'SYSTEM_CONTROLLER_SUBNET'))
+    def is_invalid(value):
+        return not value or value.strip().lower() == 'none'
+
+    system_controller_subnet_str = CONF.get(
+        'BOOTSTRAP_CONFIG', 'SYSTEM_CONTROLLER_SUBNET')
     system_controller_floating_ip = CONF.get(
         'BOOTSTRAP_CONFIG', 'SYSTEM_CONTROLLER_FLOATING_ADDRESS')
+    system_controller_oam_subnet_str = CONF.get(
+        'BOOTSTRAP_CONFIG', 'SYSTEM_CONTROLLER_OAM_SUBNET')
+    system_controller_oam_floating_ip = CONF.get(
+        'BOOTSTRAP_CONFIG', 'SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS')
+
+    if any([
+        is_invalid(system_controller_subnet_str),
+        is_invalid(system_controller_floating_ip),
+        is_invalid(system_controller_oam_subnet_str),
+        is_invalid(system_controller_oam_floating_ip)
+    ]):
+        print("System controller network configuration not found.")
+        return
+
+    system_controller_subnet = IPNetwork(system_controller_subnet_str)
+    system_controller_oam_subnet = IPNetwork(system_controller_oam_subnet_str)
+
     network_name_mgmt = 'system-controller'
     addrpool_prefix = f'{network_name_mgmt}-subnet'
 
-    system_controller_oam_subnet = IPNetwork(CONF.get(
-        'BOOTSTRAP_CONFIG', 'SYSTEM_CONTROLLER_OAM_SUBNET'))
-    system_controller_oam_floating_ip = CONF.get(
-        'BOOTSTRAP_CONFIG', 'SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS')
     network_name_oam = 'system-controller-oam'
     addrpool_oam_prefix = f'{network_name_oam}-subnet'
 
@@ -1006,8 +1066,7 @@ def populate_network_config(client):
     if has_cluster_service_network_secondary():
         populate_cluster_service_network_secondary(client)
 
-    if is_subcloud():
-        populate_system_controller_network(client)
+    populate_system_controller_network(client)
     if not is_system_controller():
         populate_admin_network(client)
     if has_admin_network_secondary() and not is_system_controller():
@@ -1070,8 +1129,8 @@ def populate_docker_kube_config(client):
         client.sysinv.service_parameter.create(**values)
         print("Docker proxy config completed.")
 
-    use_default_registries = CONF.getboolean(
-        'BOOTSTRAP_CONFIG', 'USE_DEFAULT_REGISTRIES')
+    use_public_registries = CONF.getboolean(
+        'BOOTSTRAP_CONFIG', 'USE_PUBLIC_REGISTRIES')
 
     # Get rid of any faulty docker registry entries that might have been
     # created in the previous failed run.
@@ -1087,7 +1146,8 @@ def populate_docker_kube_config(client):
                 parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DOCKER_ICR_REGISTRY):
             client.sysinv.service_parameter.delete(parameter.uuid)
 
-    if not use_default_registries:
+    # avoid creating service parameters if using public registries
+    if not use_public_registries:
         parameters = {}
 
         registries_map = {

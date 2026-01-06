@@ -103,6 +103,17 @@
   become_user: postgres
   when: wipe_ceph_osds|bool
 
+# Ensure hostwd sees the node as locked during optimized restore.
+# Normally mtcClient creates those flags, but it's stopped here.
+# Without those flags, hostwd may trigger a crashdump on quorum failure.
+- name: Ensure node lock flags exist for hostwd
+  file:
+    path: "{{ item }}"
+    state: touch
+  loop:
+    - /var/run/.node_locked
+    - /var/persist/mtc/.node_locked
+
 - name: Bringup flock services
   systemd:
     name: "{{ item }}"

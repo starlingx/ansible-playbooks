@@ -39,7 +39,7 @@ ELASTIC_REGISTRY_ADDITIONAL_OVERRIDES={{ elastic_registry.additional_overrides |
 GHCR_REGISTRY_ADDITIONAL_OVERRIDES={{ ghcr_registry.additional_overrides | default('undef') }}
 REGISTRYK8S_REGISTRY_ADDITIONAL_OVERRIDES={{ registryk8s_registry.additional_overrides | default('undef') }}
 ICR_REGISTRY_ADDITIONAL_OVERRIDES={{ icr_registry.additional_overrides | default('undef') }}
-USE_DEFAULT_REGISTRIES={{ use_default_registries }}
+USE_PUBLIC_REGISTRIES={{ use_public_registries }}
 K8S_REGISTRY_USERNAME={{ k8s_registry.username | default('none') }}
 GCR_REGISTRY_USERNAME={{ gcr_registry.username | default('none') }}
 QUAY_REGISTRY_USERNAME={{ quay_registry.username | default('none') }}
@@ -75,6 +75,10 @@ ADMIN_GATEWAY_ADDRESS={{ network_params.admin_gateway_address_primary
                         if (network_params.admin_gateway_address_primary is defined
                             and network_params.admin_gateway_address_primary)
                         else 'undef' }}
+ADMIN_FLOATING_ADDRESS={{ network_params.admin_floating_address_primary
+                        if (network_params.admin_floating_address_primary is defined
+                            and network_params.admin_floating_address_primary)
+                        else 'undef' }}
 
 {# -- start of secondary of dual-stack support #}
 ADMIN_SUBNET_SECONDARY={{ address_pairs_secondary['admin']['subnet'] | default('undef') }}
@@ -83,6 +87,10 @@ ADMIN_END_ADDRESS_SECONDARY={{ address_pairs_secondary['admin']['end'] | default
 ADMIN_GATEWAY_ADDRESS_SECONDARY={{ network_params.admin_gateway_address_secondary
                                    if (network_params.admin_gateway_address_secondary is defined
                                       and network_params.admin_gateway_address_secondary)
+                                      else 'undef' }}
+ADMIN_FLOATING_ADDRESS_SECONDARY={{ network_params.admin_floating_address_secondary
+                                   if (network_params.admin_floating_address_secondary is defined
+                                      and network_params.admin_floating_address_secondary)
                                       else 'undef' }}
 
 EXTERNAL_OAM_SUBNET_SECONDARY={{ address_pairs_secondary['oam']['subnet'] | default('undef') }}

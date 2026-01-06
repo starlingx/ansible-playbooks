@@ -9,21 +9,22 @@
 #   /opt/software/metadata directory to the subcloud. This is only done if the
 #   system controller and subcloud are at the same ostree commit.
 #
-
-- name: Retrieve system controller software version number
-  shell: source /etc/build.info; echo $SW_VERSION
-  register: system_controller_sw_version
-  delegate_to: localhost
+#   If the provided release for install is an N-1 release, the install will
+#   check if there are any patches release on the system controller. If there are,
+#   it will synchronize the patch metadata files to the subcloud, then move the
+#   existing patch metadata files from 'unavailable' to 'deployed' state if the
+#   commit hash is present in the metadata file for 'unavailable' patches.
+#   If the commit hash is not present in the 'unavailable' metadata file, the patch
+#   metadata file is removed from the subcloud.
 
 - name: Retrieve software version number
   shell: source /etc/build.info; echo $SW_VERSION
-  register: subcloud_sw_version
+  register: sw_version
 
 - name: Set software metadata synchronization facts
   set_fact:
     software_sync_required: false
-    system_controller_ostree_feed_repo_dir: /var/www/pages/feed/rel-{{ system_controller_sw_version.stdout }}/ostree_repo
-    subcloud_ostree_feed_repo_dir: /var/www/pages/feed/rel-{{ subcloud_sw_version.stdout }}/ostree_repo
+    ostree_feed_repo_dir: /var/www/pages/feed/rel-{{ sw_version.stdout }}/ostree_repo
     ostree_sysroot_repo_dir: /sysroot/ostree/repo
     ostree_rev: starlingx
     software_dir: /opt/software
@@ -32,34 +33,44 @@
 - block:
 
   - name: Gather system controller ostree commit
-    command: ostree --repo={{ system_controller_ostree_feed_repo_dir }} rev-parse {{ ostree_rev }}
+    command: ostree --repo={{ ostree_feed_repo_dir }} rev-parse {{ ostree_rev }}
     register: ostree_commit_system_controller
     delegate_to: localhost
 
   - name: Gather subcloud ostree commit
-    command: ostree --repo={{ subcloud_ostree_feed_repo_dir }} rev-parse {{ ostree_rev }}
+    command: ostree --repo={{ ostree_feed_repo_dir }} rev-parse {{ ostree_rev }}
     register: ostree_commit_subcloud
 
+  # Gather subcloud software version even unavailable patches to support N-1 installs
   - name: Gather system controller updates list
     shell: |
-      software list | \
-        grep "{{ system_controller_sw_version.stdout }}" | \
-        grep -E '(available|deployed|committed)' | \
-        awk '{$1=$1};1' | \
-        tr -d '[:space:]'
+      software list | grep {{ sw_version.stdout }} | grep -E '(available|deployed|committed|unavailable)' | \
+      sed 's/ //g;'
     register: system_controller_software_list
-    failed_when: false
     delegate_to: localhost
 
+  # software list command is still not available in this part of the install process.
+  # So we need to manually parse the metadata files to get the same software list output.
+  # Use a python script to do this to ensure we get the same output format as the
+  # software list command without headers.
   - name: Gather subcloud software list
-    shell: |
-      software list | \
-      grep "{{ subcloud_sw_version.stdout }}" | \
-      grep -E '(available|deployed|committed)' | \
-      awk '{$1=$1};1' | \
-      tr -d '[:space:]'
+    vars:
+      script_content: |
+        from software import software_controller as sc
+
+        patch_controller = sc.PatchController()
+        releases = patch_controller.software_release_query_cached()
+
+        for release in releases:
+            release_id = release.get('release_id')
+            rr = release.get('reboot_required', False)
+            state = release.get('state')
+            if "{{ sw_version.stdout }}" in release_id:
+              print(f'|{release_id}|{rr}|{state}|')
+    shell: "{{ script_content }}"
+    args:
+      executable: /usr/bin/python
     register: subcloud_software_list
-    failed_when: false
     become: true
 
   - name: Decide if software metadata synchronization is required
@@ -76,7 +87,7 @@
   - debug:
       msg:
         - "Software sync required: {{ software_sync_required }}"
-        - "ostree revision from {{ system_controller_ostree_feed_repo_dir }}:"
+        - "ostree revision from {{ ostree_feed_repo_dir }}:"
         - "system controller: {{ ostree_commit_system_controller.stdout }}"
         - "subcloud:          {{ ostree_commit_subcloud.stdout }}"
         - "Software list:"
@@ -113,19 +124,68 @@
         - "{{ synced_dir }}"
       become: true
 
+    # Transfer only the metadata files for the subcloud software version
     - name: Synchronize software dir from system controller to subcloud
       synchronize:
         mode: push
         src: "{{ software_dir }}/"
         dest: "{{ software_dir }}/"
-        rsync_opts: "--delete"
+        rsync_opts:
+          - "--include=*/"
+          - "--include=*{{ sw_version.stdout }}*-metadata.xml"
+          - "--exclude=*"
+          - "--delete"
       register: software_transfer
       retries: 2
       delay: 5
       until: software_transfer.rc == 0
 
+    # Only move metadata files from 'unavailable' to 'deployed' state
+    # if the commit hash is present in the metadata file.
+    # Use a python script to parse the metadata xml files and generate
+    # a list of metadata files that have a commit hash present.
+    # If the unavailable directory does not exist (because it was never
+    # created on the System Controller), then we have nothing to do
+    # with regards to moving files on the subcloud.
+    - name: Looking for unavailable metadata files with commit present
+      vars:
+        script_content: |
+          import xml.etree.ElementTree as ET
+          import os
+          metadata_dir = "{{ software_dir }}/metadata/unavailable/"
+          if not os.path.isdir(metadata_dir):
+            exit(0)
+          for metadata_file in os.listdir(metadata_dir):
+            if not metadata_file.endswith('-metadata.xml'):
+                continue
+            commit = None
+            metadata_file = os.path.join(metadata_dir, metadata_file)
+            tree = ET.parse(metadata_file)
+            root = tree.getroot()
+            node = root.find("./contents/ostree/commit1/commit")
+            if node is not None and node.text and node.text.strip():
+              commit = node.text.strip()
+            if commit:
+                print(f'{metadata_file}')
+      shell: "{{ script_content }}"
+      args:
+        executable: /usr/bin/python
+      register: unavailable_metadata_file_list
+      become: true
+
+    # Move the patch metadata files from 'unavailable' to 'deployed' state if
+    # the commit hash is present in the metadata file.
+    - name: Move patch metadata files from 'unavailable' to 'deployed' state
+      shell: |
+        for metadata_file in {{ unavailable_metadata_file_list.stdout_lines | join(' ') }}; do
+          release=$(basename "$metadata_file" -metadata.xml)
+          mv "$metadata_file" "{{ software_dir }}/metadata/deployed/${release}-metadata.xml"
+        done
+      become: yes
+      when: unavailable_metadata_file_list.stdout_lines | length > 0
+
     - name: Delete patch metadata files not belonging to the current
-            software version ({{ subcloud_sw_version.stdout }})
+            software version ({{ sw_version.stdout }})
       vars:
         paths_to_delete:
           - "{{ software_dir }}/metadata/unavailable"
@@ -162,4 +222,4 @@
 
     when: software_sync_required
 
-  when: sync_software_metadata and subcloud_sw_version.stdout is version('24.09', '>=')
+  when: sync_software_metadata and sw_version.stdout is version('24.09', '>=')

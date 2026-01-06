@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020,2023-2024 Wind River Systems, Inc.
+# Copyright (c) 2020,2023-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -24,7 +24,7 @@
     storageclass_headers:
       apiVersion: storage.k8s.io/v1
       kind: StorageClass
-      provisioner: "{{ netapp_k8s_storageclass[0].provisioner }}"
+      provisioner: "{{ trident_provisioner }}"
 
 - name: Prepare StorageClass content
   set_fact:
@@ -44,5 +44,38 @@
     delete storageclass {{ storage_class.metadata.name }}
   failed_when: false
 
+- name: Wait for StorageClass and TridentStorageClass to be deleted
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf
+    -n {{ trident_namespace }}
+    get {{ item }} {{ storage_class.metadata.name }}
+  register: check
+  loop_control:
+    label: "{{ item }}"
+  loop:
+    - storageclass
+    - tridentstorageclass
+  until: check.rc == 1
+  retries: 60
+  delay: 10
+  failed_when: check.rc != 1
+  changed_when: false
+
 - name: Create K8s StorageClass
   command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ trident_namespace }} apply -f {{ storageclass_file }}"
+
+- name: Wait for StorageClass and TridentStorageClass to be created
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf
+    -n {{ trident_namespace }}
+    get {{ item }} {{ storage_class.metadata.name }}
+  register: check
+  loop_control:
+    label: "{{ item }}"
+  loop:
+    - storageclass
+    - tridentstorageclass
+  until: check.rc == 0
+  retries: 60
+  delay: 10
+  changed_when: false

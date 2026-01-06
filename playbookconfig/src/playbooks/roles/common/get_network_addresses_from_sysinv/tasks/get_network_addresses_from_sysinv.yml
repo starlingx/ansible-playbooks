@@ -7,10 +7,28 @@
 # These tasks get addresses of network type and network stack (primary/secondary)
 # from the running system
 #
+# Variables expected to be passed in:
+#   network_type: The type of network to query (e.g., mgmt, oam, cluster-host, admin)
+#   network_stack: The stack of the network to query (e.g., primary, secondary)
+# OR
+#   network_requests: A list of dictionaries with keys 'network_type' and 'network_stack'
+#
+
+- name: Normalize network request variables into a list
+  set_fact:
+    net_list: |
+      {{
+        network_requests | default([
+          {
+            "network_type": network_type,
+            "network_stack": network_stack
+          }
+        ])
+      }}
 
 - name: Call to get addresses of given network type and stack
-  script: roles/common/get_network_addresses_from_sysinv/files/get_network_addresses_from_sysinv.py {{
-          network_type }} {{ network_stack }}
+  script: roles/common/get_network_addresses_from_sysinv/files/get_network_addresses_from_sysinv.py '{{
+          net_list | to_json }}'
   register: result
   failed_when: false
 
@@ -30,10 +48,15 @@
   set_fact:
     addresses: { }
 
-- name: Add key-value pair on addresses
+- name: Parse script output and set addresses
+  vars:
+    parsed_json: "{{ result.stdout | from_json }}"
   set_fact:
-    addresses: >-
-      {% set key, val = item.partition('=')[::2]|map('trim') -%}
-      {% set val = False if val=='None' else val -%}
-      {{ addresses | combine ({key: val}) }}
-  with_items: "{{ address_lines }}"
+    addresses: |
+      {{
+        parsed_json if (parsed_json | length > 1)
+        else (parsed_json.values() | list)[0]
+        | to_json
+        | replace(': null', ': false')
+        | from_json
+      }}

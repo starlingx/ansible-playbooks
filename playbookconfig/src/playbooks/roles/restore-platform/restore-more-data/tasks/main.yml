@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -19,10 +19,6 @@
     archive_ceph_backend_flag: "{{ ceph_backend_flag | regex_replace('^\\/', '') }}"
     archive_rook_backend_flag: "{{ rook_backend_flag | regex_replace('^\\/', '') }}"
     archive_fernet_keys_permdir: "{{ fernet_keys_permdir | regex_replace('^\\/', '') }}"
-
-- name: Set parameters for ldap different paths by OS
-  set_fact:
-    ldap_permdir: "{{ ldap_permdir_centos if os_release == 'centos' else ldap_permdir_debian }}"
 
 # User postgres needs access files in this folder during restore
 # Permissions will be set back to 0750 when host is unlocked
@@ -271,20 +267,6 @@
 
 - name: Stop openldap service
   shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap stop"
-
-- name: Delete ldap directory
-  file:
-    path: "{{ ldap_permdir }}"
-    state: absent
-
-- name: Recreate ldap directory
-  file:
-    path: "{{ ldap_permdir }}"
-    state: directory
-    recurse: yes
-    owner: root
-    group: root
-    mode: 0755
 
 - name: Check if ldap LDIF configuration file exists in the backup archive
   shell: "tar -tf {{ restore_data_file }} | grep -E 'etc/.*ldap/schema/cn=config.ldif'"
@@ -585,6 +567,13 @@
       previous_software_version: "{{ software_version }}"
       platform_backup_fqpn: "{{ restore_data_file }}"
 
+  - name: Restore cli environment file
+    import_role:
+      name: optimized-restore/restore-configuration
+      tasks_from: restore-cli-env.yml
+    vars:
+      platform_backup_fqpn: "{{ restore_data_file }}"
+
   - name: Restart services
     systemd:
       name: "{{ item }}"
@@ -656,7 +645,7 @@
     register: ids_and_personalities
 
   - name: Delete unprovisioned hosts
-    shell: source /etc/platform/openrc; system host-delete {{ item.split(' ')[0] }}
+    shell: source /etc/platform/openrc; system host-delete {{ item.split(' ')[0] }} --yes
     loop: "{{ ids_and_personalities.stdout_lines }}"
     when: (item.split(' ')[1] | lower) == 'none'
 
@@ -686,9 +675,10 @@
         set_fact:
           restore_system_mode: "{{ restore_system_mode_result.stdout_lines[0] }}"
 
-      - name: Create flag file in /etc/platform to skip wiping OSDs
+      - name: Create flag file in /opt/platform to skip wiping OSDs
         file:
-          path: "{{ skip_ceph_osds_wipe_flag }}"
+          path: >-
+            /opt/platform/config/{{ software_version }}/.skip_ceph_osds_wipe
           state: touch
         when: restore_system_mode != 'simplex'
 
@@ -724,6 +714,7 @@
             set_fact:
               ceph_temp_dir: /tmp/ceph/
               ceph_monmap_file: monmap.bin
+              helm_overrides_dir: "/opt/platform/helm/{{ software_version }}/rook-ceph"
 
           - name: Create {{ ceph_temp_dir }} dir
             file:
@@ -748,6 +739,22 @@
               name: recover-rook-ceph-data
             when: node_personalities.stdout is not search('storage')
 
+          - name: Get the rook-ceph app version
+            shell: source /etc/platform/openrc; system application-show rook-ceph --format value --column app_version
+            register: rook_ceph_app_version
+
+          - name: Truncate rook-ceph overrides to ensure auto-reapply is triggered
+            copy:
+              content: ""
+              dest: "{{ item }}"
+              force: yes
+            loop: >-
+              {{ lookup(
+                'fileglob',
+                helm_overrides_dir + '/' + rook_ceph_app_version.stdout + '/*.yaml',
+                wantlist=True
+              ) }}
+
           when: rook_backend.rc == 0
 
       when: not wipe_ceph_osds|bool
@@ -764,7 +771,7 @@
       # ceph is correctly configured after a wipe. This app is automatically
       # applied by conductor when there is ceph backend configured.
       - name: Remove {{ app_name }}
-        shell: source /etc/platform/openrc; system application-remove {{ app_name }} --force
+        shell: source /etc/platform/openrc; system application-remove {{ app_name }} --force --yes
 
       - name: Delete resources that block rook-ceph remove
         shell: |
@@ -848,6 +855,15 @@
 
       - name: Result of recovering Ceph PVCs
         debug: var=recover_ceph_pvcs_output.stdout_lines
+
+      - name: Remove Ceph Volume Snapshots when OSDs are wiped
+        script: remove_ceph_snapshots.sh
+        register: remove_ceph_snapshots_output
+        environment:
+          KUBECONFIG: /etc/kubernetes/admin.conf
+
+      - name: Result of removing Ceph Volume Snapshots
+        debug: var=remove_ceph_snapshots_output.stdout_lines
 
       when: wipe_ceph_osds|bool
 

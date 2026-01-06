@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2024 Wind River Systems, Inc.
+# Copyright (c) 2022-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -13,135 +13,58 @@
     name: common/validate-cert-subject-fields
 
 - block:
-  - name: Get primary management ip addresses
+  - name: Get primary and secondary ip addresses
     include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
     vars:
-      network_type: mgmt
-      network_stack: primary
+      network_requests:
+        - network_type: mgmt
+          network_stack: primary
+        - network_type: mgmt
+          network_stack: secondary
+        - network_type: oam
+          network_stack: primary
+        - network_type: oam
+          network_stack: secondary
+        - network_type: cluster-host
+          network_stack: primary
+        - network_type: cluster-host
+          network_stack: secondary
+        - network_type: admin
+          network_stack: primary
+        - network_type: admin
+          network_stack: secondary
 
   - debug:
-      msg: primary management addresses {{ addresses }}
+      msg: primary and secondary addresses {{ addresses }}
 
-  - name: Assign primary management ip addresses
+  - name: Assign primary and secondary ip addresses
     set_fact:
-      management_floating_ip_primary: "{{ addresses.floating_address }}"
-      management_c0_ip_primary: "{{ addresses.controller0_address }}"
-      management_c1_ip_primary: "{{ addresses.controller1_address }}"
+      management_floating_ip_primary: "{{ addresses.mgmt_primary.floating_address }}"
+      management_c0_ip_primary: "{{ addresses.mgmt_primary.controller0_address }}"
+      management_c1_ip_primary: "{{ addresses.mgmt_primary.controller1_address }}"
+      management_floating_ip_secondary: "{{ addresses.mgmt_secondary.floating_address }}"
+      management_c0_ip_secondary: "{{ addresses.mgmt_secondary.controller0_address }}"
+      management_c1_ip_secondary: "{{ addresses.mgmt_secondary.controller1_address }}"
+      oam_ip_primary: "{{ addresses.oam_primary.floating_address }}"
+      oam_ip_secondary: "{{ addresses.oam_secondary.floating_address }}"
+      kubernetes_cluster_floating_ip_primary: "{{ addresses.cluster_host_primary.floating_address }}"
+      kubernetes_cluster_c0_ip_primary: "{{ addresses.cluster_host_primary.controller0_address }}"
+      kubernetes_cluster_c1_ip_primary: "{{ addresses.cluster_host_primary.controller1_address }}"
+      kubernetes_cluster_floating_ip_secondary: "{{ addresses.cluster_host_secondary.floating_address }}"
+      kubernetes_cluster_c0_ip_secondary: "{{ addresses.cluster_host_secondary.controller0_address }}"
+      kubernetes_cluster_c1_ip_secondary: "{{ addresses.cluster_host_secondary.controller1_address }}"
+      admin_floating_ip_primary: "{{ addresses.admin_primary.floating_address }}"
+      admin_floating_ip_secondary: "{{ addresses.admin_secondary.floating_address }}"
 
-- block:
-  - name: Get secondary management ip addresses
-    include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
-    vars:
-      network_type: mgmt
-      network_stack: secondary
-
-  - debug:
-      msg: secondary management addresses {{ addresses }}
-
-  - name: Assign secondary management ip addresses
-    set_fact:
-      management_floating_ip_secondary: "{{ addresses.floating_address }}"
-      management_c0_ip_secondary: "{{ addresses.controller0_address }}"
-      management_c1_ip_secondary: "{{ addresses.controller1_address }}"
-
-- block:
-  - name: Get primary oam ip addresses
-    include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
-    vars:
-      network_type: oam
-      network_stack: primary
-
-  - debug:
-      msg: primary oam addresses {{ addresses }}
-
-  - name: Assign primary oam ip addresses
-    set_fact:
-      oam_ip_primary: "{{ addresses.floating_address }}"
-
-- block:
-  - name: Get secondary oam ip addresses
-    include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
-    vars:
-      network_type: oam
-      network_stack: secondary
-
-  - debug:
-      msg: secondary oam addresses {{ addresses }}
-
-  - name: Assign secondary oam ip addresses
-    set_fact:
-      oam_ip_secondary: "{{ addresses.floating_address }}"
-
-- block:
-  - name: Get primary cluster-host ip addresses
-    include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
-    vars:
-      network_type: cluster-host
-      network_stack: primary
-
-  - debug:
-      msg: primary cluster-host addresses {{ addresses }}
-
-  - name: Assign primary cluster-host ip addresses
-    set_fact:
-      kubernetes_cluster_floating_ip_primary: "{{ addresses.floating_address }}"
-      kubernetes_cluster_c0_ip_primary: "{{ addresses.controller0_address }}"
-      kubernetes_cluster_c1_ip_primary: "{{ addresses.controller1_address }}"
-
-- block:
-  - name: Get secondary cluster-host ip addresses
-    include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
-    vars:
-      network_type: cluster-host
-      network_stack: secondary
-
-  - debug:
-      msg: secondary cluster-host addresses {{ addresses }}
-
-  - name: Assign secondary cluster-host ip addresses
-    set_fact:
-      kubernetes_cluster_floating_ip_secondary: "{{ addresses.floating_address }}"
-      kubernetes_cluster_c0_ip_secondary: "{{ addresses.controller0_address }}"
-      kubernetes_cluster_c1_ip_secondary: "{{ addresses.controller1_address }}"
-
-- block:
-  - name: Get primary admin ip addresses
-    include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
-    vars:
-      network_type: admin
-      network_stack: primary
-
-  - debug:
-      msg: primary admin addresses {{ addresses }}
-
-  - name: Assign primary admin ip addresses
-    set_fact:
-      admin_floating_ip_primary: "{{ addresses.floating_address }}"
-
-- block:
-  - name: Get secondary admin ip addresses
-    include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
-    vars:
-      network_type: admin
-      network_stack: secondary
-
-  - debug:
-      msg: secondary admin addresses {{ addresses }}
-
-  - name: Assign secondary admin ip addresses
-    set_fact:
-      admin_floating_ip_secondary: "{{ addresses.floating_address }}"
-
+# Try to get from sourced credentials and fall back to 'system show' if not available
 - name: Get region name
   shell: |
-    source /etc/platform/openrc
-    system show | grep region_name | awk '{ print $4 }'
+    echo "${OS_REGION_NAME:-$(source /etc/platform/openrc && system show | grep region_name | awk '{ print $4 }')}"
   register: region_name_register
 
 - name: Get distributed_cloud role
   shell: |
-    source /etc/platform/openrc
-    system show | grep distributed_cloud_role | awk '{ print $4 }'
+    source /etc/platform/platform.conf; echo $distributed_cloud_role
   register: dc_role
 
 - name: Get cert-manager api version

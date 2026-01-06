@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -61,6 +61,63 @@
   - name: Print the output of platform restore playbook
     debug:
       msg: "{{ platform_restore_output.stdout }}"
+
+  - name: Reconfigure OAM network post factory restore
+    block:
+      # We only care about the primary OAM
+      - name: Get current OAM configuration
+        shell: |
+          source /etc/platform/openrc
+          system oam-show | awk '
+            /oam_ip[^_]/ { oam_ip = $4 }
+            /oam_gateway_ip/ { gateway = $4 }
+            /oam_subnet/ { subnet = $4 }
+            END { print oam_ip, gateway, subnet }
+          '
+        register: oam_show_output
+        retries: 3
+        delay: 5
+        until: oam_show_output.rc == 0
+        changed_when: false
+
+      - name: Parse current OAM values
+        set_fact:
+          current_oam_ip: "{{ oam_show_output.stdout.split()[0] }}"
+          current_oam_gateway: "{{ oam_show_output.stdout.split()[1] }}"
+          current_oam_subnet: "{{ oam_show_output.stdout.split()[2] }}"
+
+      - name: Determine if OAM reconfiguration is required
+        set_fact:
+          oam_reconfig_required: >-
+            {{ current_oam_ip != external_oam_floating_address or
+              current_oam_gateway != external_oam_gateway_address or
+              current_oam_subnet != external_oam_subnet }}
+
+      - name: Apply OAM configuration changes
+        shell: >-
+          source /etc/platform/openrc;
+          system oam-modify
+          oam_subnet={{ external_oam_subnet }}
+          oam_gateway_ip={{ external_oam_gateway_address }}
+          oam_ip={{ external_oam_floating_address }}
+        register: oam_modify_result
+        retries: 3
+        delay: 5
+        until: oam_modify_result.rc == 0
+        when: oam_reconfig_required | bool
+
+    when:
+      - auto_restore_mode | default('') == "factory"
+      - subcloud_is_aio_sx
+      - not (ipmi_monitor_enabled | default(true))
+
+  - name: Restore sys_protected ACL on admin.conf
+    acl:
+      path: /etc/kubernetes/admin.conf
+      entity: sys_protected
+      etype: group
+      permissions: r
+      state: present
 
   always:
     - name: Remove subcloud overrides file on {{ inventory_hostname }}

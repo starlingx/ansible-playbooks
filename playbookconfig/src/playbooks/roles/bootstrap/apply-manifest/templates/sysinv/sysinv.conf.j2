@@ -29,7 +29,7 @@ journal_min_size=1024
 journal_default_size=1024
 
 [keystone_authtoken]
-region_name=
+region_name={{ region_name }}
 auth_url=http://localhost:5000
 auth_uri=http://localhost:5000
 auth_type=password
@@ -41,11 +41,11 @@ project_domain_name=Default
 interface=internal
 
 [openstack_keystone_authtoken]
-region_name=
-neutron_region_name=
-cinder_region_name=
-nova_region_name=
-barbican_region_name=
+region_name={{ region_name }}
+neutron_region_name={{ region_name }}
+cinder_region_name={{ region_name }}
+nova_region_name={{ region_name }}
+barbican_region_name={{ region_name }}
 auth_url=http://localhost:5000
 auth_uri=http://localhost:5000
 auth_type=password
@@ -57,7 +57,7 @@ keyring_service=CGCS
 
 [fm]
 catalog_info=faultmanagement:fm:internalURL
-os_region_name=
+os_region_name={{ region_name }}
 
 [fernet_repo]
 key_repository=/opt/platform/keystone/fernet-keys

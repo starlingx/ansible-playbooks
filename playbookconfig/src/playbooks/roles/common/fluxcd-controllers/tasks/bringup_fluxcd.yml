@@ -9,6 +9,7 @@
 #
 
 # Create a temporary directory and copy FluxCD resource files for kubectl.
+
 - name: Set up FluxCD resource files
   block:
   - name: Create FluxCD resource directory
@@ -22,6 +23,7 @@
       dest: "{{ fluxcd_resource_dir }}/{{ item | basename | regex_replace('\\.j2$', '') }}"
     with_fileglob:
     - "{{ role_path }}/templates/values.yaml.j2"
+    - "{{ role_path }}/templates/values_legacy.yaml.j2"
 
 - name: Configure and launch FluxCD helm and source controllers
   block:
@@ -35,11 +37,18 @@
       failed_when: false
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
+      when: fluxcd_namespace_created is not defined or not fluxcd_namespace_created|bool
 
     - name: Fail if creating namespace fails
       fail:
         msg: "Failed to create {{ fluxcd_namespace }} namespace. Error: {{ create_fluxcd_ns.stderr }}"
-      when: create_fluxcd_ns.rc !=0 and create_fluxcd_ns.stderr is not search('AlreadyExists')
+      when: (fluxcd_namespace_created is defined and not fluxcd_namespace_created|bool)
+            or (
+              create_fluxcd_ns.rc is defined and
+              create_fluxcd_ns.rc != 0 and
+              create_fluxcd_ns.stderr is defined and
+              create_fluxcd_ns.stderr is not search('AlreadyExists')
+            )
 
     # Label FluxCD namespace with PSAC labels
     - name: Label namespace for FluxCD with PSAC labels
@@ -127,7 +136,7 @@
                   --wait
                   --wait-for-jobs
                   -f {{ fluxcd_resource_dir }}/values.yaml
-                  fluxcd
+                  {{ flux_helm_release_name }}
                   {{ flux_charts_path }}
           retries: "{{ fluxcd_retries }}"
           delay: "{{ delay_time }}"
@@ -138,75 +147,14 @@
       when: fluxcd_get_pods.stderr is search('No resources found')
 
     - block:
-        # TODO(ipiresso): Label and annotation updates can be removed once StarlingX
-        # moves to a Helm version equal or higher than 3.17, which introduced the
-        # --take-ownership option.
-        - name: Label resources
-          command: kubectl label
-                   --overwrite
-                   {{ item }}
-                   app.kubernetes.io/managed-by=Helm
-          with_items:
-            - CustomResourceDefinition helmreleases.helm.toolkit.fluxcd.io
-            - CustomResourceDefinition buckets.source.toolkit.fluxcd.io
-            - CustomResourceDefinition gitrepositories.source.toolkit.fluxcd.io
-            - CustomResourceDefinition helmcharts.source.toolkit.fluxcd.io
-            - CustomResourceDefinition helmrepositories.source.toolkit.fluxcd.io
-            - CustomResourceDefinition ocirepositories.source.toolkit.fluxcd.io
-            - ClusterRole flux-edit
-            - ClusterRole flux-view
-            - ClusterRole crd-controller
-            - ClusterRoleBinding cluster-reconciler
-            - ClusterRoleBinding crd-controller
-            - -n flux-helm Service source-controller
-            - -n flux-helm Deployment --all
-          retries: "{{ fluxcd_retries }}"
-          delay: "{{ delay_time }}"
-          register: label_fluxcd_ns
-          until: label_fluxcd_ns.rc == 0
-          failed_when: false
-          environment:
-            KUBECONFIG: /etc/kubernetes/admin.conf
-
-        - name: Annotate resources
-          command: kubectl annotate
-                   --overwrite
-                   {{ item }}
-                   meta.helm.sh/release-name=fluxcd
-                   meta.helm.sh/release-namespace=flux-helm
-          with_items:
-            - CustomResourceDefinition helmreleases.helm.toolkit.fluxcd.io
-            - CustomResourceDefinition buckets.source.toolkit.fluxcd.io
-            - CustomResourceDefinition gitrepositories.source.toolkit.fluxcd.io
-            - CustomResourceDefinition helmcharts.source.toolkit.fluxcd.io
-            - CustomResourceDefinition helmrepositories.source.toolkit.fluxcd.io
-            - CustomResourceDefinition ocirepositories.source.toolkit.fluxcd.io
-            - ClusterRole flux-edit
-            - ClusterRole flux-view
-            - ClusterRole crd-controller
-            - ClusterRoleBinding cluster-reconciler
-            - ClusterRoleBinding crd-controller
-            - -n flux-helm Service source-controller
-            - -n flux-helm Deployment --all
-          retries: "{{ fluxcd_retries }}"
-          delay: "{{ delay_time }}"
-          register: annotate_fluxcd_ns
-          until: annotate_fluxcd_ns.rc == 0
-          failed_when: false
-          environment:
-            KUBECONFIG: /etc/kubernetes/admin.conf
-
-        # This will scale the deployment up, but will also upgrade FluxCD in case there was a change
-        - name: Upgrade flux helm and source controllers for restore/upgrades over existing deployment
+        # This will scale the deployment up, but will also upgrade the Helm release
+        - name: Upgrade Flux controllers for restore/upgrades over existing deployment
           command: helm upgrade
-                  --install
                   --namespace {{ fluxcd_namespace }}
-                  --create-namespace
                   --wait
                   --wait-for-jobs
-                  --reset-then-reuse-values
                   -f {{ fluxcd_resource_dir }}/values.yaml
-                  fluxcd
+                  {{ flux_helm_release_name }}
                   {{ flux_charts_path }}
           retries: "{{ fluxcd_retries }}"
           delay: "{{ delay_time }}"

@@ -8,6 +8,11 @@
 #   This role is used to get prestage versions.
 #   For prestage for-install, versions are searched from /opt/platform-backup
 #   using the variable "platform_backup_dir".
+#   When a prestage for-install is done, a flag file named ".ostree_rsync_completed"
+#   is created in each prestaged version directory to indicate that the version
+#   has been prestaged for install. The flag is used to identify the prestaged
+#   versions and list them. If the flag file is not found in a version directory,
+#   meaning that the version has not been prestaged for install, it is ignored.
 #   For prestage for-sw-deploy, versions are searched from /opt/software/metadata
 #   using the variable "host_software_metadata_dir".
 #
@@ -19,18 +24,19 @@
   set_fact:
     platform_backup_dir: "{{ platform_backup_dir }}"
 
-- name: Find ostree_repo subdirectories
+- name: Searching for releases that have been prestaged for install
   find:
     paths: "{{ platform_backup_dir }}"
-    patterns: "ostree_repo"
+    patterns: "{{ for_install_flag_file }}"
     recurse: true
+    hidden: true
     depth: 2
-    file_type: directory
-  register: ostree_dirs
+    file_type: file
+  register: releases_prestaged_for_installation
 
-- name: Generate a versions list from ostree_repo subdirectories
+- name: Generate releases list to install
   set_fact:
-    versions_list: "{{ ostree_dirs.files
+    versions_list: "{{ releases_prestaged_for_installation.files
                   | map(attribute='path')
                   | map('dirname')
                   | map('basename')

@@ -66,12 +66,8 @@ items:
     duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
     ipAddresses:
     - "{{ oam_ip_primary }}"
-    - "{{ management_floating_ip_primary }}"
 {% if oam_ip_secondary is truthy %}
     - "{{ oam_ip_secondary }}"
-{% endif %}
-{% if management_floating_ip_secondary is truthy %}
-    - "{{ management_floating_ip_secondary }}"
 {% endif %}
     issuerRef:
       kind: ClusterIssuer
@@ -101,8 +97,12 @@ items:
     # Add kubernetes cluster ip to make sure certificate has issuer ip in san list
     # https://bugs.launchpad.net/starlingx/+bug/1971500
     - "{{ kubernetes_cluster_floating_ip_primary }}"
+{% if kubernetes_cluster_c0_ip_primary is truthy %}
     - "{{ kubernetes_cluster_c0_ip_primary }}"
+{% endif %}
+{% if kubernetes_cluster_c1_ip_primary is truthy %}
     - "{{ kubernetes_cluster_c1_ip_primary }}"
+{% endif %}
 {% if kubernetes_cluster_floating_ip_secondary is truthy %}
     - "{{ kubernetes_cluster_floating_ip_secondary }}"
 {% endif %}
@@ -137,8 +137,12 @@ items:
     duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
     ipAddresses:
     - "{{ management_floating_ip_primary }}"
+{% if management_c0_ip_primary is truthy %}
     - "{{ management_c0_ip_primary }}"
+{% endif %}
+{% if management_c1_ip_primary is truthy %}
     - "{{ management_c1_ip_primary }}"
+{% endif %}
 {% if management_floating_ip_secondary is truthy %}
     - "{{ management_floating_ip_secondary }}"
 {% endif %}

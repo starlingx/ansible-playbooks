@@ -118,6 +118,7 @@
     name: "{{ 'docker-registry' if os_release == 'debian' else 'docker-distribution' }}"
     state: restarted
 
+# the restored /etc/hosts file already contains registry.local
 - name: Update /etc/hosts with local registry host
   command: >-
     sed -i -e 's|'$CONTROLLER_ADDRESS'\t'$CONTROLLER'|'$CONTROLLER_ADDRESS'\t'$CONTROLLER'\t'$LOCAL_REGISTRY'|g' /etc/hosts
@@ -127,3 +128,4 @@
     CONTROLLER_ADDRESS: "{{ controller_floating_address }}"
     CONTROLLER: "controller"
     LOCAL_REGISTRY: "registry.local"
+  when: mode != 'restore'

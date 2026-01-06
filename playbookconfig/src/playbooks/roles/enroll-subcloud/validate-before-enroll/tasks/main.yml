@@ -11,41 +11,21 @@
 - name: Initialize some facts to be used in subsequent roles/tasks
   set_fact:
     use_docker_proxy: false
-    use_default_registries: true
-    k8s_registry: "{{ default_k8s_registry }}"
-    gcr_registry: "{{ default_gcr_registry }}"
-    quay_registry: "{{ default_quay_registry }}"
-    docker_registry: "{{ default_docker_registry }}"
-    elastic_registry: "{{ default_elastic_registry }}"
-    ghcr_registry: "{{ default_ghcr_registry }}"
-    registryk8s_registry: "{{ default_registryk8s_registry }}"
-    icr_registry: "{{ default_icr_registry }}"
+    use_public_registries: true
+    k8s_registry: "{{ default_docker_registries['k8s.gcr.io'] }}"
+    gcr_registry: "{{ default_docker_registries['gcr.io'] }}"
+    quay_registry: "{{ default_docker_registries['quay.io'] }}"
+    docker_registry: "{{ default_docker_registries['docker.io'] }}"
+    elastic_registry: "{{ default_docker_registries['docker.elastic.co'] }}"
+    ghcr_registry: "{{ default_docker_registries['ghcr.io'] }}"
+    registryk8s_registry: "{{ default_docker_registries['registry.k8s.io'] }}"
+    icr_registry: "{{ default_docker_registries['icr.io'] }}"
 
 - name: Turn on use_docker_proxy flag
   set_fact:
     use_docker_proxy: true
   when: (docker_http_proxy is defined and docker_http_proxy is not none) or
         (docker_https_proxy is defined and docker_https_proxy is not none)
-
-- name: Set default registries dictionary to central registry
-  set_fact:
-    default_docker_registries:
-      k8s.gcr.io:
-        url: "{{ central_registry }}/k8s.gcr.io"
-      gcr.io:
-        url: "{{ central_registry }}/gcr.io"
-      quay.io:
-        url: "{{ central_registry }}/quay.io"
-      docker.io:
-        url: "{{ central_registry }}/docker.io"
-      docker.elastic.co:
-        url: "{{ central_registry }}/docker.elastic.co"
-      ghcr.io:
-        url: "{{ central_registry }}/ghcr.io"
-      registry.k8s.io:
-        url: "{{ central_registry }}/registry.k8s.io"
-      icr.io:
-        url: "{{ central_registry }}/icr.io"
 
 - name: Save the list of user defined registry keys
   set_fact:

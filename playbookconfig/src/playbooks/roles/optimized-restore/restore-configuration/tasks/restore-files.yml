@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2024 Wind River Systems, Inc.
+# Copyright (c) 2022-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -85,6 +85,38 @@
   when:
     - boot_backup_found.rc == 0
     - upgrade_in_progress
+
+- name: Restore factory install files/directory
+  block:
+    - name: Check if /var/lib/factory-install was backed up
+      shell: "tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep 'var/lib/factory-install'"
+      args:
+        warn: false
+      failed_when: false
+      register: factory_install_dir_result
+
+    - name: Restore factory install directory if present
+      command: >-
+        tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }}
+        --overwrite var/lib/factory-install
+      args:
+        warn: false
+      when: factory_install_dir_result.rc == 0
+
+    - name: Check if seed ISO rules were backed up
+      shell: "tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep 'etc/udev/rules.d/99-seediso.rules'"
+      args:
+        warn: false
+      failed_when: false
+      register: seed_iso_rules_result
+
+    - name: Restore seed ISO rules if present
+      command: >-
+        tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }}
+        --overwrite etc/udev/rules.d/99-seediso.rules
+      args:
+        warn: false
+      when: seed_iso_rules_result.rc == 0
 
 - name: Check home dir for CentOS
   block:

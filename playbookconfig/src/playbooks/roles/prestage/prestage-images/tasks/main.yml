@@ -37,6 +37,7 @@
         prestage_env:
           REGISTRIES: "{{ docker_registries | to_json }}"
           PRESTAGE_DOWNLOAD: yes
+          PRESTAGE_REASON: "{{ prestage_reason }}"
 
     - name: Download container images for prestage
       script: >

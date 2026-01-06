@@ -210,7 +210,7 @@
       etcd_size: 5
       dockerdistribution_size: 16
       backup_size: 20
-      docker_size: 30
+      docker_size: 40
       kubelet_size: 10
       scratch_size: 16
     when: root_disk_size|int >= minimum_small_root_disk_size

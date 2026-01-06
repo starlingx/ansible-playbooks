@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023-2024 Wind River Systems, Inc.
+# Copyright (c) 2023-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -9,24 +9,28 @@
 #   a long period of time
 #
 
-- name: Get system mode
-  shell: source /etc/platform/platform.conf; echo $system_mode
-  register: system_mode_result
 
-- name: Get node type
-  shell: source /etc/platform/platform.conf; echo $nodetype
-  register: node_type_result
-
-- name: Get software version
-  shell: source /etc/platform/platform.conf; echo $sw_version
-  register: sw_version_result
+- name: Source platform.conf and get variables
+  shell: |
+    source /etc/platform/platform.conf
+    printf '{"system_mode": "%s", "nodetype": "%s", "sw_version": "%s"}' \
+      "$system_mode" "$nodetype" "$sw_version"
+  register: platform_conf_result
 
 - set_fact:
-    is_controller: "{{ true if node_type_result.stdout == 'controller' else false }}"
+    system_mode_result: "{{ platform_dict.system_mode }}"
+    node_type_result: "{{ platform_dict.nodetype }}"
+    sw_version_result: "{{ platform_dict.sw_version }}"
+  vars:
+    platform_dict: "{{ platform_conf_result.stdout | from_json }}"
 
 - set_fact:
-    is_compute: "{{ true if node_type_result.stdout == 'worker' else false }}"
+    is_controller: "{{ true if node_type_result == 'controller' else false }}"
+    is_compute: "{{ true if node_type_result == 'worker' else false }}"
 
+# When source_env_command is an empty string, we already sourced credentials
+# before, so we already know we're on the active controller and don't need to
+# check again
 - name: Check if current controller is the active controller
   block:
   - name: Check if admin credentials can be sourced
@@ -39,7 +43,7 @@
         {{ true if 'stdout' in active_controller and active_controller.stdout
         | length == 0 else false }}
 
-  when: is_controller
+  when: is_controller and (source_env_command is defined and source_env_command | length > 0)
 
 - name: Verify certificate expiration status
   import_tasks: verify-certificate-expiration-status.yml
@@ -67,9 +71,9 @@
   - name: Do certificate recovery on other nodes when system type is multi-node
     block:
       - name: Get worker nodes
-        shell: >-
-         source /etc/platform/openrc; system host-list --format value
-         | grep worker | awk '{ print$2 }'
+        shell: |
+         {{ source_env_command }}
+         system host-list --format value | grep worker | awk '{ print$2 }'
         register: worker_nodes_results
         until: worker_nodes_results is not failed
 
@@ -83,7 +87,9 @@
             else ['controller-1']}}
 
       - name: Lock standby controller and compute nodes
-        shell: source /etc/platform/openrc; system host-lock {{ item }} --force
+        shell: |
+          {{ source_env_command }}
+          system host-lock {{ item }} --force {{ cli_confirmation | default('--yes') }}
         register: host_lock_output
         failed_when: >-
           host_lock_output.stderr != "Avoiding lock action on already 'locked' host item"
@@ -91,7 +97,9 @@
         loop: "{{ lock_unlock_host_list }}"
 
       - name: Wait until standby controller and compute nodes are locked
-        shell: source /etc/platform/openrc; system host-list --format value | grep {{ item }}
+        shell: |
+          {{ source_env_command }}
+          system host-list --format value | grep {{ item }}
         register: host_list_var
         retries: 40
         delay: 15
@@ -122,7 +130,9 @@
                 else 'Failed to run certificate recovery on other nodes.' }}
 
       - name: Unlock standby controller and compute nodes
-        shell: source /etc/platform/openrc; system host-unlock {{ item }}
+        shell: |
+          {{ source_env_command }}
+          system host-unlock {{ item }}
         register: host_unlock_output
         retries: 20
         delay: 15
@@ -130,7 +140,9 @@
         loop: "{{ lock_unlock_host_list }}"
 
       - name: Wait until standby controller and compute nodes reboots after host-unlock
-        shell: source /etc/platform/openrc; system host-list --format value | grep {{ item }}
+        shell: |
+          {{ source_env_command }}
+          system host-list --format value | grep {{ item }}
         register: host_list_var
         retries: 40
         delay: 15
@@ -141,9 +153,9 @@
         loop: "{{ lock_unlock_host_list }}"
 
       - name: Get storage nodes
-        shell: >-
-         source /etc/platform/openrc; system host-list --format value
-         | grep storage | awk '{ print$2 }'
+        shell: |
+          {{ source_env_command }}
+          system host-list --format value | grep storage | awk '{ print$2 }'
         register: storage_nodes_results
         until: storage_nodes_results is not failed
       - name: Lock / Unlock storage nodes when they are present
@@ -164,9 +176,9 @@
       # 200.004: controller-0 experienced a service-affecting failure. Auto-recovery in progress.
       # Manual Lock and Unlock may be required if auto-recovery is unsuccessful.
       - name: Verify if controller-0 blocking management affecting alarm is present
-        shell: >-
-          source /etc/platform/openrc; fm alarm-list --mgmt_affecting --nowrap |
-          grep "200.004" | grep "controller-0"
+        shell: |
+          {{ source_env_command }}
+          fm alarm-list --mgmt_affecting --nowrap | grep "200.004" | grep "controller-0"
         register: c0_service_affecting_alarm
         failed_when: c0_service_affecting_alarm.stderr | length > 0
 
@@ -177,14 +189,18 @@
       - name: Do host-lock and unlock of controller-0 to clear up management affecting alarm
         block:
           - name: Trigger a host-swact out of controller-0
-            shell: source /etc/platform/openrc; system host-swact controller-0
+            shell: |
+              {{ source_env_command }}
+              system host-swact controller-0 {{ cli_confirmation | default('--yes') }}
             register: host_swact_var
             retries: 3
             delay: 15
             until: host_swact_var.stderr | length == 0
 
           - name: Wait until swact finishes
-            shell: source /etc/platform/openrc; system host-show controller-1
+            shell: |
+              {{ source_env_command }}
+              system host-show controller-1
             register: host_show_var
             retries: 40
             delay: 15
@@ -197,14 +213,18 @@
             loop: "{{ ['controller-0'] }}"
 
           - name: Trigger a host-swact out of controller-1
-            shell: source /etc/platform/openrc; system host-swact controller-1
+            shell: |
+              {{ source_env_command }}
+              system host-swact controller-1 {{ cli_confirmation | default('--yes') }}
             register: host_swact_var
             retries: 3
             delay: 15
             until: host_swact_var.stderr | length == 0
 
           - name: Wait until swact finishes
-            shell: source /etc/platform/openrc; system host-show controller-0
+            shell: |
+              {{ source_env_command }}
+              system host-show controller-0
             register: host_show_var
             retries: 40
             delay: 15
@@ -225,7 +245,9 @@
       become: yes
 
     - name: Wait until management affecting alarms clear up
-      shell: source /etc/platform/openrc; fm alarm-list --mgmt_affecting | grep -c True
+      shell: |
+        {{ source_env_command }}
+        fm alarm-list --mgmt_affecting | grep -c True
       register: mgmt_affecting_present
       # Fail will be better handled by next task
       failed_when: false

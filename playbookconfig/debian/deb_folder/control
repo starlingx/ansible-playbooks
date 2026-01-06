@@ -12,13 +12,16 @@ Depends: ${misc:Depends},
  ansible,
  pigz,
  python3,
+ python3-defusedxml,
  python3-netaddr,
+ python3-packaging,
  python3-ptyprocess,
  python3-pexpect,
  python3-parted,
  sshpass,
  sysinv,
  cgts-client,
+ software-client,
  trident-installer
 Description: Ansible Playbooks for StarlingX Configurations.
  This package contains playbooks used for configuring StarlingX.

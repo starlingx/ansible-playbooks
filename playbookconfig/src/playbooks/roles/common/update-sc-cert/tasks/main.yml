@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2023 Wind River Systems, Inc.
+# Copyright (c) 2021-2023, 2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -75,7 +75,7 @@
 
   - name: Check manifest applied and alarm cleared
     shell: |
-      source /etc/platform/openrc;
+      {{ source_env_command }}
       fm alarm-list --query alarm_id=250.001
     register: alarm_count
     retries: 6
@@ -92,19 +92,3 @@
     when: alarm_count.stdout != ""
 
   when: mode is not defined or mode != "enroll"
-
-- name: Restart sysinv-conductor
-  command: sm-restart service sysinv-conductor
-  become: yes
-
-- name: Check sysinv-conductor related services enabled
-  shell: sm-query service '{{ item }}' | grep -c enabled-active
-  loop:
-    - "sysinv-inv"
-    - "cert-mon"
-    - "cert-alarm"
-    - "sysinv-conductor"
-  register: service_status
-  until: service_status.stdout == '1'
-  retries: 30
-  delay: 10

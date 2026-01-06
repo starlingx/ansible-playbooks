@@ -504,6 +504,24 @@
             backup_targets: "{{ backup_targets + sw_deployments_backup_targets }}"
           when: not exclude_sw_deployments|bool
 
+    # At the end of enroll-init, the 99-seediso.rules is deleted, so we use it as a way
+    # to determine if the enrollment was executed or not
+    - name: Check if enrollment was executed
+      stat:
+        path: /etc/udev/rules.d/99-seediso.rules
+      register: seediso_rules
+
+    - name: Include factory install directory/files in backup targets
+      block:
+        - name: Include factory install directory in backup targets
+          set_fact:
+            backup_targets: "{{ backup_targets + ['/var/lib/factory-install'] }}"
+
+        - name: Remove udev exclusions to backup seed ISO rules
+          set_fact:
+            backup: "{{ backup | combine({'exclude': backup.exclude | difference(['/etc/udev/**', '/etc/udev'])}) }}"
+      when: seediso_rules.stat.exists
+
     - name: Set exclude targets
       set_fact:
         exclude_targets:

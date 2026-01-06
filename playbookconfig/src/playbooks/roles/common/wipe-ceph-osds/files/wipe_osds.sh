@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2020, 2023-2024 Wind River Systems, Inc.
+# Copyright (c) 2020, 2023-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -140,7 +140,13 @@ for f in /dev/disk/by-path/*; do
     fi
 
     dev=$(readlink -f "$f")
-    if ! lsblk --nodeps --pairs "$dev" | grep -q 'TYPE="disk"' ; then
+    # if device TYPE is not 'disk', skip it
+    if ! lsblk --nodeps --pairs "${dev}" | grep -q 'TYPE="disk"' ; then
+        continue
+    fi
+
+    # If device is 'disk' type but is ready-only, skip it
+    if lsblk --nodeps --pairs "${dev}" | grep -q 'RO="1"' ; then
         continue
     fi
 

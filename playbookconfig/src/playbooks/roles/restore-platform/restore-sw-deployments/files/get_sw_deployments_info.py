@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -13,6 +13,8 @@ import subprocess
 import defusedxml.ElementTree as ET
 
 TAR_CMD = ["tar", "--use-compress-program=pigz"]
+
+MINIMUM_SW_VERSION = (24, 9)
 
 
 @lru_cache(maxsize=None)
@@ -135,14 +137,31 @@ def get_tar_transforms(metadata):
     return transforms
 
 
+def get_tar_excludes(backup_data, metadata):
+    """Prevent unwanted items from being extracted during restore"""
+
+    # Exclude everything with a software version below minimum since they cannot be restored
+    excludes = []
+    for kind in ["committed", "unavailable"]:
+        for v in metadata.get(kind, []):
+            sw_version = get_sw_version(read_file(backup_data, v))
+            if sw_version < MINIMUM_SW_VERSION:
+                excludes.append(v)
+
+    return excludes
+
+
 def collect_sw_deployments_info(backup_data):
     """Collect software deployments info from backup so it can be printed as a JSON"""
 
     result = {}
     metadata = get_metadata(backup_data)
 
-    if metadata.get("committed"):
-        raise NotImplementedError("Committed patches not supported yet")
+    # Fail if committed data is found above minimum release
+    for v in metadata.get("committed", []):
+        sw_version = get_sw_version(read_file(backup_data, v))
+        if sw_version >= MINIMUM_SW_VERSION:
+            raise NotImplementedError("Committed patches not supported yet")
 
     result["backup_patched"] = check_if_backup_patched(backup_data)
     result["target_commit"] = get_target_commit(backup_data, metadata)
@@ -151,6 +170,7 @@ def collect_sw_deployments_info(backup_data):
         result["target_release_id"] = get_target_release_id(metadata)
         result["target_reboot_required"] = get_target_reboot_required(backup_data, metadata)
         result["tar_transforms"] = get_tar_transforms(metadata)
+        result["tar_excludes"] = get_tar_excludes(backup_data, metadata)
 
     result["metadata"] = metadata
     return result

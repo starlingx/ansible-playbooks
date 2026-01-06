@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021,2023 Wind River Systems, Inc.
+# Copyright (c) 2021, 2023, 2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -9,73 +9,64 @@
 #   command for 5 minutes as the first unlock can require a call to
 #   update_sriov_config.
 #
-#   If wait_for_unlock is enabled, the target host is a simplex subcloud.
+#   If wait_for_unlock is enabled, the target host is a simplex.
 #   It will ensure that the target has undergone the reboot (ssh port shutdown
 #   and startup), then wait for sm managed services to reach enabled-active
 #   state and finally for VIM to touch dor_complete flag before exiting.
 #
+
+- name: Set default values for unlock facts
+  set_fact:
+    wait_for_unlock: "{{ wait_for_unlock|default(false) }}"
+    shutdown_timeout: "{{ shutdown_timeout|default(180) }}"
+    unlock_timeout: "{{ unlock_timeout|default(900) }}"
+    alarm_check_timeout: "{{ alarm_check_timeout|default(180) }}"
+
 - name: Unlock host
   shell: source /etc/platform/openrc; system host-unlock {{ target_host }}
   retries: 10
   delay: 30
   register: result
   until: result.rc == 0
-  when: distributed_cloud_role is undefined or distributed_cloud_role != 'subcloud'
 
 - block:
-  - name: Set default values for unlock facts
-    set_fact:
-      wait_for_unlock: "{{ wait_for_unlock|default(false) }}"
-      shutdown_timeout: "{{ shutdown_timeout|default(180) }}"
-      unlock_timeout: "{{ unlock_timeout|default(900) }}"
-      alarm_check_timeout: "{{ alarm_check_timeout|default(180) }}"
+  # On some hardware, the actual reboot after system host-unlock response is received may take
+  # longer than 60s. Wait up to 3 minutes for ssh port to become unavailable to ensure that the
+  # system has rebooted by maintenance before executing the next task. The 3 minutes
+  # timeout should be enough as maintenance will force reboot if it does not take place within
+  # 2 minutes.
+  - name: Wait up to {{ shutdown_timeout }} seconds for ssh port to become unavailable for {{ inventory_hostname }}
+    local_action:
+      module: wait_for
+        port={{ ansible_port }}
+        host={{ ansible_host }}
+        delay=5
+        timeout={{ shutdown_timeout }}
+        state=stopped
 
-  - name: Unlock subcloud host
-    shell: source /etc/platform/openrc; system host-unlock {{ target_host }}
-    retries: 10
+  - name: Wait up to {{ unlock_timeout }} seconds for ssh port to become available for {{ inventory_hostname }}
+    local_action:
+      module: wait_for
+        port={{ ansible_port }}
+        host={{ ansible_host }}
+        delay=60
+        timeout={{ unlock_timeout }}
+        state=started
+
+  - name: Wait till all services are enabled-active
+    shell: >-
+      sm-dump | sed "1,/Services/d" | awk '{ print $3 }'
+      | grep -v "enabled-active" | wc -l
+    register: service_status_result
+    until: service_status_result.stdout == "1"
+    retries: 20
     delay: 30
-    register: result
-    until: result.rc == 0
 
-  - block:
-    # On some hardware, the actual reboot after system host-unlock response is received may take
-    # longer than 60s. Wait up to 3 minutes for ssh port to become unavailable to ensure that the
-    # subcloud is actually rebooted by maintenance before executing the next task. The 3 minute
-    # timeout should be enough as maintenance will force reboot if it does not take place within
-    # 2 minutes.
-    - name: Wait up to {{ shutdown_timeout }} seconds for ssh port to become unavailable for {{ inventory_hostname }}
-      local_action:
-        module: wait_for
-          port={{ ansible_port }}
-          host={{ ansible_host }}
-          delay=5
-          timeout={{ shutdown_timeout }}
-          state=stopped
+  - name: Wait for vim recovery post unlock to complete
+    wait_for:
+      path: /var/run/.nfv-vim.dor_complete
+      state: present
+      timeout: 300
+      msg: Timeout waiting for vim recovery to complete
 
-    - name: Wait up to {{ unlock_timeout }} seconds for ssh port to become available for {{ inventory_hostname }}
-      local_action:
-        module: wait_for
-          port={{ ansible_port }}
-          host={{ ansible_host }}
-          delay=60
-          timeout={{ unlock_timeout }}
-          state=started
-
-    - name: Wait till all services are enabled-active
-      shell: >-
-        sm-dump | sed "1,/Services/d" | awk '{ print $3 }'
-        | grep -v "enabled-active" | wc -l
-      register: service_status_result
-      until: service_status_result.stdout == "1"
-      retries: 20
-      delay: 30
-
-    - name: Wait for vim recovery post unlock to complete
-      wait_for:
-        path: /var/run/.nfv-vim.dor_complete
-        state: present
-        timeout: 300
-        msg: Timeout waiting for vim recovery to complete
-
-    when: wait_for_unlock
-  when: distributed_cloud_role is defined and distributed_cloud_role == 'subcloud'
+  when: wait_for_unlock

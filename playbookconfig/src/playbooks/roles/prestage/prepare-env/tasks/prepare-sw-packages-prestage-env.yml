@@ -22,18 +22,6 @@
   set_fact:
     ostree_repo_release_feed: "{{ release_feed }}/ostree_repo"
 
-- name: Check if {{ ostree_repo_release_feed }} exists on {{ inventory_hostname }}
-  stat:
-    path: "{{ ostree_repo_release_feed }}"
-  register: ostree_repo_release_feed_result
-
-# From the subcloud perspective, we need to check if the ostree directory for
-# release N exists. This is necessary to determine if the subcloud is N-1,
-# in which the ostree directory for prestaged release N does not exist.
-- name: Set flag to indicate if the host ostree repo dir exist
-  set_fact:
-    host_ostree_dir_exist: "{{ ostree_repo_release_feed_result.stat.exists }}"
-
 - name: Check if {{ host_software_metadata_dir }} exists on {{ inventory_hostname }}
   stat:
     path: "{{ host_software_metadata_dir }}"
@@ -67,12 +55,10 @@
 # The condition for it to be true must meet:
 #   - The prestage source must be 'remote' to determine that the subcloud has
 #     a different release than the System ontroller.
-#   - The N release ostree directory does not already exist on the N-1 subcloud.
 #   - The subcloud sw version must be lower than the sw version to be prestaged.
 - name: Set flag to indicate if the ostree directory should be copied to the subcloud
   set_fact:
     force_ostree_dir_sync: "{{ 'true' if (prestage_source == 'remote' and
-                                not host_ostree_dir_exist and
                                 host_software_version < software_version) else 'false' }}"
 
 - debug:

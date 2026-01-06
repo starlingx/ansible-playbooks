@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -10,17 +10,9 @@
 #   them, and using USM local installation to deploy them.
 #
 #   Role outline:
-#   - Compare SW_VERSION between system controller and subcloud
-#   - Retrieve subcloud software releases, determine patch level
-#   - Retrieve system controller releases for subcloud's SW_VERSION
-#     and determine patch level
-#   - Diff system controller and subcloud patch levels
-#   - Bring subcloud to target patch level (system controller's level):
-#     - Determine dependent patches
-#     - Set releases_to_apply: gather patch IDs, remove already applied
-#       patches on subcloud from list
-#     - Stage patches from dc-vault
-#     - Initiate usm-deploy-releases role
+#   - Retrieve subcloud software releases
+#   - Check the patches need to be applied on the subcloud from the system controller
+#   - Use common/usm-deploy-releases to upload and apply the patches
 #
 
 - name: Check if the controller is active controller
@@ -38,10 +30,13 @@
     msg: "Subcloud enrollment cannot be done on non-active controller."
   when: not is_active_controller
 
+# Instead of using SOFTWARE_URL, software CLI is using SYSTEM_URL,
+# which is already used by sysinv. To still authenticate with the
+# token, we need to explicitly provide --software-url.
 - name: Run software deploy show
   shell: |
-    source /etc/platform/openrc
-    software deploy show
+    {{ source_env_command }}
+    software --software-url {{ software_url }} deploy show
   register: check_deploy_show
   failed_when: false
 
@@ -62,182 +57,51 @@
   register: sw_version_system_controller
   delegate_to: localhost
 
-- name: Retrieve SW_VERSION on subcloud
-  shell: source /etc/build.info; echo $SW_VERSION
-  register: sw_version_subcloud
-
-# TODO(srana): This restriction should be removed in the future
-- name: Ensure system controller and subcloud are at the same major release
-  fail:
-    msg: |
-      Major software versions do not match.
-      System controller: {{ sw_version_system_controller.stdout }},
-      Subcloud: {{ sw_version_subcloud.stdout }}
-  when: sw_version_system_controller.stdout != sw_version_subcloud.stdout
-
-- name: Retrive subcloud software list raw output
+- name: Retrieve subcloud software list raw output
   shell: |
-    source /etc/platform/openrc
-    software list --release {{ sw_version_subcloud.stdout }}
+    {{ source_env_command }}
+    software --software-url {{ software_url }} list --release {{ software_version }}
   register: subcloud_software_list_raw
 
-- name: Retrive system controller software list raw output
-  shell: |
-    source /etc/platform/openrc
-    software list --release {{ sw_version_subcloud.stdout }}
-  register: system_controller_software_list_raw
-  delegate_to: localhost
-
-# Note: We strip out the component from release string (fromat: component-MM.mm.pp)
+# Note: Keep the full release string (format: component-MM.mm.pp) for component filtering
 - name: Retrieve deployed subcloud software release list
   shell: |
     echo -e "{{ subcloud_software_list_raw.stdout }}" | \
-      grep {{ sw_version_subcloud.stdout }} | \
+      grep {{ software_version }} | \
       grep -E '(deployed|committed)' | \
-      awk '{print $2}' | \
-      awk -F'-' '{print $NF}'
+      awk '{print $2}'
   register: subcloud_software_list
 
-- name: Determine subcloud release {{ sw_version_subcloud.stdout }} patch level
-  shell: |
-    echo -e "{{ subcloud_software_list.stdout_lines | join('\n') }}" | \
-      sort -V | \
-      tail -n 1
-  register: subcloud_patch_level
-
-# Note: We strip out the component from release string (fromat: component-MM.mm.pp)
-- name: Retrieve deployed system controller sofware release list for {{ sw_version_subcloud.stdout }}
-  shell: |
-    echo -e "{{ system_controller_software_list_raw.stdout }}" | \
-      grep {{ sw_version_subcloud.stdout }} | \
-      grep -E '(deployed|committed)' | \
-      awk '{print $2}' | \
-      awk -F'-' '{print $NF}'
-  register: system_controller_software_list
+- name: Check patches to upload and apply from the system controller to the subcloud
+  script: >
+    check_patches_to_apply.py
+    --sc-software-version {{ software_version }}
+    --cc-software-version {{ sw_version_system_controller.stdout }}
+    --subcloud-releases "{{ subcloud_software_list.stdout_lines | join(',') }}"
+  register: check_patches_to_upload_and_apply
   delegate_to: localhost
 
-- name: Determine system controller release {{ sw_version_subcloud.stdout }} patch level
-  shell: |
-    echo -e "{{ system_controller_software_list.stdout_lines | join('\n') }}" | \
-      sort -V | \
-      tail -n 1
-  register: system_controller_patch_level
-  delegate_to: localhost
-
-# Task to convert version # to an int for comparsion. For example, 24.09.01 -> 240901
-- name: Convert version numbers to integers
+- name: Parse check patches output
   set_fact:
-    system_controller_patch_int: |
-      {{ system_controller_patch_level.stdout | replace('.', '') | int }}
-    subcloud_patch_int: |
-      {{ subcloud_patch_level.stdout | replace('.', '') | int }}
+    patches_result: "{{ check_patches_to_upload_and_apply.stdout | from_json }}"
 
-- name: Print task results and variables
+- name: Fail if check patches script encountered an error
+  fail:
+    msg: "{{ patches_result.msg }}"
+  when: patches_result.failed | default(false)
+
+- name: Get patches and releases to apply
+  set_fact:
+    patch_files_to_apply: "{{ patches_result.patch_files_to_apply | default([]) }}"
+    release_ids_to_apply: "{{ patches_result.release_ids_to_apply | default([]) }}"
+
+- name: List patches identified to upload and apply
   debug:
     msg: |
-      System Controller Software List:
-      {{ system_controller_software_list_raw.stdout }}
-      Subcloud Software List:
-      {{ subcloud_software_list_raw.stdout }}
-      SW Version on System Controller: {{ sw_version_system_controller.stdout }}
-      SW Version on Subcloud: {{ sw_version_subcloud.stdout }}
-      Subcloud Software Release List: {{ subcloud_software_list.stdout_lines | join(', ') }}
-      Subcloud Patch Level: {{ subcloud_patch_level.stdout }}
-      System Controller Software Release List: {{ system_controller_software_list.stdout_lines | join(', ') }}
-      System Controller Patch Level: {{ system_controller_patch_level.stdout }}
-      System Controller Patch Level (Integer): {{ system_controller_patch_int }}
-      Subcloud Patch Level (Integer): {{ subcloud_patch_int }}
+      Patch files to apply: {{ patch_files_to_apply }}
 
-- name: |
-    Bring the subcloud patch level {{ subcloud_patch_level.stdout }} to the
-    system controller's patch level {{ system_controller_patch_level.stdout }}
+- name: Upload and apply patches
   block:
-    # The system_controller_patch_level with component string
-    - name: Gather release id for target patch
-      shell: |
-        echo -e "{{ system_controller_software_list_raw.stdout }}" | \
-          grep -E '(deployed|committed)' | \
-          grep {{ system_controller_patch_level.stdout }} | \
-          awk '{print $2}'
-      register: target_release_id
-      delegate_to: localhost
-
-    # Parses the "software show <release>" requires section
-    - name: Determine dependent patches for {{ target_release_id.stdout }}
-      shell: |
-        software show {{ target_release_id.stdout }} | \
-          awk '/\| requires/{flag=1} flag' | \
-          grep -oE '[^[:space:]]+-[0-9.]+' | \
-          cat
-      register: dependent_patches
-      delegate_to: localhost
-
-    - name: Set releases_to_apply and patches source dir
-      set_fact:
-        releases_to_apply: "{{ dependent_patches.stdout_lines + [target_release_id.stdout] }}"
-        patches_source_dir: "/opt/dc-vault/software/{{ sw_version_subcloud.stdout }}"
-        patch_file_id_dict: { } # Map release ids to patch files
-
-    - name: Gather ids for already applied releases on subcloud
-      shell: |
-        echo -e "{{ subcloud_software_list_raw.stdout }}" | \
-          grep {{ sw_version_subcloud.stdout }} | \
-          grep -E '(deployed|committed)' | \
-          awk '{print $2}'
-      register: subcloud_software_list_ids
-
-    - name: Remove already applied patches on subcloud from list of releases_to_apply
-      set_fact:
-        releases_to_apply: |
-          {{ releases_to_apply | difference(subcloud_software_list_ids.stdout_lines) }}
-
-    - name: Gather patch files from dc-vault
-      find:
-        paths: "{{ patches_source_dir }}"
-        patterns: "*.patch"
-      register: patch_files
-      delegate_to: localhost
-
-    # Extract release id from patch metadata <id> tag
-    - name: Identify the releases associated with the patch files
-      shell: |
-        tar -xOf {{ item.path }} metadata.tar | \
-        tar -xOf - metadata.xml | \
-        grep -oP '(?<=<id>).*?(?=</id>)'
-      register: patch_metadata
-      loop: "{{ patch_files.files }}"
-      delegate_to: localhost
-      args:
-        # Suppress warning suggesting the use of the "unarchive" module.
-        # Using shell for this specific task is more appropriate.
-        # The "unarchive" module offers no benefits here, it adds unnecessary
-        # complexity and tasks, so 'warn: false' is added to suppress
-        # the warning message.
-        warn: false
-
-    # Note: Duplicate keys are not an issue.
-    # Multiple patch files with the same id but different names simply
-    # indicate that these files are duplicates with different filenames.
-    - name: Create release id to patch file mapping
-      set_fact:
-        patch_file_id_dict: "{{ patch_file_id_dict | combine({ item.stdout: item.item.path }) }}"
-      when: item.stdout is defined and item.stdout | length > 0
-      loop: "{{ patch_metadata.results }}"
-
-    - name: Print patch_file_id_dict
-      debug:
-        var: patch_file_id_dict
-
-    - name: Fail if patch files not found
-      assert:
-        that:
-          - item in patch_file_id_dict
-        fail_msg: |
-          Patch file for {{ item }} is missing on the system
-          controller in {{ patches_source_dir }}. Please ensure the
-          patch file is present (uploade to dc-vault) and retry.
-      loop: "{{ releases_to_apply }}"
-
     - name: Create a tmp directory to stage patches on subcloud
       tempfile:
         state: directory
@@ -249,35 +113,29 @@
 
     - name: Copy patch files from system controller to subcloud
       copy:
-        src: "{{ patch_file_id_dict[item] }}"
-        dest: "{{ patches_stage_dir.path }}/{{ item }}.patch"
-      loop: "{{ releases_to_apply }}"
+        src: "/opt/dc-vault/software/{{ software_version }}/{{ item }}"
+        dest: "{{ patches_stage_dir.path }}/{{ item }}"
+      loop: "{{ patch_files_to_apply }}"
       vars:
         # The ansible_remote_tmp directory is used as a staging area to
         # transfer files. The default location, /tmp, may not have
         # sufficient space for transfers.
         ansible_remote_tmp: /scratch
 
-    - name: Print gathered values before deploying patches
-      debug:
-        msg: |
-          Target Release ID: {{ target_release_id.stdout }}
-          Dependent Patches: {{ dependent_patches.stdout_lines | join(', ') }}
-          Releases to Apply: {{ releases_to_apply | join(', ') }}
-          Patches Source Directory: {{ patches_source_dir }}
-          Patches Stage Directory: {{ patches_stage_dir.path }}
-          Subcloud Software List IDs: {{ subcloud_software_list_ids.stdout_lines | join(', ') }}
 
     - name: Deploy Releases
       include_role:
         name: common/usm-deploy-releases
       vars:
-        releases: "{{ releases_to_apply }}"
+        patches: "{{ patch_files_to_apply }}"
         patches_dir: "{{ patches_stage_dir.path }}"
-        release_id: "{{ target_release_id.stdout }}"
-        release_version: "{{ system_controller_patch_level.stdout }}"
+        release_ids: "{{ release_ids_to_apply }}"
+        target_release_id: "{{ patches_result.target_release_id | default('') }}"
+        target_sw_version: "{{ patches_result.target_sw_version | default('') }}"
+        reboot_required: "{{ patches_result.reboot_required | default(false) }}"
+        enrollment_in_progress: true
 
-  when: system_controller_patch_int > subcloud_patch_int
+  when: release_ids_to_apply | length > 0
 
   always:
     - name: Clean up the tmp stage directory

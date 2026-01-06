@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023-2024 Wind River Systems, Inc.
+# Copyright (c) 2023-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -8,7 +8,9 @@
 #   These tasks lock, unlock and wait for reboot of a node
 #
 - name: Lock {{ item }}
-  shell: source /etc/platform/openrc; system host-lock {{ item }}
+  shell: >-
+    source /etc/platform/openrc;
+    system host-lock {{ item }} {{ cli_confirmation | default('--yes') }}
   retries: 8
   delay: 15
   register: host_lock_output

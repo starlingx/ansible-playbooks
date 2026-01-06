@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2023, 2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -244,4 +244,17 @@
     path: "{{ subcloud_overrides }}"
     line: "restore_registry_filesystem: true"
   when: restore_registry_images and restore_mode == 'optimized'
+  connection: local
+
+# When running factory restore, the backup file is named "factory_backup.tgz"
+# since this does not match the default backup name format, the
+# registry_backup_filename must be specified as it's derived from the
+# backup name if not provided (which would be incorrect).
+- name: Add registry_backup_filename for factory restore to overrides file
+  lineinfile:
+    path: "{{ subcloud_overrides }}"
+    line: "registry_backup_filename: {{ images_backup_filename }}"
+  when:
+    - auto_restore_mode | default('') == "factory"
+    - restore_mode == 'optimized'
   connection: local

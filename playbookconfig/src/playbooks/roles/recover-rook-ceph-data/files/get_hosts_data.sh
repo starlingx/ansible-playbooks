@@ -1,54 +1,64 @@
 #!/bin/sh
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 
-ONLY_OSD=""
-OSD_N_MON=""
+OSD_ONLY_HOST=""
+OSD_AND_MON_HOST=""
 HOSTS_WITH_OSD=()
 
 source /etc/platform/openrc;
 
+# Creates an array with all hostnames
 HOSTS=$(system host-list --format value --column hostname | tr '\n' ' ')
 IFS=', ' read -r -a HOSTS_ARRAY <<< "$HOSTS"
 
+# Iterates over the array
 for host in "${HOSTS_ARRAY[@]}"; do
     HAS_MON=false
     HAS_OSD=false
 
-    if system host-stor-list $host | grep osd | grep configured &>/dev/null; then
+    # Check if there is an OSD configured on host
+    if system host-stor-list "$host" | grep -q 'osd.*configured'; then
         echo "osd found on $host"
-        HOSTS_WITH_OSD+=($host)
+        HOSTS_WITH_OSD+=("$host")
         HAS_OSD=true
     fi
 
-    if system host-label-list $host | grep ceph-mon-placement &>/dev/null; then
+    # Check if a monitor is configured on host
+    if system host-label-list "$host" | grep -q ceph-mon-placement; then
         echo "mon found on $host"
         HAS_MON=true
     fi
 
-    if [[ $HAS_MON == true && $HAS_OSD == true && $OSD_N_MON == "" ]]; then
-        OSD_N_MON=$host
-    elif [[ $HAS_OSD == true && $ONLY_OSD == "" ]]; then
-        ONLY_OSD=$host
+    # Sets the "OSD_AND_MON_HOST" and "OSD_ONLY_HOST" to the hostname if empty
+    if [[ -z "$OSD_AND_MON_HOST" && "$HAS_MON" == true && "$HAS_OSD" == true ]]; then
+        OSD_AND_MON_HOST=$host
+    elif [[ -z "$OSD_ONLY_HOST" && "$HAS_OSD" == true && "$HAS_MON" == false ]]; then
+        OSD_ONLY_HOST=$host
     fi
 done
 
-if [[ $OSD_N_MON ]]; then
-    TARGET=$OSD_N_MON
-    if [ ${#HOSTS_ARRAY[@]} == 1 ]; then
-        STRUCT="ONE_HOST"
+# TODO: Prioritize controller-0 as the recovery target host.
+# Sets the "RECOVERY_TARGET_HOST" and "RECOVERY_TYPE" according to what was found in the hosts
+if [[ -n "$OSD_AND_MON_HOST" ]]; then
+    RECOVERY_TARGET_HOST="$OSD_AND_MON_HOST"
+    # Just one host means it's an AIO-SX
+    if [[ ${#HOSTS_ARRAY[@]} -eq 1 ]]; then
+        RECOVERY_TYPE="SINGLE_HOST"
     else
-        STRUCT="OSD_N_MON"
+        RECOVERY_TYPE="OSD_AND_MON"
     fi
-elif [[ $ONLY_OSD ]]; then
-    TARGET=$ONLY_OSD
-    STRUCT="ONLY_OSD"
+elif [[ -n "$OSD_ONLY_HOST" ]]; then
+    RECOVERY_TARGET_HOST="$OSD_ONLY_HOST"
+    RECOVERY_TYPE="OSD_ONLY"
 else
+    # This means that no OSD was found on any host
     exit 1
 fi
 
-echo "{\"structure\": \"$STRUCT\", \"target_hostname\": \"$TARGET\", \"hosts_with_osd\": \"${HOSTS_WITH_OSD[@]}\"}"
+# json to be read by the playbook
+echo "{\"recovery_type\": \"$RECOVERY_TYPE\", \"recovery_target_host\": \"$RECOVERY_TARGET_HOST\", \"hosts_with_osd\": \"${HOSTS_WITH_OSD[@]}\"}"
 exit 0

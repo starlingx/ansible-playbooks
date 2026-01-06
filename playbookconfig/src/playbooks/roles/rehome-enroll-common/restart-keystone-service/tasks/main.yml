@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022,2024 Wind River Systems, Inc.
+# Copyright (c) 2022, 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -18,3 +18,8 @@
   until: keystone_service_status.stdout == '1'
   retries: 10
   delay: 10
+
+- name: Reload openrc credentials after restarting keystone
+  include_role:
+    name: common/load-openrc
+  when: mode is defined and mode == "enroll"

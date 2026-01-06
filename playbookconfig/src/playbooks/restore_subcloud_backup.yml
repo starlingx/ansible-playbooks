@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2023, 2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -12,11 +12,108 @@
   # check block in common/prepare-env role.
   gather_facts: no
   become: yes
+  vars_files:
+    - vars/common/main.yml
 
   roles:
     - common/remote-execution-precheck
-    - common/prepare-env
-    - subcloud-bnr/restore
+
+  tasks:
+    - name: Set facts for restore monitoring
+      set_fact:
+        auto_restore_mode: "{{ auto_restore_mode | default('') }}"
+        restore_timeout: "{{ restore_timeout | default(3600) }}"
+        ipmi_event_pattern: "{{ ipmi_install_complete_pattern | default('Unknown #0x01 |  | Asserted') }}"
+        ipmi_sensor_type: "System Event"
+        ipmi_sensor_number: "CC"
+        restore_complete_ipmi_data: "{{ restore_complete_ipmi_data | default('cc10f1') }}"
+        restore_failed_ipmi_data: "{{ restore_failed_ipmi_data | default('cc10f2') }}"
+        restore_failed_backup_missing_ipmi_data: "{{ restore_failed_backup_missing_ipmi_data | default('cc10f3') }}"
+        restore_failed_images_missing_ipmi_data: "{{ restore_failed_images_missing_ipmi_data | default('cc10f4') }}"
+        restore_failed_both_missing_ipmi_data: "{{ restore_failed_both_missing_ipmi_data | default('cc10f5') }}"
+        ipmi_monitor_enabled: "{{ ipmi_sel_event_monitoring | default(true) }}"
+
+    # Auto or factory restore are triggered automatically inside the subcloud, so we just
+    # need to monitor the IPMI SEL logs and wait for the restore to complete or fail
+    - block:
+        # When restoring a pre-installed subcloud, we need to mount the seed iso
+        # containing the auto-restore data. The set_boot_override must be excluded
+        # because we don't want to boot from the seed iso but we still need to
+        # reboot the machine so the cloud init gets triggered
+        - name: Run RVMC script to start {{ auto_restore_mode }} restore
+          include_role:
+            name: common/rvmc
+          vars:
+            excluded_operations: "set_boot_override"
+            job_retry_delay: "{{ 120 | random }}"
+          when:
+            - rvmc_config_file is defined
+            - mount_seed_iso | default(false) | bool
+
+        - name: Waiting {{ restore_timeout }} seconds for {{ auto_restore_mode }} restore complete IPMI SEL event
+          include_role:
+            name: common/ipmi-monitor
+          vars:
+            ipmi_timeout: "{{ restore_timeout }}"
+            ipmi_data_values: |
+              {{ restore_complete_ipmi_data }},
+              {{ restore_failed_ipmi_data }},
+              {{ restore_failed_backup_missing_ipmi_data }},
+              {{ restore_failed_images_missing_ipmi_data }},
+              {{ restore_failed_both_missing_ipmi_data }}
+
+        - name: Check if detected event is a success event
+          set_fact:
+            is_success_event: "{{ detected_event_data == restore_complete_ipmi_data }}"
+          when: detected_event_data is defined
+
+        - name: Set failure reason based on detected event
+          set_fact:
+            failure_reason: >-
+              {%- if detected_event_data == restore_failed_backup_missing_ipmi_data -%}
+              Platform backup file is missing
+              {%- elif detected_event_data == restore_failed_images_missing_ipmi_data -%}
+              Container images (backup file and prestaged) are missing
+              {%- elif detected_event_data == restore_failed_both_missing_ipmi_data -%}
+              Both platform backup and container images are missing
+              {%- elif detected_event_data == restore_failed_ipmi_data -%}
+              Restore playbook execution failed
+              {%- else -%}
+              Unknown restore failure
+              {%- endif -%}
+          when:
+            - detected_event_data is defined
+            - not is_success_event
+
+        - name: Fail with specific error message
+          fail:
+            msg: "{{ auto_restore_mode | capitalize }} restore failed: {{ failure_reason }}"
+          when: failure_reason is defined
+
+        - name: Display success message
+          debug:
+            msg: "{{ auto_restore_mode | capitalize }} restore completed successfully."
+          when: is_success_event
+      when:
+        - auto_restore_mode in ['factory', 'auto']
+        - ipmi_monitor_enabled
+
+    # Standard subcloud restore
+    - block:
+        - include_role:
+            name: common/prepare-env
+
+        - include_role:
+            name: subcloud-bnr/restore
+      when: (auto_restore_mode not in ['factory', 'auto']) or (auto_restore_mode == 'factory' and not ipmi_monitor_enabled)
+
+    # Auto-restore without SEL event monitoring
+    - name: Monitor for auto-restore completion
+      include_role:
+        name: subcloud-bnr/monitor-auto-restore
+      when:
+        - auto_restore_mode == 'auto'
+        - not ipmi_monitor_enabled
 
   vars:
     optimized_bnr_supported: true

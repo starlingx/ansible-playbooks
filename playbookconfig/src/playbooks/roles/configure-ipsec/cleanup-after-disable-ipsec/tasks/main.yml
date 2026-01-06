@@ -18,4 +18,19 @@
     script: roles/common/files/clear-mgmt-ipsec-flag.py
     become_user: postgres
 
+  - name: Get PXEBoot network list addresses
+    script: roles/common/files/get_pxeboot_addr_list.py
+    register: ip_addrs_list
+
+  - set_fact:
+      pxeboot_addrs: "{{ ip_addrs_list.stdout }}"
+
+  - name: Disable IPsec cert renewal cronjob
+    command: >-
+      ansible all -i "{{ item }}," -m lineinfile -a "path=/var/spool/cron/crontabs/root
+      regexp='.*20 .* /usr/bin/ipsec-cert-renew.sh$' state=absent" -b -e
+      "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+    loop: "{{ pxeboot_addrs }}"
+
   when: system_mode != "simplex"

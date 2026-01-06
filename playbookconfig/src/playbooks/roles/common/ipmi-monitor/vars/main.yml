@@ -1,0 +1,5 @@
+---
+ipmi_check_interval: 30
+ipmi_timeout: 3600
+ipmi_initial_event_id: ""
+check_event_type: true

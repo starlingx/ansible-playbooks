@@ -23,6 +23,7 @@ restore_items:
   - etc/group-
   - etc/haproxy
   - etc/hosts
+  - etc/kdump
   - etc/keystone
   - etc/kubernetes
   - etc/lighttpd
@@ -55,6 +56,8 @@ restore_extra_items: []
 restore_exclude_items:
   - etc/ssl/certs/ssl-cert-snakeoil.pem
   - etc/ssl/private/ssl-cert-snakeoil.key
+  - etc/sysctl.d/05-default-sysctl.conf
+  - etc/sysctl.d/100-custom-user.conf
 
 upgrade_exclude_items:
   '21.12':

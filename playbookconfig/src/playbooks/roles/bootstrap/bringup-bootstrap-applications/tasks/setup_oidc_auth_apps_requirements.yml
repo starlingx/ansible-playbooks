@@ -1,0 +1,113 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   Configure all required oidc overrides
+#
+
+- name: Get primary oam ip addresses
+  include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+  vars:
+    network_type: oam
+    network_stack: primary
+
+- debug:
+    msg: primary oam addresses {{ addresses }}
+
+- name: Assign primary oam ip addresses
+  set_fact:
+    oam_ip_primary: "{{ addresses.floating_address }}"
+
+- name: Get primary management ip addresses
+  include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+  vars:
+    network_type: mgmt
+    network_stack: primary
+
+- debug:
+    msg: primary management addresses {{ addresses }}
+
+- name: Assign primary management ip addresses
+  set_fact:
+    management_floating_ip_primary: "{{ addresses.floating_address }}"
+
+- name: set LDAP host
+  set_fact:
+    ldap_host: >-
+      {{
+        '"[' ~ management_floating_ip_primary ~ ']:636"' if ':' in management_floating_ip_primary
+        else management_floating_ip_primary ~ ':636'
+      }}
+
+- debug:
+    var: ldap_host
+
+- debug:
+    msg: Setting up oidc overrides
+
+- name: Get LDAP password from keyring
+  shell: keyring get ldap ldapadmin
+  register: keyring_result
+  changed_when: false
+
+- name: Set LDAP password fact
+  set_fact:
+    ldap_bind_pw: "{{ keyring_result.stdout }}"
+  no_log: true
+
+- name: Set oidc-auth-apps overrides directory
+  set_fact:
+    override_dir: /tmp
+
+- name: Set helm names
+  set_fact:
+    helm_names:
+      - dex
+      - oidc-client
+      - secret-observer
+
+- name: Create overrides.yaml from template for oidc
+  template:
+    src: "{{ item }}-overrides.yaml.j2"
+    dest: "{{ override_dir }}/{{ item }}-overrides.yaml"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ helm_names }}"
+
+- name: Set oidc overrides
+  set_fact:
+    oidc_overrides: >-
+      {{
+        oidc_overrides | default([]) +
+        [
+          {
+            'chart': item,
+            'namespace': 'kube-system',
+            'values-path': override_dir ~ '/' ~ item ~ '-overrides.yaml'
+          }
+        ]
+      }}
+  loop: "{{ helm_names }}"
+
+- name: Add oidc overrides to oidc item in the application list
+  set_fact:
+    applications_str: |
+      [
+      {% for app in applications %}
+        {% set path = app.keys() | first %}
+        {% if 'oidc-auth-apps' in path %}
+          { {{ path | to_json }}: {{ {'overrides': oidc_overrides} | to_json }} }
+        {% else %}
+          { {{ path | to_json }}: null }
+        {% endif %}
+        {% if not loop.last %},{% endif %}
+      {% endfor %}
+      ]
+
+- name: Update applications list
+  set_fact:
+    applications: "{{ applications_str | from_yaml }}"

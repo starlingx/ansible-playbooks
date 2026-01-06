@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -16,20 +16,119 @@
   become: no
 
   tasks:
+    # The reboot operation is not needed for the enroll-init stage.
+    # So we set the wait_for_timeout to 420 seconds to allow for
+    # the system to complete the enroll-init stage without rebooting
+    # to give the system enough time to reconfigure the OAM network
+    # and monitor the Sysinv endpoint for the new address.
+    - set_fact:
+        ipmi_monitor_enabled: "{{ ipmi_sel_event_monitoring | default(true) }}"
+
     - set_fact:
         sysinv_port: "{{ sysinv_port | default(6385) }}"
-        boot_wait_time: "{{ enroll_boot_wait_time | default(150) }}"
-        wait_for_timeout: "{{ enroll_wait_for_timeout | default(1020) }}"
+        cloud_init_wait_time: "{{ cloud_init_wait_time | default(
+            0 if ipmi_monitor_enabled else 40
+          ) }}"
+        wait_for_timeout: "{{ enroll_wait_for_timeout | default(420) }}"
         job_retry_delay: "{{ 120 | random }}"
         protocol: "{{ protocol | default('https') }}"
         operation_string: "enroll-init"
 
-    - name: Run RVMC script to insert seed image and power on host
+    # Get the last SEL ID before starting the enroll-init process
+    - block:
+        - name: Get last SEL event ID before enroll-init
+          command:
+            argv:
+              - /usr/local/bin/ipmi_sel_event_monitor.py
+              - --config-file
+              - "{{ rvmc_config_file }}"
+              - --get-last-event
+          register: last_sel_result
+          delegate_to: localhost
+
+        - name: Parse last SEL ID from result
+          set_fact:
+            initial_sel_id: "{{ (last_sel_result.stdout | from_json).last_event_id | default('') }}"
+
+        - debug:
+            msg: "Starting IPMI monitoring from SEL ID: {{ initial_sel_id | default('beginning') }}"
+      when: ipmi_monitor_enabled
+
+    # We need to exclude the set_boot_override and poweroff_host operations
+    # from the RVMC script, as these are not needed for the enroll-init stage.
+    # The set_boot_override operation is not needed as the system is already
+    # booted from the seed image, and the poweroff_host operation is not needed
+    # as the system will not be powered off during the enroll-init stage.
+    # The RVMC script will be run with the --excluded_operations flag set to
+    # exclude these operations.
+    - name: Run RVMC script to execute enroll-init
       include_role:
         name: common/rvmc
+      vars:
+        excluded_operations: "set_boot_override, poweroff_host"
 
     - debug:
         msg: "Waiting for the system to enroll init..."
+
+    # Monitor each enroll-init stage sequentially. Can be skipped by setting
+    # ipmi_sel_event_monitoring to false.
+    - block:
+        - name: Set facts for enroll-init IPMI monitoring
+          set_fact:
+            enroll_init_stages:
+              - name: "Factory setup"
+                timeout: "{{ factory_setup_timeout | default(90) }}"
+                success_code: "cc10e0"
+                failure_codes:
+                  cc10e1: "Factory setup failed, factory-install completion flag not found"
+
+              - name: "Manual CA certificates check"
+                timeout: "{{ manual_cacerts_timeout | default(90) }}"
+                success_code: "cc10e7"
+                failure_codes:
+                  cc10e8: "Kubernetes Root CA or Front Proxy CA expired"
+                  cc10e9: "ETCD Root CA is expired"
+                  cc10ea: "ETCD Root CA, Kubernetes Root CA and Front Proxy CA are expired"
+
+              - name: "Kubernetes leaf server/client certificates check"
+                timeout: "{{ k8s_leaf_certs_timeout | default(300) }}"
+                success_code: "cc10e2"
+                failure_codes:
+                  cc10e3: "Kubernetes leaf server/client certificates recovery failed. Manual recovery is required"
+                  cc10e4: "Kubectl failed to reply within timeout. Manual recovery is required"
+                  cc10e5: "Kubernetes pods failed to reach Running state after restart"
+                  cc10e6: "RESTAPI or Docker registry certs did not renew within timeout"
+
+              - name: "Platform system-local-ca certificate check"
+                timeout: "{{ slocal_cert_timeout | default(20) }}"
+                success_code: "cc10eb"
+                failure_codes:
+                  cc10ec: "Platform system-local-ca certificate is expired. Manual recovery is required"
+
+              - name: "Platform cloud-init"
+                timeout: "{{ platform_cloudinit_timeout | default(300) }}"
+                success_code: "cc10ed"
+                failure_codes:
+                  cc10ee: "Platform cloud-init configuration failed during execution"
+
+              - name: "Custom cloud-init"
+                timeout: "{{ custom_cloudinit_timeout | default(300) }}"
+                success_code: "cc10ef"
+                failure_codes:
+                  cc10d0: "Custom cloud-init scripts failed during execution"
+
+        - name: Monitor enroll-init stages
+          include_role:
+            name: enroll-subcloud/monitor-enroll-init-ipmi
+          vars:
+            ipmi_initial_event_id: "{{ initial_sel_id }}"
+            ipmi_check_interval: 5
+
+      when: ipmi_monitor_enabled
+
+    - debug:
+        msg: "IPMI SEL event monitoring disabled, proceeding without stage validation"
+      when: not ipmi_monitor_enabled
 
     # Wait for the sysinv API to open, ensuring that endpoints
     # are reconfigured with the new address.
@@ -38,7 +137,7 @@
         module: wait_for
           port={{ sysinv_port }}
           host={{ enroll_reconfigured_oam }}
-          delay={{ boot_wait_time }}
+          delay={{ cloud_init_wait_time }}
           timeout={{ wait_for_timeout }}
           state=started
           msg="Timeout waiting for {{ enroll_reconfigured_oam }}:{{ sysinv_port }}. Err_code=wait_enroll_init"

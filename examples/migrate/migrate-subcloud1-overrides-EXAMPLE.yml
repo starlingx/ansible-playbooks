@@ -1,7 +1,41 @@
 ---
+# All parameters in the example below are required.
+#
+# All IP address and address pool name parameters and can be specified
+# as single-stack (IPv4 or IPv6) or as dual-stack using comma separated
+# format like:
+#
+#     "management_node_0_address": "192.168.204.3,fd01::3",
+#     "management_node_1_address": "192.168.204.4,fd01::4",
+#     "management_addrpool_name": "management-ipv4,management-ipv6",
+#
+# The admin and storage networks are optional and each one must be added
+# if the pool exists before the migration.
+#
+#  For admin network:
+#     "admin_node_0_address": "192.168.210.3",
+#     "admin_node_1_address": "192.168.210.4",
+#     "admin_addrpool_name": "admin-ipv4",
+#
+#  For storage network:
+#     "storage_node_0_address": "10.10.20.2",
+#     "storage_node_1_address": "10.10.20.3",
+#     "storage_addrpool_name": "storage-pool",
+#
+
 {
   "ansible_ssh_pass": "St8rlingXCloud*",
   "ansible_become_pass": "St8rlingXCloud*",
   "external_oam_node_0_address": "10.10.10.13",
   "external_oam_node_1_address": "10.10.10.14",
+  "external_oam_addrpool_name": "oam-ipv4",
+  "management_node_0_address": "192.168.204.3",
+  "management_node_1_address": "192.168.204.4",
+  "management_addrpool_name": "management-ipv4",
+  "cluster_host_node_0_address": "192.168.206.2",
+  "cluster_host_node_1_address": "192.168.206.3",
+  "cluster_host_addrpool_name": "cluster-host-subnet-ipv4",
+  "pxeboot_node_0_address": "169.254.202.2",
+  "pxeboot_node_1_address": "169.254.202.3",
+  "pxeboot_addrpool_name": "pxeboot",
 }

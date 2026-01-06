@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2023 Wind River Systems, Inc.
+# Copyright (c) 2021-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -17,24 +17,22 @@
 - name: Get previous system controller subnet address
   shell: >-
     source /etc/platform/openrc;
-    system addrpool-list
-    | awk '/system-controller-subnet/{ print$2 }'
-    | xargs -I {} system addrpool-show {}
-    | awk -F'|' '/network/ {gsub(/ /, "", $3);
-    net=$3} /prefix/ {gsub(/ /, "", $3); print net "/" $3}'
+    system addrpool-list --nowrap | awk '/system-controller-subnet/{ print$6"/"$8 }'
   register: previous_system_controller_subnet_addr
 
 - block:
   - name: Get previous system controller host route uuid
     shell: >-
       source /etc/platform/openrc; system host-route-list controller-0
-      | grep {{ previous_system_controller_subnet_addr.stdout }}
+      | grep {{ (previous_system_controller_subnet_addr.stdout | ipaddr(0)).split('/')[0] }}
       | awk '{ print $2 }'
     register: previous_route_uuid_controller_0
 
   - name: Delete previous system controller network
     shell: >-
-      source /etc/platform/openrc; system host-route-delete "{{ item }}"
+      source /etc/platform/openrc;
+      system host-route-delete "{{ item }}"
+      {{ cli_confirmation | default('--yes') }}
     loop: "{{ previous_route_uuid_controller_0.stdout_lines }}"
     when: previous_route_uuid_controller_0.stdout_lines | length > 0
   when: system_controller_subnet != previous_system_controller_subnet_addr.stdout
@@ -76,24 +74,22 @@
   - name: Get previous system controller subnet address
     shell: >-
       source /etc/platform/openrc;
-      system addrpool-list
-      | awk '/system-controller-subnet/{ print$2 }'
-      | xargs -I {} system addrpool-show {}
-      | awk -F'|' '/network/ {gsub(/ /, "", $3);
-      net=$3} /prefix/ {gsub(/ /, "", $3); print net "/" $3}'
+      system addrpool-list --nowrap | awk '/system-controller-subnet/{ print$6"/"$8 }'
     register: previous_system_controller_subnet_addr
 
   - block:
     - name: Get previous system controller host route uuid
       shell: >-
         source /etc/platform/openrc; system host-route-list controller-1
-        | grep {{ previous_system_controller_subnet_addr.stdout }}
+        | grep {{ (previous_system_controller_subnet_addr.stdout | ipaddr(0)).split('/')[0] }}
         | awk '{ print $2 }'
       register: previous_route_uuid_controller_1
 
     - name: Delete previous system controller network
       shell: >-
-        source /etc/platform/openrc; system host-route-delete "{{ item }}"
+        source /etc/platform/openrc;
+        system host-route-delete "{{ item }}"
+        {{ cli_confirmation | default('--yes') }}
       loop: "{{ previous_route_uuid_controller_1.stdout_lines }}"
       when: previous_route_uuid_controller_1.stdout_lines | length > 0
     when: system_controller_subnet != previous_system_controller_subnet_addr.stdout
@@ -124,6 +120,40 @@
 
 - name: Update system controller's subnets
   import_tasks: update_system_controller_subnet.yml
+
+- name: Check existing dns host record for registry central
+  shell: >-
+    source /etc/platform/openrc;
+    system service-parameter-list | awk '/dns/ && /host-record/ && /registry.central/'
+  register: existing_dns_registry_central
+
+- name: Extract current dns host record for registry central
+  set_fact:
+    current_dns_record: "{{ existing_dns_registry_central.stdout |
+      regex_search('registry.central,[^\\s|]+') }}"
+  when: existing_dns_registry_central.stdout | length != 0
+
+- name: Set central registry for subcloud
+  set_fact:
+    registry_central_address: >-
+      {{ system_controller_floating_address
+        if (virtual_system is defined and virtual_system|bool)
+        else system_controller_oam_floating_address }}
+
+- block:
+    - name: Modify dns host record for registry central
+      shell: >-
+        source /etc/platform/openrc;
+        system service-parameter-modify dns host-record
+        registry.central=registry.central,{{ registry_central_address }}
+      register: dns_record_output
+
+    - name: Apply dns host record update
+      shell: source /etc/platform/openrc; system service-parameter-apply dns
+
+  when:
+    - existing_dns_registry_central.stdout | length != 0
+    - current_dns_record != ('registry.central,' ~ registry_central_address)
 
 - block:
   - name: Modify docker no_proxy if exists

@@ -35,7 +35,6 @@
   with_items:
     - { name: 'admin', id: "{{ system_controller_keystone_admin_user_id }}" }
     - { name: 'sysinv', id: "{{ system_controller_keystone_sysinv_user_id }}" }
-    - { name: 'dcmanager', id: "{{ system_controller_keystone_dcmanager_user_id }}" }
   become_user: postgres
   no_log: true
 
@@ -52,35 +51,7 @@
     controller_0_address=$(awk '/controller-0$/ {print $1}' /etc/hosts)
     echo flush_all > /dev/tcp/$controller_0_address/11211
 
-- name: Restart keystone service
-  import_role:
-    name: rehome-enroll-common/restart-keystone-service
-
-- name: Restart affected services using sm
-  command: "sm-restart service {{ item }}"
-  loop:
-    - "vim-api"
-    - "barbican-api"
-    - "sysinv-conductor"
-
-- name: Restart affected services using pmon
-  command: "pmon-restart {{ item }}"
-  loop:
-    - "fm-api"
-    - "sm-api"
-    - "sw-patch-controller-daemon"
-    - "software-controller-daemon"
-
-- name: Wait until services are restarted after changing keystone IDs
-  shell: sm-query service {{ item }} | grep -c enabled-active
-  loop:
-    - "vim-api"
-    - "barbican-api"
-    - "sysinv-conductor"
-    - "sysinv-inv"
-    - "cert-mon"
-    - "cert-alarm"
-  register: service_status
-  until: service_status.stdout == '1'
-  retries: 20
-  delay: 15
+# We're restarting almost all services in the next role, migrate_keystone_passwords
+# The only one that is missing is sm-api as it doesn't need any keystone user update
+- name: Restart sm-api using pmon
+  command: "pmon-restart sm-api"

@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022,2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -22,6 +22,14 @@
         warn: false
       environment:
         INSECURE_REGISTRIES: "{{ insecure_registries | to_json }}"
+
+    - name: Update daemon.json with default max concurrent downloads/uploads
+      command: "{{ item }}"
+      args:
+        warn: false
+      with_items:
+        - "sed -i 's/<%= @max_concurrent_uploads %>/5/g' /etc/docker/daemon.json"
+        - "sed -i 's/<%= @max_concurrent_downloads %>/3/g' /etc/docker/daemon.json"
 
     - name: Restart docker
       systemd:
