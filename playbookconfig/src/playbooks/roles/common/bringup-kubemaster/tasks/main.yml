@@ -50,11 +50,6 @@
     path: "{{ kubeadm_pki_dir }}"
     state: absent
 
-- name: Setup dictionary of kubernetes certificates to install
-  set_fact:
-    k8s_pki_files: { ca.crt: "{{k8s_root_ca_cert}}", ca.key: "{{k8s_root_ca_key}}" }
-  when: (k8s_root_ca_cert)
-
 - name: Create pki directory for kubernetes certificates
   file:
     path: "{{ kubeadm_pki_dir }}"
@@ -77,22 +72,6 @@
       remote_src: yes
       force: yes
       mode: '0600'
-
-  - block:
-    - name: Copy kubernetes CA crt file
-      copy:
-        src: "{{ k8s_pki_files['ca.crt'] }}"
-        dest: "{{ kubeadm_pki_dir }}/ca.crt"
-        mode: '0644'
-        remote_src: yes
-
-    - name: Copy kubernetes CA key file
-      copy:
-        src: "{{ k8s_pki_files['ca.key'] }}"
-        dest: "{{ kubeadm_pki_dir }}/ca.key"
-        mode: '0600'
-        remote_src: yes
-    when: k8s_pki_files is defined
   when: mode != 'restore'
 
 - block:
@@ -126,7 +105,6 @@
       csr_path: "{{ kubeadm_pki_dir }}/ca.csr"
       provider: selfsigned
       force: true
-  when: k8s_pki_files is undefined
 
 - name: Set kubelet node configuration if single-stack
   set_fact:
@@ -182,7 +160,7 @@
 
 - name: Set apiserver SAN list
   set_fact:
-    apiserver_cert_list: "{{ [ cluster_floating_address, loopback_ip ] + apiserver_cert_sans + OAM_addresses_primary }}"
+    apiserver_cert_list: "{{ [ cluster_floating_address, loopback_ip ] + OAM_addresses_primary }}"
 
 # add secondary to apiserver SAN list
 - block:

@@ -1213,17 +1213,6 @@
     when: application_list_output.rc == 0 and old_application_list | length > 0
   when: replayed
 
-- name: Validate apiserver_cert_sans list
-  fail:
-    msg: "apiserver_cert_sans must be a list"
-  when: apiserver_cert_sans | type_debug != 'list'
-
-- name: Validate apiserver_cert_sans entries
-  include_role:
-    name: common/validate-addresses
-  vars:
-    address_list: "{{ apiserver_cert_sans | list }}"
-
 - name: Check if external certificates and CA files exists
   block:
   - name: Verify that either both etcd root ca cert and key are defined or not at all
@@ -1261,22 +1250,6 @@
     fail:
       msg: "etcd_root_ca_key file not found. ({{ etcd_root_ca_key }})"
     when: etcd_root_ca_key and not ca_file_exist['etcd_root_ca_key']
-
-  - name: Verify that either both Kubernetes root ca cert and key are defined or not at all
-    fail:
-      msg: "k8s_root_ca_cert and k8s_root_ca_key must be provided as a pair"
-    when: (k8s_root_ca_cert and not k8s_root_ca_key) or
-          (not k8s_root_ca_cert and k8s_root_ca_key)
-
-  - name: Check for k8s_root_ca_cert file
-    fail:
-      msg: "k8s_root_ca_cert file not found. ({{ k8s_root_ca_cert }})"
-    when: k8s_root_ca_cert and not ca_file_exist['k8s_root_ca_cert']
-
-  - name: Check for k8s_root_ca_key file
-    fail:
-      msg: "k8s_root_ca_key file not found. ({{ k8s_root_ca_key }})"
-    when: k8s_root_ca_key and not ca_file_exist['k8s_root_ca_key']
   when: mode != 'restore'
 
 - name: Verify 'system-local-ca' overrides
