@@ -238,7 +238,9 @@
   - name: Remove imported images from download_images_list
     set_fact:
       download_images_list: "{{ download_images_list | difference(imported_images_list) }}"
-    when: imported_images_list is defined
+    when:
+    - imported_images_list is defined
+    - restore_mode is not defined  # Skip during restore
 
   - name: Restore the original add_docker_prefix setting
     set_fact:
