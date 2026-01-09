@@ -12,7 +12,6 @@
     check_system: "{{ check_system | default(false) }}"
     check_load: "{{ check_load | default(false) }}"
     check_bootstrap_address: "{{ check_bootstrap_address | default(false) }}"
-    check_patches: "{{ check_patches | default(false) }}"
 
 - set_fact:
     supported_release_versions: "{{ supported_release_versions + [ install_release_version ] }}"
@@ -98,25 +97,6 @@
           (bootstrap_address not in ansible_all_ipv6_addresses)
 
   when: check_bootstrap_address
-
-# check_patches validation - e.g. prior to subcloud restore of non-Redfish subcloud
-- block:
-  - name: Query list of applied patches on master
-    shell: sw-patch query|awk '($4 == "Applied" || $4 == "Partial-Applied") {print $1}'
-    register: master_patch_list
-    delegate_to: localhost
-
-  - name: Query list of applied patches on the target
-    shell: sw-patch query|awk '($4 == "Applied" || $4 == "Partial-Applied") {print $1}'
-    register: target_patch_list
-
-  - name: Fail if the applied patch list on target differs from that on the master
-    fail:
-      msg: >-
-        The applied patches ({{ target_patch_list.stdout_lines }}) are not the same on the
-        master ({{ master_patch_list.stdout_lines }})
-    when: target_patch_list.stdout_lines != master_patch_list.stdout_lines
-  when: check_patches
 
 # Now that the host has been validated, set the official software version, system type facts
 - name: Set software version, system type config path facts
