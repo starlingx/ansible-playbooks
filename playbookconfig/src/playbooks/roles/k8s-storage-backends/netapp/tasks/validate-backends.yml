@@ -1,12 +1,12 @@
 ---
 #
-# Copyright (c) 2025 Wind River Systems, Inc.
+# Copyright (c) 2025-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # SUB-TASKS DESCRIPTION
 #   Checks based on the storageDriverName
-#   Check if the multipath config needs to be updated
+#   Check if the multipath configuration is in the desired state
 
 - name: Display backend and storage driver
   debug:
@@ -69,23 +69,35 @@
   loop: "{{ netapp_backends }}"
   changed_when: false
 
-- name: Determine if multipath check is required
+- name: Determine if multipath configuration enforcement is required
   set_fact:
-    run_multipath_check: true
+    multipath_enforcer_required: true
   when:
-    - not run_multipath_check | default(false)
+    - not multipath_enforcer_required | default(false)
     - "'ontap-san' in item.spec.storageDriverName"
   loop: "{{ netapp_backends }}"
 
-- name: Check if the DaemonSet to update multipath configuration exists
+- name: Check if the DaemonSet to enforce multipath configuration exists
   shell: >
     kubectl --kubeconfig=/etc/kubernetes/admin.conf
-    get daemonset {{ multipath_config_updater_ds_name }} -n {{ trident_namespace }} --ignore-not-found
-  register: daemonset_check
+    get daemonset {{ multipath_config_enforcer_ds_name }} -n {{ trident_namespace }} --ignore-not-found
+  register: enforce_daemonset_check
   changed_when: false
 
-- name: Delete the DaemonSet for multipath configuration update
+- name: Delete the DaemonSet enforcing the multipath configuration
   shell: >
     kubectl  --kubeconfig=/etc/kubernetes/admin.conf
-    delete daemonset {{ multipath_config_updater_ds_name }} -n {{ trident_namespace }}
-  when: daemonset_check.stdout != ""
+    delete daemonset {{ multipath_config_enforcer_ds_name }} -n {{ trident_namespace }}
+  when: enforce_daemonset_check.stdout != ""
+
+- name: Read multipath config
+  set_fact:
+    multipath_conf: "{{ lookup('file', '/etc/multipath.conf') }}"
+
+- name: Determine if multipath configuration rollback is required
+  set_fact:
+    multipath_rollback_required: true
+  when:
+    - not multipath_rollback_required | default(false)
+    - not multipath_enforcer_required | default(false)
+    - "'find_multipaths no' in multipath_conf or 'TRIDENT CONFIG' in multipath_conf"
