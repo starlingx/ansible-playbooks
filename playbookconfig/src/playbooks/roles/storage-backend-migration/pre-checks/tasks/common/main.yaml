@@ -19,6 +19,13 @@
 - name: Check deployment-manager is applied
   include_tasks: "check_dm_app.yaml"
 
+- name: Check openstack app is not applied
+  include_tasks: "check_openstack_app.yaml"
+  when: block_openstack_app | bool
+
+- name: Check for none hosts
+  include_tasks: "check_none_hosts.yaml"
+
 - name: Check if hosts are unlocked/enabled/available
   include_tasks: "check_hosts_ready.yaml"
 

@@ -9,7 +9,7 @@
   vars:
     app_name_to_check: "rook-ceph"
     success_statuses: "applying"
-    retries: 6
+    retries: 30
     delay: 10
 
 - name: Wait for app to start applying after docker images retrieval

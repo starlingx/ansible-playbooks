@@ -187,7 +187,7 @@
         ceph-bluestore-tool repair --path {{ rook_base_pod }}/{{ item }}"
       register: result
       until: result.rc == 0
-      retries: 5
+      retries: 20
       delay: 10
   when: inventory_hostname in groups.with_osds
 

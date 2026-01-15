@@ -17,14 +17,18 @@ metadata:
   namespace: rook-ceph # namespace:cluster
 spec:
   metadataPool:
+    parameters:
+      min_size: "{{ pool_minsize }}"
     replicated:
-      size: 1
+      size: {{ pool_size }}
       requireSafeReplicaSize: false
   dataPools:
     - name: data
       failureDomain: osd
+      parameters:
+        min_size: "{{ pool_minsize }}"
       replicated:
-        size: 1
+        size: {{ pool_size }}
         requireSafeReplicaSize: false
   preserveFilesystemOnDelete: false
   metadataServer:

@@ -42,3 +42,5 @@ cgts_vg_min_required_free_gib: "20"
 osd_usage_safety_margin_percent: 25 # for SX in-service check
 
 erase_rbd_snapshots: false
+
+block_openstack_app: true

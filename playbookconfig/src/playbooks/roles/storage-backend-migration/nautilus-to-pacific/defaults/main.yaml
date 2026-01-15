@@ -13,3 +13,4 @@ rook_ceph_template_manifests:
   - name: operator.yaml
   - name: cluster.yaml
   - name: toolbox.yaml
+  - name: filesystem.yaml

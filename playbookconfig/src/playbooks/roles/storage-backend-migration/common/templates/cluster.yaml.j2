@@ -247,8 +247,16 @@ spec:
     mgr: system-cluster-critical
     #crashcollector: rook-ceph-crashcollector-priority-class
   storage: # cluster level storage configuration and selection
-    useAllNodes: true
-    useAllDevices: true
+    useAllNodes: false
+    useAllDevices: false
+    nodes:
+{% for host, disks in disks_by_host.items() %}
+      - name: {{ host }}
+        devices:
+{% for disk in disks %}
+          - name: {{ disk.disk_device_path }}
+{% endfor %}
+{% endfor %}
     #deviceFilter:
     config:
       # crushRoot: "custom-root" # specify a non-default root label for the CRUSH map

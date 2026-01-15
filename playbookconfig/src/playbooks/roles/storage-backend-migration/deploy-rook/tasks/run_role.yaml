@@ -69,5 +69,5 @@
       failed_when:
         - app_apply_result.rc != 0
         - ("applying" not in app_apply_result.stderr)
-        - ("in progress" not in app_apply_result.stderr)
+        - ("is already in progress" not in app_apply_result.stderr)
   when: inventory_hostname in groups.active_controller

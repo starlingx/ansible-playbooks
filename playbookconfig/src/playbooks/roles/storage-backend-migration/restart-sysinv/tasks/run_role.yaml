@@ -9,7 +9,7 @@
   register: conductor_result
   retries: 60
   delay: 10
-  until: conductor_result.rc == 0
+  until: (conductor_result.rc == 0 and "error" not in conductor_result.stdout)
   changed_when: false
   when: inventory_hostname in groups.active_controller
 
@@ -18,7 +18,7 @@
   register: inv_result
   retries: 60
   delay: 10
-  until: inv_result.rc == 0
+  until: (inv_result.rc == 0 and "error" not in inv_result.stdout)
   changed_when: false
   when: inventory_hostname in groups.active_controller
 

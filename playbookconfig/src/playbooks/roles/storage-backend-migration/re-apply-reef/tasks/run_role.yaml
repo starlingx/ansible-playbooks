@@ -64,7 +64,7 @@
       failed_when:
         - app_apply_result.rc != 0
         - ("applying" not in app_apply_result.stderr)
-        - ("in progress" not in app_apply_result.stderr)
+        - ("is already in progress" not in app_apply_result.stderr)
 
     - name: Wait for rook-ceph to reach applied status
       include_tasks: "{{ role_path_common }}/tasks/check_app_status.yaml"
@@ -92,7 +92,7 @@
   failed_when: >
     app_apply_result.rc != 0 and
     ("applying" not in app_apply_result.stderr and
-    "in progress" not in app_apply_result.stderr)
+    "is already in progress" not in app_apply_result.stderr)
 
 - name: Clean recovery reef
   include_tasks: clean_recovery_reef.yaml

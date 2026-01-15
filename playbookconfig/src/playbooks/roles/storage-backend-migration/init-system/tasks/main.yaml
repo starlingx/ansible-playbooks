@@ -26,7 +26,8 @@
       become_user: postgres
       command: >
         psql -d sysinv -t -A -F','
-        -c "SELECT hostname, personality FROM i_host;"
+        -c "SELECT hostname, personality FROM i_host
+            WHERE hostname IS NOT NULL AND PERSONALITY IS NOT NULL;"
       register: host_list_output
       changed_when: false
 

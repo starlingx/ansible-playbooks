@@ -8,5 +8,5 @@ fs_name: "kube-cephfs"
 data_pool_name: "kube-cephfs-data"
 metadata_pool_name: "kube-cephfs-metadata"
 
-rook_ceph_manifests:
-  - filesystem.yaml
+rook_ceph_template_manifests:
+  - name: filesystem.yaml

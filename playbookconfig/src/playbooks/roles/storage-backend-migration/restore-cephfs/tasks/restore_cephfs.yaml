@@ -4,11 +4,11 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: Copy rook-ceph manifests to remote
-  copy:
-    src: "{{ role_path_common }}/files/{{ item }}"
-    dest: "{{ tmp_workspace }}/{{ item }}"
-  loop: "{{ rook_ceph_manifests }}"
+- name: Render rook-ceph manifests to remote
+  template:
+    src: "{{ role_path_common }}/templates/{{ item.name }}.j2"
+    dest: "{{ tmp_workspace }}/{{ item.name }}"
+  loop: "{{ rook_ceph_template_manifests }}"
 
 - name: Get rook-ceph-tool pod name
   shell: kubectl get pods -n rook-ceph | awk '/rook-ceph-tool/ {print $1}'
