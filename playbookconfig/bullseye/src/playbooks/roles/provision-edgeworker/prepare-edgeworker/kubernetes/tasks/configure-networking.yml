@@ -1,16 +1,17 @@
 ---
 #
 # Copyright (c) 2021 Intel Corporation
+# Copyright (c) 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 - name: Stat sysctl file configuration
   stat:
-    path: /etc/sysctl.d/99-sysctl.conf
+    path: /etc/sysctl.d/98-sysctl.conf
 
 - name: Enable net.ipv4.ip_forward in sysctl
   sysctl:
     name: net.ipv4.ip_forward
     value: 1
-    sysctl_file: /etc/sysctl.d/99-sysctl.conf
+    sysctl_file: /etc/sysctl.d/98-sysctl.conf
     state: present
