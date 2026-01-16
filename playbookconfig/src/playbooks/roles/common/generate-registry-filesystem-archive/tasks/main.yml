@@ -48,3 +48,21 @@
   register: img_tar_cmd
   failed_when: img_tar_cmd.rc >= 2 or img_tar_cmd.rc < 0
   become: yes
+
+- name: Verify registry archive integrity
+  command: "{{ compress_program }} -t {{ registry_archive_fqpn }}"
+  become: yes
+  register: integrity_check
+  failed_when: false
+
+- name: Remove corrupted file and fail
+  block:
+    - name: Remove corrupted file {{ registry_archive_fqpn }}
+      file:
+        path: "{{ registry_archive_fqpn }}"
+        state: absent
+
+    - name: Fail if the registry archive file is corrupted
+      fail:
+        msg: "Registry archive file is corrupted and has been removed."
+  when: integrity_check.rc != 0
