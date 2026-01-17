@@ -1,0 +1,39 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Scale resource(s)
+  delegate_to: "{{ system.active_controller }}"
+  command: >
+    kubectl -n {{ item.namespace }}
+    scale {{ item.kind }} {{ item.name }} --replicas={{ item.replicas }}
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  when: item.method == "name"
+  register: scale_name_result
+  loop: "{{ resources }}"
+  loop_control:
+    label: >
+      "{{ item.name if item.method == "name" else item.label }} in {{ item.namespace }}"
+  failed_when:
+    - scale_name_result.rc != 0
+    - ("no objects passed to scale" not in scale_name_result.stderr)
+
+- name: Scale resource(s) by label
+  delegate_to: "{{ system.active_controller }}"
+  command: >
+    kubectl -n {{ item.namespace }}
+    scale {{ item.kind }} -l {{ item.label }} --replicas={{ item.replicas }}
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  when: item.method == "label"
+  register: scale_label_result
+  loop: "{{ resources }}"
+  loop_control:
+    label: >
+      "{{ item.label if item.method == "label" else item.name }} in {{ item.namespace }}"
+  failed_when:
+    - scale_label_result.rc != 0
+    - ("no objects passed to scale" not in scale_label_result.stderr)

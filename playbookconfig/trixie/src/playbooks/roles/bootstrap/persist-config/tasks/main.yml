@@ -1,0 +1,635 @@
+---
+#
+# Copyright (c) 2019-2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to persist the bootstrap configurations on filesystem and
+#   system inventory database.
+#
+
+# Keyring config
+- block:
+  - name: Check if keyring data has been persisted
+    stat:
+      path: "{{ keyring_workdir }}"
+    register: tmp_keyring
+
+  - block:
+    - name: Persist keyring data (overwrite if exists)
+      command: "cp -r {{ keyring_workdir }} {{ keyring_permdir }}"
+
+    - name: Change group ownership to entire {{ platform_path }}/.keyring/
+      command: "chgrp -R sys_protected {{ platform_path  }}/.keyring/"
+
+    - name: Delete the temporary keyring work dir
+      file:
+        path: "{{ keyring_workdir }}"
+        state: absent
+    when: tmp_keyring.stat.exists
+  when: save_password
+
+# Need to wait until keyring data is persisted before allowing the
+# subcloud to be aborted again, since the puppet bootstrap manifest
+# is only aplied at the initial play. If aborting before this, it
+# won't be possible to source the openrc credentials and the subcloud
+# would need to be reinstalled.
+- name: Remove unabortable flag for {{ inventory_hostname }}
+  file:
+    path: "{{ override_files_dir }}/.{{ inventory_hostname }}_deploy_not_abortable"
+    state: absent
+  when: distributed_cloud_role  == 'subcloud'
+  delegate_to: localhost
+
+- name: Ensure replicated config parent directories exist
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    recurse: yes
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: 0755
+  with_items:
+    - { path: "{{ config_permdir }}", owner: "root", group: "root" }
+    - { path: "{{ sysinv_permdir }}", owner: "sysinv", group: "sysinv" }
+
+- name: Get list of new config files
+  find:
+    paths: "{{ config_workdir }}"
+    file_type: any
+  register: config_find
+
+- block:
+  - name: Remove existing config files from permanent location
+    file:
+      path: "{{ config_permdir }}/{{ item.path | basename}}"
+      state: absent
+    with_items: "{{ config_find.files }}"
+
+  - name: Move new config files to permanent location
+    # Can't use command module due to wildcard
+    shell: mv {{ config_workdir }}/* {{ config_permdir }}
+
+  - name: Delete working config directory
+    file:
+      path: "{{ config_workdir }}"
+      state: absent
+  when: config_find.matched != 0
+
+- name: Delete extraArgs and extraVolumes configuration
+  file:
+    path: "{{ last_kubernetes_extra_config_file }}"
+    state: absent
+
+- name: Persist extraArgs and extraVolumes configuration file
+  command: >
+      mv -f {{ tmp_kubernetes_extra_config_file }}
+      {{ last_kubernetes_extra_config_file }}
+
+# Postgres, PXE, Branding, Grub config tasks and filesystem resizing are
+# moved to a separate file as they don't need to be executed again once the
+# controller-0 host has been created.
+- include: one_time_config_tasks.yml
+  when: not initial_db_populated
+
+- name: Find etcd certs files
+  find:
+    paths: "/etc/etcd"
+    patterns:
+      - '*.crt'
+      - '*.key'
+  register: etcd_certs_find_output
+
+- name: Copy etcd certificates to etcd certs directory
+  copy:
+    src: "/etc/etcd/{{ item }}"
+    dest: "{{ etcd_certs_dir }}/{{ item }}"
+    remote_src: yes
+    force: yes
+  with_items:
+    - "etcd-server.crt"
+    - "etcd-server.key"
+    - "ca.crt"
+    - "ca.key"
+    - "etcd-client.crt"
+    - "etcd-client.key"
+  when: etcd_certs_find_output.matched != 0
+
+# Banner customization is not part of one_time_config_task.yml as the user may
+# choose to change their banner look and feel and replay.
+# Create issue and motd files if defined by user
+- block:
+  - name: Create banner directory
+    file:
+      path: "{{ banner_root }}"
+      state: directory
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: Create issue console file if defined by user
+    copy:
+      content: "{{ banner.issue.console }}"
+      dest: "{{ banner_root }}issue"
+    when: banner.issue.console is defined
+
+  - name: Create issue network file if defined by user
+    copy:
+      content: "{{ banner.issue.network }}"
+      dest: "{{ banner_root }}issue.net"
+    when: banner.issue.network is defined
+
+  - name: Create motd head file if defined by user
+    copy:
+      content: "{{ banner.motd.head }}"
+      dest: "{{ banner_root }}motd.head"
+    when: banner.motd.head is defined
+
+  - name: Create motd tail file if defined by user
+    copy:
+      content: "{{ banner.motd.tail }}"
+      dest: "{{ banner_root }}motd.tail"
+    when: banner.motd.tail is defined
+  when: banner is defined
+
+- name: Check if custom banner exists
+  stat:
+    path: /opt/banner
+  register: banner_result
+
+- block:
+  - name: Apply custom banner
+    shell:
+      /usr/sbin/apply_banner_customization /opt/banner > /tmp/apply_banner_customization.log
+    failed_when: false
+    register: banner_apply
+
+  - name: Fail if banner customization failed
+    fail:
+      msg: "Failed to apply banner customization. See /tmp/apply_banner_customization.log for details."
+    when: banner_apply.rc != 0
+  when: banner_result.stat.exists and banner_result.stat.isdir
+
+# Shut down services if there are services impacting config changes in
+# this replay or previous bootstrap did not complete for whatever reason.
+- name: Shuting down services for reconfiguration as required
+  include: shutdown_services.yml
+  when: restart_services
+
+- block:
+  - name: Find old registry secrets in Barbican
+    shell: "{{ item }}"
+    failed_when: false
+    with_items:
+      - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n k8s-registry-secret -f value"
+      - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n gcr-registry-secret -f value"
+      - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n quay-registry-secret -f value"
+      - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n docker-registry-secret -f value"
+      - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n elastic-registry-secret -f value"
+      - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n ghcr-registry-secret -f value"
+      - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n registryk8s-registry-secret -f value"
+      - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n icr-registry-secret -f value"
+    register: old_barbican_secrets
+
+  - name: Delete old registry secrets in Barbican
+    shell: "source /etc/platform/openrc; openstack secret delete {{ item }}"
+    with_items:
+      - "{{ old_barbican_secrets.results | map(attribute='stdout_lines') | flatten }}"
+
+  when: replayed
+
+# need to do this here to get the barbican secret id for sysinv
+- block:
+  - name: Create Barbican secret for k8s registry if credentials exist
+    shell: "source /etc/platform/openrc; openstack secret store -n k8s-registry-secret
+           -p 'username:{{ k8s_registry['username'] }} password:{{ k8s_registry['password'] }}' -c 'Secret href' -f value"
+    register: k8s_registry_secret_output
+    no_log: true
+
+  - set_fact:
+      k8s_registry_secret: "{{ k8s_registry_secret_output.stdout }}"
+
+  when: k8s_registry.username is defined
+
+- block:
+  - name: Create Barbican secret for gcr registry if credentials exist
+    shell: "source /etc/platform/openrc; openstack secret store -n gcr-registry-secret
+           -p 'username:{{ gcr_registry['username'] }} password:{{ gcr_registry['password'] }}' -c 'Secret href' -f value"
+    register: gcr_registry_secret_output
+    no_log: true
+
+  - set_fact:
+      gcr_registry_secret: "{{ gcr_registry_secret_output.stdout }}"
+
+  when: gcr_registry.username is defined
+
+- block:
+  - name: Create Barbican secret for quay registry if credentials exist
+    shell: "source /etc/platform/openrc; openstack secret store -n quay-registry-secret
+           -p 'username:{{ quay_registry['username'] }} password:{{ quay_registry['password'] }}' -c 'Secret href' -f value"
+    register: quay_registry_secret_output
+    no_log: true
+
+  - set_fact:
+      quay_registry_secret: "{{ quay_registry_secret_output.stdout }}"
+
+  when: quay_registry.username is defined
+
+- block:
+  - name: Create Barbican secret for docker registry if credentials exist
+    shell: "source /etc/platform/openrc; openstack secret store -n docker-registry-secret
+           -p 'username:{{ docker_registry['username'] }} password:{{ docker_registry['password'] }}'
+           -c 'Secret href' -f value"
+    register: docker_registry_secret_output
+    no_log: true
+
+  - set_fact:
+      docker_registry_secret: "{{ docker_registry_secret_output.stdout }}"
+
+  when: docker_registry.username is defined
+
+- block:
+  - name: Create Barbican secret for elastic registry if credentials exist
+    shell: "source /etc/platform/openrc; openstack secret store -n elastic-registry-secret
+           -p 'username:{{ elastic_registry['username'] }} password:{{ elastic_registry['password'] }}'
+           -c 'Secret href' -f value"
+    register: elastic_registry_secret_output
+    no_log: true
+
+  - set_fact:
+      elastic_registry_secret: "{{ elastic_registry_secret_output.stdout }}"
+
+  when: elastic_registry.username is defined
+
+- block:
+  - name: Create Barbican secret for ghcr registry if credentials exist
+    shell: "source /etc/platform/openrc; openstack secret store -n ghcr-registry-secret
+           -p 'username:{{ ghcr_registry['username'] }} password:{{ ghcr_registry['password'] }}'
+           -c 'Secret href' -f value"
+    register: ghcr_registry_secret_output
+    no_log: true
+
+  - set_fact:
+      ghcr_registry_secret: "{{ ghcr_registry_secret_output.stdout }}"
+
+  when: ghcr_registry.username is defined
+
+- block:
+  - name: Create Barbican secret for registryk8s registry if credentials exist
+    shell: "source /etc/platform/openrc; openstack secret store -n registryk8s-registry-secret
+           -p 'username:{{ registryk8s_registry['username'] }} password:{{ registryk8s_registry['password'] }}'
+           -c 'Secret href' -f value"
+    register: registryk8s_registry_secret_output
+    no_log: true
+
+  - set_fact:
+      registryk8s_registry_secret: "{{ registryk8s_registry_secret_output.stdout }}"
+
+  when: registryk8s_registry.username is defined
+
+- block:
+  - name: Create Barbican secret for icr registry if credentials exist
+    shell: "source /etc/platform/openrc; openstack secret store -n icr-registry-secret
+           -p 'username:{{ icr_registry['username'] }} password:{{ icr_registry['password'] }}' -c 'Secret href' -f value"
+    register: icr_registry_secret_output
+    no_log: true
+
+  - set_fact:
+      icr_registry_secret: "{{ icr_registry_secret_output.stdout }}"
+
+  when: icr_registry.username is defined
+
+- name: Add section [KUBE_APISERVER]
+  set_fact:
+    sysinv_k8s_vars: "[KUBE_APISERVER]\n"
+
+- name: Populate k8s kube_apiserver section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
+  loop: "{{ apiserver_extra_args|dict2items }}"
+
+- name: Add section [KUBE_CONTROLLER_MANAGER]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_CONTROLLER_MANAGER]\n"
+
+- name: Populate k8s kube_controller_manager section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
+  loop: "{{ controllermanager_extra_args|dict2items }}"
+
+- name: Add section [KUBE_SCHEDULER]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_SCHEDULER]\n"
+
+- name: Populate k8s kube_scheduler section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
+  loop: "{{ scheduler_extra_args|dict2items }}"
+
+- name: Add section [KUBE_APISERVER_EXTRA_VOLUMES]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_APISERVER_EXTRA_VOLUMES]\n"
+
+- name: Populate k8s kube_apiserver extra_volumes section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.name}}={{item | to_json}}\n"
+  loop: "{{ apiserver_extra_volumes }}"
+
+- name: Add section [KUBE_CONTROLLER_MANAGER_EXTRA_VOLUMES]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_CONTROLLER_MANAGER_EXTRA_VOLUMES]\n"
+
+- name: Populate k8s kube_controller_manager extra_volumes section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.name}}={{item | to_json}}\n"
+  loop: "{{ controllermanager_extra_volumes }}"
+
+- name: Add section [KUBE_SCHEDULER_EXTRA_VOLUMES]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_SCHEDULER_EXTRA_VOLUMES]\n"
+
+- name: Populate k8s kube_scheduler extra_volumes section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.name}}={{item | to_json}}\n"
+  loop: "{{ scheduler_extra_volumes }}"
+
+- name: Add section [KUBE_KUBELET]
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}[KUBE_KUBELET]\n"
+
+- name: Populate k8s kubelet section
+  set_fact:
+    sysinv_k8s_vars: "{{ sysinv_k8s_vars }}{{item.key}}={{item.value}}\n"
+  loop: "{{ kubelet_configurations|dict2items }}"
+
+- block:
+  - name: Add section [USER_DNS_HOST_RECORDS]
+    set_fact:
+      sysinv_user_dns_host_records: "[USER_DNS_HOST_RECORDS]\n"
+
+  - name: Populate user dns host records section
+    set_fact:
+      sysinv_user_dns_host_records: "{{ sysinv_user_dns_host_records }}{{ item }}={{ user_dns_host_records[item] }}\n"
+    loop: "{{ user_dns_host_records.keys() }}"
+
+  when: user_dns_host_records
+
+- block:
+  - name: Generate config ini file for python sysinv db population script
+    template:
+      src: bootstrap_config.j2
+      dest: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
+
+  - include: update_sysinv_database.yml
+  when: save_config_to_db
+
+# Update docker and containerd config files and restart docker and containerd
+# if docker proxy is configured
+- block:
+  - name: Ensure docker and containerd config directory exist
+    file:
+      path: "{{ item }}"
+      state: directory
+      owner: root
+      group: root
+      mode: 0755
+    with_items:
+      - /etc/systemd/system/docker.service.d
+      - /etc/systemd/system/containerd.service.d
+
+  - name: Ensure docker and containerd proxy config exist
+    copy:
+      content: ""
+      dest: "{{ item }}"
+      force: no
+      owner: root
+      group: root
+      mode: 0644
+      remote_src: yes
+    with_items:
+      - "{{ docker_proxy_conf }}"
+      - "{{ containerd_proxy_conf }}"
+
+  - name: Write header to docker and containerd proxy conf files
+    lineinfile:
+      path: "{{ item }}"
+      line: "[Service]"
+    with_items:
+      - "{{ docker_proxy_conf }}"
+      - "{{ containerd_proxy_conf }}"
+
+  - name: Add http proxy URL to docker and containerd proxy conf files
+    lineinfile:
+      path: "{{ item }}"
+      line: "Environment='HTTP_PROXY={{ docker_http_proxy }}'"
+    with_items:
+      - "{{ docker_proxy_conf }}"
+      - "{{ containerd_proxy_conf }}"
+    when: docker_http_proxy != 'undef'
+
+  - name: Add https proxy URL to docker and containerd proxy conf files
+    lineinfile:
+      path: "{{ item }}"
+      line: "Environment='HTTPS_PROXY={{ docker_https_proxy }}'"
+    with_items:
+      - "{{ docker_proxy_conf }}"
+      - "{{ containerd_proxy_conf }}"
+    when: docker_https_proxy != 'undef'
+
+  - name: Add no proxy address list to docker proxy config file on CentOS
+    lineinfile:
+      path: "{{ docker_proxy_conf }}"
+      line: "Environment='NO_PROXY={{ docker_no_proxy_combined | join(',') }}'"
+    when: os_release == "centos"
+
+  # Docker on Debian doesn't work with the NO_PROXY environment variable if it
+  # has IPv6 addresses with square brackets, thus remove the square brackets
+  - name: Add no proxy address list to docker proxy config file on Debian
+    lineinfile:
+      path: "{{ docker_proxy_conf }}"
+      line: "Environment='NO_PROXY={{ docker_no_proxy_combined | join(',') | regex_replace('\\[|\\]', '') }}'"
+    when: os_release == "debian"
+
+  # Containerd doesn't work with the NO_PROXY environment
+  # variable if it has IPv6 addresses with square brackets,
+  # remove the square brackets
+  - name: Add no proxy address list to containerd proxy config file
+    lineinfile:
+      path: "{{ containerd_proxy_conf }}"
+      line: "Environment='NO_PROXY={{ docker_no_proxy_combined | join(',') | regex_replace('\\[|\\]', '') }}'"
+
+  - name: Restart Docker and containerd
+    systemd:
+      state: restarted
+      daemon_reload: yes
+      name: "{{ item }}"
+    with_items:
+      - docker
+      - containerd
+
+  when: use_docker_proxy
+
+- name: Remove previous ssl_ca certs if replayed
+  block:
+  - name: Check for existing ssl_ca certificates
+    shell: |
+      source /etc/platform/openrc
+      system ca-certificate-list --nowrap | awk '{ print $2 }' | awk 'NR>3 && NF'
+    register: existing_ssl_ca_certificates_uuid
+
+  - name: Delete existing ssl_ca certificates
+    shell: source /etc/platform/openrc; system ca-certificate-uninstall {{ item }} --yes
+    with_items:
+    - "{{ existing_ssl_ca_certificates_uuid.stdout_lines }}"
+    when: existing_ssl_ca_certificates_uuid.stdout_lines | length > 0
+
+  when: replayed
+
+# Install certificate if SSL CA certificate is configured
+- block:
+  - name: Copy ssl_ca certificate
+    copy:
+      src: "{{ ssl_ca_cert }}"
+      dest: "{{ temp_ssl_ca }}"
+      remote_src: yes
+
+  - name: Remove ssl_ca complete flag
+    file:
+      path: "{{ ssl_ca_complete_flag }}"
+      state: absent
+
+  - name: Add ssl_ca certificate
+    shell: source /etc/platform/openrc; system ca-certificate-install {{ temp_ssl_ca }} --yes
+    register: add_ssl_ca_certificate
+
+  - name: Wait for certificate install
+    wait_for:
+      path: "{{ ssl_ca_complete_flag }}"
+      state: present
+      timeout: 360
+      msg:
+        "Timeout waiting for ssl_ca certificate install:
+         {{ ssl_ca_cert }}
+         Err_code= failed_ssl_cert
+         {{ add_ssl_ca_certificate.stdout }}"
+
+  - name: Cleanup temporary certificate
+    file:
+      path: "{{ temp_ssl_ca }}"
+      state: absent
+
+  when: ssl_ca_cert is defined and ssl_ca_cert
+
+# PXE boot files
+- name: Set pxeboot files source if address allocation is dynamic
+  set_fact:
+    pxe_default: pxelinux.cfg.files/default
+    pxe_grub_cfg: pxelinux.cfg.files/grub.cfg
+  when: management_dynamic_address_allocation
+
+- name: Set pxeboot files source if address allocation is static
+  set_fact:
+    pxe_default: pxelinux.cfg.files/default.static
+    pxe_grub_cfg: pxelinux.cfg.files/grub.cfg.static
+  when: not management_dynamic_address_allocation
+
+- name: Set pxeboot files symlinks
+  file:
+    src: "/var/pxeboot/{{ item.src }}"
+    dest: "/var/pxeboot/{{ item.dest }}"
+    state: link
+    force: yes
+  with_items:
+    - { src: '{{ pxe_default }}', dest: 'pxelinux.cfg/default' }
+    - { src: '{{ pxe_grub_cfg }}', dest: 'pxelinux.cfg/grub.cfg' }
+
+- name: Update the management_interface in platform.conf
+  lineinfile:
+    path: /etc/platform/platform.conf
+    regexp: "management_interface"
+    line: "management_interface=lo"
+
+- name: Add new entries to platform.conf
+  lineinfile:
+    path: /etc/platform/platform.conf
+    line: "{{ item }}"
+  with_items:
+    - sw_version={{ software_version }}
+    - vswitch_type=none
+
+- name: Ensure distributed cloud role is removed from platform.conf
+  lineinfile:
+    path: /etc/platform/platform.conf
+    regexp: '^distributed_cloud_role'
+    state: absent
+  when: distributed_cloud_role == 'none'
+
+- name: Add distributed cloud role to platform.conf
+  lineinfile:
+    path: /etc/platform/platform.conf
+    line: distributed_cloud_role={{ distributed_cloud_role }}
+  when: distributed_cloud_role != 'none'
+
+- name: Invalidate name service caching server
+  command: nscd -i hosts
+  when: os_release == "centos"
+
+- name: Set config path facts
+  set_fact:
+    extra_permdir: "{{ platform_path }}/extra"
+
+- name: Ensure extra dir exist
+  file:
+    path: "{{ extra_permdir }}"
+    state: directory
+    recurse: yes
+    owner: "root"
+    group: "root"
+    mode: 0755
+
+- block:
+  - name: Strip the leading '/' from directories and assign them to new variables
+    set_fact:
+      archive_extra_permdir: "{{ extra_permdir | regex_replace('^\\/', '') }}"
+
+  - name: Look for extra dir in backup archive
+    shell: "tar -tf {{ restore_data_file }} | grep '{{ archive_extra_permdir }}'"
+    args:
+      warn: false
+    failed_when: false
+    register: search_result
+
+  - name: Restore extra dir
+    command: >-
+      tar -C {{ extra_permdir }} -xpf {{ restore_data_file }} --strip-components=3
+      '{{ archive_extra_permdir }}'
+    args:
+      warn: false
+    when: search_result.rc == 0
+
+  when: mode == 'restore'
+
+- name: Create source and target device_images bind directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: www
+    group: root
+    mode: 0755
+  with_items:
+    - "{{ source_device_image_bind_dir }}"
+    - "{{ target_device_image_bind_dir }}"
+
+- name: Bind mount on {{ target_device_image_bind_dir }}
+  # Due to deficiency of mount module, resort to command for now
+  command: mount -o bind -t ext4 {{ source_device_image_bind_dir }} {{ target_device_image_bind_dir }}
+  args:
+    warn: false
+
+# When the mode is restore, the ceph data directory needs
+# to be mounted before the Kubernetes services bring up
+- name: Mount ceph data directory
+  include_role:
+    name: common/mount-ceph-data
+  when: mode == 'restore'

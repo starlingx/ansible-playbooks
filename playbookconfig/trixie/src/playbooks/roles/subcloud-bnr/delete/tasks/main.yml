@@ -1,0 +1,34 @@
+---
+#
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to remove the subcloud backup data of the specified
+#   software release from local/central storage.
+#
+- name: Validate user input
+  import_tasks: validate_input.yml
+
+- name: Prepare remote execution environment
+  include_role:
+    name: common/prepare-env
+  when: local
+
+- name: Check if the specified backup directory exists
+  stat:
+    path: "{{ removal_dir }}"
+  register: removal_dir_stat
+  connection: "{{ target_connection }}"
+
+- name: Fail if the specified backup directory does not exist
+  fail:
+    msg: "The specified subcloud backup does not exist."
+  when: not removal_dir_stat.stat.exists
+
+- name: Remove {{ software_version }} backup data for {{ inventory_hostname }}
+  file:
+    path: "{{ removal_dir }}"
+    state: absent
+  connection: "{{ target_connection }}"

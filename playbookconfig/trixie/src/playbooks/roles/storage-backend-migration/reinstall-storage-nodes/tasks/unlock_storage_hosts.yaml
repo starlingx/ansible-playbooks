@@ -1,0 +1,53 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Change administrativeState from locked to unlocked
+  lineinfile:
+    path: "{{ tmp_workspace }}/storage-to-worker-cpu-memory.yaml"
+    regexp: '^(\s*)administrativeState:\s*locked'
+    line: '\1administrativeState: unlocked'
+    backrefs: yes
+
+- name: Apply storage DM file with unlocked state
+  command: kubectl apply -f {{ tmp_workspace }}/storage-to-worker-cpu-memory.yaml
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+
+- name: Give DM a few seconds to apply the new config
+  pause:
+    seconds: 15
+  changed_when: false
+
+- name: Unlock storages
+  environment: "{{ system_env }}"
+  command: system host-unlock {{ item }}
+  loop: "{{ groups.storages }}"
+  loop_control:
+    label: "{{ item }}"
+  register: host_unlock_output
+
+- name: Debug host_unlock_output result
+  debug:
+    msg: "{{ item.stdout_lines | replace('\\n', '\n') }}"
+  loop: "{{ host_unlock_output.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Wait until all storage nodes are unlocked|enabled|available
+  become: true
+  become_user: postgres
+  command: >-
+    psql -d sysinv -t -A -c
+    "SELECT COUNT(*) FROM i_host
+     WHERE hostname LIKE 'storage%'
+       AND administrative = 'unlocked'
+       AND operational = 'enabled'
+       AND availability = 'available';"
+  register: storage_host_ready_count
+  until: storage_host_ready_count.stdout | int == groups.storages | length
+  retries: 180
+  delay: 10
+  changed_when: false

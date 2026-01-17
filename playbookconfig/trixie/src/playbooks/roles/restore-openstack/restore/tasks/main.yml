@@ -1,0 +1,266 @@
+---
+#
+# Copyright (c) 2019,2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to restore OpenStack application.
+#
+# To bring up remaining OpenStack services after storage data is restored
+- block:
+  - name: Check if restore OpenStack continue flag file exists
+    stat:
+      path: "{{ restore_openstack_continue_flag }}"
+    register: check_restore_openstack_continue
+
+  - name: Fail if restore OpenStack continue flag file does not exist
+    fail:
+      msg: >-
+        "{{ restore_openstack_continue_flag }} does not exist. Cannot continue
+         to restore OpenStack application."
+    when: not check_restore_openstack_continue.stat.exists
+
+  - name: Unset show_multiple_locations override
+    shell: >-
+      source /etc/platform/openrc; system helm-override-update
+      --set conf.glance.DEFAULT.show_multiple_locations=False {{ openstack_app_name }} glance openstack
+
+  - name: Continue to bring up the remaining OpenStack services
+    shell: source /etc/platform/openrc; system application-apply --mode normal {{ openstack_app_name }}
+
+  - name: Checking OpenStack application apply progress for the remaining OpenStack services... (max 50 mins)
+    shell: >-
+      source /etc/platform/openrc; system application-show {{ openstack_app_name }} --column status --format value
+    register: check_app_state
+    until: check_app_state.stdout in ['applied', 'apply-failed']
+    retries: 50
+    delay: 60
+
+  - name: Fail if the remaining OpenStack services cannot be restored successfully
+    fail:
+      msg: OpenStack application is not applied successfully.
+    when: check_app_state.stdout != "applied"
+
+  - name: Remove restore_openstack_in_progress flag file
+    file:
+      path: "{{ restore_openstack_in_progress_flag }}"
+      state: absent
+
+  - name: Remove restore_openstack_continue flag file
+    file:
+      path: "{{ restore_openstack_continue_flag }}"
+      state: absent
+
+  - debug:
+      msg: Restore OpenStack application is successful!
+
+  - meta: end_play
+  when: restore_openstack_continue
+
+- name: Create restore OpenStack application in progress flag file in /opt/platform
+  file:
+    path: "{{ restore_openstack_in_progress_flag }}"
+    state: touch
+
+- block:
+  - name: Determine software version of the backup
+    shell: >-
+      tar -tf {{ target_backup_dir }}/{{ backup_filename }} |
+      grep 'platform/fluxcd' |
+      sed -E 's|.*/fluxcd/([^/]+).*|\1|' |
+      head -n 1
+    register: backup_version_output
+    changed_when: false
+    args:
+      warn: false
+
+  - name: Set backup_software_version value
+    set_fact:
+      backup_software_version: "{{ backup_version_output.stdout }}"
+
+  - name: Set config path facts
+    set_fact:
+      fluxcd_permdir: "{{ platform_path }}/fluxcd/{{ backup_software_version }}"
+      helm_charts_permdir: "{{ platform_path }}/helm_charts"
+
+  - name: Restore Helm charts, fluxcd manifests and extension filesystem
+    command: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} {{ item }}
+    args:
+      warn: false
+    become_user: root
+    with_items:
+      - "{{ helm_charts_permdir | regex_replace('^\\/', '') }}"
+      - "{{ fluxcd_permdir | regex_replace('^\\/', '') }}"
+
+  - name: Set Helm Overrides backup directory
+    tempfile:
+      state: directory
+    register: helm_overrides_sqldump_dir
+    become_user: postgres
+
+  - name: Restore Helm Overrides dump file
+    command: >-
+      tar -C {{ helm_overrides_sqldump_dir.path }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
+      --wildcards --transform='s,.*/,,' '*/helm_overrides*.sql'
+    args:
+      warn: false
+
+  - name: Apply Helm Overrides dump file
+    shell: >-
+      psql -f {{ helm_overrides_sqldump_dir.path }}/helm_overrides_dump.sql sysinv
+    become_user: postgres
+
+  - name: Remove Helm Overrides backup directory
+    file:
+      path: "{{ helm_overrides_sqldump_dir.path }}"
+      state: absent
+
+  # This override is required by the tidy_storage helper script when we do a full restore.
+  - name: Set show_multiple_locations override
+    shell: >-
+      source /etc/platform/openrc; system helm-override-update
+      --set conf.glance.DEFAULT.show_multiple_locations=True {{ openstack_app_name }} glance openstack
+
+  - name: Bring up MariaDB and its prerequisite services
+    shell: >-
+      source /etc/platform/openrc; system application-apply --mode restore_db {{ openstack_app_name }}
+
+  - name: Checking MariaDB apply progress ... (max 30 mins)
+    shell: >-
+      source /etc/platform/openrc; system application-show {{ openstack_app_name }} --column status --format value
+    register: check_app_state
+    until: check_app_state.stdout in ['applied', 'apply-failed']
+    retries: 30
+    delay: 60
+
+  - name: Check if MariaDB pod is running
+    shell: >-
+      kubectl --kubeconfig={{ kube_config_dir }} get pods -n openstack |
+      grep {{ mariadb_pod }} | grep -i 'Running'
+    failed_when: false
+    register: check_mariadb_pod
+
+  - name: Fail if MariaDB service cannot be restored successfully
+    fail:
+      msg: >-
+        MariaDB service cannot be restored successfully.
+        Restore OpenStack application failed.
+    when: check_app_state.stdout != "applied" or
+          check_mariadb_pod.rc != 0
+
+  - block:
+    - name: Check if openstack-garbd pod is running if it is not an all-in-one system
+      shell: >-
+        kubectl --kubeconfig={{ kube_config_dir }} get pods -n openstack |
+        grep openstack-garbd | grep -i 'Running'
+      failed_when: false
+      register: check_garbd_pod
+
+    - name: Fail if openstack-garbd pod is not running
+      fail:
+        msg: openstack-garbd pod is not running. Restore OpenStack application failed.
+      when: check_garbd_pod.rc != 0
+
+    when: system_type == "Standard"
+
+  - name: Create MariaDB backup directory
+    file:
+      path: "{{ backup_dir }}/mariadb"
+      state: directory
+      recurse: yes
+      owner: root
+      group: root
+      mode: 0755
+
+  - name: Extract MariaDB data to backup directory
+    command: >-
+      tar -C {{ backup_dir }}/mariadb -xpf {{ target_backup_dir }}/{{ backup_filename }}
+      --wildcards --transform='s,.*/,,' '*/*\.mariadb\.*'
+    args:
+      warn: false
+
+  - name: Set k8s cmd prefix
+    set_fact:
+      kube_cmd_prefix: "kubectl --kubeconfig={{ kube_config_dir }} exec -i {{ mariadb_pod }} -n openstack -- bash -c "
+
+  - name: List MariaDB backup files
+    shell: ls {{ backup_dir }}/mariadb/*
+    register: mariadb_files
+
+  - name: Create MariaDB database
+    shell: >-
+      {{ kube_cmd_prefix }}
+      'exec mysql -uroot -p"$MYSQL_DBADMIN_PASSWORD" -e"create database {{ (item|basename).split('.')[0] }}"'
+    with_items: "{{ mariadb_files.stdout_lines }}"
+
+  - name: Restore MariaDB data
+    shell: >-
+      {{ kube_cmd_prefix }}
+      'exec mysql -uroot -p"$MYSQL_DBADMIN_PASSWORD" {{ (item|basename).split('.')[0] }}'
+      < {{ item }}
+    with_items: "{{ mariadb_files.stdout_lines }}"
+
+  - name: Remove MariaDB backup directory
+    file:
+      path: "{{ backup_dir }}/mariadb"
+      state: absent
+
+  - name: Bring up Cinder and Glance services and the prerequisites
+    shell: >-
+      source /etc/platform/openrc; system application-apply --mode restore_storage {{ openstack_app_name }}
+
+  - name: Checking Cinder and Glance apply progress... (max 30 mins)
+    shell: >-
+      source /etc/platform/openrc; system application-show {{ openstack_app_name }} --column status --format value
+    register: check_app_state
+    until: check_app_state.stdout in ['applied', 'apply-failed']
+    retries: 30
+    delay: 60
+
+  - name: Fail if Cinder and Glance services cannot be restored successfully
+    fail:
+      msg: >-
+        Cinder and Glance services cannot be restored successfully.
+        Restore OpenStack application failed.
+    when: check_app_state.stdout != "applied"
+
+  - block:
+    - name: Inform user to restore Glance images and Cinder volumes
+      debug:
+        msg: >-
+          Please refer to the system administration guide to restore Glance images
+          and Cinder volumes.
+
+    - name: Create restore OpenStack application continue flag file
+      file:
+        path: "{{ restore_openstack_continue_flag }}"
+        state: touch
+
+    - meta: end_play
+    when: restore_cinder_glance_data
+
+  - name: Continue to bring up the remaining OpenStack services
+    shell: source /etc/platform/openrc; system application-apply --mode normal {{ openstack_app_name }}
+
+  - name: Checking OpenStack application apply progress for the remaining OpenStack services... (max 50 mins)
+    shell: >-
+      source /etc/platform/openrc; system application-show {{ openstack_app_name }} --column status --format value
+    register: check_app_state
+    until: check_app_state.stdout in ['applied', 'apply-failed']
+    retries: 50
+    delay: 60
+
+  - name: Fail if the remaining OpenStack services cannot be restored successfully
+    fail:
+      msg: OpenStack application is not applied successfully.
+    when: check_app_state.stdout != "applied"
+
+  - debug:
+      msg: Restore OpenStack application is successful!
+
+  always:
+    - name: Remove restore_openstack_in_progress flag file
+      file:
+        path: "{{ restore_openstack_in_progress_flag }}"
+        state: absent

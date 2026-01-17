@@ -1,0 +1,24 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to modify mtc heartbeat failure action.
+#
+
+- name: Get system mode
+  shell: source /etc/platform/platform.conf; echo $system_mode
+  register: system_mode
+
+- block:
+  - name: Modify mtc heartbeat failure action
+    shell: >-
+      source /etc/platform/openrc; system service-parameter-modify
+      platform maintenance heartbeat_failure_action={{ action }}
+
+  - name: Apply mtc heartbeat failure action update
+    shell: source /etc/platform/openrc; system service-parameter-apply platform
+
+  when: system_mode != "simplex"

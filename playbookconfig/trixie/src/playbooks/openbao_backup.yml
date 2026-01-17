@@ -1,0 +1,32 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# requires one variable passed:
+# initial_backup_dir = The resulting backup package will be found here.
+
+- hosts: all
+  gather_facts: no
+
+  # Specify defaults including:
+  #   backup_encryption_enabled
+  #   backup_encryption_passphrase
+  vars_files:
+    - host_vars/backup-restore/default.yml
+
+  vars:
+    password_change: false
+    openbao_encrypt: "{{ backup_encryption_enabled|bool }}"
+    encrypt_openbao_secret: "{{ backup_encryption_passphrase | default('') }}"
+    openbao_mode: "backup"
+    op_mode: "standalone"
+
+  roles:
+    - role: common/prepare-env
+    - role: openbao/prepare_env
+      become: yes
+    - role: openbao/openbao_backup
+      become: yes

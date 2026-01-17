@@ -1,0 +1,28 @@
+---
+local_registry: registry.local:9001
+
+# Used to infer values for missing registries
+infer_registry_url: docker.io
+
+possible_missing_registries:
+  - icr.io
+  - registry.k8s.io
+
+registry_to_service:
+  icr.io: icr-registry
+  registry.k8s.io: registryk8s-registry
+
+registry_to_fact:
+  docker.elastic.co: elastic_registry
+  docker.io: docker_registry
+  gcr.io: gcr_registry
+  ghcr.io: ghcr_registry
+  icr.io: icr_registry
+  k8s.gcr.io: k8s_registry
+  quay.io: quay_registry
+  registry.k8s.io: registryk8s_registry
+
+# Used by auto-restore to avoid logging into external docker registries
+# when the system has no external connectivity. All images should be
+# pulled from the local registry.
+skip_registry_login: false

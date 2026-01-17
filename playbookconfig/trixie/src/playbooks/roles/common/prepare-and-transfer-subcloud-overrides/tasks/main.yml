@@ -1,0 +1,61 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role prepares and transfers overrides file securely to the subcloud
+#   for the execution of the local playbook.
+#
+- block:
+  - name: Create a vault id file
+    copy:
+      dest: "{{ vault_id_file }}"
+      content: |
+        "{{ vault_pass }}"
+      mode: '0600'
+      remote_src: no
+    register: local_vault_id
+    connection: local
+
+  - name: Encrypt subcloud overrides file
+    command: ansible-vault encrypt {{ subcloud_overrides }} --vault-id {{ vault_id_file }}
+    register: local_encrypt_result
+    connection: local
+
+  - name: Copy vault id file to the subcloud
+    copy:
+      src: "{{ vault_id_file }}"
+      dest: "{{ vault_id_file }}"
+      mode: '0400'
+
+  - name: Copy encrypted subcloud overrides file to the subcloud
+    copy:
+      src: "{{ subcloud_overrides }}"
+      dest: "{{ subcloud_overrides }}"
+      owner: root
+      group: root
+      decrypt: no
+      backup: no
+
+  - name: Decrypt subcloud overrides file
+    command: ansible-vault decrypt {{ subcloud_overrides }} --vault-id {{ vault_id_file }}
+
+  always:
+    - name: Remove local subcloud overrides file
+      file:
+        path: "{{ subcloud_overrides }}"
+        state: absent
+      connection: local
+
+    - name: Remove vault id file from the system controller
+      file:
+        path: "{{ vault_id_file }}"
+        state: absent
+      connection: local
+
+    - name: Remove vault id file from the subcloud
+      file:
+        path: "{{ vault_id_file }}"
+        state: absent

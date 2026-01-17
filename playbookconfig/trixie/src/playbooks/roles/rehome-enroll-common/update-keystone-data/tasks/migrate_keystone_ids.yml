@@ -1,0 +1,57 @@
+---
+#
+# Copyright (c) 2021-2022,2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   These tasks are to migrate the keystone IDs in keystone DB and hieradata.
+#
+- name: Update admin user id and project id in hieradata static.yaml
+  lineinfile:
+    path: "/opt/platform/puppet/{{ software_version }}/hieradata/static.yaml"
+    regexp: "{{ item.From }}"
+    line: "{{ item.To }}"
+  loop:
+    - { From: "^openstack::keystone::bootstrap::dc_services_project_id",
+        To: "openstack::keystone::bootstrap::dc_services_project_id:
+        '{{ system_controller_keystone_services_project_id }}'" }
+    - { From: "^platform::sysinv::bootstrap::dc_sysinv_user_id",
+        To: "platform::sysinv::bootstrap::dc_sysinv_user_id:
+        '{{ system_controller_keystone_sysinv_user_id }}'" }
+    - { From: "^platform::dcmanager::bootstrap::dc_dcmanager_user_id",
+        To: "platform::dcmanager::bootstrap::dc_dcmanager_user_id:
+        '{{ system_controller_keystone_dcmanager_user_id }}'" }
+    - { From: "^keystone::bootstrap::dc_admin_user_id",
+        To: "keystone::bootstrap::dc_admin_user_id:
+        '{{ system_controller_keystone_admin_user_id }}'" }
+    - { From: "^keystone::bootstrap::dc_admin_project_id",
+        To: "keystone::bootstrap::dc_admin_project_id:
+        '{{ system_controller_keystone_admin_project_id }}'" }
+  no_log: true
+
+- name: Migrate keystone user IDs
+  script: migrate_keystone_ids.py {{ item.name }} {{ item.id }} 'user'
+  with_items:
+    - { name: 'admin', id: "{{ system_controller_keystone_admin_user_id }}" }
+    - { name: 'sysinv', id: "{{ system_controller_keystone_sysinv_user_id }}" }
+  become_user: postgres
+  no_log: true
+
+- name: Migrate keystone project IDs
+  script: migrate_keystone_ids.py {{ item.name }} {{ item.id }} 'project'
+  with_items:
+    - { name: 'admin', id: "{{ system_controller_keystone_admin_project_id }}" }
+    - { name: 'services', id: "{{ system_controller_keystone_services_project_id }}" }
+  become_user: postgres
+  no_log: true
+
+- name: Flush memcached
+  shell: |
+    controller_0_address=$(awk '/controller-0$/ {print $1}' /etc/hosts)
+    echo flush_all > /dev/tcp/$controller_0_address/11211
+
+# We're restarting almost all services in the next role, migrate_keystone_passwords
+# The only one that is missing is sm-api as it doesn't need any keystone user update
+- name: Restart sm-api using pmon
+  command: "pmon-restart sm-api"

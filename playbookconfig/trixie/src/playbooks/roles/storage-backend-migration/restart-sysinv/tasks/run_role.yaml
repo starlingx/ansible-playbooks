@@ -1,0 +1,48 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Restart Conductor
+  command: sm-restart service sysinv-conductor
+  register: conductor_result
+  retries: 60
+  delay: 10
+  until: (conductor_result.rc == 0 and "error" not in conductor_result.stdout)
+  changed_when: false
+  when: inventory_hostname in groups.active_controller
+
+- name: Restart Inv
+  command: sm-restart service sysinv-inv
+  register: inv_result
+  retries: 60
+  delay: 10
+  until: (inv_result.rc == 0 and "error" not in inv_result.stdout)
+  changed_when: false
+  when: inventory_hostname in groups.active_controller
+
+- name: Restart Agent
+  command: systemctl restart sysinv-agent
+  register: agent_result
+  retries: 60
+  delay: 10
+  until: agent_result.rc == 0
+  changed_when: false
+
+- name: Wait for sysinv CLI to be responsive
+  command: system storage-backend-list
+  environment: "{{ system_env }}"
+  register: sysinv_ready
+  until: sysinv_ready.rc == 0
+  retries: 60
+  delay: 10
+  changed_when: false
+  when: inventory_hostname in groups.active_controller
+
+- name: Give sysinv a few extra seconds to stabilize
+  pause:
+    seconds: 15
+  run_once: true
+  changed_when: false
+  when: inventory_hostname in groups.active_controller

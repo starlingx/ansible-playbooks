@@ -1,0 +1,65 @@
+---
+#
+# Copyright (c) 2021 Intel Corporation
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- name: Gather variables
+  include_vars: "vars/ubuntu.yml"
+
+- name: Install prerequisite packages for adding repos and installing kubelet
+  apt:
+    pkg:
+    - apt-transport-https
+    - ca-certificates
+    - curl
+    - gnupg-agent
+    - software-properties-common
+
+- name: Check if containerd executable exists
+  stat:
+    path: /usr/local/bin/containerd
+  register: containerd_installed
+
+- name: Get containerd version if exists
+  command: "/usr/local/bin/containerd --version"
+  register: containerd_installed_ver
+  when: containerd_installed.stat.exists
+
+- name: Install containerd
+  unarchive:
+    src: "https://storage.googleapis.com/cri-containerd-release/cri-containerd-{{ containerd_version }}.linux-amd64.tar.gz"
+    dest: /
+    remote_src: yes
+  environment:
+    http_proxy: "{{ http_proxy }}"
+    https_proxy: "{{ https_proxy }}"
+    no_proxy: "{{ no_proxy }}"
+  when: (not containerd_installed.stat.exists or containerd_installed_ver.stdout != containerd_version)
+
+- name: Add kubernetes repo key
+  apt_key:
+    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+    state: present
+  environment:
+    http_proxy: "{{ http_proxy }}"
+    https_proxy: "{{ https_proxy }}"
+    no_proxy: "{{ no_proxy }}"
+
+- name: Add kubernetes repo to apt repo
+  apt_repository:
+    repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+    state: present
+
+- name: Ensure k8s packages are installed
+  action: "{{ k8s_package_info.pkg_mgr }}"
+  args:
+    pkg: "{{ item.name }}"
+    state: present
+    force: true
+    update_cache: true
+  register: install_task_result
+  until: install_task_result is succeeded
+  retries: 5
+  delay: "{{ retry_stagger | d(5) }}"
+  with_items: "{{ k8s_package_info.pkgs }}"

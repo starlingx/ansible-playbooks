@@ -1,0 +1,145 @@
+---
+#
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#   This role patches a standalone subcloud being enrolled by finding the
+#   patch level difference between the subcloud and the
+#   system controller, determining required/dependent patches, staging
+#   them, and using USM local installation to deploy them.
+#
+#   Role outline:
+#   - Retrieve subcloud software releases
+#   - Check the patches need to be applied on the subcloud from the system controller
+#   - Use common/usm-deploy-releases to upload and apply the patches
+#
+
+- name: Check if the controller is active controller
+  shell: source /etc/platform/openrc
+  register: active_controller
+  failed_when: false
+
+- set_fact:
+    is_active_controller: >-
+      {{ true if 'stdout' in active_controller and active_controller.stdout
+      | length == 0 else false }}
+
+- name: Fail if not active controller
+  fail:
+    msg: "Subcloud enrollment cannot be done on non-active controller."
+  when: not is_active_controller
+
+# Instead of using SOFTWARE_URL, software CLI is using SYSTEM_URL,
+# which is already used by sysinv. To still authenticate with the
+# token, we need to explicitly provide --software-url.
+- name: Run software deploy show
+  shell: |
+    {{ source_env_command }}
+    software --software-url {{ software_url }} deploy show
+  register: check_deploy_show
+  failed_when: false
+
+- name: Ensure no deploy in progress
+  fail:
+    msg: |
+      Software deployment already in progress:
+      {{ check_deploy_show.stdout }}
+      Existing release deployment found. Retry after confirming no
+      subcloud software update is in progress, ensure that the deployment
+      is complete and deleted. If the deployment failed, manually roll back the
+      software update and resolve the deployment error before retrying.
+      For more details, see /var/log/software.log.
+  when: '"No deploy in progress" not in check_deploy_show.stdout'
+
+- name: Retrieve SW_VERSION on system controller
+  shell: source /etc/build.info; echo $SW_VERSION
+  register: sw_version_system_controller
+  delegate_to: localhost
+
+- name: Retrieve subcloud software list raw output
+  shell: |
+    {{ source_env_command }}
+    software --software-url {{ software_url }} list --release {{ software_version }}
+  register: subcloud_software_list_raw
+
+# Note: Keep the full release string (format: component-MM.mm.pp) for component filtering
+- name: Retrieve deployed subcloud software release list
+  shell: |
+    echo -e "{{ subcloud_software_list_raw.stdout }}" | \
+      grep {{ software_version }} | \
+      grep -E '(deployed|committed)' | \
+      awk '{print $2}'
+  register: subcloud_software_list
+
+- name: Check patches to upload and apply from the system controller to the subcloud
+  script: >
+    check_patches_to_apply.py
+    --sc-software-version {{ software_version }}
+    --cc-software-version {{ sw_version_system_controller.stdout }}
+    --subcloud-releases "{{ subcloud_software_list.stdout_lines | join(',') }}"
+  register: check_patches_to_upload_and_apply
+  delegate_to: localhost
+
+- name: Parse check patches output
+  set_fact:
+    patches_result: "{{ check_patches_to_upload_and_apply.stdout | from_json }}"
+
+- name: Fail if check patches script encountered an error
+  fail:
+    msg: "{{ patches_result.msg }}"
+  when: patches_result.failed | default(false)
+
+- name: Get patches and releases to apply
+  set_fact:
+    patch_files_to_apply: "{{ patches_result.patch_files_to_apply | default([]) }}"
+    release_ids_to_apply: "{{ patches_result.release_ids_to_apply | default([]) }}"
+
+- name: List patches identified to upload and apply
+  debug:
+    msg: |
+      Patch files to apply: {{ patch_files_to_apply }}
+
+- name: Upload and apply patches
+  block:
+    - name: Create a tmp directory to stage patches on subcloud
+      tempfile:
+        state: directory
+        prefix: enroll_patches_
+        # The default /tmp directory may not have sufficient space for large patches.
+        # The created directory is cleaned up by the always block below.
+        path: /scratch
+      register: patches_stage_dir
+
+    - name: Copy patch files from system controller to subcloud
+      copy:
+        src: "/opt/dc-vault/software/{{ software_version }}/{{ item }}"
+        dest: "{{ patches_stage_dir.path }}/{{ item }}"
+      loop: "{{ patch_files_to_apply }}"
+      vars:
+        # The ansible_remote_tmp directory is used as a staging area to
+        # transfer files. The default location, /tmp, may not have
+        # sufficient space for transfers.
+        ansible_remote_tmp: /scratch
+
+
+    - name: Deploy Releases
+      include_role:
+        name: common/usm-deploy-releases
+      vars:
+        patches: "{{ patch_files_to_apply }}"
+        patches_dir: "{{ patches_stage_dir.path }}"
+        release_ids: "{{ release_ids_to_apply }}"
+        target_release_id: "{{ patches_result.target_release_id | default('') }}"
+        target_sw_version: "{{ patches_result.target_sw_version | default('') }}"
+        reboot_required: "{{ patches_result.reboot_required | default(false) }}"
+        enrollment_in_progress: true
+
+  when: release_ids_to_apply | length > 0
+
+  always:
+    - name: Clean up the tmp stage directory
+      file:
+        path: "{{ patches_stage_dir.path }}"
+        state: absent
+      when: patches_stage_dir is defined and patches_stage_dir.path is defined

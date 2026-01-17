@@ -1,0 +1,12 @@
+[pipeline:fm-api]
+pipeline={{ fm_api_pipeline }}
+
+[filter:request_id]
+paste.filter_factory={{ request_id_filter_factory }}
+
+[filter:authtoken]
+acl_public_routes={{ acl_public_routes }}
+paste.filter_factory={{ authtoken_filter_factory }}
+
+[app:api_v1]
+paste.app_factory={{ app_factory }}

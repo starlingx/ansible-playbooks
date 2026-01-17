@@ -1,0 +1,8 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Manage {{ lv_name }}"
+  include_tasks: "{{ lv_action }}_lv.yaml"

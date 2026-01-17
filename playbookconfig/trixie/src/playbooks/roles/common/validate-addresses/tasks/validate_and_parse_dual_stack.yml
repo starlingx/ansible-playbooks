@@ -1,0 +1,57 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Validate comma separated dual-stack CIDR or IP address in the specified
+#   dict item and parse them into primary and secondary category and set
+#   into variables:  {key}_primary and {key}_secondary.
+#
+
+- name: Set empty as variable
+  set_fact:
+    network_param_lines:
+      - primary=False
+      - secondary=False
+  when: network_param.value | length == 0
+
+- block:
+  - name: Validate comma separated dual-stack subnets or addresses
+    debug:
+      msg: "{{ network_param.key }}:{{ network_param.value }} Validating:{{ item }}"
+    failed_when: item|ipaddr == False
+    with_items: '{{ network_param.value.split(",") }}'
+
+  - set_fact:
+      network_param_lines: ""
+
+  - name: Validate and parse comma separated dual-stack subnets or addresses
+    script: roles/common/validate-addresses/files/parse_dual_stack.py "{{
+            network_param.key }}" "{{ network_param.value }}"
+    register: result
+    failed_when: false
+
+  - name: Fail if script parse_dual_stack.py failed or error occurred
+    fail:
+      msg: >
+        Error parsing {{ network_param.key }}:{{ network_param.value }},
+        return code: {{ result.rc }}
+        Error output: {{ result.stderr }}
+    when: result.rc != 0
+
+  - name: Set parsed output as variable
+    set_fact:
+      network_param_lines: "{{ result.stdout_lines }}"
+
+  when: network_param.value | length > 0
+
+- block:
+  - name: Add dual-stack key/value on dual-stack network params
+    set_fact:
+      dual_stack_network_params: >-
+        {% set key, val = item.partition('=')[::2]|map('trim') -%}
+        {% set val = False if val=='False' else val -%}
+        {{ dual_stack_network_params|default({}) | combine ({network_param.key+"_"+key: val}) }}
+    with_items: "{{ network_param_lines }}"

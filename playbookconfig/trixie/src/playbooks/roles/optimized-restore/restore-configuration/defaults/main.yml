@@ -1,0 +1,100 @@
+---
+# These are to be restored from localhost_platform_backup.tgz
+# Some directories like /etc/kuberenetes and /etc/ldap are not
+# covered here because they are handled by their respective roles.
+# Files listed here shoud generally be simple to restore and
+# not require complex logic.
+# A list of *some* roles that do this:
+# - common/bringup-kubemaster
+# - backup-restore/restore-ldap
+# - restore-platform/restore-sw-deployments
+restore_items:
+  - etc/barbican
+  - etc/containerd
+  - etc/cni
+  - etc/default
+  - etc/dnsmasq.conf
+  - etc/docker
+  - etc/docker-distribution
+  - etc/drbd.d
+  - etc/etcd
+  - etc/fm
+  - etc/group
+  - etc/group-
+  - etc/haproxy
+  - etc/hosts
+  - etc/kdump
+  - etc/keystone
+  - etc/kubernetes
+  - etc/lighttpd
+  - etc/mtc
+  - etc/mtc.conf
+  - etc/mtc.ini
+  - etc/passwd
+  - etc/passwd-
+  - etc/pcidp
+  - etc/pki
+  - etc/platform/openrc
+  # See here playbookconfig/src/playbooks/roles/common/helm/tasks/main.yml
+  # /etc/postgresql needs to be restored because it is modified on IPv6 only systems
+  - etc/postgresql
+  - etc/resolv.conf
+  - etc/shadow
+  - etc/shadow-
+  - etc/sm
+  - etc/ssh
+  - etc/ssl
+  - etc/sysctl.d
+  - etc/sysinv
+  - etc/systemd/system
+  - opt/platform
+  - opt/extension
+  - var/rootdirs/root
+
+restore_extra_items: []
+
+restore_exclude_items:
+  - etc/ssl/certs/ssl-cert-snakeoil.pem
+  - etc/ssl/private/ssl-cert-snakeoil.key
+  - etc/sysctl.d/05-default-sysctl.conf
+  - etc/sysctl.d/100-custom-user.conf
+
+upgrade_exclude_items:
+  '21.12':
+    - etc/group
+    - etc/group-
+    - etc/kubernetes
+    - etc/passwd
+    - etc/passwd-
+    - etc/postgresql
+    - etc/shadow
+    - etc/shadow-
+    - etc/ssl/certs
+  '22.12':
+    - etc/default
+    - etc/group
+    - etc/group-
+    - etc/kubernetes
+    - etc/passwd
+    - etc/passwd-
+    - etc/postgresql
+    - etc/shadow
+    - etc/shadow-
+    # This was already restored during apply-manifest
+    - opt/platform/puppet
+
+pxelinux_config_permdir: "/opt/platform/config/{{ software_version }}/pxelinux.cfg"
+
+# Used to restore networking configuration
+network_scripts: /etc/network/interfaces.d
+network_routes: /etc/network/routes
+
+# These are the addresses in puppet system hieradata that are required during optimized restore/upgrade
+network_address_keys:
+  - platform::network::cluster_host::params::controller_address
+  - platform::network::cluster_host::params::controller0_address
+  - platform::network::mgmt::params::controller_address
+  - platform::network::mgmt::params::controller0_address
+  - platform::network::oam::params::controller_address
+  - platform::network::pxeboot::params::controller_address
+  - platform::network::pxeboot::params::controller0_address

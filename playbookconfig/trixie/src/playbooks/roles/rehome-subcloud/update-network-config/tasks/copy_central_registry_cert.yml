@@ -1,0 +1,22 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   These tasks are to copy the central registry's cert to subcloud
+#
+
+- name: Copy the central cloud registry certificate from central cloud to subcloud
+  copy:
+    src: "{{ docker_cert_dir }}/registry.local:9001/registry-cert.crt"
+    dest: "{{ docker_cert_dir }}/registry.central:9001/registry-cert.crt"
+    mode: preserve
+
+- name: Store the central certificate to the shared filesystem
+  copy:
+    src: "{{ docker_cert_dir }}/registry.central:9001/registry-cert.crt"
+    dest: "{{ config_permdir }}/registry.central/registry-cert.crt"
+    remote_src: yes
+    mode: preserve

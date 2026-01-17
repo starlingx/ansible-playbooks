@@ -1,0 +1,96 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: stx-multipath-config-rollback
+  namespace: {{ trident_namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: stx-multipath-config-rollback
+  template:
+    metadata:
+      labels:
+        app: stx-multipath-config-rollback
+    spec:
+      hostPID: true
+      containers:
+      - name: multipath-rollback
+        image: {{ local_registry }}/docker.io/library/busybox:1.37.0
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          set -e
+
+          MULTIPATH_CONF="/host/etc/multipath.conf"
+          DONE_FLAG_FILE="/tmp/done"
+
+          # Print the verification time
+          date
+
+          if [ -f "$FLAG_DONE_FILE" ]; then
+            echo "The flag already exists, so the rollback has already been done."
+            sleep infinity
+          fi
+
+          # Check if the file exists
+          if [ -f "$MULTIPATH_CONF" ]; then
+            # Extract the find_multipaths value
+            FIND_MULTIPATHS=$(grep -E "^[[:space:]]*find_multipaths" "$MULTIPATH_CONF" | awk '{print $2}')
+
+            # If the find_multipaths was not found
+            if [ -z "$FIND_MULTIPATHS" ]; then
+              if grep -q '^[[:space:]]*defaults[[:space:]]*{' "$MULTIPATH_CONF"; then
+                  # If `find_multipaths` does NOT exist within the file, insert it into the `defaults` block
+                  if ! grep -q '^[[:space:]]*find_multipaths[[:space:]]\+' "$MULTIPATH_CONF"; then
+                      sed -i '
+                      /^[[:space:]]*defaults[[:space:]]*{/{
+                          :a
+                          n
+                          /^[[:space:]]*find_multipaths[[:space:]]/b
+                          /^\}/i\    find_multipaths yes
+                          ba
+                      }
+                      ' "$MULTIPATH_CONF"
+                  fi
+              else
+                # If there are no defaults
+                printf "\ndefaults {\n    find_multipaths yes\n}\n" >> "$MULTIPATH_CONF"
+              fi
+            # If the value is different from 'yes'
+            elif [ "$FIND_MULTIPATHS" == "no" ]; then
+              echo "find_multipaths is currently set to '$FIND_MULTIPATHS'. Changing it to 'yes'..."
+              sed -i 's/^\([[:space:]]*find_multipaths[[:space:]]\+\)no/\1yes/' "$MULTIPATH_CONF"
+              echo "find_multipaths restored to 'yes' in $MULTIPATH_CONF"
+            fi
+
+            sed -i '/# BEGIN TRIDENT CONFIG/,/# END TRIDENT CONFIG/d' "$MULTIPATH_CONF"
+
+            echo "Restarting multipathd service..."
+            chroot /host /bin/systemctl restart multipathd
+            echo "Multipath configuration rollback completed."
+          else
+            echo "$MULTIPATH_CONF not found."
+          fi
+          touch "$DONE_FLAG_FILE"
+          sleep infinity
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - test -f /tmp/done
+          initialDelaySeconds: 5
+        volumeMounts:
+        - name: host-system
+          mountPath: /host
+        securityContext:
+          privileged: true
+      volumes:
+      - name: host-system
+        hostPath:
+          path: /
+      tolerations:
+        - operator: "Exists"
+      imagePullSecrets:
+        - name: {{ trident_secret_name }}

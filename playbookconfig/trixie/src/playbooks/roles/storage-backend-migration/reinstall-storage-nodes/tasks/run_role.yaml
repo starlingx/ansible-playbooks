@@ -1,0 +1,46 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Ensure {{ tmp_workspace }} exist"
+  file:
+    path: "{{ tmp_workspace }}"
+    state: directory
+
+- name: Copy files to workspace
+  copy:
+    src: "{{ roles_dir_path }}/{{ role_name }}/files/{{ item }}"
+    dest: "{{ tmp_workspace }}/{{ item }}"
+    mode: "0755"
+  loop: "{{ reinstall_files }}"
+
+- name: Get storage HW information
+  include_tasks: get_storage_hw_info.yaml
+
+- name: Generate Storage DM file
+  include_tasks: get_storage_dm_file.yaml
+
+- name: Prepare storage hosts
+  include_tasks: prepare_storage_hosts.yaml
+
+- name: Delete unused host profiles
+  include_tasks: delete_unused_host_profiles.yaml
+
+- name: Force lock the storage hosts
+  include_tasks: force_lock_storage_hosts.yaml
+
+- name: Issue reinstall storage hosts
+  include_tasks: reinstall_storage_hosts.yaml
+
+- name: Fix memory in the DB
+  include_tasks: fix_host_memory_db.yaml
+
+- name: Unlock storage hosts
+  include_tasks: unlock_storage_hosts.yaml
+
+- name: Cleanup temporary workspace folder
+  file:
+    path: "{{ tmp_workspace }}"
+    state: absent

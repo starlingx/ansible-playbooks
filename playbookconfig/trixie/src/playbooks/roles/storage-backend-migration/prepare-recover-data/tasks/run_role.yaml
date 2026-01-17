@@ -1,0 +1,97 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Ensure {{ tmp_workspace }} exist"
+  file:
+    path: "{{ tmp_workspace }}"
+    state: directory
+
+- name: Scale desired deployments to replica 0
+  run_once: true
+  include_tasks: "{{ role_path_common }}/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "name"
+        name: "rook-ceph-operator"
+        namespace: "rook-ceph"
+        replicas: 0
+        kind: Deployment
+      - method: "label"
+        label: "app=rook-ceph-mds"
+        namespace: "rook-ceph"
+        replicas: 0
+        kind: Deployment
+      - method: "label"
+        label: "app=rook-ceph-mgr"
+        namespace: "rook-ceph"
+        replicas: 0
+        kind: Deployment
+      - method: "label"
+        label: "app=rook-ceph-osd"
+        namespace: "rook-ceph"
+        replicas: 0
+        kind: Deployment
+
+- name: Get rook-ceph-tool pod name
+  shell: kubectl get pods -n rook-ceph | awk '/rook-ceph-tool/ {print $1}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: tool_pod
+  changed_when: false
+  when: inventory_hostname in groups.active_controller
+
+- name: "Wait {{ tool_pod.stdout }} pod to be Running"
+  command: kubectl get pods {{ tool_pod.stdout }} -n rook-ceph -o 'jsonpath={.status.phase}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: tool_pod_running
+  until: "'Running' in tool_pod_running.stdout"
+  retries: 60
+  delay: 10
+  changed_when: false
+  failed_when:
+    - "'Running' not in tool_pod_running.stdout"
+  when: inventory_hostname in groups.active_controller
+
+- name: Copy ceph config from tool pod
+  command: kubectl cp -n rook-ceph {{ tool_pod.stdout }}:/etc/ceph /etc/ceph
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  when: inventory_hostname in groups.active_controller
+
+- name: Copy all Ceph configuration files from active controller
+  shell: >
+    SSHPASS='{{ ansible_password }}' sshpass -e
+    rsync -vrpP -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    sysadmin@{{ groups.active_controller | first }}:/etc/ceph /etc/ceph
+  register: copy_result
+  when: inventory_hostname not in groups.active_controller
+
+- name: Debug /etc/ceph copy
+  debug:
+    var: copy_result.stdout_lines
+  when: inventory_hostname not in groups.active_controller
+
+- name: Set correct permissions recursively for files
+  file:
+    path: /etc/ceph
+    state: directory
+    recurse: true
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Ensure all directories have execute permission for navigation
+  file:
+    path: /etc/ceph
+    state: directory
+    recurse: true
+    mode: 0755
+
+- name: Cleanup temporary rook-ceph folder
+  file:
+    path: "{{ tmp_workspace }}"
+    state: absent

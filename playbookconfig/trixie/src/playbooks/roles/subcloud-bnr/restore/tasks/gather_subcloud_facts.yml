@@ -1,0 +1,47 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Optimized restore is only currently for AIO-SX. This task
+# will determine what restore mode to use based on the contents
+# of the platform backup.
+#
+# For AIO-SX optimized restore will be used. For everything else
+# legacy restore will be used.
+
+- name: Read platform.conf from platform backup
+  command: >-
+    tar --use-compress-program={{ compress_program }}
+    -Oxf '{{ tmp_platform_backup_dir }}/{{ tmp_platform_backup_filename }}'
+    etc/platform/platform.conf
+  args:
+    warn: false
+  vars:
+    compress_program: "{{ 'pigz' if software_version is version('22.12', '>=') else 'gzip' }}"
+  register: backup_platform_conf_values
+  connection: "{{ target_connection }}"
+
+- name: Determine if subcloud is AIO-SX
+  set_fact:
+    subcloud_is_aio_sx: >-
+      {{
+        'system_mode=simplex' in backup_platform_conf_values.stdout_lines and
+        'system_type=All-in-one' in backup_platform_conf_values.stdout_lines
+      }}
+
+- name: Set restore_mode for subcloud
+  set_fact:
+    restore_mode: >-
+      {{
+        'optimized'
+        if subcloud_is_aio_sx and software_version is version('22.12', '>=')
+        else 'old'
+      }}
+  when:
+    - restore_mode is not defined
+
+- name: Derive optimized B&R support based on restore_mode
+  set_fact:
+    optimized_bnr_supported: "{{ restore_mode == 'optimized' }}"

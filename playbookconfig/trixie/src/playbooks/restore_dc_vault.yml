@@ -1,0 +1,16 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- hosts: all
+  gather_facts: no
+
+  vars_files:
+    - host_vars/backup-restore/default.yml
+
+  roles:
+    - { role: common/prepare-env }
+    - { role: restore-dc-vault/prepare-env }
+    - { role: restore-dc-vault/restore-dc-vault-directory, become: yes }

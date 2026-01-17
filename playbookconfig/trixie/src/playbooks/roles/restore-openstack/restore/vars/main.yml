@@ -1,0 +1,11 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+platform_path: /opt/platform
+restore_openstack_in_progress_flag: "{{ platform_path }}/.restore_openstack_in_progress"
+restore_openstack_continue_flag: "{{ platform_path }}/.restore_openstack_continue"
+kube_config_dir: /etc/kubernetes/admin.conf
+mariadb_pod: mariadb-server-0

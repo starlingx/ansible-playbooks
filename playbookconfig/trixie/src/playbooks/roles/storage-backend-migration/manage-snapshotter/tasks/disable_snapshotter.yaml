@@ -1,0 +1,80 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Scale down CSI volume-snapshot-controller
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "name"
+        name: "volume-snapshot-controller"
+        namespace: "kube-system"
+        replicas: 0
+        kind: StatefulSet
+
+- name: Wait for volume-snapshot-controller to be deleted
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/wait_resources_condition.yaml"
+  vars:
+    k8s_namespace: "kube-system"
+    k8s_resource_prefix: "volume-snapshot-controller"
+    k8s_resource_type: "pod"
+    wait_mode: "deleted"
+
+- name: Disable snapshotter
+  environment: "{{ system_env }}"
+  shell: >
+    system helm-override-update --reuse-values rook-ceph rook-ceph rook-ceph \
+    --set csi.enableCephfsSnapshotter=False --set csi.enableRBDSnapshotter=False
+
+- name: Check storage backend has_long_running_operations
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -c
+    "SELECT capabilities::json->>'has_long_running_operations'
+    FROM storage_backend;"
+  register: has_long_running_operations
+  until: has_long_running_operations.stdout_lines | length == 0
+  retries: 60
+  delay: 10
+  changed_when: false
+
+- name: Show storage backend has_long_running_operations
+  debug:
+    var: has_long_running_operations.stdout_lines
+  when: has_long_running_operations.stdout_lines | length > 0
+
+- name: Apply Rook-Ceph application
+  environment: "{{ system_env }}"
+  command: system application-apply rook-ceph
+  register: app_apply_result
+  failed_when:
+    - app_apply_result.rc != 0
+    - ("applying" not in app_apply_result.stderr)
+    - ("is already in progress" not in app_apply_result.stderr)
+
+- name: Wait for rook-ceph to reach applied
+  include_tasks: "{{ role_path_common }}/tasks/check_app_status.yaml"
+  vars:
+    app_name_to_check: "rook-ceph"
+    success_statuses:
+      - "applied"
+    failure_statuses:
+      - "apply-failed"
+    retries: 366 # 1 hour and 1 minute, good luck
+    delay: 10
+
+- name: Show final application status
+  debug:
+    msg: "Final rook-ceph status: {{ app_status_check.stdout | trim }}"
+
+- name: Check snapshotter exists in CSI CephFs provisioner
+  shell: kubectl get deployment csi-cephfsplugin-provisioner -n rook-ceph -o jsonpath='{.spec.template.spec.containers[*].name}' | grep -q snapshotter
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: snapshotter_check
+  failed_when: snapshotter_check.rc == 0

@@ -1,0 +1,102 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- name: Get certificate expiration date
+  shell: echo -n '{{ secure_boot_cert }}' | base64 -d | openssl x509 -noout -enddate
+  register: cert_expiration
+  changed_when: false
+
+- name: Extract expiration date string
+  set_fact:
+    cert_expiration_date: "{{ cert_expiration.stdout | regex_replace('^notAfter=', '') }}"
+
+- name: Fail if the certificate has expired
+  fail:
+    msg: "The certificate has expired on {{ cert_expiration_date }}."
+  when: now() >= (cert_expiration_date | to_datetime('%b %d %H:%M:%S %Y %Z'))
+
+- debug:
+    msg: "Certificate is valid until {{ cert_expiration_date }}."
+
+- name: Compare provided certificate with current ones
+  block:
+    - name: Make temporary directory
+      tempfile:
+        state: directory
+      register: tempdir
+
+    - name: Extract DB certificates from UEFI
+      command: mokutil --export --db
+      args:
+        chdir: "{{ tempdir.path }}"
+
+    - name: Get exported DB files
+      find:
+        paths: "{{ tempdir.path }}"
+        patterns: "DB*.der"
+      register: db_files
+
+    - name: Get installed DB certificates
+      command: openssl x509 -inform der -in {{ item.path }} -outform pem
+      loop: "{{ db_files.files }}"
+      register: db_certs
+      changed_when: false
+      no_log: true
+
+    - name: Check if provided certificate is already in DB
+      set_fact:
+        cert_already_installed: >-
+          {{ (secure_boot_cert | b64decode | trim) in
+          (db_certs.results | map(attribute='stdout') | map('trim') | list) }}
+  always:
+    - name: Delete temporary directory
+      file:
+        path: "{{ tempdir.path }}"
+        state: absent
+
+- name: Compare provided KEK with current ones
+  block:
+    - name: Make temporary directory
+      tempfile:
+        state: directory
+      register: tempdir
+
+    - name: Extract all from UEFI
+      shell: |
+        mokutil --export --db
+        mokutil --export --kek
+      args:
+        chdir: "{{ tempdir.path }}"
+
+    - name: Get exported KEK files
+      find:
+        paths: "{{ tempdir.path }}"
+        patterns: "KEK*.der"
+      register: kek_files
+
+    - name: Get public key from provided KEK
+      shell: echo -n '{{ key_exchange_key }}' | base64 -d | openssl pkey -pubout -outform PEM
+      register: kek_public_key
+      changed_when: false
+
+    - name: Get installed KEK certificates
+      command: openssl x509 -inform der -in {{ item.path }} -pubkey -noout
+      loop: "{{ kek_files.files }}"
+      register: kek_certs
+      changed_when: false
+
+    - name: Check if provided KEK is valid
+      fail:
+        msg: "The provided KEK is not valid."
+      when: not kek_public_key.stdout in (kek_certs.results | map(attribute='stdout') | list)
+
+  always:
+    - name: Delete temporary directory
+      file:
+        path: "{{ tempdir.path }}"
+        state: absent
+
+  when: not cert_already_installed

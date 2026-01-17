@@ -1,0 +1,24 @@
+---
+#
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This playbook is designed to be used by dcmanager to delete subcloud backup data
+# of the specified release version.
+#
+- hosts: all
+  # If gathering facts is really necessary, run setup task AFTER host connectivity
+  # check block in common/prepare-env role.
+  gather_facts: no
+  become: yes
+
+  roles:
+    - common/remote-execution-precheck
+    - subcloud-bnr/delete
+
+  vars:
+    override_files_dir: "{{ lookup('env', 'HOME') }}"
+    password_change: false
+    playbook_overrides: "{{ subcloud_bnr_overrides }}"
+    local_backup_dir: "/opt/platform-backup/backups"

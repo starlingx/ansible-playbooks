@@ -1,0 +1,344 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Delete all rook-ceph-osd-prepare jobs
+  delegate_to: "{{ system.active_controller }}"
+  command: kubectl -n rook-ceph delete job -l app=rook-ceph-osd-prepare
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: osd_prepare_jobs_deleted
+
+- name: Wait for all rook-ceph-osd-prepare jobs to be deleted
+  include_tasks: "{{ role_path_common }}/tasks/kubernetes/wait_resources_condition.yaml"
+  vars:
+    k8s_namespace: "rook-ceph"
+    k8s_resource_prefix: "osd-prepare"
+    wait_mode: "deleted"
+
+- name: Scale desired rook-ceph-operator deployment to replica 0
+  run_once: true
+  include_tasks: "{{ role_path_common }}/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "name"
+        name: "rook-ceph-operator"
+        namespace: "rook-ceph"
+        replicas: 0
+        kind: Deployment
+
+- name: Scale desired rook-ceph-operator deployment to replica 1
+  run_once: true
+  include_tasks: "{{ role_path_common }}/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "name"
+        name: "rook-ceph-operator"
+        namespace: "rook-ceph"
+        replicas: 1
+        kind: Deployment
+
+- name: Wait for all rook-ceph-osd-prepare jobs to be created
+  include_tasks: "{{ role_path_common }}/tasks/kubernetes/wait_resources_condition.yaml"
+  vars:
+    k8s_namespace: "rook-ceph"
+    k8s_resource_prefix: "osd-prepare"
+    k8s_retries: 360
+    wait_mode: "created"
+    fact_name: "osd_prepare_jobs"
+
+- name: Wait for all rook-ceph-osd-prepare jobs to be completed
+  include_tasks: "{{ role_path_common }}/tasks/kubernetes/wait_resources_condition.yaml"
+  vars:
+    k8s_namespace: "rook-ceph"
+    k8s_resource_list: "{{ osd_prepare_jobs }}"
+    wait_mode: "complete"
+
+- name: Scale desired deployments to replica 0
+  run_once: true
+  include_tasks: "{{ role_path_common }}/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "name"
+        name: "rook-ceph-operator"
+        namespace: "rook-ceph"
+        replicas: 0
+        kind: Deployment
+      - method: "label"
+        label: "app=rook-ceph-mds"
+        namespace: "rook-ceph"
+        replicas: 0
+        kind: Deployment
+      - method: "label"
+        label: "app=rook-ceph-mgr"
+        namespace: "rook-ceph"
+        replicas: 0
+        kind: Deployment
+      - method: "label"
+        label: "app=rook-ceph-osd"
+        namespace: "rook-ceph"
+        replicas: 0
+        kind: Deployment
+
+- name: Wait for all rook-ceph-osd pods to be deleted
+  include_tasks: "{{ role_path_common }}/tasks/kubernetes/wait_resources_condition.yaml"
+  vars:
+    k8s_namespace: "rook-ceph"
+    k8s_resource_label: "rook-ceph-osd"
+    k8s_resource_type: "pod"
+    wait_mode: "deleted"
+
+- name: Scale up all mons
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "label"
+        label: "app=rook-ceph-mon"
+        namespace: "rook-ceph"
+        replicas: 1
+        kind: Deployment
+
+- name: Verify that all rook-ceph mon pods are Running
+  run_once: true
+  delegate_to: "{{ system.active_controller }}"
+  shell: |
+    kubectl get pods -n rook-ceph \
+      -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.phase}{"\n"}{end}' \
+    | grep -E '^rook-ceph-mon-[a-z]+' \
+    | awk '{if ($2 != "Running") {print $0; exit 1}}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: ceph_pods_check
+  retries: 60
+  delay: 10
+  until: ceph_pods_check.rc == 0
+
+- name: Wait until all MONs to be in quorum
+  run_once: true
+  shell: timeout 30 ceph mon stat
+  register: ceph_mon_stat
+  retries: 60
+  delay: 10
+  until: ceph_mon_stat.rc == 0 and "out of quorum" not in ceph_mon_stat.stdout
+
+- name: Ceph MON stat result
+  run_once: true
+  debug:
+    var: ceph_mon_stat.stdout_lines
+
+- name: Export keyring
+  delegate_to: "{{ system.active_controller }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  block:
+  - name: Export Ceph auth keyring
+    command: ceph auth export -o {{ tmp_workspace }}/export.keyring
+
+  - name: Get rook-ceph-recovery pod name
+    shell: kubectl get pods -n rook-ceph | awk '/rook-ceph-recovery-{{ inventory_hostname }}/ {print $1}'
+    register: recovery_pod
+    changed_when: false
+
+  - name: Prepare monstore directory
+    shell: |
+      kubectl exec -n rook-ceph {{ recovery_pod.stdout }} -- bash -c 'rm -rf {{ tmp_workspace }}/monstore && mkdir -p {{ tmp_workspace }}/monstore'
+      kubectl cp -n rook-ceph {{ tmp_workspace }}/export.keyring {{ recovery_pod.stdout }}:{{ tmp_workspace }}/
+
+- name: Get monitor list
+  block:
+  - name: Set monitor name
+    set_fact:
+      mon_name: "{{ hostvars[system.active_controller]['mon_list'][inventory_hostname].name }}"
+
+  - name: Debug mon_name
+    debug:
+      var: mon_name
+  when: inventory_hostname in hosts_to_recover_mon
+
+- name: Fix OSDs
+  delegate_to: "{{ system.active_controller }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  block:
+    - name: List OSDs for FSID in the pod
+      shell: >
+        kubectl exec -n rook-ceph {{ recovery_pod.stdout }} -- bash -c "
+        ls {{ rook_base_pod }}/ | grep {{ hostvars[system.active_controller]['ceph_fsid'] }}"
+      register: osds_pod_result
+      changed_when: false
+
+    - name: Set osds fact
+      set_fact:
+        pod_osds: "{{ osds_pod_result.stdout_lines }}"
+
+    - name: Fix OSDs and repair
+      delegate_to: "{{ system.active_controller }}"
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      loop: "{{ pod_osds }}"
+      loop_control:
+        label: "{{ item }}"
+      shell: >
+        kubectl exec -n rook-ceph {{ recovery_pod.stdout }} -- bash -c "
+        ceph-bluestore-tool quick-fix --path {{ rook_base_pod }}/{{ item }};
+        ceph-bluestore-tool repair --path {{ rook_base_pod }}/{{ item }}"
+      register: result
+      until: result.rc == 0
+      retries: 20
+      delay: 10
+  when: inventory_hostname in groups.with_osds
+
+- name: Inject OSD metadata into monstore
+  delegate_to: "{{ system.active_controller }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  loop: "{{ pod_osds }}"
+  loop_control:
+    label: "{{ item }}"
+  shell: >
+    kubectl exec -n rook-ceph {{ recovery_pod.stdout }} -- bash -c
+    "ceph-objectstore-tool --type bluestore --data-path {{ rook_base_pod }}/{{ item }} --op update-mon-db --mon-store-path {{ tmp_workspace }}/monstore --no-mon-config"
+  when: inventory_hostname in hosts_to_recover_mon
+
+- name: Rebuild monstore
+  shell: kubectl exec -n rook-ceph {{ recovery_pod.stdout }} -- bash -c "ceph-monstore-tool {{ tmp_workspace }}/monstore rebuild -- --keyring {{ tmp_workspace }}/export.keyring"
+  delegate_to: "{{ system.active_controller }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  when: inventory_hostname in hosts_to_recover_mon
+
+- name: Scale down all mons
+  run_once: true
+  include_tasks: "{{ role_path_common }}/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "label"
+        label: "app=rook-ceph-mon"
+        namespace: "rook-ceph"
+        replicas: 0
+        kind: Deployment
+
+- name: Replace store.db on monitor
+  shell: >
+    kubectl exec -n rook-ceph {{ recovery_pod.stdout }} -- bash -c "
+    rm -rf /var/lib/rook/mon-{{ mon_name }}/data/store.db;
+    cp -ar {{ tmp_workspace }}/monstore/store.db /var/lib/rook/mon-{{ mon_name }}/data
+    "
+  when: inventory_hostname in hosts_to_recover_mon
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+
+- name: Manipulate and inject monmap
+  delegate_to: "{{ system.active_controller }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  block:
+  - name: Extract monmap
+    shell: >
+      kubectl exec -n rook-ceph {{ recovery_pod.stdout }} -- bash -c "
+      ceph-mon --name mon.{{ mon_name }} --extract-monmap {{ tmp_workspace }}/mon-{{ mon_name }}.map --mon-data /var/lib/rook/mon-{{ mon_name }}/data;
+      monmaptool --print {{ tmp_workspace }}/mon-{{ mon_name }}.map;"
+    register: monmaptool_outputs
+
+  - name: Debug mon map
+    debug:
+      var: monmaptool_outputs.stdout_lines
+
+  - name: Remove old IPs and monitor names
+    shell: >
+      kubectl exec -n rook-ceph {{ recovery_pod.stdout }} -- bash -c "
+      monmaptool --rm {{ item.value.name }} {{ tmp_workspace }}/mon-{{ mon_name }}.map;
+      monmaptool --print {{ tmp_workspace }}/mon-{{ mon_name }}.map"
+    register: monmaptool_outputs
+    loop: "{{ hostvars[system.active_controller]['mon_list'] | dict2items | sort(attribute='value.rank', reverse=true) }}"
+    loop_control:
+      label: "{{ item.value.name}}"
+
+  - name: Debug monmap
+    debug:
+      msg: "{{ item.stdout_lines | replace('\\n', '\n') }}"
+    loop: "{{ monmaptool_outputs.results }}"
+    loop_control:
+      label: "{{ item.item.value.name }}"
+
+  - name: Add new IPs and monitor names
+    shell: >
+      kubectl exec -n rook-ceph {{ recovery_pod.stdout }} -- bash -c "
+      monmaptool --addv {{ item.value.name }} {{ item.value.ip }} {{ tmp_workspace }}/mon-{{ mon_name }}.map;
+      monmaptool --print {{ tmp_workspace }}/mon-{{ mon_name }}.map"
+    register: monmaptool_outputs
+    # Use reverse order to keep leader
+    loop: "{{ hostvars[system.active_controller]['mon_list'] | dict2items | sort(attribute='value.rank', reverse=true) }}"
+    loop_control:
+      label: "{{ item.value.name }}"
+
+  - name: Debug monmap
+    debug:
+      msg: "{{ item.stdout_lines | replace('\\n', '\n') }}"
+    loop: "{{ monmaptool_outputs.results }}"
+    loop_control:
+      label: "{{ item.item.value.name }}"
+
+  - name: Add new FSID
+    shell: >
+      kubectl exec -n rook-ceph {{ recovery_pod.stdout }} -- bash -c "
+      monmaptool --fsid {{ hostvars[system.active_controller]['ceph_fsid'] }} {{ tmp_workspace }}/mon-{{ mon_name }}.map;
+      monmaptool {{ tmp_workspace }}/mon-{{ mon_name }}.map --set-min-mon-release pacific;
+      monmaptool --print {{ tmp_workspace }}/mon-{{ mon_name }}.map"
+    register: monmaptool_outputs
+
+  - name: Debug monmap
+    debug:
+      var: monmaptool_outputs.stdout_lines
+
+  - name: Inject new monmap
+    shell: kubectl exec -n rook-ceph {{ recovery_pod.stdout }} -- bash -c \
+      "ceph-mon --name mon.{{ mon_name }} --inject-monmap {{ tmp_workspace }}/mon-{{ mon_name }}.map --mon-data /var/lib/rook/mon-{{ mon_name }}/data"
+    register: inject_output
+
+  - name: Debug inject_output var
+    debug:
+      var: inject_output.stdout_lines
+  when: inventory_hostname in hosts_to_recover_mon
+
+- name: Scale up all mons
+  run_once: true
+  include_tasks: "{{ role_path_common }}/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "label"
+        label: "app=rook-ceph-mon"
+        namespace: "rook-ceph"
+        replicas: 1
+        kind: Deployment
+
+- name: Verify that all rook-ceph mon pods are Running
+  run_once: true
+  delegate_to: "{{ system.active_controller }}"
+  shell: |
+    kubectl get pods -n rook-ceph \
+      -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.phase}{"\n"}{end}' \
+    | grep -E '^rook-ceph-mon-[a-z]+' \
+    | awk '{if ($2 != "Running") {print $0; exit 1}}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: ceph_pods_check
+  retries: 60
+  delay: 10
+  until: ceph_pods_check.rc == 0
+
+- name: Wait until all MONs to be in quorum
+  run_once: true
+  shell: timeout 30 ceph mon stat
+  register: ceph_mon_stat
+  retries: 60
+  delay: 10
+  until: ceph_mon_stat.rc == 0 and "out of quorum" not in ceph_mon_stat.stdout
+
+- name: Ceph MON stat result
+  run_once: true
+  debug:
+    var: ceph_mon_stat.stdout_lines

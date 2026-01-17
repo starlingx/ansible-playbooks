@@ -1,0 +1,22 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Register total available bytes for backups path
+  shell: |
+    # Find the nearest existing path to pass to df
+    path="{{ backups_path }}"
+    while [ ! -e "$path" ]; do
+      path=$(dirname "$path")
+    done
+
+    df --block-size=1 --output=avail "$path" | tail -1
+  changed_when: false
+  register: path_df_avail
+
+- name: Register available space for backups and destination name
+  set_fact:
+    avail_space_bytes: "{{ path_df_avail.stdout }}"
+    backups_dest_name: "{{ backups_path }}"

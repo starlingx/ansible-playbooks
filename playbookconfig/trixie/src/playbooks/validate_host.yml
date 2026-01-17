@@ -1,0 +1,37 @@
+---
+#
+# Copyright (c) 2021-2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- hosts: all
+  # If gathering facts is really necessary, run setup task AFTER host connectivity
+  # check block in prepare-env role.
+  gather_facts: false
+
+  vars_files:
+    - vars/common/main.yml
+
+  pre_tasks:
+    - set_fact:
+        override_files_dir: "{{ lookup('env', 'HOME') }}"
+        check_load: "{{ check_load | default(true) }}"
+        check_bootstrap_address: "{{ check_bootstrap_address | default(true) }}"
+        sync_software_metadata: "{{ sync_software_metadata | default(false) }}"
+        password_change: "{{ password_change | default(true) }}"
+        password_change_responses:
+          yes/no: 'yes'
+          sysadmin*: 'sysadmin'
+          \(current\) UNIX password: 'sysadmin'
+          Current password: 'sysadmin'
+          (?i)New password: "{{ ansible_ssh_pass }}"
+          (?i)Retype new password: "{{ ansible_ssh_pass }}"
+        enforce_password_change: "{{ enforce_password_change | default(false) }}"
+
+  roles:
+    - common/prepare-env
+    - role: common/install-sync-software-metadata
+      when: sync_software_metadata
+      vars:
+        ansible_become_pass: "{{ ansible_ssh_pass }}"
+    - common/validate-target

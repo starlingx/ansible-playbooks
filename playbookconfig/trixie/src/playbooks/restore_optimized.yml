@@ -1,0 +1,35 @@
+---
+#
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- hosts: all
+  gather_facts: no
+
+  vars_files:
+    - vars/common/main.yml
+    - host_vars/bootstrap/default.yml
+    - host_vars/backup-restore/default.yml
+    - vars/backup-restore/main.yml
+    - vars/optimized-restore/main.yml
+
+  vars:
+    mode: restore
+    restore_mode: optimized
+    replayed: false
+
+  roles:
+    - common/prepare-env
+    - restore-platform/precheck
+    - common/validate-target
+    - backup-restore/validate-input
+    - backup-restore/prepare-env
+    - optimized-restore/prepare-env
+    - restore-platform/prepare-env
+    - { role: common/wipe-ceph-osds, become: yes }
+    - { role: optimized-restore/apply-manifest, become: yes }
+    - { role: optimized-restore/restore-configuration, become: yes }
+    - { role: optimized-restore/restore-data, become: yes }
+    - { role: optimized-restore/complete-restore, become: yes }

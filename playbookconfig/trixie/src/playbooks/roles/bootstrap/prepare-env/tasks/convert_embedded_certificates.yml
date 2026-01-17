@@ -1,0 +1,82 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# TASK DESCRIPTION:
+#   - Install the provided overrides as temporary files
+#   - Point the overrides to the newly created files if required
+#
+
+- name: For every non-empty override, write a temporary decoded file
+  tempfile:
+    path: /tmp/
+  register: cert_tmp_file_names
+  with_items: "{{ external_cert_overrides_list }}"
+  loop_control:
+    loop_var: cert_override
+  when: lookup('vars', cert_override, default='') | length > 0
+
+# First, we copy the content of cert/keys embedded as b64 strings to the temporary files in
+# the target host. We are using a regex to check if the strings can be decoded from b64.
+# Also, we verify if the decoded content includes the marker '-----BEGIN'.
+- name: Try to decode the content and write in the temp files if it's from a cert or key
+  copy:
+    content: "{{ lookup('vars', cert_override[1]) | b64decode }}"
+    dest: "{{ cert_tmp_file_names.results[cert_override[0]].path }}"
+    owner: root
+    group: root
+    mode: 0440
+  with_indexed_items: "{{ external_cert_overrides_list }}"
+  loop_control:
+    loop_var: cert_override
+  when:
+  - lookup('vars', cert_override[1], default='') | length > 0
+  - lookup('vars', cert_override[1]) is match('^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$')
+  - cert_or_key_begin_marker in (lookup('vars', cert_override[1]) | b64decode)
+  register: content_copy_result_output
+  become: true
+
+# Second, we verify if the remaining overrides contain valid filepaths (i.e. file exists).
+# These certificates are copied as they are to temporary files in the target host.
+- name: Check if the files referenced by the remaining overrides exist
+  stat:
+    path: "{{ lookup('vars', cert_override[1]) }}"
+  register: external_ca_files
+  with_indexed_items: "{{ external_cert_overrides_list }}"
+  loop_control:
+    loop_var: cert_override
+  when:
+  - lookup('vars', cert_override[1], default='') | length > 0
+  - not content_copy_result_output.results[cert_override[0]].changed
+  connection: local
+
+- name: Copy the valid files referenced by the remaining overrides directly
+  copy:
+    src: "{{ lookup('vars', cert_override[1]) }}"
+    dest: "{{ cert_tmp_file_names.results[cert_override[0]].path }}"
+    owner: root
+    group: root
+    mode: 0440
+  with_indexed_items: "{{ external_cert_overrides_list }}"
+  loop_control:
+    loop_var: cert_override
+  when:
+  - lookup('vars', cert_override[1], default='') | length > 0
+  - not content_copy_result_output.results[cert_override[0]].changed
+  - external_ca_files.results[cert_override[0]].stat.exists
+  register: file_copy_result_output
+  become: true
+
+# Finally, we reassign the overrides value, pointing to the new temporary files.
+# We only need to change overrides that were detected in the previous steps.
+- name: Reassign override variables with the temp file paths if required
+  set_fact: "{{ cert_override[1] }}={{ cert_tmp_file_names.results[cert_override[0]].path }}"
+  with_indexed_items: "{{ external_cert_overrides_list }}"
+  loop_control:
+    loop_var: cert_override
+  when:
+  - lookup('vars', cert_override[1], default='') | length > 0
+  - content_copy_result_output.results[cert_override[0]].changed or
+    file_copy_result_output.results[cert_override[0]].changed

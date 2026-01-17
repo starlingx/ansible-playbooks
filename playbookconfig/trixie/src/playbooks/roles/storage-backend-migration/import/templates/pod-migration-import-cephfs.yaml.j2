@@ -1,0 +1,32 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: migration-import-cephfs
+  namespace: {{ cephfs_pvc_namespace }}
+spec:
+  nodeName: {{ inventory_hostname }}
+  containers:
+  - name: migration-import-cephfs
+    image: {{ images.ceph_config_helper }}
+    command: [ "sleep", "infinity" ]
+    volumeMounts:
+    - mountPath: /data
+      name: data
+    - mountPath: /backup
+      name: backup-data
+  imagePullSecrets:
+    - name: rook-migration-registry-local-secret
+  volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: {{ pvc_name }}
+  - name: backup-data
+    hostPath:
+      path: {{ backups_cephfs_path }}

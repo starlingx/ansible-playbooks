@@ -1,0 +1,2 @@
+playbooks/ansible.cfg etc/ansible
+playbooks/hosts etc/ansible

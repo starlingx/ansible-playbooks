@@ -1,0 +1,141 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This file contains the recursive monitoring loop that handles individual IPMI
+# event detection cycles. It calls the Python monitoring script, processes the
+# results (success, failure, or timeout), updates the monitoring state, and
+# recursively continues until all stages complete or a failure occurs.
+#
+
+- name: Determine timeout for current monitoring cycle
+  set_fact:
+    current_timeout: "{{ enroll_init_stages[current_stage_index | int].timeout }}"
+
+- name: >
+    Monitoring for '{{ enroll_init_stages[current_stage_index | int].name }}'
+    IPMI SEL event ({{ completed_stages | length }}/{{ total_stages }} stages completed)
+    - Timeout: {{ current_timeout }}s
+  command: >
+    /usr/local/bin/ipmi_sel_event_monitor.py
+    --config-file "{{ rvmc_config_file }}"
+    --sensor-type "{{ ipmi_sensor_type }}"
+    --sensor-number "{{ ipmi_sensor_number }}"
+    --success-codes "{{ all_success_codes | join(',') }}"
+    --failure-codes "{{ all_failure_codes | join(',') }}"
+    {% if current_event_id is defined and current_event_id | length > 0 %}
+    --initial-event-id "{{ current_event_id }}"
+    {% endif %}
+    --interval {{ ipmi_check_interval }}
+    --timeout {{ current_timeout }}
+  register: monitoring_result
+  failed_when: false
+  delegate_to: localhost
+
+- name: Validate monitoring result
+  fail:
+    msg: "IPMI monitoring script failed: {{ monitoring_result.stderr | default('Unknown error') }}"
+  when:
+    - monitoring_result.rc != 0
+    - (monitoring_result.stdout | default('') | length == 0)
+
+- name: Parse monitoring result
+  block:
+    - name: Convert stdout to JSON
+      set_fact:
+        monitoring_json: "{{ monitoring_result.stdout | from_json }}"
+  rescue:
+    - fail:
+        msg:
+          - "Failed to parse IPMI monitoring result as JSON"
+          - "Script output: {{ monitoring_result.stdout | default('No output') }}"
+          - "Script error: {{ monitoring_result.stderr | default('No error output') }}"
+
+- name: Process success event
+  block:
+    - name: Extract event details
+      set_fact:
+        detected_code: "{{ monitoring_json.success_event.data }}"
+        detected_event_id: "{{ monitoring_json.success_event.event_id }}"
+        detected_stage_name: "{{ success_code_to_name[monitoring_json.success_event.data] }}"
+        detected_stage_index: "{{ success_code_to_index[monitoring_json.success_event.data] | int }}"
+
+    - name: Display success
+      debug:
+        msg: "SUCCESS: {{ detected_stage_name }} completed (Event ID: {{ detected_event_id }})"
+
+    - name: Calculate completed stages
+      set_fact:
+        new_completed_stages: >-
+          {{
+            range(current_stage_index | int, (detected_stage_index | int) + 1) |
+            map('extract', enroll_init_stages) |
+            map(attribute='name') |
+            list
+          }}
+
+    - name: Update monitoring state
+      set_fact:
+        completed_stages: "{{ completed_stages + new_completed_stages }}"
+        current_stage_index: "{{ (detected_stage_index | int) + 1 }}"
+        current_event_id: "{{ detected_event_id }}"
+
+    - name: Display skip-ahead info
+      debug:
+        msg: "SKIP-AHEAD: Completed {{ new_completed_stages | length }} stage(s): {{ new_completed_stages | join(', ') }}"
+      when: (new_completed_stages | length) > 1
+
+  when: monitoring_json.success_event_detected | default(false)
+
+- name: Process failure event
+  block:
+    - name: Get failure message
+      set_fact:
+        failure_message: "{{ failure_code_to_message[monitoring_json.failure_event.data] }}"
+
+    - name: Find failed stage
+      set_fact:
+        failed_stage_name: "{{ item.name }}"
+        failed_stage_index: "{{ idx }}"
+      loop: "{{ enroll_init_stages }}"
+      loop_control:
+        label: "{{ item.name }}"
+        index_var: idx
+      when: monitoring_json.failure_event.data in item.failure_codes.keys()
+
+    - name: Calculate completed stages before failure
+      set_fact:
+        completed_stages_message: >-
+          {%- if failed_stage_index is defined and (failed_stage_index | int) > 0 -%}
+          Completed stages: {{ range(0, failed_stage_index | int)
+                              | map('extract', enroll_init_stages)
+                              | map(attribute='name')
+                              | join(', ') }}
+          {%- else -%}
+          Failure occurred in first stage
+          {%- endif -%}
+
+    - name: Fail with detailed error
+      fail:
+        msg:
+          - "FAILURE EVENT DETECTED"
+          - "Code: {{ monitoring_json.failure_event.data }}"
+          - "Event ID: {{ monitoring_json.failure_event.event_id }}"
+          - "Failed stage: {{ failed_stage_name }}"
+          - "Error: {{ failure_message }}"
+          - "{{ completed_stages_message }}"
+  when: monitoring_json.failure_detected | default(false)
+
+- name: Process timeout
+  fail:
+    msg:
+      - "TIMEOUT: No events detected within {{ current_timeout }} seconds"
+      - "Expected stage: {{ enroll_init_stages[current_stage_index | int].name }}"
+      - "Completed stages: {{ completed_stages | join(', ') if completed_stages else 'None' }}"
+  when: monitoring_json.timeout_reached | default(false)
+
+- name: Continue monitoring remaining stages
+  include_tasks: monitor.yml
+  when: (current_stage_index | int) < (total_stages | int)

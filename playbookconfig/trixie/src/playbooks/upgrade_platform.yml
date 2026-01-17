@@ -1,0 +1,15 @@
+---
+#
+# Copyright (c) 2020-2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- hosts: all
+  gather_facts: no
+
+- name: "Running upgrade playbook {{ upgrade_playbook }}"
+  import_playbook: "{{ upgrade_playbook }}"
+  vars:
+    upgrade_mode: "optimized"
+    upgrade_playbook: "{{ 'upgrade_platform_optimized.yml' if upgrade_mode == 'optimized' else 'upgrade_platform_old.yml' }}"

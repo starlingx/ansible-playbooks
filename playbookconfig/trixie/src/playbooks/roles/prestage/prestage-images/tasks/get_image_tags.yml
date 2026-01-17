@@ -1,0 +1,23 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# TASKS DESCRIPTION:
+#   These tasks retrieve the tags of a given container image from the local
+#   registry and add the complete image reference to the local registry
+#   image list.
+#
+
+- name: Get tags for {{ img }}
+  shell: >
+    source /etc/platform/openrc;
+    system registry-image-tags {{ img }} | egrep -v "Image Tag|---" | awk '{print $2}'
+  register: tags
+
+- name: Assign tag to {{ img }}
+  set_fact:
+    registry_images: "{{ registry_images|default([]) + [img + ':' + item] }}"
+  with_items:
+    - "{{ tags.stdout_lines }}"

@@ -1,0 +1,31 @@
+---
+#
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This playbook is designed to be used by dcmanager to backup a subcloud.
+#
+- hosts: all
+  # If gathering facts is really necessary, run setup task AFTER host connectivity
+  # check block in common/prepare-env role.
+  gather_facts: no
+  become: yes
+
+  roles:
+    - common/remote-execution-precheck
+    - common/prepare-env
+    - subcloud-bnr/backup
+
+  vars:
+    optimized_bnr_supported: true
+    override_files_dir: "{{ lookup('env', 'HOME') }}"
+    password_change: false
+    playbook_overrides: "{{ subcloud_bnr_overrides }}"
+    vault_pass: "{{ ansible_become_pass|list|shuffle|join }}"
+    vault_id_file: "/tmp/vaultid_{{ inventory_hostname }}.tmp"
+    default_backup_prefix: "{{ inventory_hostname }}_platform_backup"
+    default_registry_filesystem_backup_prefix: "{{ inventory_hostname }}_image_registry_backup"
+    default_user_images_backup_prefix: "{{ inventory_hostname }}_user_images_backup"
+    default_local_backup_dir: "/opt/platform-backup/backups"
+    default_local_staging_dir: "/opt/backups/{{ inventory_hostname|list|reverse|join }}"

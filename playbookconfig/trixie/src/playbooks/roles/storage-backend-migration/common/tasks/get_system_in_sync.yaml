@@ -1,0 +1,40 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get system status from Kubernetes
+  shell: kubectl get system -n deployment
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: kubectl_system_output
+  changed_when: false
+
+- name: Display system status
+  debug:
+    var: kubectl_system_output.stdout_lines
+
+- name: Get system from in JSON format
+  shell: kubectl get system -n deployment -o json
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: system_json
+  changed_when: false
+
+- name: Parse system JSON
+  set_fact:
+    system_list: "{{ system_json.stdout | from_json }}"
+
+- name: Set bad system list
+  set_fact:
+    bad_system_in_sync: >-
+        {{
+          system_list['items']
+          | selectattr('status.inSync', '!=', true)
+          | list
+          +
+          system_list['items']
+          | selectattr('status.reconciled', '!=', true)
+          | list
+        }}

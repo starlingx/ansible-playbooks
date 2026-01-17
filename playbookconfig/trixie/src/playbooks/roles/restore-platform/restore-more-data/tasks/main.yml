@@ -1,0 +1,926 @@
+---
+#
+# Copyright (c) 2019-2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to restore the remaining data in the backup tarball
+#   during platform restore.
+#
+
+- name: Set backup OS Release to Debian
+  set_fact:
+    backup_os_release: "debian"
+
+- name: Set parameters for archive paths
+  set_fact:
+    archive_platform_conf_path: "{{ platform_conf_path | regex_replace('^\\/', '') }}"
+    archive_ceph_backend_flag: "{{ ceph_backend_flag | regex_replace('^\\/', '') }}"
+    archive_rook_backend_flag: "{{ rook_backend_flag | regex_replace('^\\/', '') }}"
+    archive_fernet_keys_permdir: "{{ fernet_keys_permdir | regex_replace('^\\/', '') }}"
+
+# User postgres needs access files in this folder during restore
+# Permissions will be set back to 0750 when host is unlocked
+- name: Correct staging directory permissions for restore
+  file:
+    path: "{{ staging_dir }}"
+    state: directory
+    recurse: yes
+    owner: root
+    group: root
+    mode: 0755
+
+- block:
+  # These hieradata were generated after persist-config role was run. They
+  # will be re-generated when sysinv is restarted after postgres db is restored
+  - name: Remove newly generated hieradata data
+    file:
+      path: "{{ item }}"
+      state: absent
+    with_items:
+      - "{{ puppet_permdir }}/hieradata/{{ controller_floating_address|ipmath(1) }}.yaml"
+      - "{{ puppet_permdir }}/hieradata/system.yaml"
+      - "{{ puppet_permdir }}/hieradata/secure_system.yaml"
+
+  - name: Extract platform.conf from the backup tarball
+    command: >-
+      tar -C {{ staging_dir }} -xpf {{ restore_data_file }}  --transform='s,.*/,,'
+      {{ archive_platform_conf_path }}/platform.conf
+    args:
+      warn: false
+
+  - name: Search for the new INSTALL_UUID in /etc/platform/platform.conf
+    shell: grep INSTALL_UUID {{ platform_conf_path }}/platform.conf
+    register: result
+
+  - name: Replace INSTALL_UUID with the new one
+    lineinfile:
+      dest: "{{ staging_dir }}/platform.conf"
+      regexp: 'INSTALL_UUID'
+      line: "{{ result.stdout }}"
+
+  - name: Strip out entries that are host specific
+    lineinfile:
+      dest: "{{ staging_dir }}/platform.conf"
+      regexp: "{{ item }}"
+      state: absent
+    with_items:
+      - '^oam_interface='
+      - '^cluster_host_interface='
+      - '^UUID='
+
+  - name: Search for the management_interface in /etc/platform/platform.conf
+    shell: grep management_interface {{ platform_conf_path }}/platform.conf
+    failed_when: false
+    register: result
+
+  - name: Replace management_interface with the new one
+    lineinfile:
+      dest: "{{ staging_dir }}/platform.conf"
+      regexp: '^management_interface='
+      line: "{{ result.stdout }}"
+    when: result.rc == 0
+
+  - name: Replace platform config file
+    command: mv -f {{ staging_dir }}/platform.conf {{ platform_conf_path}}/platform.conf
+
+  when: not upgrade_in_progress
+
+# For subcloud, the DC root CA certificate needs to be restored from backup
+# into /opt/platform/config directory and it will be installed to controllers
+# at the time when controllers are unlocked.
+- block:
+  # Restore admin endpoint root CA certificate for DC if it exists in backup
+  - name: Check if admin endpoint root CA certficate exists in backup config permdir (opt/platform/config)
+    command: >-
+      tar -tf {{ restore_data_file }}
+      '{{ archive_config_permdir }}/dc-adminep-root-ca.crt'
+    register: check_ca_cert
+    failed_when: false
+    args:
+      warn: false
+
+  - name: Restore admin endpoint root CA certificate into config permdir (/opt/platform/config/...)
+    command: >-
+      tar -C {{ config_permdir }} -xpf {{ restore_data_file }}
+      --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/dc-adminep-root-ca.crt'
+    args:
+      warn: false
+    when: check_ca_cert.rc is defined and
+          check_ca_cert.rc == 0
+
+# While licences are not enforced, STX offers support for them through the "system license-install"
+# command. The licenses are stored in /etc/platform/.license and /opt/platform/config/<version>/.license
+# It is good practice to support license restoration, even if they are not enforced.
+- name: Check if license exists in backup config permdir (opt/platform/config)
+  command: tar -tf {{ restore_data_file }} '{{ archive_platform_conf_path }}/.license'
+  register: check_permdir_license
+  failed_when: false
+  args:
+    warn: false
+
+- name: Restore license in config permdir (/opt/platform/config/...)
+  command: >-
+    tar -C {{ config_permdir }} -xpf {{ restore_data_file }}
+    --overwrite --transform='s,.*/,,' '{{ archive_platform_conf_path }}/.license'
+  args:
+    warn: false
+  when: check_permdir_license.rc is defined and
+        check_permdir_license.rc == 0
+
+- name: Check if license exists in backup platform config (etc/platform)
+  command: tar -tf {{ restore_data_file }} '{{ archive_platform_conf_path }}/.license'
+  register: check_platform_license
+  failed_when: false
+  args:
+    warn: false
+
+- name: Restore license in platform config (/etc/platform/)
+  command: >-
+    tar -C {{ platform_conf_path }} -xpf {{ restore_data_file }}
+    --overwrite --transform='s,.*/,,' '{{ archive_platform_conf_path }}/.license'
+  args:
+    warn: false
+  when: check_platform_license.rc is defined and
+        check_platform_license.rc == 0
+
+- name: Check if SSH config directory exists in backup tarball
+  command: tar -tf {{ restore_data_file }} --wildcards 'etc/ssh/*'
+  register: check_ssh_dir
+  failed_when: false
+  args:
+    warn: false
+
+- block:
+  - name: Get current MACs sshd config
+    command: grep '^MACs' /etc/ssh/sshd_config
+    register: debian_sshd_macs
+
+  - name: Restore SSH config directory
+    command: >-
+      tar -C /etc/ssh -xpf {{ restore_data_file }} --overwrite
+      --wildcards --transform='s,.*/,,' etc/ssh/*
+    args:
+      warn: false
+
+  # if restoring on Debian, additional work is needed when restoring data from
+  # a CentOS deployment or else sshd will fail when controller-0 is unlocked
+  # TODO (heitormatsui): remove when CentOS -> Debian upgrade support is deprecated
+  - block:
+    - name: Replace MACs from CentOS with Debian
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^MACs"
+        line: "{{ debian_sshd_macs.stdout_lines[0] }}"
+
+    - name: Replace sftp-server executable from CentOS path with Debian's
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^Subsystem\s+sftp\s+/usr/libexec/openssh/sftp-server'
+        line: "Subsystem       sftp    /usr/lib/openssh/sftp-server"
+
+    - name: Gather SSH private keys
+      command: find /etc/ssh -name '*_key'
+      register: pvt_keys
+
+    - name: Ensure read-only permissions to private keys
+      file:
+        path: "{{ item }}"
+        mode: 0600
+      with_items: "{{ pvt_keys.stdout_lines }}"
+    when: backup_os_release == "centos" and os_release == "debian"
+
+  - block:
+    - name: Gather latest SSH public key
+      command: ssh-keyscan -T 20 -t ecdsa -p {{ ansible_port if ansible_port else 22 }} {{ ansible_host }}
+      register: remote_keyscan
+      until: remote_keyscan.stdout != ""
+      retries: 6
+      delay: "{{ 3 | random }}"
+      become: no
+      delegate_to: localhost
+
+    - name: Update the known_hosts file with collected SSH public keys
+      lineinfile:
+        path: "~/.ssh/known_hosts"
+        create: yes
+        line: "{{ item }}"
+      with_items: "{{ remote_keyscan.stdout_lines | list }}"
+      register: add_sshkey
+      until: not add_sshkey.changed
+      retries: 6
+      delay: "{{ 3 | random }}"
+      become: no
+      delegate_to: localhost
+    when: inventory_hostname != 'localhost'
+  when: check_ssh_dir.rc is defined and check_ssh_dir.rc == 0
+
+# Restore resolv.conf and dnsmaq
+- name: Extract resolv.conf from backup tarball
+  command: >-
+    tar -C /etc -xpf {{ restore_data_file }} --overwrite
+    --transform='s,.*/,,' etc/resolv.conf
+  args:
+    warn: false
+
+- name: Restore dnsmasq in config permdir (/opt/platform/config/...)
+  command: >-
+    tar -C {{ config_permdir }} -xpf {{ restore_data_file }} --wildcards
+    --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/dnsmasq*'
+  args:
+    warn: false
+
+- name: Restore boot files in pxelinux.cfg dir
+  command: >-
+    tar -C {{ pxe_config_permdir }} -xpf {{ restore_data_file }} --wildcards
+    --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/pxelinux.cfg/*-*-*'
+  args:
+    warn: false
+  when: not upgrade_in_progress
+
+# The grub.cfg used during the first boot is /boot/grub2/grub.cfg.
+# After the first boot, the grub.cfg becomes /boot/efi/EFI/BOOT/grub.cfg.
+# Instead of using grub-install to change now, we copy the config
+# And use it from the temporary location for first boot.
+- name: Create temporary bootloader configuration
+  copy:
+    src: /boot/efi/EFI/BOOT/grub.cfg
+    dest: /boot/grub2/grub.cfg
+    remote_src: true
+
+- name: Check if /boot is present in the backup
+  command:
+    cmd: "tar --use-compress-program=pigz -tf '{{ platform_backup_fqpn }}' boot/"
+  args:
+    warn: false
+  failed_when: false
+  register: boot_backup_found
+
+- name: Restore /boot from the backup
+  command:
+    cmd: "tar --use-compress-program=pigz -C / -xpf '{{ platform_backup_fqpn }}' boot/"
+  args:
+    warn: false
+  when:
+    - boot_backup_found.rc == 0
+
+- name: Stop openldap service
+  shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap stop"
+
+- name: Check if ldap LDIF configuration file exists in the backup archive
+  shell: "tar -tf {{ restore_data_file }} | grep -E 'etc/.*ldap/schema/cn=config.ldif'"
+  args:
+    warn: false
+  failed_when: false
+  register: bkp_has_ldap_config_ldif
+
+- name: Restore LDAP configuration
+  block:
+    - name: Restore ldap data
+      import_role:
+        name: backup-restore/restore-ldap
+      vars:
+        platform_backup_fqpn: "{{ restore_data_file }}"
+
+    - name: Start openldap service
+      shell: "export SYSTEMCTL_SKIP_REDIRECT=1; /etc/init.d/openldap start"
+
+  when: bkp_has_ldap_config_ldif.rc == 0
+
+# In order to determine the home dir pattern of the backed up data
+# we only check var/home and use that to know how to extract.
+# /var/home will exist on Debian, and not on CentOS. Cannot use /home
+# because it exists in both (a directory vs a symlink)
+# This enables home directory content of a CentOS backup to be restored
+# on Debian during upgrade.
+- name: Check if var/home directory is in the backup tarball
+  command: "tar -tf {{ restore_data_file }} var/home"
+  args:
+    warn: false
+  failed_when: false
+  register: debian_homedir
+
+- name: Set the home directory to extract
+  set_fact:
+    home_dir_pattern: "{{ 'var/home/*' if debian_homedir.rc == 0 else 'home/*' }} "
+
+- name: Restore home directory
+  shell: tar -C / --wildcards --overwrite -xpf {{ restore_data_file }} {{ home_dir_pattern }}
+  args:
+    warn: false
+  become_user: root
+
+- name: Restore extension filesystem
+  command: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
+  args:
+    warn: false
+  become_user: root
+  with_items:
+    - "{{ extension_permdir | regex_replace('^\\/', '') }}"
+
+- name: Check if fluxcd folder is present in the backup tarball
+  shell: "tar -tf {{ restore_data_file }} | grep '{{ fluxcd_permdir | regex_replace('^\\/', '') }}'"
+  args:
+    warn: false
+  failed_when: false
+  register: bkp_has_fluxcd
+
+- name: Restore fluxcd manifests
+  command: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
+  args:
+    warn: false
+  become_user: root
+  with_items:
+    - "{{ fluxcd_permdir | regex_replace('^\\/', '') }}"
+  when: bkp_has_fluxcd.rc is defined and
+        bkp_has_fluxcd.rc == 0
+
+- name: Restore helm overrides
+  command: tar -C / --overwrite -xpf {{ restore_data_file }} {{ archive_helm_permdir }}
+  args:
+    warn: false
+  become_user: root
+
+- name: Restore sysinv default configuration file
+  command: >-
+    tar -C {{ sysinv_config_permdir }} -xpf {{ restore_data_file }}
+    --wildcards --transform='s,.*/,,' '*/sysinv.conf.default'
+  args:
+    warn: false
+
+- name: Restore coredump.conf.d directory
+  command: >-
+    tar -C /etc/systemd/coredump.conf.d -xpf {{ restore_data_file }} --wildcards
+    --overwrite --transform='s,.*/,,' etc/systemd/coredump.conf.d/*
+  args:
+    warn: false
+
+- name: Restore configuration files
+  command: >-
+    tar --use-compress-program=pigz -C / -xvpf {{ restore_data_file }} --overwrite
+    {{ ' '.join(restore_items) }}
+  args:
+    warn: false
+  when: restore_items | length > 0
+
+- name: Restore extra configuration files
+  command: >-
+    tar --use-compress-program=pigz -C / -xvpf {{ restore_data_file }} --overwrite
+    {{ ' '.join(restore_extra_items) }}
+  args:
+    warn: false
+  when: restore_extra_items | length > 0
+
+- name: Look for the flag indicating that ceph is configured
+  shell: "tar -tf {{ restore_data_file }} | grep '{{ archive_ceph_backend_flag }}'"
+  args:
+    warn: false
+  failed_when: false
+  register: ceph_backend
+
+- name: Look for the flag indicating that rook is configured
+  shell: "tar -tf {{ restore_data_file }} | grep '{{ archive_rook_backend_flag }}'"
+  args:
+    warn: false
+  failed_when: false
+  register: rook_backend
+
+# Restore ceph crushmap if ceph backend is configured and Ceph cluster is being restored
+- block:
+  # Can't store ceph crushmap at sysinv_config_permdir (/opt/platform/sysinv/)
+  # for AIO systems because when unlocking controller-0 for the first time,
+  # the crushmap is set thru ceph puppet when /opt/platform is not mounted yet.
+  # So for AIO systems store the crushmap at /etc/sysinv.
+  - name: Set ceph crushmap directory to /etc/sysinv if it is AIO system
+    set_fact:
+      ceph_crushmap_dir: /etc/sysinv
+    when: system_type == 'All-in-one'
+
+  - name: Set ceph crushmap directory to /opt/platform/sysinv if it is non-AIO system
+    set_fact:
+      ceph_crushmap_dir: "{{ sysinv_config_permdir }}"
+    when: system_type != 'All-in-one'
+
+  - name: Restore ceph crush map
+    command: >-
+      tar -C {{ ceph_crushmap_dir }} -xpf {{ restore_data_file }}
+      --wildcards --transform='s,.*/,,' '*/crushmap.bin.backup'
+    args:
+      warn: false
+
+  # Need to remove osd info from the crushmap before it is loaded into ceph.
+  # When osds are created they will be inserted into the crushmap by ceph.
+  # TODO: There might be a better command to do this, like the rebuild option
+  # with the ceph-monstore-tool.
+  - name: Remove osds from the crushmap
+    shell: >-
+      crushtool -i {{ ceph_crushmap_dir }}/{{ crushmap_file }} --tree |
+      awk /osd/'{print $NF}' |
+      xargs -i crushtool -i {{ ceph_crushmap_dir }}/{{ crushmap_file }} --remove-item {}
+      -o {{ ceph_crushmap_dir }}/{{ crushmap_file_tmp }} &&
+      mv {{ ceph_crushmap_dir }}/{{ crushmap_file_tmp }}
+      {{ ceph_crushmap_dir }}/{{ crushmap_file }}
+
+  when: not wipe_ceph_osds|bool and ceph_backend.rc == 0
+
+- name: Look for deploy files
+  shell: "tar -tf {{ restore_data_file }} |
+         grep {{ archive_deploy_permdir }}"
+  args:
+    warn: false
+  failed_when: false
+  register: deploy_search_result
+
+- name: Restore files in deploy directory (/opt/platform/deploy/...)
+  command: >-
+    tar -C / --overwrite -xpf {{ restore_data_file }}
+    {{ archive_deploy_permdir}}
+  args:
+    warn: false
+  when: deploy_search_result.rc == 0
+
+# TODO: Restore ceph_external when it is supported
+
+- block:
+  - name: Backup default k8s service parameters
+    shell: |
+      source /etc/platform/openrc
+      system service-parameter-list --nowrap | grep kube_ | awk '{ print $4" "$6" "$8"="$10; }'
+    register: default_k8s_service_parameters
+
+  - name: Check if the system is a DC controller
+    command: >-
+      grep -i "distributed_cloud_role\s*=\s*systemcontroller"
+      {{ platform_conf_path }}/platform.conf
+    register: check_dc_controller
+    failed_when: false
+
+  - name: Shutdown mtce
+    command: /usr/lib/ocf/resource.d/platform/mtcAgent stop
+    environment:
+      OCF_ROOT: "/usr/lib/ocf"
+      OCF_RESKEY_state: "active"
+
+  - name: Stop services
+    systemd:
+      name: "{{ item }}"
+      state: stopped
+    with_items:
+      - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
+      - fminit
+      - fm-api
+      - sysinv-api
+      - sysinv-conductor
+      - sysinv-agent
+      - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
+
+  - name: Restore Postgres
+    import_role:
+      name: backup-restore/restore-postgres
+    vars:
+      platform_backup_fqpn: "{{ restore_data_file }}"
+
+  - block:
+    - name: Check if fernet keys directory exists in the backup tarball
+      command: tar -tf {{ restore_data_file }} {{ archive_fernet_keys_permdir }}
+      register: check_fernet_keys_dir
+      failed_when: false
+      args:
+        warn: false
+
+    - name: Migrate fernet keys
+      command: >-
+        tar -C {{ fernet_keys_permdir }} -xpf {{ restore_data_file }} --overwrite
+        --wildcards --transform='s,.*/,,' {{ archive_fernet_keys_permdir }}/*
+      args:
+        warn: false
+      when: check_fernet_keys_dir.rc == 0
+
+    - name: Migrate databases and platform data
+      command: "upgrade_controller_simplex {{ restore_data_file }}"
+      register: migration_output
+
+    - debug:
+        var: migration_output.stdout_lines
+
+    when: upgrade_in_progress
+
+  # Set all the hosts including controller-0 to locked/disabled/offline state.
+  # After the services are restarted, mtce will update controller-0 to
+  # locked/disabled/online state. Setting controller-0 to offline state now
+  # will ensure that keystone, sysinv and mtcAgent are indeed in-service after being restarted.
+  - name: Set all the hosts to locked/disabled/offline state
+    shell: >-
+      psql -c "update i_host set administrative='locked', operational='disabled',
+      availability='offline'" sysinv
+    become_user: postgres
+    when: >-
+      wipe_ceph_osds|bool and (ceph_backend.rc == 0 or rook_backend.rc == 0) or
+      (ceph_backend.rc != 0 or rook_backend.rc != 0)
+
+  - name: Set all the hosts, except storage nodes to locked/disabled/offline state
+    shell: >-
+      psql -c "update i_host set administrative='locked', operational='disabled',
+      availability='offline' where personality!='storage'" sysinv
+    become_user: postgres
+    when: not wipe_ceph_osds|bool and (ceph_backend.rc == 0 or rook_backend.rc == 0)
+
+  # Container images will not be present after restore. Inform sysinv so it
+  # can download the images. Kubernetes will then start the apps.
+  - name: Set applied apps to "restore-requested" state
+    shell: psql -c "update kube_app set status='restore-requested' where status='applied'" sysinv
+    become_user: postgres
+
+  - name: Set platform-integ-apps to applied state when set to wipe osds disks
+    command: >-
+      psql -c "update kube_app set status='applied' where name='platform-integ-apps'
+      and status='restore-requested'" sysinv
+    become_user: postgres
+    when: wipe_ceph_osds|bool and ceph_backend.rc == 0
+
+  - name: Set rook-ceph to applied state when set to wipe osds disks
+    command: >-
+      psql -c "update kube_app set status='applied' where name='rook-ceph'
+      and status='restore-requested'" sysinv
+    become_user: postgres
+    when: wipe_ceph_osds|bool and rook_backend.rc == 0
+
+  - name: Get current resolv.conf permissions
+    stat:
+      path: /etc/resolv.conf
+    register: resolv_conf_stat
+
+  #  Make sure /etc/resolv.conf have the correct permissions
+  #  before restart services
+  - name: Update resolv.conf permissions
+    file:
+      path: /etc/resolv.conf
+      mode: '0644'
+    when: resolv_conf_stat.stat.mode != "0644"
+
+  - name: Restore networking
+    import_role:
+      name: optimized-restore/restore-configuration
+      tasks_from: restore-networking.yml
+    vars:
+      previous_software_version: "{{ software_version }}"
+      platform_backup_fqpn: "{{ restore_data_file }}"
+
+  - name: Restore cli environment file
+    import_role:
+      name: optimized-restore/restore-configuration
+      tasks_from: restore-cli-env.yml
+    vars:
+      platform_backup_fqpn: "{{ restore_data_file }}"
+
+  - name: Restart services
+    systemd:
+      name: "{{ item }}"
+      state: restarted
+    with_items:
+      - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
+      - fminit
+      - fm-api
+      - sysinv-api
+      - sysinv-conductor
+      - sysinv-agent
+      - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
+
+  - name: Wait for 90 secs before check if services come up
+    wait_for: timeout=90
+
+  # added this to make keystone start up faster.
+  - name: Get Keystone user data
+    shell: source /etc/platform/openrc; openstack user list
+    register: keystone_output
+    retries: 5
+    delay: 10  # Delay between retries in seconds
+    until: keystone_output.rc == 0
+    ignore_errors: true  # To allow retries even if the first attempt fails
+
+  # admin-keystone is always the very last to be ready,
+  # So we just wait and check for admin-keystone to come up.
+  - name: Make sure admin-keystone is ready
+    shell: "ps -ef | grep admin-keystone | grep -v grep"
+    register: result
+    until: result.stdout.find("keystone") != -1
+    retries: 6
+    delay: 10
+
+  - name: Add missing registries during stx7 upgrade
+    import_role:
+      name: common/push-docker-images
+      tasks_from: restore_docker_registries.yml
+    when:
+      - upgrade_in_progress
+      - previous_software_version == '22.06'
+
+  - name: Bring up Maintenance Agent
+    command: /usr/lib/ocf/resource.d/platform/mtcAgent start
+    environment:
+      OCF_ROOT: "/usr/lib/ocf"
+      OCF_RESKEY_state: "active"
+
+  # Run "system host-list" to verify that controller-0 is in
+  # "online" state. This will ensure that keystone, sysinv and
+  # mtcAgent are indeed in-service after being restarted.
+  - name: Check controller-0 is in online state
+    shell: source /etc/platform/openrc; system host-show controller-0 --column availability --format value
+    register: check_online
+    failed_when: false
+    retries: 30
+    delay: 10
+    until: check_online.stdout == "online"
+
+  - name: Inform user that restore_platform is not successful
+    debug:
+      msg: >-
+        Platform restore was unsuccessful. Please refer to the system administration
+        guide for next step.
+    when: check_online.stdout != "online"
+
+  - name: Check if there are unprovisioned hosts
+    shell: source /etc/platform/openrc; system host-list --format value --column personality --column id
+    register: ids_and_personalities
+
+  - name: Delete unprovisioned hosts
+    shell: source /etc/platform/openrc; system host-delete {{ item.split(' ')[0] }} --yes
+    loop: "{{ ids_and_personalities.stdout_lines }}"
+    when: (item.split(' ')[1] | lower) == 'none'
+
+  - block:
+    - block:
+      # Recover procedure for systems with storage nodes is different from
+      # that of systems with controller storage:
+      # - For controller storage we recover ceph-mon data by scanning OSDs.
+      # - For systems with storage nodes we get ceph-mon data from storage-0
+      #   ceph-mon that is already up and will not be reinstalled.
+      - name: Check if setup has storage nodes
+        shell: source /etc/platform/openrc; system host-list --format value --column personality
+        register: node_personalities
+        failed_when: false
+
+      # Get system_mode after restore and create flag file to skip wiping OSDs
+      - name: Retrieve system mode
+        shell: source /etc/platform/platform.conf; echo $system_mode
+        register: restore_system_mode_result
+
+      - name: Fail if system mode is not defined
+        fail:
+          msg: "system_mode is missing in /etc/platform/platform.conf"
+        when: restore_system_mode_result.stdout_lines|length == 0
+
+      - name: Set system mode fact
+        set_fact:
+          restore_system_mode: "{{ restore_system_mode_result.stdout_lines[0] }}"
+
+      - name: Create flag file in /opt/platform to skip wiping OSDs
+        file:
+          path: >-
+            /opt/platform/config/{{ software_version }}/.skip_ceph_osds_wipe
+          state: touch
+        when: restore_system_mode != 'simplex'
+
+      # Recover ceph data for systems with controller storage
+      - block:
+        # bare-metal
+        - block:
+          - include_role:
+              name: recover-ceph-data
+            when: node_personalities.stdout is not search('storage')
+
+          - name: Mark crushmap as restored
+            file:
+              path: "{{ sysinv_config_permdir }}/.crushmap_applied"
+              owner: root
+              group: root
+              mode: 644
+              state: touch
+
+          - name: Mark ceph backend as configured
+            file:
+              path: "{{ ceph_backend_flag }}"
+              owner: root
+              group: root
+              mode: 644
+              state: touch
+
+          when: ceph_backend.rc == 0
+
+        # rook-ceph
+        - block:
+          - name: Set Ceph variables
+            set_fact:
+              ceph_temp_dir: /tmp/ceph/
+              ceph_monmap_file: monmap.bin
+              helm_overrides_dir: "/opt/platform/helm/{{ software_version }}/rook-ceph"
+
+          - name: Create {{ ceph_temp_dir }} dir
+            file:
+              path: "{{ ceph_temp_dir }}"
+              state: directory
+            become: yes
+
+          - name: Get {{ ceph_monmap_file }} file path
+            shell: >-
+              tar --use-compress-program=pigz -tf {{ restore_data_file }} |
+              grep {{ ceph_monmap_file }}
+            register: ceph_monmap_backup_path_tgz
+
+          - name: Restore {{ ceph_monmap_file }} file
+            command: >-
+              tar --use-compress-program=pigz -C {{ ceph_temp_dir }} --transform='s,.*/,,'
+              -xpf {{ platform_backup_fqpn }} {{ ceph_monmap_backup_path_tgz.stdout_lines[0] }}
+            args:
+              warn: false
+
+          - include_role:
+              name: recover-rook-ceph-data
+            when: node_personalities.stdout is not search('storage')
+
+          - name: Get the rook-ceph app version
+            shell: source /etc/platform/openrc; system application-show rook-ceph --format value --column app_version
+            register: rook_ceph_app_version
+
+          - name: Truncate rook-ceph overrides to ensure auto-reapply is triggered
+            copy:
+              content: ""
+              dest: "{{ item }}"
+              force: yes
+            loop: >-
+              {{ lookup(
+                'fileglob',
+                helm_overrides_dir + '/' + rook_ceph_app_version.stdout + '/*.yaml',
+                wantlist=True
+              ) }}
+
+          when: rook_backend.rc == 0
+
+      when: not wipe_ceph_osds|bool
+
+    - block:
+      - set_fact:
+          app_name: "{{ 'rook-ceph' if rook_backend.rc == 0 else 'platform-integ-apps' }}"
+
+      # The application platform-integ-apps or rook-ceph is being removed when the flag
+      # wipe_ceph_osds is set to true because this application needs to be
+      # reapplied, but helm will not reapply the charts if the version is not bumped.
+      #
+      # The application is removed here to be applied after host is unlocked and
+      # ceph is correctly configured after a wipe. This app is automatically
+      # applied by conductor when there is ceph backend configured.
+      - name: Remove {{ app_name }}
+        shell: source /etc/platform/openrc; system application-remove {{ app_name }} --force --yes
+
+      - name: Delete resources that block rook-ceph remove
+        shell: |
+          kubectl delete deployments -n rook-ceph --all --force
+          kubectl delete daemonsets -n rook-ceph --all --force
+
+          kubectl patch -n rook-ceph cephblockpools $(kubectl get cephblockpools -n rook-ceph \
+            -o custom-columns=:metadata.name) --type merge -p '{"metadata":{"finalizers": []}}'
+          kubectl delete -n rook-ceph cephblockpools --all --force
+
+          kubectl patch -n rook-ceph cephfilesystemsubvolumegroups $(kubectl get \
+            cephfilesystemsubvolumegroups -n rook-ceph -o custom-columns=:metadata.name) \
+            --type merge -p '{"metadata":{"finalizers": []}}'
+          kubectl delete -n rook-ceph cephfilesystemsubvolumegroups --all --force
+
+          kubectl patch -n rook-ceph cephfilesystems $(kubectl get cephfilesystems -n rook-ceph \
+            -o custom-columns=:metadata.name) --type merge -p '{"metadata":{"finalizers": []}}'
+          kubectl delete -n rook-ceph cephfilesystems --all --force
+
+          kubectl patch -n rook-ceph cephcluster rook-ceph --type merge \
+            -p '{"metadata":{"finalizers": []}}'
+          kubectl delete -n rook-ceph cephcluster rook-ceph --force
+
+          kubectl patch -n rook-ceph helmreleases $(kubectl get helmreleases -n rook-ceph \
+            -o custom-columns=:metadata.name) --type merge -p '{"metadata":{"finalizers": []}}'
+          kubectl delete -n rook-ceph helmreleases --all --force
+
+          kubectl patch -n rook-ceph helmcharts $(kubectl get helmcharts -n rook-ceph \
+            -o custom-columns=:metadata.name) --type merge -p '{"metadata":{"finalizers": []}}'
+          kubectl delete -n rook-ceph helmcharts --all --force
+
+          kubectl patch -n rook-ceph helmrepository stx-platform --type merge \
+            -p '{"metadata":{"finalizers": []}}'
+          kubectl delete -n rook-ceph helmrepository stx-platform --force
+        environment:
+          KUBECONFIG: /etc/kubernetes/admin.conf
+        ignore_errors: true
+        when: rook_backend.rc == 0
+
+      # When controller unlock occurs there is a chance platform-integ-apps or rook-ceph
+      # has not yet been completely removed. This causes the running removal to abort
+      # and sets the state from removing to remove-failed. This removal is necessary
+      # to ensure that the platform-integ-apps or rook-ceph will be reapplied after the unlock.
+      - name: Check if {{ app_name }} is in uploaded state
+        shell: |
+          source /etc/platform/openrc
+          system application-show {{ app_name }} --column status --format value
+        register: check_uploaded
+        retries: "{{ application_check_retries }}"
+        delay: "{{ application_check_retry_delay }}"
+        until: check_uploaded.stdout == "uploaded"
+
+      - block:
+        # Between obtaining the CRDs and deleting the resources, one of the CRDs may have already
+        # been removed. Therefore, to prevent the task from failing, 'ignore_errors' was added.
+        - name: Delete all resources from the rook-ceph namespace
+          shell: |
+            CRDS=$(kubectl api-resources --namespaced=true --verbs=delete -o name | \
+              grep -v "event" | tr "\n" "," | sed -e 's/,$//')
+            kubectl patch -n rook-ceph $(kubectl get -n rook-ceph $CRDS -o name) \
+              --type merge -p '{"metadata":{"finalizers": []}}'
+            kubectl delete -n rook-ceph "$CRDS" --all --force
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          ignore_errors: true
+
+        - name: Remove content from ceph data directory
+          shell: |
+            rm -rf /var/lib/ceph/data/*
+            rm -rf /var/lib/ceph/mon-float/*
+          args:
+            warn: false
+
+        when: rook_backend.rc == 0
+
+      - name: Recover Ceph PVCs when OSDs are wiped
+        script: recover_ceph_pvcs.sh
+        register: recover_ceph_pvcs_output
+        environment:
+          KUBECONFIG: /etc/kubernetes/admin.conf
+
+      - name: Result of recovering Ceph PVCs
+        debug: var=recover_ceph_pvcs_output.stdout_lines
+
+      - name: Remove Ceph Volume Snapshots when OSDs are wiped
+        script: remove_ceph_snapshots.sh
+        register: remove_ceph_snapshots_output
+        environment:
+          KUBECONFIG: /etc/kubernetes/admin.conf
+
+      - name: Result of removing Ceph Volume Snapshots
+        debug: var=remove_ceph_snapshots_output.stdout_lines
+
+      when: wipe_ceph_osds|bool
+
+    when: check_online.stdout == "online" and (ceph_backend.rc == 0 or rook_backend.rc == 0)
+
+  - name: Apply kube-apiserver parameters
+    block:
+    # Restore default k8s service parameters to support older stx versions
+    # Will use the restored parameter from database when present, else will
+    # create the parameter with default value from before database restore
+    - name: Restore default k8s service parameters
+      shell: |
+        source /etc/platform/openrc
+        system service-parameter-add {{ item }}
+      with_items: "{{ default_k8s_service_parameters.stdout_lines }}"
+      register: k8s_parameter_add
+      failed_when: >
+        k8s_parameter_add.rc != 0 and
+        "Parameter already exists" not in k8s_parameter_add.stderr
+
+    - name: Update host config data
+      command: "/usr/bin/sysinv-puppet create-host-config"
+
+    - name: Update system config data
+      command: "/usr/bin/sysinv-puppet create-system-config"
+
+    - block:
+        - name: Create a list of apiserver parameters classes to pass to puppet
+          copy:
+            dest: "/tmp/apiserver.yml"
+            content: |
+              classes:
+              - platform::kubernetes::master::change_apiserver_parameters
+
+        - name: Apply puppet apiserver parameters
+          command: >
+            /usr/local/bin/puppet-manifest-apply.sh
+            {{ puppet_permdir }}/hieradata/
+            controller-0
+            controller runtime /tmp/apiserver.yml
+          environment:
+            LC_ALL: "en_US.UTF-8"
+
+      when: not upgrade_in_progress
+
+  - name: Set restore in progress for sysinv
+    shell: "source /etc/platform/openrc; system restore-start"
+
+  - name: Inform user that restore_platform is run successfully
+    debug:
+      msg: >-
+        Controller-0 is now online. The next step is to unlock this controller.
+        Please refer to the system administration guide for more details.
+    when: check_online.stdout == "online"
+
+  # Remove temporary staging area used by the copy module
+  - name: Remove temporary directory used to stage restore data
+    file:
+      path: "{{ ansible_remote_tmp }}"
+      state: absent

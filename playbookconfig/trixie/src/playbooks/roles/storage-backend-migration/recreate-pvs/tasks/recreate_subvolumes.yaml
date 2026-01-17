@@ -1,0 +1,23 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Read New PV {{ pv_name }} YAML file
+  slurp:
+    src: "{{ tmp_workspace }}/{{ pv_name }}.yaml"
+  register: new_pv_data
+
+- name: Parse the New PV {{ pv_name }} YAML content
+  set_fact:
+    new_pv_data: "{{ new_pv_data.content | b64decode | from_yaml }}"
+
+- name: "Extract subvolumeName from the new saved PV file"
+  set_fact:
+    new_pv_subvolume_name: "{{ new_pv_data.spec.csi.volumeAttributes.subvolumeName }}"
+
+- name: "Create volume for PV {{ pv_name }}"
+  command: ceph fs subvolume create kube-cephfs {{ new_pv_subvolume_name }} --group-name csi --size {{ pv_required_subvolume_bytes }}
+  vars:
+    pv_required_subvolume_bytes: "{{ pv_subvolume_size_bytes | int + 268435456 }}" # + 256MiB

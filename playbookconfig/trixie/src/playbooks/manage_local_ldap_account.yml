@@ -1,0 +1,194 @@
+---
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Create new LDAP and Keystone users with same username. In DC environments,
+# should be executed in the central cloud to allow the propagation of created
+# Keystone user to the subclouds.
+#
+# The operator will be prompted for the following parameters:
+# - user_password           : password for the new account.
+#
+# The parameters below should be provided, otherwise the playbook either fails
+# or uses the default value.
+# - user_id                 : the username to be used. Should always be
+#                             provided.
+# - mode                    : controls if the users should be created or
+#                             deleted. The valid values are 'create' and
+#                             'delete' (default: 'create').
+# - password_change_period  : number of days before needing to change LDAP
+#                             password (default: 90).
+# - password_warning_period : number of days to warn about changing the LDAP
+#                             password (default: 2).
+# - sudo_permission         : give sudo capabilities to new LDAP user to execute
+#                             commands with root privileges (default: no).
+# - user_role               : role for the new Keystone user as
+#                             'admin'/'member'/'reader'/'operator'/'configurator'.
+# - sys_protected           : is used to add the new LDAP user to the group
+#                             "sys_protected" (default: no).
+#
+# The inventory file contains the system controller IP, user and password.
+#
+# Example to add user 'na-admin' (mode=create is default):
+#   ansible-playbook --inventory inventory --extra-vars='user_id=na-admin' \
+#     /usr/share/ansible/stx-ansible/playbooks/manage_local_ldap_account.yml
+#
+# Example to add user 'na-admin' with the use of variable mode=create:
+#   ansible-playbook --inventory inventory --extra-vars='user_id=na-admin mode=create' \
+#     /usr/share/ansible/stx-ansible/playbooks/manage_local_ldap_account.yml
+#
+# Example to delete user 'na-admin':
+#   ansible-playbook --inventory inventory --extra-vars='user_id=na-admin \
+#   mode=delete' /usr/share/ansible/stx-ansible/playbooks/manage_local_ldap_account.yml
+#
+
+- hosts: systemcontroller
+  gather_facts: no
+
+  vars:
+    ssh_internal_args: -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no
+
+  tasks:
+
+  - set_fact:
+      in_user_id: "{{ user_id if user_id is defined else ''}}"
+
+  - set_fact:
+      in_mode: "{{ mode if mode is defined else 'create'}}"
+
+  - set_fact:
+      in_sudo_permission: "{{ sudo_permission if sudo_permission is defined else false}}"
+
+  - set_fact:
+      in_user_role: "{{ user_role if user_role is defined else 'admin'}}"
+
+  - set_fact:
+      in_password_change_period: "{{ password_change_period if password_change_period is defined else 90}}"
+
+  - set_fact:
+      in_password_warning_period: "{{ password_warning_period if password_warning_period is defined else 2}}"
+
+  - set_fact:
+      in_sys_protected: "{{ sys_protected if sys_protected is defined else false}}"
+
+  - name: Validate user_id
+    fail:
+      msg: "The user account cannot be empty. Please provide a valid user account."
+    when: in_user_id == ''
+
+  - name: Validate mode
+    fail:
+      msg: "The mode must be 'create' or 'delete'."
+    when: "in_mode not in ['create', 'delete']"
+
+  - name: Validate sudo_permission
+    fail:
+      msg: "The sudo_permission must be 'yes' or 'no'."
+    when: "in_sudo_permission not in [true, false]"
+
+  - name: Validate user_role
+    fail:
+      msg: "The user role must be 'admin', 'member', 'reader', 'operator' or 'configurator'."
+    when: "in_user_role not in ['admin', 'member', 'reader', 'operator', 'configurator']"
+
+  # The ansible's conversion of a invalid string to integer will return 0,
+  # that would be a valid value, this is the reason of the validation
+  # using regex to verify if the string have only valid values between 0-9.
+  - name: Validate password_change_period
+    fail:
+      msg: "The password change period must be a non-negative number"
+    when: "in_password_change_period is not string or in_password_change_period is not regex('^[0-9]+$')"
+
+  - name: Validate password_warning_period
+    fail:
+      msg: "The password warning period must be a non-negative number"
+    when: "in_password_warning_period is not string or in_password_warning_period is not regex('^[0-9]+$')"
+
+  - name: Validate sys_protected
+    fail:
+      msg: "The sys_protected must be 'yes' or 'no'."
+    when: "in_sys_protected not in [true, false]"
+
+  - name: Get distributed cloud role
+    import_role:
+      name: manage-local-ldap-account/common/get-distributed-role
+
+  # This playbook should not run on subclouds because the Keystone user would not propagate to other clouds.
+  - name: Fail if running on subcloud
+    fail:
+      msg: "This playbook should run on the central cloud, not in subclouds."
+    when: is_dc_subcloud
+
+  - name: Get LDAP user data
+    command: ldapsearch -x -LLL uid={{ in_user_id }}
+    register: ldap_user_output_reg
+
+  - name: Store info about LDAP user existence
+    set_fact:
+      ldap_user_exists: "{{ true if ldap_user_output_reg.stdout != '' else false }}"
+
+  - name: Validate that informed LDAP user doesn't exist when mode is create
+    fail:
+      msg: "The LDAP user {{ in_user_id }} already exists.
+            Run this playbook with mode=delete to remove it first."
+    when: in_mode == 'create' and ldap_user_exists
+
+  - name: Get Keystone user data
+    shell: source /etc/platform/openrc; openstack user list | grep -w {{ in_user_id }} | wc -l
+    register: openstack_user_output_reg
+
+  - name: Store info about Keystone user existence
+    set_fact:
+      openstack_user_exists: "{{ true if openstack_user_output_reg.stdout != '0' else false }}"
+
+  - name: Validate that informed Keystone user doesn't exist when mode is create
+    fail:
+      msg: "The Keystone user {{ in_user_id }} already exists.
+            Run this playbook with mode=delete to remove it first."
+    when: in_mode == 'create' and openstack_user_exists
+
+  - name: Set os_param_region_name if system is a DC systemcontroller
+    set_fact:
+      os_param_region_name: "{{ '--os-region-name SystemController' if is_dc_systemcontroller == true else '' }}"
+
+  - block:
+    - pause:
+        prompt: "What is the password for the user account?"
+        echo: no
+      register: prompt
+      no_log: no
+    - set_fact:
+        in_user_password: "{{ prompt.user_input }}"
+      no_log: no
+    - name: Validate user_password
+      fail:
+        msg: "The password cannot be empty. Please provide a valid password for the user account."
+      when: "in_user_password is not defined or in_user_password ==''"
+    when: in_mode == 'create'
+
+  - name: Create LDAP and Keystone user {{ in_user_id }}
+    block:
+
+    - include_role:
+        name: manage-local-ldap-account/create-account
+
+    - include_role:
+        name: manage-local-ldap-account/create-keystone-account
+
+    when: in_mode == 'create'
+
+  - name: Delete LDAP and Keystone user {{ in_user_id }}
+    block:
+
+    - name: Delete LDAP user {{ in_user_id }} if it exists
+      command: ldapdeleteuser {{ in_user_id }}
+      become: yes
+      when: ldap_user_exists
+
+    - name: Delete the Keystone user {{ in_user_id }} if it exists
+      shell: >-
+        source /etc/platform/openrc; openstack {{ os_param_region_name }} user delete {{ in_user_id }}
+      when: openstack_user_exists
+
+    when: in_mode == 'delete'

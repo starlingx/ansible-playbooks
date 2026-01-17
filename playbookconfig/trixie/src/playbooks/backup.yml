@@ -1,0 +1,28 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- hosts: all
+  # If gathering facts is really necessary, run setup task AFTER host connectivity
+  # check block in common role.
+  gather_facts: no
+
+  vars_files:
+    - host_vars/backup-restore/default.yml
+    - vars/backup-restore/main.yml
+
+  vars:
+    mode: 'backup'
+
+  # Main play
+  roles:
+    # For now, input will not be validated.
+    # - role: backup/validate-input
+    - role: common/prepare-env
+    - role: backup-restore/prepare-env
+    - role: backup/prepare-env
+      become: yes
+    - role: backup/backup-system
+      become: yes

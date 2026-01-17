@@ -1,0 +1,87 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This playbook provides the capability to set the "kernelMountOptions: recover_session=clean"
+# parameter in every PVs/PVCs from the given namespace, enabling the cephfs volumes to
+# remount automatically when there is a client eviction from Ceph mds.
+#
+# The playbook is supposed to be called by the 'change_cephfs_mounter_options.yml' playbook.
+#
+
+- name: Get PVC list
+  command: kubectl -n {{ namespace }} get pvc -o yaml
+  register: pvc_list_output
+
+- name: Set PVC definitions
+  set_fact:
+    pvc_definitions: "{{ pvc_list_output.stdout | from_yaml | json_query('items[?spec.storageClassName==`cephfs`]') }}"
+- name: Set PVC formatted data
+  set_fact:
+    pvcs: "{{ pvc_definitions | json_query('[*].{pvc: metadata.name, pv: spec.volumeName}') }}"
+
+- name: Save PVC definitions to files
+  copy:
+    content: |
+      {{ item }}
+    dest: "/{{ temp_dir_path }}/{{ item | from_yaml | json_query('metadata.name') }}.yaml"
+  loop: "{{ pvc_definitions | map('to_yaml') }}"
+
+- name: Get PV definition
+  command: kubectl get pv {{ item.pv }} -n {{ namespace }} -o yaml
+  loop: "{{ pvcs }}"
+  register: pvs_output
+  changed_when: false
+
+- name: Set PV definitions and reclaim
+  set_fact:
+    pv_definition_list: "{{ pvs_output.results | map(attribute='stdout') }}"
+    patch_json: '{"spec": {"persistentVolumeReclaimPolicy": "Retain"}}'
+
+- name: Save and update PV definitions to files
+  copy:
+    content: >
+      {{
+        item | from_yaml
+        | combine(
+          {'spec': { 'claimRef': None, 'csi': { 'volumeAttributes': { 'kernelMountOptions': 'recover_session=clean' }}}},
+          recursive=True)
+        | to_yaml
+      }}
+    dest: "{{ temp_dir_path }}/{{ item | from_yaml | json_query('metadata.name') }}.yaml"
+  loop: "{{ pv_definition_list }}"
+
+- name: Patch PV to retain the volume
+  command: kubectl patch pv {{ item.pv }} -n {{ namespace }} -p {{ patch_json | to_json }}
+  loop: "{{ pvcs }}"
+  register: patch_output
+  ignore_errors: True
+
+- name: Show error message if cannot continue with PVC
+  fail:
+    msg: "Could not change the reclaim policy. It is not secure to continue the changes for the {{ item.item.pv }}"
+  when: item.rc != 0
+  loop: "{{ patch_output.results }}"
+  ignore_errors: True
+
+- name: Delete PVCs
+  command: kubectl delete -n {{ namespace }} pvc {{ item.item.pvc }}
+  when: item.rc == 0
+  loop: "{{ patch_output.results }}"
+
+- name: Delete PVs
+  command: kubectl delete -n {{ namespace }} pv {{ item.item.pv }}
+  when: item.rc == 0
+  loop: "{{ patch_output.results }}"
+
+- name: Apply updated PVCs
+  command: kubectl apply -n {{ namespace }} -f {{ temp_dir_path }}/{{ item.item.pvc }}.yaml
+  when: item.rc == 0
+  loop: "{{ patch_output.results }}"
+
+- name: Apply updated PVs
+  command: kubectl apply -n {{ namespace }} -f {{ temp_dir_path }}/{{ item.item.pv }}.yaml
+  when: item.rc == 0
+  loop: "{{ patch_output.results }}"

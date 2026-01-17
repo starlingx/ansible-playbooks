@@ -1,0 +1,10 @@
+
+apiVersion: trident.netapp.io/v1
+kind: TridentNodeRemediationTemplate
+metadata:
+  name: trident-node-remediation-template
+  # STX_change: configurable namespace
+  namespace: {{ trident_namespace }}
+spec:
+  template:
+    spec: {}

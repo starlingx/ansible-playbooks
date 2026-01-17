@@ -1,0 +1,125 @@
+[OPERATION]
+MODE={{ mode }}
+
+[{{ mode | upper }}_CONFIG]
+SW_VERSION={{ software_version }}
+SYSTEM_MODE={{ system_mode }}
+DOCKER_HTTP_PROXY={{ docker_http_proxy }}
+DOCKER_HTTPS_PROXY={{ docker_https_proxy }}
+DOCKER_NO_PROXY={{ docker_no_proxy_combined | join(',') }}
+K8S_REGISTRY={{ k8s_registry.url }}
+GCR_REGISTRY={{ gcr_registry.url }}
+QUAY_REGISTRY={{ quay_registry.url }}
+DOCKER_REGISTRY={{ docker_registry.url }}
+ELASTIC_REGISTRY={{ elastic_registry.url }}
+GHCR_REGISTRY={{ ghcr_registry.url }}
+REGISTRYK8S_REGISTRY={{ registryk8s_registry.url }}
+ICR_REGISTRY={{ icr_registry.url }}
+K8S_REGISTRY_TYPE={{ k8s_registry.type | default('docker') }}
+GCR_REGISTRY_TYPE={{ gcr_registry.type | default('docker') }}
+QUAY_REGISTRY_TYPE={{ quay_registry.type | default('docker') }}
+DOCKER_REGISTRY_TYPE={{ docker_registry.type | default('docker') }}
+ELASTIC_REGISTRY_TYPE={{ elastic_registry.type | default('docker') }}
+GHCR_REGISTRY_TYPE={{ ghcr_registry.type | default('docker') }}
+REGISTRYK8S_REGISTRY_TYPE={{ registryk8s_registry.type | default('docker') }}
+ICR_REGISTRY_TYPE={{ icr_registry.type | default('docker') }}
+K8S_REGISTRY_SECURE={{ k8s_registry.secure | default(True) }}
+GCR_REGISTRY_SECURE={{ gcr_registry.secure | default(True) }}
+QUAY_REGISTRY_SECURE={{ quay_registry.secure | default(True) }}
+DOCKER_REGISTRY_SECURE={{ docker_registry.secure | default(True) }}
+ELASTIC_REGISTRY_SECURE={{ elastic_registry.secure | default(True) }}
+GHCR_REGISTRY_SECURE={{ ghcr_registry.secure | default(True) }}
+REGISTRYK8S_REGISTRY_SECURE={{ registryk8s_registry.secure | default(True) }}
+ICR_REGISTRY_SECURE={{ icr_registry.secure | default(True) }}
+K8S_REGISTRY_ADDITIONAL_OVERRIDES={{ k8s_registry.additional_overrides | default('undef') }}
+GCR_REGISTRY_ADDITIONAL_OVERRIDES={{ gcr_registry.additional_overrides | default('undef') }}
+QUAY_REGISTRY_ADDITIONAL_OVERRIDES={{ quay_registry.additional_overrides | default('undef') }}
+DOCKER_REGISTRY_ADDITIONAL_OVERRIDES={{ docker_registry.additional_overrides | default('undef') }}
+ELASTIC_REGISTRY_ADDITIONAL_OVERRIDES={{ elastic_registry.additional_overrides | default('undef') }}
+GHCR_REGISTRY_ADDITIONAL_OVERRIDES={{ ghcr_registry.additional_overrides | default('undef') }}
+REGISTRYK8S_REGISTRY_ADDITIONAL_OVERRIDES={{ registryk8s_registry.additional_overrides | default('undef') }}
+ICR_REGISTRY_ADDITIONAL_OVERRIDES={{ icr_registry.additional_overrides | default('undef') }}
+USE_PUBLIC_REGISTRIES={{ use_public_registries }}
+K8S_REGISTRY_USERNAME={{ k8s_registry.username | default('none') }}
+GCR_REGISTRY_USERNAME={{ gcr_registry.username | default('none') }}
+QUAY_REGISTRY_USERNAME={{ quay_registry.username | default('none') }}
+DOCKER_REGISTRY_USERNAME={{ docker_registry.username | default('none') }}
+ELASTIC_REGISTRY_USERNAME={{ elastic_registry.username | default('none') }}
+GHCR_REGISTRY_USERNAME={{ ghcr_registry.username | default('none') }}
+REGISTRYK8S_REGISTRY_USERNAME={{ registryk8s_registry.username | default('none') }}
+ICR_REGISTRY_USERNAME={{ icr_registry.username | default('none') }}
+K8S_REGISTRY_PASSWORD={{ k8s_registry.password | default('none') }}
+GCR_REGISTRY_PASSWORD={{ gcr_registry.password | default('none') }}
+QUAY_REGISTRY_PASSWORD={{ quay_registry.password | default('none') }}
+DOCKER_REGISTRY_PASSWORD={{ docker_registry.password | default('none') }}
+ELASTIC_REGISTRY_PASSWORD={{ elastic_registry.password | default('none') }}
+GHCR_REGISTRY_PASSWORD={{ ghcr_registry.password | default('none') }}
+REGISTRYK8S_REGISTRY_PASSWORD={{ registryk8s_registry.password | default('none') }}
+ICR_REGISTRY_PASSWORD={{ icr_registry.password | default('none') }}
+
+MANAGEMENT_SUBNET={{ management_pairs['management']['subnet'] | default('undef') }}
+MANAGEMENT_START_ADDRESS={{ management_pairs['management']['start'] | default('undef') }}
+MANAGEMENT_END_ADDRESS={{ management_pairs['management']['end'] | default('undef') }}
+MANAGEMENT_FLOATING_ADDRESS={{ controller_floating_address| default('undef') }}
+MANAGEMENT_CONTROLLER0_ADDRESS={{ derived_network_params.controller_0_address | default('undef')}}
+MANAGEMENT_CONTROLLER1_ADDRESS={{ derived_network_params.controller_1_address | default('undef')}}
+MANAGEMENT_GATEWAY_ADDRESS={{ network_params.management_gateway_address_primary
+                              if (network_params.management_gateway_address_primary is defined
+                                 and network_params.management_gateway_address_primary)
+                              else 'undef' }}
+
+ADMIN_SUBNET={{ admin_pairs['admin']['subnet'] | default('undef') }}
+ADMIN_START_ADDRESS={{ admin_pairs['admin']['start'] | default('undef') }}
+ADMIN_END_ADDRESS={{ admin_pairs['admin']['end'] | default('undef') }}
+ADMIN_GATEWAY_ADDRESS={{ network_params.admin_gateway_address_primary
+                        if (network_params.admin_gateway_address_primary is defined
+                            and network_params.admin_gateway_address_primary)
+                        else 'undef' }}
+ADMIN_FLOATING_ADDRESS={{ network_params.admin_floating_address_primary
+                        if (network_params.admin_floating_address_primary is defined
+                            and network_params.admin_floating_address_primary)
+                        else 'undef' }}
+
+{# -- start of secondary of dual-stack support #}
+ADMIN_SUBNET_SECONDARY={{ address_pairs_secondary['admin']['subnet'] | default('undef') }}
+ADMIN_START_ADDRESS_SECONDARY={{ address_pairs_secondary['admin']['start'] | default('undef') }}
+ADMIN_END_ADDRESS_SECONDARY={{ address_pairs_secondary['admin']['end'] | default('undef') }}
+ADMIN_GATEWAY_ADDRESS_SECONDARY={{ network_params.admin_gateway_address_secondary
+                                   if (network_params.admin_gateway_address_secondary is defined
+                                      and network_params.admin_gateway_address_secondary)
+                                      else 'undef' }}
+ADMIN_FLOATING_ADDRESS_SECONDARY={{ network_params.admin_floating_address_secondary
+                                   if (network_params.admin_floating_address_secondary is defined
+                                      and network_params.admin_floating_address_secondary)
+                                      else 'undef' }}
+
+EXTERNAL_OAM_SUBNET_SECONDARY={{ address_pairs_secondary['oam']['subnet'] | default('undef') }}
+EXTERNAL_OAM_START_ADDRESS_SECONDARY={{ address_pairs_secondary['oam']['start'] | default('undef') }}
+EXTERNAL_OAM_END_ADDRESS_SECONDARY={{ address_pairs_secondary['oam']['end'] | default('undef') }}
+EXTERNAL_OAM_0_ADDRESS_SECONDARY={{ address_pairs_secondary['oam_node']['start'] | default('undef') }}
+EXTERNAL_OAM_1_ADDRESS_SECONDARY={{ address_pairs_secondary['oam_node']['end'] | default('undef') }}
+EXTERNAL_OAM_FLOATING_ADDRESS_SECONDARY={{ network_params.external_oam_floating_address_secondary
+                                   if (network_params.external_oam_floating_address_secondary is defined
+                                      and network_params.external_oam_floating_address_secondary)
+                                      else 'undef' }}
+EXTERNAL_OAM_GATEWAY_ADDRESS_SECONDARY={{ network_params.external_oam_gateway_address_secondary
+                                   if (network_params.external_oam_gateway_address_secondary is defined
+                                      and network_params.external_oam_gateway_address_secondary)
+                                      else 'undef' }}
+{# -- end of secondary of dual-stack support #}
+
+
+SYSTEM_CONTROLLER_OAM_SUBNET={{ system_controller_oam_subnet }}
+SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS={{ system_controller_oam_floating_address }}
+SYSTEM_CONTROLLER_SUBNET={{ system_controller_subnet }}
+SYSTEM_CONTROLLER_FLOATING_ADDRESS={{ system_controller_floating_address }}
+
+# Controller-1 will not be installed before enrollment
+CONTROLLER_0_ADMIN_NETWORK_IF={{ controller_0_admin_network_if.get('stdout', 'undef')
+                                 if controller_0_admin_network_if is defined
+                                 else 'undef' }}
+
+{# -- Check user_dns_host_records to include dns_host_records #}
+{% if user_dns_host_records is defined | default(false) %}
+{{ sysinv_user_dns_host_records }}
+{% endif %}

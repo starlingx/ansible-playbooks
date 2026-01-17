@@ -1,0 +1,185 @@
+---
+#
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to check the target host environment before proceeding to
+#   the next step.
+#
+
+- name: Check if backup is in progress
+  stat:
+    path: "{{ backup_in_progress_flag }}"
+  register: backup_in_progress
+
+- block:
+  - name: Get unix timestamp from the system
+    shell: "date +%s"
+    register: unix_timestamp
+
+  - name: Fail if backup is already in progress for less than 20 minutes
+    fail:
+      msg: >
+        failure_msg: A backup has already been started less than 20 minutes ago.
+        Wait to start a new backup or manually remove the backup flag in {{ backup_in_progress_flag }}
+    when: (unix_timestamp.stdout | float - backup_in_progress.stat.ctime) < 1200
+  when: backup_in_progress.stat.exists
+
+- block:
+  - name: Check if it is the active controller
+    shell: source /etc/platform/openrc; system host-show $(cat /etc/hostname) --column capabilities --format value
+          | grep -i "Controller-Active"
+    register: active_ctlr
+
+  - name: Fail if it is not an active controller
+    fail:
+      msg: "Backup can only be done on the active controller."
+    when: active_ctlr.rc != 0
+
+  - name: Check disk usage of /home directory
+    shell: "du -sh -m  {{ homedir }}  | awk '{print $1}'"
+    register: home_dir_usage
+
+  - name: Fail if disk usage of /home directory is over {{ max_home_dir_usage }}MB
+    fail:
+      msg: >-
+        Directory /home contains more than {{ max_home_dir_usage }}MB of data.
+        Please cleanup /home directory and try backup again.
+    when: home_dir_usage.stdout|int > max_home_dir_usage
+
+  - name: Search for system_mode in /etc/platform/platform.conf
+    shell: grep system_mode {{ platform_conf_path }}/platform.conf
+    register: check_system_mode
+
+  - name: Fail if system_mode is not set in /etc/platform/platform.conf
+    fail:
+      msg: "system_mode is not set in /etc/platform/platform.conf"
+    when: check_system_mode.rc != 0
+
+  - name: set system_mode
+    set_fact:
+      system_mode: "{{ check_system_mode.stdout.split('=')[1] }}"
+
+  - name: Exclude patches on AIO-SX
+    set_fact:
+      exclude_sw_deployments: "{{ system_mode == 'simplex' and system_type == 'All-in-one' }}"
+    when: exclude_sw_deployments is not defined
+
+  - name: Set dc-vault config path fact
+    set_fact:
+      dc_vault_permdir: "/opt/dc-vault"
+
+  - name: Check if ceph is configured
+    stat:
+      path: "{{ ceph_backend_flag }}"
+    register: ceph_backend_configured_flag
+
+  - name: Check if rook is configured
+    stat:
+      path: "{{ rook_backend_flag }}"
+    register: rook_backend_configured_flag
+
+  - block:
+    - name: Get Kubernetes version
+      import_role:
+        name: common/get-kube-version
+
+    - name: Get kubernetes version for fresh installs
+      include_vars:
+        file: roles/bootstrap/validate-config/vars/main.yml
+        name: bootstrap_vars
+
+    - name: Set fresh_install_k8s_version variable
+      set_fact:
+        fresh_install_k8s_version: "{{ bootstrap_vars.fresh_install_k8s_version }}"
+
+    - name: Get the recommended K8s version list for this Release
+      script: roles/backup/prepare-env/files/kube_supported_versions.py {{ fresh_install_k8s_version }}
+      register: result
+
+    - name: Fail if get supported kubernetes version is empty or throws an exception
+      fail:
+        msg: |
+          Failed to get list of supported kubernetes version,
+          Min_version: {{ fresh_install_k8s_version }}
+          Return code: {{ result.rc }}
+          Error output: {{ result.stderr }}
+          Result values: {{ result.stdout }}
+      when: result.rc != 0 or result.stdout == ""
+
+    - name: Set list of recommended K8s versions as variable
+      set_fact:
+        recommended_k8s_versions: "{{ result.stdout }}"
+
+    - name: Check if K8s version is in the recommended version list for backup
+      fail:
+        msg: |
+          K8s Version {{ kubernetes_version }} is not present in the recommended K8s version list for backup;
+          Use the extra arg: ignore_kube_version_check_for_backup=true to proceed with the backup anyway.
+          The K8s recommended version list for backup: {{ recommended_k8s_versions }}
+      when: kubernetes_version not in recommended_k8s_versions
+    when: not ignore_kube_version_check_for_backup | bool
+
+  - name: Wait for system to be healthy before starting backup
+    shell: |-
+      source /etc/platform/openrc
+      system health-query
+    register: health_status
+    retries: "{{ wait_for_healthy_retries }}"
+    delay: "{{ wait_for_healthy_retry_delay }}"
+    until: >-
+      health_status.rc != 0 or (
+        (health_status.stdout.count('[Fail]') == 0) or (
+          health_status.stdout.count('[Fail]') == 1 and
+          no_mgmt_alarms in health_status.stdout and
+          no_cert_alarms in health_status.stdout
+        )
+      )
+    vars:
+      no_mgmt_alarms: "[0] of which are management affecting"
+      no_cert_alarms: "[0] are certificate expiration alarms"
+    when: not ignore_health|bool
+
+  - name: Query health status for reference
+    shell: |-
+      source /etc/platform/openrc
+      system health-query
+    register: final_health_status
+
+  - name: Display health status
+    debug:
+      var: final_health_status
+
+  - name: Create backup in progress flag file
+    file:
+      path: "{{ backup_in_progress_flag }}"
+      state: touch
+
+  rescue:
+    # rescue block designed to catch various playbook errors
+    # and propagate them to the parent playbook.
+    - name: Set failure message playbook errors
+      set_fact:
+        failure_msg: >
+          Failed task: {{ ansible_failed_task.name }}.
+          {% if ansible_failed_result.msg is defined %}
+          Failed with error: {{ ansible_failed_result.msg }}
+          {% else %}
+          Failed with details: {{ ansible_failed_result }}
+          {% endif %}
+      when: ansible_failed_task is defined and ansible_failed_result is defined
+
+    - name: Display failure message
+      debug:
+        msg: "{{ failure_msg }}"
+
+    - name: Force fail if this playbook or nested playbook failed
+      fail:
+        msg: >
+          {% if failure_msg is defined and failure_msg != '' %}
+          failure_msg: {{ failure_msg }}
+          {% else %}
+          failure_msg: Failed to prepare environment for backup system.
+          {% endif %}

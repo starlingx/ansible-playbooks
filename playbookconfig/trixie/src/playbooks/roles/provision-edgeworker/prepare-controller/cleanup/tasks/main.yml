@@ -1,0 +1,15 @@
+---
+#
+# Copyright (c) 2021 Intel Corporation
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- name: Cleanup temporary files
+  file:
+    path: /tmp/edgeworker
+    state: absent
+
+- name: Remove the provision in progress flag
+  file:
+    path: "{{ edgeworker_provision_flag_file }}"
+    state: absent

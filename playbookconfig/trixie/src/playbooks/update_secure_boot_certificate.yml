@@ -1,0 +1,129 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This playbook is intended to be run on system controller or
+# standalone systems.
+#
+# It provides the capability to update the secure boot certificate.
+#
+# To run the playbook, the user would define an overrides file that
+# provides the required variable settings, passing this on the ansible
+# command-line as a parameter.
+# (see update-secure-boot-certificate-inventory-EXAMPLE.yml)
+#
+# Example command:
+# ansible-playbook /usr/share/ansible/stx-ansible/playbooks/update_secure_boot_certificate.yml \
+#     -i @update-secure-boot-certificate-inventory.yml \
+#     --extra-vars "target_list=subcloud1"
+#
+# Use target_list to target individual subclouds, or a comma-separated
+# list of subclouds such as 'subcloud1,subcloud2'. To target all online
+# subclouds at once use target_list=all_online_subclouds.
+#
+# To target only the system controller or standalone systems use target_list=localhost.
+#
+
+- name: Prepare target list and groups
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Fail if target_list is not defined
+      fail:
+        msg: >-
+          Please provide the target list in extra-vars.
+          Example --extra-vars "target_list=subcloud1,subcloud2"
+          or "target_list=all_online_subclouds" to target all online subclouds
+          in 'dcmanager subcloud list'
+      when: target_list is undefined
+
+    - name: Get all online subclouds in the system
+      block:
+        - name: Get online subclouds from dcmanager
+          shell: |
+            source /etc/platform/openrc
+            dcmanager subcloud list -c name -c availability | awk ' $4 == "online" { print $2 }'
+          register: subclouds
+          changed_when: false
+
+        - name: Add host to target_group
+          add_host:
+            name: "{{ item }}"
+            groups: target_group
+          with_items: "{{ subclouds.stdout_lines }}"
+      when: "'all_online_subclouds' in target_list"
+
+    - name: Get additional hosts from extra-vars
+      add_host:
+        name: "{{ item }}"
+        groups: target_group
+      with_items: "{{ target_list.split(',') }}"
+      when: "item not in ('localhost', 'all_online_subclouds')"
+
+- name: Run playbook in subclouds
+  hosts: target_group
+  tasks:
+    - block:
+        - name: Run playbook
+          command: >
+            ansible-playbook
+              /usr/share/ansible/stx-ansible/playbooks/update_secure_boot_certificate.yml
+                -e "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+                ansible_become_pass={{ ansible_become_pass }} target_list=localhost
+                secure_boot_cert={{ secure_boot_cert }} key_exchange_key={{ key_exchange_key }}"
+                --tags hosts_only -v
+          register: playbook_run
+          no_log: true
+
+      always:
+        - name: Print the output of the playbook
+          debug:
+            msg: >-
+              {{ playbook_run.get('stdout',
+              'Failed to run certificate recovery on other nodes.') }}
+          failed_when: playbook_run.rc != 0
+
+# Discover all hosts and add them to `target_group`.
+# - If running in central, add subclouds to `skip_group` since they were handled
+#   in the previous play.
+# - If running in a subcloud, start from this play due to the `hosts_only` tag.
+- name: Get available hosts
+  hosts: localhost
+  gather_facts: no
+  tags: hosts_only
+  tasks:
+    - name: Skip subclouds
+      add_host:
+        name: "{{ item }}"
+        groups: skip_group
+      with_items: "{{ groups.get('target_group', []) }}"
+
+    - name: Get available hosts
+      shell: |
+        source /etc/platform/openrc
+        system host-list --column hostname --column mgmt_ip --column availability --format yaml
+      register: stx_hosts
+      changed_when: false
+
+    - name: Add discovered hosts to inventory
+      add_host:
+        name: "{{ item.hostname }}"
+        groups: target_group
+      with_items: "{{ stx_hosts.stdout | from_yaml | json_query('[?availability!=`offline`]') }}"
+
+# Run the role only on discovered hosts in the current region:
+# - Skips localhost, since controller-0 and controller-1 are in `target_group`
+# - In central, skips discovered subclouds
+# - In subclouds, runs only on local discovered hosts
+- name: Update secure boot certificate on target group
+  hosts: target_group,!skip_group
+  gather_facts: no
+  tags: hosts_only
+  vars_files:
+    - host_vars/update-secure-boot-certificate/default.yml
+  strategy: free
+  roles:
+    - common/check-connectivity
+    - update-secure-boot-certificate

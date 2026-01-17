@@ -1,0 +1,48 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Check all system alarms
+  command: fm alarm-list --uuid
+  environment: "{{ system_env }}"
+  register: system_alarms
+  changed_when: false
+
+- name: Display all system alarms
+  debug:
+    var: system_alarms.stdout_lines
+  when: system_alarms.stdout_lines | length > 0
+
+- name: Retrieve all alarms regarding old cluster FSID
+  shell: |
+    fm alarm-list --query entity_instance_id=cluster={{ hostvars[system.active_controller]['ceph_fsid'] }} \
+    --uuid --nowrap   | awk '/^[|][[:space:]]*[a-f0-9-]{36}/ {print $2}'
+  environment: "{{ system_env }}"
+  register: cluster_alarm_list
+  changed_when: false
+
+- name: Delete old alarms
+  block:
+  - name: Display cluster_alarm_list
+    debug:
+      var: cluster_alarm_list.stdout_lines
+
+  - name: Delete old alarms
+    command: fm alarm-delete {{ item | trim }}
+    environment: "{{ system_env }}"
+    loop: "{{ cluster_alarm_list.stdout_lines }}"
+    loop_control:
+      label: "{{ item | trim }}"
+
+  - name: Check all system alarms after deletion
+    command: fm alarm-list --uuid
+    environment: "{{ system_env }}"
+    register: system_alarms_new
+    changed_when: false
+
+  - name: Display all system alarms after deletion
+    debug:
+      var: system_alarms_new.stdout_lines
+  when: cluster_alarm_list.stdout_lines | length > 0

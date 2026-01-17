@@ -1,0 +1,45 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role starts services required to enable IPsec on all hosts
+#   in the system.
+#
+
+- name: Get system mode
+  shell: source /etc/platform/platform.conf; echo $system_mode
+  register: system_mode
+
+- block:
+  - name: Enable and start strongswan IPsec service
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "systemctl enable ipsec.service --now"
+      -b -e "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+    with_items:
+      - controller-0
+      - controller-1
+
+  - name: Enable and start ipsec-server service
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "systemctl enable ipsec-server.service --now"
+      -b -e "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+    with_items:
+      - controller-0
+      - controller-1
+
+  - name: Create pmon configuration symlink for ipsec-server
+    command: >-
+      ansible all -i "{{ item }}," -m command -a "ln -sf
+      /usr/share/starlingx/pmon.d/ipsec-server.conf /etc/pmon.d/ipsec-server.conf"
+      -b -e "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+      ansible_become_pass={{ ansible_become_pass }}"
+    with_items:
+      - controller-0
+      - controller-1
+
+  when: system_mode != "simplex"

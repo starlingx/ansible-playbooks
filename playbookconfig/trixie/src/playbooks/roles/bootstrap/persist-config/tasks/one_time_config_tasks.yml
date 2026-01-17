@@ -1,0 +1,135 @@
+---
+#
+# Copyright (c) 2019-2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   - Save Postgres config to replicated filesystem for mate
+#   - Save branding config to replicated filesystem
+#   - Set up symlink for PXE boot
+#   - Add default security feature to kernel command line parameters
+#   - Resize some filesytems
+#
+
+- name: Set Postgres, PXE, branding config directory fact
+  set_fact:
+    postgres_config_dir: "{{ config_permdir + '/postgresql' }}"
+    pxe_config_dir: "{{ config_permdir + '/pxelinux.cfg' }}"
+    branding_config_dir: "{{ config_permdir + '/branding' }}"
+    ssl_ca_certs_dir: "{{ config_permdir + '/ssl_ca' }}"
+
+- debug:
+    msg: >-
+      postgres_config_dir: {{ postgres_config_dir }}
+      pxe_config_dir: {{ pxe_config_dir }}
+      branding_config_dir: {{ branding_config_dir }}
+      ssl_ca_certs_dir: {{ ssl_ca_certs_dir }}
+
+- name: Ensure Postres, PXE config directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    recurse: yes
+    owner: root
+    group: root
+    mode: 0755
+  with_items:
+    - "{{ postgres_config_dir }}"
+    - "{{ pxe_config_dir }}"
+
+- name: Ensure SSL CA and etcd certs directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0700
+  with_items:
+    - "{{ ssl_ca_certs_dir }}"
+    - "{{ etcd_certs_dir }}"
+
+- name: Get list of Postgres conf files (type file)
+  find:
+    paths: /etc/postgresql
+    pattern: '*.conf'
+    file_type: file
+  register: postgres_result_file
+
+- name: Get list of Postgres conf files (type links)
+  find:
+    paths: /etc/postgresql
+    pattern: '*.conf'
+    file_type: link
+  register: postgres_result_link
+
+- name: Copy postgres conf files for mate
+  copy:
+    src: "{{ item.path }}"
+    dest: "{{ postgres_config_dir }}"
+    mode: preserve
+    owner: postgres
+    group: postgres
+    remote_src: yes
+  with_items: "{{ postgres_result_file.files + postgres_result_link.files }}"
+
+- name: Create a symlink to PXE config files
+  file:
+    src: "{{ pxe_config_dir }}"
+    dest: /var/pxeboot/pxelinux.cfg
+    state: link
+
+- name: Check if copying of branding files for mate is required
+  stat:
+    path: /opt/branding/
+  register: branding_result
+
+- block:
+    - name: Ensure branding config directory exists
+      file:
+        path: "{{ branding_config_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: 0755
+
+    - name: Check if branding tar files exist (there should be only one)
+      find:
+        paths: /opt/branding
+        patterns: '*.tgz'
+      register: bt_result
+
+    - name: Copy branding tar files
+      copy:
+        src: "{{ item.path }}"
+        dest: "{{ branding_config_dir }}"
+        remote_src: yes
+        mode: preserve
+      with_items:
+        - "{{ bt_result.files }}"
+
+  when: branding_result.stat.exists and branding_result.stat.isdir
+
+- name: Add default security feature to kernel parameters (Centos)
+  block:
+    - name: Get grub default kernel
+      command: grubby --default-kernel
+      register: grub_kernel_output
+
+    - name: Update grub default kernel parameters
+      command: "{{ item }}"
+      with_items:
+        - "grubby --update-kernel={{ grub_kernel_output.stdout_lines[0] }} --args='{{ default_security_feature }}'"
+        - "grubby --efi --update-kernel={{ grub_kernel_output.stdout_lines[0] }} --args='{{ default_security_feature }}'"
+  when: os_release == 'centos'
+
+- name: Add default security feature to kernel parameters (Debian)
+  command: /usr/local/bin/puppet-update-grub-env.py --add-kernelparams '{{ default_security_feature }}'
+  when: os_release == 'debian'
+
+- name: Gather drbd status
+  command: drbd-overview
+  register: drbd_result
+
+- name: Record drbd status
+  debug: var=drbd_result.stdout_lines

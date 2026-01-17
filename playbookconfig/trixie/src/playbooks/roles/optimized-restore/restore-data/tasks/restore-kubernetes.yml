@@ -1,0 +1,244 @@
+---
+#
+# Copyright (c) 2022-2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Restore kubernetes service.
+#   During restoration of kubernetes, images will be pushed to local
+#   registry.  If the images were not included in the backup
+#   they will be downloaded in the same way as during a bootstrap.
+
+# We may need to update /etc/hosts because registry.central will not be
+# available on system controllers or subclouds because dnsmasq is not brought up.
+- block:
+  - name: Get primary system-controller-oam floating ip address
+    include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+    vars:
+      network_type: system-controller-oam
+      network_stack: primary
+
+  - debug:
+      msg: primary system-controller-oam addresses {{ addresses }}
+
+  - name: Assign primary system-controller-oam ip addresses
+    set_fact:
+      sc_oam_vip: "{{ addresses.floating_address }}"
+
+- name: Add host route to registry.central if present
+  lineinfile:
+    path: /etc/hosts
+    insertafter: EOF
+    line: "{{ sc_oam_vip }} registry.central"
+  when: sc_oam_vip
+
+- name: Get Kubernetes version
+  import_role:
+    name: common/get-kube-version
+
+- name: Create symlinks for current Kubernetes version
+  import_role:
+    name: common/k8s-symlinks
+
+- name: Enable kubelet
+  systemd:
+    name: kubelet
+    state: stopped
+    enabled: true
+
+- name: Start containerd service
+  systemd:
+    name: containerd
+    state: restarted
+
+- name: Add original system images to download list
+  block:
+    # During backup, a snapshot of all the images in registry local
+    # was taken.  We want to ensure that all those
+    # images are redownloaded before running unlock after this playbook.
+    # Image downloads for application re-applies shortly after
+    # the host unlock impose a significant performance cost.
+    - name: Attempt to read original image list from backup
+      command:
+        cmd: >
+          tar --wildcards --use-compress-program=pigz -O -xf
+          {{ platform_backup_fqpn | quote }} 'opt/*/system_image_list.yaml'
+      args:
+        warn: false
+      failed_when: false
+      register: system_image_list
+
+    - name: Attempt to read crictl cache image list from backup
+      command:
+        cmd: >
+          tar --wildcards --use-compress-program=pigz -O -xf
+          {{ platform_backup_fqpn | quote }} 'opt/*/crictl_image_cache_list.txt'
+      args:
+        warn: false
+      failed_when: false
+      register: crictl_image_cache
+
+    - name: Add original images to additional download list if found
+      set_fact:
+        backed_up_local_registry_images: "{{ (system_image_list.stdout | from_yaml).images }}"
+      when: system_image_list.rc == 0
+
+    - name: Display additional images for download
+      debug:
+        var: backed_up_local_registry_images
+      when: system_image_list.rc == 0
+
+    # Get the list of k8s control plane images to satisfy the scenario.
+    # - crictl_image_cache_list is not present in backup file during restore.
+    # - crictl image cache was cleared before backup.
+    - name: Get the list of kubernetes control plane images
+      command: "/usr/local/kubernetes/{{ kubernetes_version }}/stage1/usr/bin/kubeadm
+               --kubeconfig=/etc/kubernetes/admin.conf config images list
+               --kubernetes-version {{ kubernetes_version }}"
+      register: k8s_cp_images_output
+
+    - name: Save the crictl cache images to a list
+      set_fact:
+        crictl_image_cache_list:
+          "{{ (k8s_cp_images_output.stdout_lines)
+          if (crictl_image_cache.rc != 0)
+          else ((k8s_cp_images_output.stdout_lines + crictl_image_cache.stdout_lines) | unique) }}"
+
+  when: >
+    restore_original_images|bool and
+    not upgrade_in_progress
+
+# Running push-docker-images and bringup-kubemaster increases playbook time,
+# but it decreases unlock time by around the same amount.
+- name: Populate local image registry
+  import_role:
+    name: common/push-docker-images
+
+- name: Restore path
+  block:
+    - name: Check if var/lib/kubelet is present in the backup
+      command:
+        cmd: "tar --use-compress-program=pigz -tf '{{ platform_backup_fqpn }}' var/lib/kubelet"
+      args:
+        warn: false
+      failed_when: false
+      register: kubelet_backup_found
+
+    - name: Restore var/lib/kubelet from the backup
+      command:
+        # In the case where the backed-up CPU manager policy/memory manager policy
+        # is 'static', the state preserved in cpu_manager_state/memory_manager_state
+        # conflicts with the default 'none' policy and causes kubelet to error out
+        # in the next step. Excluding state files here is safe as it gets regenerated
+        # with intended values after subsequent unlock after the restore playbook.
+        cmd: "tar --use-compress-program=pigz -C / -xpf \
+             '{{ platform_backup_fqpn }}' var/lib/kubelet \
+             --exclude var/lib/kubelet/cpu_manager_state \
+             --exclude var/lib/kubelet/memory_manager_state"
+      args:
+        warn: false
+      when: kubelet_backup_found.rc == 0
+
+    - name: Create kubelet override config file
+      template:
+        src: roles/common/bringup-kubemaster/templates/kubelet.conf.j2
+        dest: /etc/default/kubelet
+      vars:
+        node_ip: "{{ derived_network_params.controller_0_cluster_host }}"
+
+    - name: Stop etcd
+      service:
+        name: etcd
+        state: stopped
+
+    - name: Restore etcd database
+      include_role:
+        name: backup-restore/restore-etcd
+
+    - name: Start etcd
+      service:
+        name: etcd
+        state: started
+        enabled: false
+
+    - name: Set up k8s environment variable
+      copy:
+        src: /usr/share/puppet/modules/platform/files/kubeconfig.sh
+        dest: /etc/profile.d/kubeconfig.sh
+        remote_src: yes
+
+    - name: Add kubelet service override
+      copy:
+        src: "{{ kubelet_override_template }}"
+        dest: /etc/systemd/system/kubelet.service.d/kube-stx-override.conf
+        mode: preserve
+        remote_src: yes
+
+    - name: Register kubelet with pmond
+      copy:
+        src: "{{ kubelet_pmond_template }}"
+        dest: /etc/pmon.d/kubelet.conf
+        mode: preserve
+        remote_src: yes
+
+    - name: Do a systemd daemon-reload
+      systemd:
+        daemon_reload: true
+
+    - name: Start kubelet
+      systemd:
+        name: kubelet
+        state: started
+
+  when: not upgrade_in_progress
+
+# During an upgrade, do a full bringup of Kubernetes to pick up changes. E.g. audit config.
+- name: Restore Kubernetes during upgrades
+  block:
+    # The condition of requirement for updating the containerd config is:
+    # Does the pause image in the config file match the pause image in platform image list for
+    # the Kubernetes version being restored. If the pause image is changed for a specific
+    # Kubernetes version between releases this step is required, e.g.
+    # stx5 has pause:3.2 for Kubernetes 1.21 and stx8 has pause:3.4 for Kubernetes 1.21.
+    # This change aligns with puppet:
+    # https://opendev.org/starlingx/stx-puppet/src/commit/c1f08898163ee1ca65987a80d55fd953817e1fbb/puppet-manifests/src/modules/platform/manifests/containerd.pp#L129
+    - name: Update pause image in containerd config
+      replace:
+        path: /etc/containerd/config.toml
+        after: "sandbox_image ="
+        before: "$"
+        regexp: '"{{ local_registry }}/.+/pause:.+"'
+        replace: '"{{ local_registry }}/{{ pause_img }}"'
+      register: update_pause_img
+
+    - name: Restart containerd service
+      systemd:
+        name: containerd
+        state: restarted
+      when: update_pause_img.changed
+
+    - name: Bring up Kubernetes master
+      include_role:
+        name: common/bringup-kubemaster
+
+    - name: Start kubelet
+      systemd:
+        name: kubelet
+        state: started
+      retries: 3
+      delay: 15
+
+  when: upgrade_in_progress
+
+- name: Restore helm service
+  import_tasks: restore-helm.yml
+
+# we need to restart sysinv conductor here because it seem to be caching old data
+# this prevents it from interacting with a fresh kubernetes cluster. For example,
+# if the user changes OAM network and forces the kubernetes cluster to be torn down
+# and brought up again.
+- name: Restart sysinv-conductor
+  systemd:
+    name: sysinv-conductor
+    state: restarted

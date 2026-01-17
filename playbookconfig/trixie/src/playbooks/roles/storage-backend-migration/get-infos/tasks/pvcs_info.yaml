@@ -1,0 +1,57 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get all cephfs PVCs names
+  command: kubectl get pvc -o jsonpath='{range .items[?(@.spec.storageClassName=="cephfs")]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' -A
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: cephfs_pvcs_raw_result
+  changed_when: false
+  when: cephfs_pvcs_raw is undefined
+
+- name: Set cephfs_pvcs_raw
+  set_fact:
+    cephfs_pvcs_raw: "{{ cephfs_pvcs_raw_result.stdout_lines }}"
+    cacheable: true
+  when: cephfs_pvcs_raw is undefined
+
+- name: Build dict with cephfs PVC names keyed by namespace
+  set_fact:
+    cephfs_pvcs_by_namespace: >-
+      {{
+      cephfs_pvcs_by_namespace
+      | default({})
+      | combine(
+          { item.split()[0]: [{ 'name': item.split()[1] }]},
+          list_merge='append'
+        )
+      }}
+  loop: "{{ cephfs_pvcs_raw }}"
+  when: cephfs_pvcs_raw | default([]) | length > 0
+
+- name: Debug cephfs_pvcs_by_namespace var
+  debug:
+    var: cephfs_pvcs_by_namespace
+  when: cephfs_pvcs_by_namespace is defined
+
+- name: Set rbd_pvcs_names if undefined
+  block:
+    - name: Get all rbd PVCs names
+      command: kubectl get pvc -o jsonpath='{range .items[?(@.spec.storageClassName=="general")]}{.metadata.name}{"\n"}{end}' -A
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      register: rbd_pvcs_output
+      changed_when: false
+
+    - name: Set vars for rbd pvc names
+      set_fact:
+        rbd_pvcs_names: "{{ rbd_pvcs_output.stdout_lines }}"
+        cacheable: true
+  when: rbd_pvcs_names is undefined
+
+- name: Debug rbd_pvcs_names var
+  debug:
+    var: rbd_pvcs_names

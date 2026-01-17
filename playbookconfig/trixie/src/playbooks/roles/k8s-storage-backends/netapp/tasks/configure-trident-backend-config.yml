@@ -1,0 +1,48 @@
+---
+#
+# Copyright (c) 2023,2025 Wind River Systems, Inc.
+#
+# SUB-TASKS DESCRIPTION:
+#   These tasks configure TridentBackendConfig custom resource
+#
+
+- name: Configure Trident Backend Config custom resource
+  block:
+    - name: Set TridentBackendConfig filename
+      set_fact:
+        tbc_file: "{{ trident_setup_dir }}/tbc-{{ backend.metadata.name }}.yml"
+
+    - name: Set TridentBackendConfig headers
+      set_fact:
+        tbc_headers:
+          apiVersion: trident.netapp.io/v1
+          kind: TridentBackendConfig
+
+    - name: Prepare TridentBackendConfig content
+      set_fact:
+        tbc_yaml: "{{ tbc_headers | combine(backend) }}"
+
+    - name: Create TridentBackendConfig yaml file
+      copy:
+        content: "{{ tbc_yaml | to_nice_yaml }}"
+        dest: "{{ tbc_file }}"
+
+    - name: Create K8s TridentBackendConfig
+      command: "kubectl -n {{ trident_namespace }} --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ tbc_file }}"
+
+    - name: Wait for TridentBackendConfig to be created
+      command: >-
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf
+        -n {{ trident_namespace }}
+        get tridentbackendconfig {{ backend.metadata.name }}
+      register: check
+      until: check.rc == 0
+      retries: 60
+      delay: 10
+      changed_when: false
+
+  always:
+    - name: Remove Trident backend config yaml file
+      file:
+        path: "{{ tbc_file }}"
+        state: absent

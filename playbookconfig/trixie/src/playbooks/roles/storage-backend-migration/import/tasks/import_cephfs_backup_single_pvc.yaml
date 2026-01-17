@@ -1,0 +1,55 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "[PVC {{ pvc.name }}] Try to restore CephFS"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  block:
+    - name: "[PVC {{ pvc.name }}] Create restore pod"
+      template:
+        src: pod-migration-import-cephfs.yaml.j2
+        dest: "{{ tmp_workspace }}/pod-migration-import-cephfs.yaml"
+        mode: 0644
+      vars:
+        pvc_name: "{{ pvc.name }}"
+      register: pod_file_created
+      changed_when: false
+      failed_when: pod_file_created.failed
+
+    - name: "[PVC {{ pvc.name }}] Apply pod"
+      command: "kubectl apply -f {{ tmp_workspace }}/pod-migration-import-cephfs.yaml"
+      register: apply_pod_result
+
+    - name: "[PVC {{ pvc.name }}] Wait for migration-import-cephfs pod to be applied"
+      command: kubectl get pods -n {{ cephfs_pvc_namespace }} migration-import-cephfs -o 'jsonpath={.status.phase}'
+      register: cephfs_pod_applied
+      until: "'Running' in cephfs_pod_applied.stdout"
+      retries: 60
+      delay: 10
+      changed_when: false
+      failed_when:
+        - "'Running' not in cephfs_pod_applied.stdout"
+
+    - name: "[PVC {{ pvc.name }}] Import CephFS backup file"
+      shell: |
+        set -e -o pipefail
+        echo "Importing backup to /data/..."
+        kubectl exec -n {{ cephfs_pvc_namespace }} migration-import-cephfs -- tar -xzf "/backup/backup-${PVC_NAME}.tar.gz" -C /data/
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+        PVC_NAME: "{{ cephfs_pvc_namespace }}-{{ pvc.name }}"
+      register: import_result
+      changed_when: import_result.rc == 0
+
+    - name: "[PVC {{ pvc.name }}] Show import CephFS result"
+      debug:
+        var: import_result.stdout_lines
+
+  always:
+    - name: "[PVC {{ pvc.name }}] Cleanup restore pod"
+      command: "kubectl delete -f {{ tmp_workspace }}/pod-migration-import-cephfs.yaml --ignore-not-found=true"
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"

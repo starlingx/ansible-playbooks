@@ -1,0 +1,35 @@
+- name: Update storage-backend migration_status capability to failed
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -c "
+    UPDATE storage_backend
+    SET capabilities = (
+      capabilities::jsonb || '{\"migration_status\": \"failed\"}'::jsonb
+    )::text
+    WHERE id = {{ storage_backend.id }};
+    "
+  vars:
+    storage_backend: "{{ hostvars[system.active_controller].storage_backend }}"
+  run_once: true
+  delegate_to: "{{ system.active_controller }}"
+  when: hostvars[system.active_controller].storage_backend is defined
+
+- name: Raise migration error alarm
+  script: "{{ role_path_common }}/files/fm_alarm.py --entity-uuid {{ storage_backend.uuid }} --set error --file-name /home/sysadmin/storage-backend-migration-ansible.log"
+  vars:
+    storage_backend: "{{ hostvars[system.active_controller].storage_backend }}"
+  run_once: true
+  delegate_to: "{{ system.active_controller }}"
+  when: hostvars[system.active_controller].storage_backend is defined
+
+- name: Remove in-progress migration flag
+  file:
+    path: /run/.rook_migration_in_progress
+    state: absent
+  run_once: true
+  delegate_to: "{{ system.active_controller }}"
+
+- name: Propagate the failure
+  fail:
+    msg: Migration failed.

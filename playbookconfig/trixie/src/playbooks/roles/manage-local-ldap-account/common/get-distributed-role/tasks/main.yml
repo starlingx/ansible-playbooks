@@ -1,0 +1,21 @@
+---
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Set flags related to distributed cloud.
+#
+
+- name: Get distributed_cloud role
+  shell: |
+    source /etc/platform/openrc
+    system show | grep distributed_cloud_role | awk '{ print $4 }'
+  register: distributed_cloud_role
+
+- name: Check if system is a DC systemcontroller
+  set_fact:
+    is_dc_systemcontroller: "{{ true if distributed_cloud_role.stdout == 'systemcontroller' else false }}"
+
+- name: Check if system is a DC subcloud
+  set_fact:
+    is_dc_subcloud: "{{ true if distributed_cloud_role.stdout == 'subcloud' else false }}"

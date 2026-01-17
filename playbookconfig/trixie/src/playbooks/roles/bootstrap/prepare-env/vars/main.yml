@@ -1,0 +1,103 @@
+---
+
+image_brand: StarlingX
+platform_path: /opt/platform
+puppet_path: /opt/platform/puppet
+standard_root_disk_size: 500
+temp_ssl_ca_dir: "/tmp"
+temp_ssl_ca_file: "ca-cert.pem"
+temp_k8s_plugins_dir: "/tmp"
+
+external_cert_overrides_list:
+- ssl_ca_cert
+- etcd_root_ca_cert
+- etcd_root_ca_key
+- system_root_ca_cert
+- system_local_ca_cert
+- system_local_ca_key
+
+cert_or_key_begin_marker: "-----BEGIN"
+
+# KUBERNETES PARAMETERS
+# =====================
+kubelet_vol_plugin_dir: /var/opt/libexec/kubernetes/kubelet-plugins/volume/exec/
+# Kubernetes api server encryption provider configuration file
+encryption_provider_config: /etc/kubernetes/encryption-provider.yaml
+audit_log_root: /var/log/kubernetes/audit/
+audit_log_filename: audit.log
+default_audit_policy_config: /etc/kubernetes/default-audit-policy.yaml
+kubelet_cgroup_root: "/k8s-infra"
+luks_fs_dir: /var/luks/stx/luks_fs/
+
+# Networking
+networking_configurations_defaults:
+  dnsDomain: 'cluster.local'
+  podSubnet: "{{ cluster_pod_subnet }}"
+  serviceSubnet: "{{ cluster_service_subnet }}"
+
+# ClusterConfiguration
+apiserver_extra_args_defaults:
+  encryption-provider-config: "{{ encryption_provider_config }}"
+  default-not-ready-toleration-seconds: "30"
+  default-unreachable-toleration-seconds: "30"
+  event-ttl: "24h"
+  audit-log-path: "{{ audit_log_root }}{{audit_log_filename}}"
+  audit-log-maxage: "3"
+  audit-log-maxbackup: "10"
+  audit-log-maxsize: "100"
+  tls-min-version: "VersionTLS12"
+# The source of cipher suites is from this list:
+# https://kubernetes.io/docs/reference/command-line-tools-reference/kube-apiserver/
+  tls-cipher-suites: "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_AES_128_GCM_SHA256,TLS_AES_256_GCM_SHA384"# yamllint disable-line rule:line-length
+
+controllermanager_extra_args_defaults:
+  node-monitor-period: "2s"
+  node-monitor-grace-period: "20s"
+  flex-volume-plugin-dir: "{{ kubelet_vol_plugin_dir }}"
+  allocate-node-cidrs: "false"
+
+scheduler_extra_args_defaults: { }
+
+apiserver_extra_volumes_defaults:
+  - name: "encryption-config"
+    hostPath: "{{ encryption_provider_config }}"
+    mountPath: "{{ encryption_provider_config }}"
+    readOnly: true
+    pathType: File
+  - name: "default-audit-policy-file"
+    hostPath: "{{ default_audit_policy_config }}"
+    mountPath: "{{ default_audit_policy_config }}"
+    readOnly: true
+    pathType: File
+  - name: "audit-log-dir"
+    hostPath: "{{ audit_log_root }}"
+    mountPath: "{{ audit_log_root }}"
+    readOnly: false
+    pathType: DirectoryOrCreate
+
+controllermanager_extra_volumes_defaults: []
+
+scheduler_extra_volumes_defaults: []
+
+# KubeletConfiguration
+kubelet_extra_args_defaults:
+  v: '2'
+kubelet_configurations_defaults:
+  nodeStatusUpdateFrequency: "4s"
+  failSwapOn: false
+  cgroupDriver: "cgroupfs"
+  cgroupRoot: "{{ kubelet_cgroup_root }}"
+  imageGCHighThresholdPercent: 79
+  imageGCLowThresholdPercent: 75
+  evictionHard:
+    memory.available: '100Mi'
+    nodefs.available: '10%'
+    nodefs.inodesFree: '5%'
+    imagefs.available: '2Gi'
+
+# SSL certs configuration
+ca_cert_dir: "/etc/pki/ca-trust/source/anchors"
+
+# Registry filesystem
+bootstrap_registry_filesystem: false
+bootstrap_registry_filesystem_fqpn: null

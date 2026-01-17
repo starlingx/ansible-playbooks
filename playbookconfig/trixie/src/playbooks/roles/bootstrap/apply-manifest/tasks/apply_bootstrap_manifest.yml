@@ -1,0 +1,414 @@
+---
+#
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+# These tasks create static configuration and apply the puppet bootstrap
+# manifest.
+
+- name: Create config workdir
+  file:
+    path: "{{ hieradata_workdir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+- block:
+  - name: Generating static config data
+    command: "/usr/bin/sysinv-puppet create-static-config {{ hieradata_workdir }}"
+    failed_when: false
+    register: static_config_result
+
+  - name: Fail if static hieradata cannot be generated
+    fail:
+      msg: "Failed to create puppet hiera static config."
+    when: static_config_result.rc != 0
+
+  - block:
+    - name: Write required system controller keystone user and project Ids to static hieradata if it's subcloud
+      lineinfile:
+        path: "{{ hieradata_workdir }}/static.yaml"
+        line: "{{ item }}"
+      with_items:
+        - "keystone::{{ 'bootstrap::' if os_release == 'debian' else '' }}dc_admin_user_id:
+          {{ system_controller_keystone_admin_user_id }}"
+        - "keystone::{{ 'bootstrap::' if os_release == 'debian' else '' }}dc_admin_project_id:
+          {{ system_controller_keystone_admin_project_id }}"
+        - "openstack::keystone::bootstrap::dc_services_project_id: {{ system_controller_keystone_services_project_id }}"
+        - "platform::sysinv::bootstrap::dc_sysinv_user_id: {{ system_controller_keystone_sysinv_user_id }}"
+        - "platform::dcmanager::bootstrap::dc_dcmanager_user_id: {{system_controller_keystone_dcmanager_user_id}}"
+
+    - name: Set ldapserver_remote to true by default in static.yaml to avoid misconfiguration during bootstrap
+      lineinfile:
+        path: "{{ hieradata_workdir }}/static.yaml"
+        regexp: "^platform::ldap::params::ldapserver_remote:"
+        line: "platform::ldap::params::ldapserver_remote: true"
+
+    when: distributed_cloud_role == 'subcloud'
+
+  - name: Create cert for etcd server and client
+    import_role:
+      name: common/create-etcd-certs
+  when: mode == 'bootstrap'
+
+- block:
+  - name: Set ssh_config tmp dir fact
+    set_fact:
+      temp_ssh_config_dir: /tmp/config/ssh_config
+
+  - name: Prefetch all hieradata
+    command: >-
+      tar -C {{ hieradata_workdir }} -xpf {{ restore_data_file }} --wildcards
+      --transform='s,.*/,,' '{{ archive_puppet_permdir }}/*.yaml'
+    args:
+      warn: false
+
+  - name: Migrate static hieradata to new version
+    command: >
+      sed -i
+      '/{{ item }}/ s/{{ upgrade_metadata.from_release }}/{{ upgrade_metadata.to_release }}/g'
+      {{ hieradata_workdir }}/static.yaml
+    args:
+      warn: false
+    loop:
+      - "platform::client::credentials::params::keyring_directory: "
+      - "platform::client::credentials::params::keyring_file: "
+      - "platform::params::software_version: "
+    when: upgrade_in_progress|default(false)|bool
+
+  - name: Restore etcd certificates.
+    shell: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
+    args:
+      warn: false
+    with_items:
+      - "{{ '/etc/etcd' | regex_replace('^\\/', '') }}"
+    become_user: root
+
+  - name: Check if etcd certs are exist.
+    find:
+      paths: "/etc/etcd"
+      patterns:
+        - '*.crt'
+        - '*.key'
+    register: etcd_certs_find_output
+
+  - name: Check if apiserver-keys are present in the backup tarball
+    shell: "tar -tf {{ restore_data_file }} | grep 'etc/kubernetes/pki/apiserver-etcd-client.*'"
+    args:
+      warn: false
+    failed_when: false
+    register: apiserver_etcd_certs_find_output
+
+  - name: Extract apiserver-keys from /etc/kubernetes/pki
+    shell: tar -C /etc/etcd/ --overwrite -xpf {{ restore_data_file }} {{ item }} --strip-components 3
+    args:
+      warn: false
+    with_items:
+      - "{{ kubeadm_pki_dir | regex_replace('^\\/', '') }}/apiserver-etcd-client.crt"
+      - "{{ kubeadm_pki_dir | regex_replace('^\\/', '') }}/apiserver-etcd-client.key"
+    become_user: root
+    when: apiserver_etcd_certs_find_output.rc == 0
+
+  - name: Look for ssh_config dir in the backup tarball
+    shell: "tar -tf {{ restore_data_file }} | grep 'opt/platform/config/.*/ssh_config'"
+    args:
+      warn: false
+    failed_when: false
+    register: search_ssh_config
+
+  - block:
+    - name: Create temp ssh_config dir
+      file:
+        path: "{{ temp_ssh_config_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: 0755
+
+    - name: Prefetch ssh_config
+      command: >-
+        tar -C {{ temp_ssh_config_dir }} -xpf {{ restore_data_file }} --transform='s,.*/,,'
+        {{ archive_ssh_config_permdir }}
+      args:
+        warn: false
+
+    - name: Remove the unwanted directory
+      file:
+        path: "{{ temp_ssh_config_dir }}/ssh_config"
+        state: absent
+
+    when: search_ssh_config.rc == 0
+  when: mode == 'restore'
+
+- name: Set the ip version of etcd listen address to its default value
+  set_fact:
+    etcd_listen_address_version: 4
+
+- name: Update the ip version of etcd listen address to ipv6
+  set_fact:
+    etcd_listen_address_version: 6
+  when: ipv6_addressing != False
+
+  # Add etcd security info to static hieradata so that etcd is configured with security
+  # when etc puppet manifest is applied before Kubernetes master is initialized in the later role.
+- name: Write security settings to static hieradata
+  lineinfile:
+    path: "{{ hieradata_workdir }}/static.yaml"
+    line: "{{ item }}"
+  with_items:
+    - "platform::etcd::params::bind_address: {{ cluster_floating_address }}"
+    - "platform::etcd::params::bind_address_version: {{ etcd_listen_address_version }}"
+
+- name: Create runtime hieradata
+  file:
+    path: "{{ hieradata_workdir }}/runtime.yaml"
+    state: touch
+    owner: root
+    group: root
+    mode: 0600
+
+- block:
+  - name: Set identity_region in runtime.yaml
+    lineinfile:
+      path: "{{ hieradata_workdir }}/runtime.yaml"
+      regexp: "^platform::client::params::identity_region:.*"
+      line: "platform::client::params::identity_region: {{ region_name }}"
+      create: yes
+
+  - name: Set keystone_identity_region in runtime.yaml
+    lineinfile:
+      path: "{{ hieradata_workdir }}/runtime.yaml"
+      regexp: "^platform::client::params::keystone_identity_region:.*"
+      line: "platform::client::params::keystone_identity_region: {{ region_name }}"
+      create: yes
+  - name: Ensure keystone::endpoint::region is set correctly in controller.yaml
+    lineinfile:
+      path: /etc/puppet/hieradata/controller.yaml
+      regexp: '^keystone::endpoint::region:'
+      line: "keystone::endpoint::region: {{ region_name }}"
+  - name: Ensure platform::mtce::params::auth_region is set correctly in controller.yaml
+    lineinfile:
+      path: /etc/puppet/hieradata/controller.yaml
+      regexp: '^platform::mtce::params::auth_region:'
+      line: "platform::mtce::params::auth_region: {{ region_name }}"
+  - name: Ensure barbican::keystone::authtoken::region_name is set correctly in static.yaml
+    lineinfile:
+      path: "{{ hieradata_workdir }}/static.yaml"
+      regexp: '^barbican::keystone::authtoken::region_name:'
+      line: "barbican::keystone::authtoken::region_name: {{ region_name }}"
+
+  when: distributed_cloud_role in ['subcloud', 'none']
+
+- block:
+  - name: Specify filesystem sizes
+    set_fact:
+      pgsql_size: 10
+      platform_size: 10
+      etcd_size: 5
+      dockerdistribution_size: 16
+      backup_size: 20
+      docker_size: 40
+      kubelet_size: 10
+      scratch_size: 16
+    when: root_disk_size|int >= minimum_small_root_disk_size
+
+  - name: Expand filesystem sizes
+    set_fact:
+      pgsql_size: 20
+      backup_size: 25
+    when: root_disk_size|int > small_root_disk_size
+
+  - name: Expand systemcontroller filesystems sizes for standard deployments
+    set_fact:
+      platform_size: 20
+      backup_size: 35
+    when: >
+      (root_disk_size|int > small_root_disk_size and
+       distributed_cloud_role == 'systemcontroller' and
+       system_type == 'Standard')
+
+  - name: Write filesystem settings to runtime hieradata
+    lineinfile:
+      path: "{{ hieradata_workdir }}/runtime.yaml"
+      line: "{{ item }}"
+    with_items:
+      - "platform::filesystem::backup::params::lv_size: {{ backup_size }}"
+      - "platform::filesystem::docker::params::lv_size: {{ docker_size }}"
+      - "platform::filesystem::kubelet::params::lv_size: {{ kubelet_size }}"
+      - "platform::filesystem::scratch::params::lv_size: {{ scratch_size }}"
+      - "platform::drbd::dockerdistribution::params::lv_size: {{ dockerdistribution_size }}"
+      - "platform::drbd::etcd::params::lv_size: {{ etcd_size }}"
+      - "platform::drbd::pgsql::params::lv_size: {{ pgsql_size }}"
+      - "platform::drbd::platform::params::lv_size: {{ platform_size }}"
+    when: root_disk_size|int >= minimum_small_root_disk_size
+
+  - name: Write dns host records to runtime hieradata
+    lineinfile:
+      path: "{{ hieradata_workdir }}/runtime.yaml"
+      regexp: "^platform::config::hosts::host_records: "
+      line: "platform::config::hosts::host_records: {{ user_dns_host_records_lines }}"
+    when: user_dns_host_records
+
+  - name: Getting supported disk devices from udev
+    shell: |
+      import pyudev
+      from sysinv.common import constants as sysinv_constants
+      context = pyudev.Context()
+      output = ""
+      for device in context.list_devices(DEVTYPE='disk'):
+          if device.properties['MAJOR'] in sysinv_constants.VALID_MAJOR_LIST:
+              if 'ID_PATH' in device:
+                  output += "(ID_PATH=%s)|" % device.properties['ID_PATH']
+      print(output[:-1])
+    args:
+      executable: /usr/bin/python
+    register: tuned_devices
+
+  - name: Write disk devices to StarlingX Tuned profile
+    lineinfile:
+      path: "{{ hieradata_workdir }}/runtime.yaml"
+      line: "platform::sysctl::params::tuned_devices: {{ tuned_devices.stdout }}"
+
+  when: mode == 'bootstrap'
+
+- name: Add L4 service ports value to bootstrap runtime hieradata
+  vars:
+    script_content: |
+      import sysinv.common.platform_firewall as pf
+      file = "{{ hieradata_workdir }}/runtime.yaml"
+      with open(file, "a") as f:
+        for key in pf.SYSTEM_CONFIG:
+          f.write(f"{key}: {pf.SYSTEM_CONFIG[key]}\n")
+  shell: "{{ script_content }}"
+  args:
+    executable: /usr/bin/python
+  when: mode == 'bootstrap' or mode == 'restore'
+
+- block:
+  - name: Read drbd settings from system hieradata
+    command: "grep 'platform::drbd::.*::params::lv_size.*' {{ hieradata_workdir }}/system.yaml"
+    register: system_file
+
+  - name: Read admin_password from system hieradata
+    command: "egrep '::keystone_admin_password|::admin_password|admin::password' {{ hieradata_workdir }}/secure_system.yaml"
+    register: secure_system_file
+
+  - name: Write system settings to runtime hieradata
+    lineinfile:
+      path: "{{ hieradata_workdir }}/runtime.yaml"
+      line: "{{ item }}"
+    no_log: true
+    with_items: "{{ system_file.stdout_lines + secure_system_file.stdout_lines }}"
+
+  - name: Read in system.yaml network values
+    shell: "grep -E '^platform::network::' {{ hieradata_workdir }}/system.yaml"
+    register: system_result
+
+  - name: Include system values as facts
+    set_fact:
+      system_values: "{{ system_result.stdout | from_yaml }}"
+
+  - name: Remove system hieradata
+    file:
+      path: "{{ item }}"
+      state: absent
+    with_items:
+      - "{{ hieradata_workdir }}/system.yaml"
+      - "{{ hieradata_workdir }}/secure_system.yaml"
+
+  # Search the hieradata file name for controller-0 host, if
+  # the command doesn't find the pattern it will return != 0
+  - name: Get controller-0 host hieradata filename
+    shell: "grep -l 'platform::params::hostname:.*controller-0' {{ hieradata_workdir }}/*.yaml"
+    register: c0_hiera_file
+    no_log: true
+    ignore_errors: true
+
+  # If for any reason the previous command fails to find the hieradata file,
+  # the process will continue with puppet using default docker filesystem size
+  - block:
+    - name: Read docker filesystem size from host hieradata
+      shell: >
+        grep 'platform::filesystem::docker::params::lv_size' {{ c0_hiera_file.stdout_lines[0] }} |
+        cut -d' ' -f2 |
+        head -n1
+      register: host_docker_lv_size
+
+    - name: Write docker filesystem size to runtime hieradata
+      lineinfile:
+        path: "{{ hieradata_workdir }}/runtime.yaml"
+        line: "platform::filesystem::docker::params::lv_size: {{ item }}"
+      with_items: "{{ host_docker_lv_size.stdout_lines }}"
+
+    when: c0_hiera_file.rc == 0
+
+  - name: Fetch unwanted hieradata files
+    find:
+      paths: "{{ hieradata_workdir }}"
+      patterns: "*.yaml"
+      excludes: "runtime.yaml,*static.yaml"
+    register: host_hieradata_file
+
+  - name: Remove remaining hieradata files
+    file:
+      path: "{{ item.path }}"
+      state: absent
+    with_items: "{{ host_hieradata_file.files }}"
+
+  when: mode == 'restore'
+
+- name: Applying puppet bootstrap manifest
+  command: >
+    /usr/local/bin/puppet-manifest-apply.sh
+    {{ hieradata_workdir }}
+    controller-0
+    controller ansible_bootstrap
+    {{ hieradata_workdir }}/runtime.yaml > {{ manifest_apply_log }}
+  register: bootstrap_manifest
+  environment:
+    INITIAL_CONFIG_PRIMARY: "true"
+    LC_ALL: "en_US.UTF-8"
+  failed_when: false
+
+- name: Fail if puppet manifest apply script returns an error
+  fail:
+    msg: >-
+         Failed to apply bootstrap manifest. Please re-install host {{ansible_host}}
+         before attempting to bootstrap it again. See /var/log/puppet/latest/puppet.log
+         for details.
+  when: bootstrap_manifest.rc != 0
+
+- name: Import keystone bootstrap tasks
+  import_tasks: keystone_bootstrap.yml
+
+- name: Import barbican bootstrap tasks
+  import_tasks: barbican_bootstrap.yml
+
+- name: Import sysinv bootstrap tasks
+  import_tasks: sysinv_bootstrap.yml
+
+- name: Import mtce bootstrap tasks
+  import_tasks: mtce_bootstrap.yml
+
+- name: Import fm bootstrap tasks
+  import_tasks: fm_bootstrap.yml
+
+- name: Remove runtime hieradata
+  file:
+    path: "{{ hieradata_workdir }}/runtime.yaml"
+    state: absent
+
+- name: Ensure Puppet directory exists
+  file:
+    path: "{{ puppet_permdir }}"
+    state: directory
+    recurse: yes
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Persist puppet working files
+  command: "mv {{ hieradata_workdir }} {{ puppet_permdir }}"

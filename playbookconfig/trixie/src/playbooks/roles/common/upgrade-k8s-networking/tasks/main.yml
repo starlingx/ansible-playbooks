@@ -1,0 +1,185 @@
+---
+#
+# Copyright (c) 2021-2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- block:
+  - name: Backup mode variable
+    set_fact:
+      previous_mode: "{{ mode }}"
+
+  when: mode is defined
+
+- name: Initialize variables
+  set_fact:
+    overrides_file: "/tmp/upgrade_overrides.yaml"
+    mode: "upgrade_k8s_networking"
+
+- name: Fail if kubernetes_version is not defined
+  fail: msg="The mandatory parameter kubernetes_version is not defined."
+  when: kubernetes_version is not defined
+
+- name: Set kubernetes long version
+  set_fact:
+    kubernetes_long_version: "{{ kubernetes_version if kubernetes_version.startswith('v')
+                              else 'v' + kubernetes_version }}"
+  when: kubernetes_long_version is not defined
+
+- name: Create the upgrade overrides file
+  command: "/usr/bin/sysinv-utils create-host-overrides {{ overrides_file }}"
+
+- name: Read the overrides variables
+  include_vars:
+    file: "{{ overrides_file }}"
+  when: inventory_hostname == 'localhost'
+
+- block:
+  - name: Fetch local copy of overrides
+    fetch:
+      src: "{{ overrides_file }}"
+      dest: /tmp/
+    register: fetched
+
+  - name: Read the overrides variables
+    include_vars:
+      file: "{{ fetched.dest }}"
+
+  - name: Remove local overrides copy
+    local_action:
+      module: file
+      path: "{{ fetched.dest }}"
+      state: absent
+    become: no
+
+  when: inventory_hostname != 'localhost'
+
+# cluster_pod_subnet is comma separated dual-stack read from sysinv.
+# calico-cni.yaml.j2 now could have both pools: cluster_network_ipv4
+# and cluster_network_ipv6
+# cluster_host_floating_address and cluster_host_node_0_address are also
+# comma separated dual-stack read from sysinv
+- name: Set networking facts
+  set_fact:
+    kubelet_cni_bin_dir: "/var/opt/cni/bin"
+    kubelet_vol_plugin_dir: "/var/opt/libexec/kubernetes/kubelet-plugins/volume/exec/"
+    cluster_network_ipv4: "{{ cluster_pod_subnet.split(',')[0] | ipv4
+                            if cluster_pod_subnet.split(',')[0] | ipv4
+                            else  cluster_pod_subnet.split(',')[-1] | ipv4
+                          }}"
+    cluster_network_ipv6: "{{ cluster_pod_subnet.split(',')[0] | ipv6
+                            if cluster_pod_subnet.split(',')[0] | ipv6
+                            else  cluster_pod_subnet.split(',')[-1] | ipv6
+                          }}"
+    cluster_floating_address: "{{ cluster_host_floating_address.split(',')[0] }}"
+    controller_0_cluster_host: "{{ cluster_host_node_0_address.split(',')[0] }}"
+
+- name: Set secondary cluster_floating_address
+  set_fact:
+    cluster_floating_address_secondary: "{{ cluster_host_floating_address.split(',')[1] }}"
+  when: cluster_host_floating_address.split(',') | length == 2
+
+- name: Set secondary controller_0_cluster_host
+  set_fact:
+    controller_0_cluster_host_secondary: "{{ cluster_host_node_0_address.split(',')[1] }}"
+  when: cluster_host_node_0_address.split(',') | length == 2
+
+- name: Upgrade k8s networking images
+  import_role:
+    name: common/push-docker-images
+
+- name: Create Calico config file
+  template:
+    src: "roles/common/bringup-kubemaster/templates/k8s-{{ kubernetes_long_version }}/calico-cni.yaml.j2"
+    dest: /etc/kubernetes/update_calico.yaml
+
+- name: Update Calico Networking
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_calico.yaml"
+  retries: 5
+  delay: 3
+  register: result
+  until: result.rc == 0
+
+- name: Create Multus config file
+  template:
+    src: "roles/common/bringup-kubemaster/templates/k8s-{{ kubernetes_long_version }}/multus-cni.yaml.j2"
+    dest: /etc/kubernetes/update_multus.yaml
+
+- name: Update Multus Networking
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_multus.yaml"
+  retries: 5
+  delay: 3
+  register: result
+  until: result.rc == 0
+
+- block:
+  - name: Check if SRIOV config file is present in the backup tarball
+    shell: "tar -tf {{ restore_data_file }} | grep 'etc/pcidp/config.json'"
+    args:
+      warn: false
+    failed_when: false
+    register: sriov_config_file_check_output
+
+  - name: Restore SRIOV config file
+    shell: mkdir -p /etc/pcidp && tar -C /etc/pcidp/ -xpf {{ restore_data_file }}
+        --overwrite --transform='s,.*/,,' *pcidp/config.json*
+    args:
+      warn: false
+    failed_when: false
+    when: sriov_config_file_check_output.rc == 0
+
+  when: previous_mode is defined and
+        previous_mode == 'restore'
+
+- name: Create SRIOV Networking config file
+  template:
+    src: "roles/common/bringup-kubemaster/templates/k8s-{{ kubernetes_long_version }}/sriov-cni.yaml.j2"
+    dest: /etc/kubernetes/update_sriov-cni.yaml
+
+# K8s upgrade from v1.24.4 to v1.25.3+ results in a duplication
+# of the SRIOV daemonsets due to the name change in the new upstream release.
+# This task was added to clean up the old daemonsets before
+# upgrading to the up-versioned daemonsets.
+- name: Prune old SRIOV daemonset
+  command: >
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf delete daemonset
+    kube-sriov-cni-ds-amd64 --ignore-not-found=true --namespace=kube-system --wait=false
+  when: kubernetes_long_version == "v1.25.3"
+
+- name: Update SRIOV Networking
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_sriov-cni.yaml"
+
+- name: Create SRIOV device plugin config file
+  template:
+    src: "roles/common/bringup-kubemaster/templates/k8s-{{ kubernetes_long_version }}/sriov-plugin.yaml.j2"
+    dest: /etc/kubernetes/update_sriovdp-daemonset.yaml
+
+- name: Update SRIOV device plugin
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_sriovdp-daemonset.yaml"
+
+- name: Create Coredns config file
+  template:
+    src: "roles/common/bringup-kubemaster/templates/coredns.yaml.j2"
+    dest: /etc/kubernetes/update_coredns.yaml
+
+- name: Update Coredns config map
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_coredns.yaml"
+
+- block:
+  - name: Check if calico ipv4 pool exists
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf get ippool.crd.projectcalico.org/default-ipv4-ippool"
+    failed_when: false
+    register: check_ipv4_pools
+
+  - name: Remove unused ipv4 pool
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf delete ippool.crd.projectcalico.org/default-ipv4-ippool"
+    when: check_ipv4_pools.rc == 0
+
+  when: not cluster_network_ipv4
+
+- block:
+  - name: Restore mode variable
+    set_fact:
+      mode: "{{ previous_mode }}"
+
+  when: previous_mode is defined

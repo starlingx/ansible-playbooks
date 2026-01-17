@@ -1,0 +1,99 @@
+---
+#
+# Copyright (c) 2021 Intel Corporation
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- name: Define a flag file to inidicate edgeworker is being provisioned
+  set_fact:
+    edgeworker_provision_flag_file: /var/run/edgeworker_provisioning_in_progress
+
+- name: Check if edgeworker playbook is running by other users
+  stat:
+    path: "{{ edgeworker_provision_flag_file }}"
+  register: edgeworker_provision_flag
+
+- name: Fail if another user is provisioning edgeworker nodes
+  fail:
+    msg: >
+      An edgeworker provisioning session is already in progress, if this is not the case,
+      please remove "{{ edgeworker_provision_flag_file }}" and try again.
+  when: edgeworker_provision_flag.stat.exists
+
+- name: Create a flag to indicate the provision is in progress
+  file:
+    path: "{{ edgeworker_provision_flag_file }}"
+    state: touch
+
+- name: Cleanup temporary files if previous run failed
+  file:
+    path: /tmp/edgeworker
+    state: absent
+
+- name: Get host list with hostname/ip/uuid/personality
+  shell: |
+    source /etc/platform/openrc
+    system host-list --column hostname --column mgmt_ip --column uuid --column personality --format yaml
+  register: host_list_result
+
+- name: Set a list for node hostname and ip address
+  set_fact:
+    hostname_ip_list: "{{ hostname_ip_list | default({}) | combine({item.hostname: item.mgmt_ip}) }}"
+  with_items: "{{ host_list_result.stdout | from_yaml }}"
+
+- name: Set ansible_host of edgeworker
+  add_host:
+    hostname: '{{ item }}'
+    ansible_host: '{{ item }}'
+    ansible_ssh_host: '{{ hostname_ip_list[item] }}'
+  with_inventory_hostnames:
+    - edgeworker
+
+- name: Write edgeworker to /etc/hosts
+  lineinfile:
+    dest: /etc/hosts
+    state: present
+    regexp: "^{{ hostname_ip_list[item] }}"
+    line: "{{ hostname_ip_list[item] }} {{ item }}"
+  with_inventory_hostnames:
+    - edgeworker
+
+- name: Check the edgeworker connectivity
+  wait_for:
+    host: "{{ hostvars[item]['ansible_ssh_host'] }}"
+    port: 22
+    state: started
+    delay: 0
+  delay: 30
+  retries: 5
+  failed_when: false
+  with_inventory_hostnames:
+    - edgeworker
+  become: no
+
+- name: Create edgeworker temp directory for configuration files
+  file:
+    path: /tmp/edgeworker
+    state: directory
+
+- name: Create the host overrides file
+  command: "/usr/bin/sysinv-utils create-host-overrides /tmp/edgeworker/host-overrides.yml"
+
+- name: Read the overrides variables
+  include_vars:
+    file: "/tmp/edgeworker/host-overrides.yml"
+
+- name: Set default docker proxy values if not configured
+  set_fact:
+    http_proxy: "{{ docker_http_proxy|default('') }}"
+    https_proxy: "{{ docker_https_proxy|default('') }}"
+    no_proxy: "{{ docker_no_proxy|default([]) }}"
+
+- name: Get docker registry config
+  shell: |
+    source /etc/platform/openrc
+    system service-parameter-list | awk '/docker-registry/&&/url/{print$10}'
+  register: docker_registry_result
+
+- set_fact:
+    docker_registry: "{{ docker_registry_result.stdout }}"

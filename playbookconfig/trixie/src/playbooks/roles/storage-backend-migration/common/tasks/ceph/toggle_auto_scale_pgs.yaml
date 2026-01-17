@@ -1,0 +1,11 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "{{ action }} auto-scale for all pools"
+  shell: |
+    for pool in $(ceph osd pool ls); do
+      ceph osd pool set $pool pg_autoscale_mode {{ action }}
+    done

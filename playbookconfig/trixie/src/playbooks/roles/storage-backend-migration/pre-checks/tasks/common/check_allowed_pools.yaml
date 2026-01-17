@@ -1,0 +1,19 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get list of all pools in the Ceph cluster (ceph osd pool ls)
+  command: timeout 30 ceph osd pool ls
+  register: ceph_all_pools_list
+  changed_when: false
+
+- name: Determine pools that are NOT in the allowed list
+  set_fact:
+    unexpected_pools: "{{ ceph_all_pools_list.stdout_lines | difference(ceph_allowed_pools) }}"
+
+- name: Fail if any unexpected pool is found
+  fail:
+    msg: "FAILURE: Unexpected pools found in the cluster: {{ unexpected_pools }}. Only the pools {{ ceph_allowed_pools }} are permitted."
+  when: unexpected_pools | length > 0

@@ -1,0 +1,131 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This playbook provides the capability to set the "kernelMountOptions: recover_session=clean"
+# parameter in the cephfs Storage Class, enabling the cephfs volumes to remount automatically
+# when there is a client eviction from
+# Ceph mds.
+#
+# It will also use the 'change_cephfs_pv_pvcs.yml' playbook to change the PVs/PVCs parameters as well
+# for already created ones.
+# The playbook will scan for PVs/PVCs in the namespace provided in the 'scale_resources' variable.
+# It will first scale down the deployments, then will update the PVs/PVCs and later scale up the deployments.
+#
+# The playbook is supposed to run on Active controller.
+#
+# Example to run the playbook:
+# ansible-playbook /usr/share/ansible/stx-ansible/playbooks/change_cephfs_mounter_options.yml -e @input.yml
+#
+# Template for the 'inputs.yml' file:
+#
+#   update_storage_class: true
+#   scale_resources:
+#     - name: <deployment-name-1>
+#       type: <deployment|replicaset>
+#       namespace: <namespace-1>
+#     - name: <deployment-name-2>
+#       type: <deployment|replicaset>
+#       namespace: <namespace-2>
+#
+#  If the 'update_storage_class' is not defined, the default will be 'false' and no changes will be made to
+#  the Storage Class cephfs.
+#
+#  If the 'scale_resources' is not defined, it will not update any PV/PVC.
+#
+
+- name: Update CephFS StorageClass and PVCs/PVs with Scale Down/Up
+  hosts: localhost
+  gather_facts: no
+  vars:
+    update_sc: "{{ update_storage_class | default(False) | bool }}"
+    resources: "{{ scale_resources | default([]) }}"
+
+  pre_tasks:
+    - name: Ask for confirmation
+      ansible.builtin.pause:
+        prompt: |
+          These deployments will have their replicas set to zero, which may impact the availability of the associated pods:
+          {{ resources | map(attribute='name') }}
+          Do you want to continue? (yes/no)
+      register: user_input
+
+    - name: Check user input
+      ansible.builtin.fail:
+        msg: "Playbook terminated by user."
+      when: user_input.user_input | trim | lower != 'yes'
+
+    - name: Set namespaces
+      set_fact:
+        namespaces: "{{ resources | map(attribute='namespace') | unique }}"
+
+    - name: Get resource replicas
+      command:
+        kubectl get {{ item.type }} {{ item.name }} -n {{ item.namespace }} -o jsonpath='{.spec.replicas}'
+      loop: "{{ resources }}"
+      register: resource_replicas_output
+      changed_when: false
+
+    - name: Set replicas by resource
+      set_fact:
+        replica_by_resource: "{{ resource_replicas_output.results }}"
+
+    - name: Create temp directory
+      tempfile:
+        state: directory
+        suffix: update_sc_pv_pvcs
+      register: temp_dir
+
+  tasks:
+    - name: Scale down resources
+      command: >
+        kubectl scale {{ item.type }} {{ item.name }} -n {{ item.namespace }} --replicas=0
+      loop: "{{ resources }}"
+
+    - name: Update StorageClass
+      block:
+      - name: Get StorageClass definition
+        command: kubectl get sc cephfs -o yaml
+        register: sc_yaml
+
+      - name: Delete StorageClass
+        command: kubectl delete sc cephfs
+
+      - name: Update StorageClass configuration
+        copy:
+          content: >
+            {{ sc_yaml.stdout | from_yaml
+            | combine({'parameters': { 'kernelMountOptions': 'recover_session=clean' }}, recursive=True)
+            | to_yaml }}
+          dest: "{{ temp_dir.path }}/sc-cephfs.yaml"
+
+      - name: Apply updated StorageClass
+        command: kubectl apply -f {{ temp_dir.path }}/sc-cephfs.yaml
+      when: update_sc
+
+    - name: Iterate over namespaces
+      include_tasks: change_cephfs_pv_pvcs.yml
+      vars:
+        temp_dir_path: "{{ temp_dir.path }}"
+      loop: "{{ namespaces }}"
+      loop_control:
+        loop_var: namespace
+
+    - name: Cleanup
+      block:
+        - debug:
+            msg: Run cleanup
+      always:
+        - name: Scale up resources
+          command: >
+            kubectl scale {{ item.item.type }} {{ item.item.name }}
+            -n {{ item.item.namespace }}
+            --replicas={{ item.stdout }}
+          loop: "{{ replica_by_resource }}"
+
+        - name: Remove temp directory
+          file:
+            path: "{{temp_dir.path }}"
+            state: absent

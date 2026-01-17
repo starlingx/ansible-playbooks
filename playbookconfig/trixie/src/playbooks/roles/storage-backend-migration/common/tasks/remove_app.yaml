@@ -1,0 +1,25 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Check {{ app_name }} status before removal
+  include_tasks: "{{ role_path_common }}/tasks/check_app_status.yaml"
+  vars:
+    app_name_to_check: "{{ app_name }}"
+
+- name: Remove {{ app_name }}
+  block:
+    - name: Remove {{ app_name }} application
+      shell: system application-remove {{ app_name }} {{ '--force' if force | bool else '' }}
+      environment: "{{ system_env }}"
+
+    - name: Wait for {{ app_name }} to reach 'uploaded' status
+      include_tasks: "{{ role_path_common }}/tasks/check_app_status.yaml"
+      vars:
+        app_name_to_check: "{{ app_name }}"
+        success_statuses: "uploaded"
+        retries: 60
+        delay: 10
+  when: app_status_check.stdout.strip() == "applied"

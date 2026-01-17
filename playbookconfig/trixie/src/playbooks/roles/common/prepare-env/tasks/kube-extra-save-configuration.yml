@@ -1,0 +1,77 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to persist kubernetes extra configuration in a file when bootstrap is running
+#   and load the content last_kube_extra_config_bootstrap.yaml and copy to override_backup_file when
+#   backup is running.
+#
+- name: Read in last kubernetes config values (extraArgs and extraVolumes)
+  block:
+    - name: Check if load has last_kube_extra_config_bootstrap.yaml
+      stat:
+        path: "{{ config_permdir }}/last_kube_extra_config_bootstrap.yaml"
+      register: load_has_extra_config
+
+    - name: Read last_kube_extra_config_bootstrap.yaml if it exists
+      block:
+
+        - name: Read last kubernetes config yaml file
+          command: "cat {{ config_permdir }}/last_kube_extra_config_bootstrap.yaml"
+          register: result
+
+        - name: Get last kubernetes config facts
+          set_fact:
+            last_kube_extra_config: "{{ result.stdout | from_yaml }}"
+
+        - name: Set last kubernetes config facts
+          set_fact:
+            apiserver_extra_args: "{{ last_kube_extra_config.apiserver_extra_args }}"
+            controllermanager_extra_args: "{{ last_kube_extra_config.controllermanager_extra_args }}"
+            scheduler_extra_args: "{{ last_kube_extra_config.scheduler_extra_args }}"
+            kubelet_configurations: "{{ last_kube_extra_config.kubelet_configurations }}"
+            apiserver_extra_volumes: "{{ last_kube_extra_config.apiserver_extra_volumes }}"
+            controllermanager_extra_volumes: "{{ last_kube_extra_config.controllermanager_extra_volumes }}"
+            scheduler_extra_volumes: "{{ last_kube_extra_config.scheduler_extra_volumes }}"
+
+      when: load_has_extra_config.stat.exists
+
+  when: mode == 'backup'
+
+- name: Append kubernetes extra configuration (extraArgs and extraVolumes)
+  blockinfile:
+    path: "{{ dst_file }}"
+    marker: ""
+    create: yes
+    block: |
+      {% if apiserver_extra_args is defined %}
+      apiserver_extra_args:
+      {{ apiserver_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
+      {% endif %}
+      {% if controllermanager_extra_args is defined %}
+      controllermanager_extra_args:
+      {{ controllermanager_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
+      {% endif %}
+      {% if scheduler_extra_args is defined %}
+      scheduler_extra_args:
+      {{ scheduler_extra_args | to_nice_yaml | indent(2, indentfirst=True) }}
+      {% endif %}
+      {% if kubelet_configurations is defined %}
+      kubelet_configurations:
+      {{ kubelet_configurations | to_nice_yaml | indent(2, indentfirst=True) }}
+      {% endif %}
+      {% if apiserver_extra_volumes is defined %}
+      apiserver_extra_volumes:
+      {{ apiserver_extra_volumes | to_yaml | indent(2, indentfirst=True) }}
+      {% endif %}
+      {% if controllermanager_extra_volumes is defined %}
+      controllermanager_extra_volumes:
+      {{ controllermanager_extra_volumes | to_yaml | indent(2, indentfirst=True) }}
+      {% endif %}
+      {% if scheduler_extra_volumes is defined %}
+      scheduler_extra_volumes:
+      {{ scheduler_extra_volumes | to_yaml | indent(2, indentfirst=True) }}
+      {% endif %}

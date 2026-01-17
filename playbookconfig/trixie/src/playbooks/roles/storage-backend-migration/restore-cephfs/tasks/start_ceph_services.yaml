@@ -1,0 +1,69 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Scale desired deployments to replica 1
+  include_tasks: "{{ role_path_common }}/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "label"
+        label: "app=rook-ceph-mgr"
+        namespace: "rook-ceph"
+        kind: Deployment
+        replicas: 1
+      - method: "label"
+        label: "app=rook-ceph-osd"
+        namespace: "rook-ceph"
+        kind: Deployment
+        replicas: 1
+
+- name: Verify that all rook-ceph mon, mgr and osd pods are Running
+  shell: |
+    kubectl get pods -n rook-ceph \
+      -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.phase}{"\n"}{end}' \
+    | grep -E '^rook-ceph-mon-[a-z]+|^rook-ceph-osd-[0-9]+|^rook-ceph-mgr-[a-z]+' \
+    | awk '{if ($2 != "Running") {print $0; exit 1}}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: ceph_pods_check
+  retries: 60
+  delay: 10
+  until: ceph_pods_check.rc == 0
+
+- name: Wait until all MONs to be in quorum
+  shell: timeout 30 ceph mon stat
+  register: ceph_mon_stat
+  retries: 60
+  delay: 10
+  until: ceph_mon_stat.rc == 0 and "out of quorum" not in ceph_mon_stat.stdout
+
+- name: Ceph MON stat result
+  debug:
+    var: ceph_mon_stat.stdout_lines
+
+- name: Wait until all MGR to be in active
+  shell: timeout 30 ceph -s
+  register: ceph_status
+  retries: 60
+  delay: 10
+  until: >
+    ceph_status.rc == 0 and ceph_status.stdout is search('mgr.*active')
+
+- name: Ceph status result
+  debug:
+    var: ceph_status.stdout_lines
+
+- name: Wait until all OSDs to be up
+  command: timeout 30 ceph osd stat
+  register: ceph_osd_stat
+  until: >
+    ceph_osd_stat.stdout is search('^([0-9]+) osds: \\1 up')
+  retries: 60
+  delay: 10
+  changed_when: false
+
+- name: Ceph OSD stat result
+  debug:
+    var: ceph_osd_stat.stdout_lines

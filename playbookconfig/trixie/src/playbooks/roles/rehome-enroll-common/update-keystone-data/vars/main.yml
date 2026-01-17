@@ -1,0 +1,10 @@
+---
+#
+# Copyright (c) 2021-2023, 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+keystone_conf: /etc/keystone/keystone.conf
+platform_path: /opt/platform
+puppet_path: /opt/platform/puppet

@@ -1,0 +1,47 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+
+- name: Do software deploy activate
+  block:
+    - name: Execute software deploy activate
+      command: software deploy activate
+
+    - name: Wait for software deploy activate to finish
+      command: software deploy show
+      register: wait_for_activate_result
+      until: wait_for_activate_result.stdout | regex_search('activate-(done|failed)')
+      retries: "{{ (wait_for_activate_timeout|int + 9) // 10 }}"
+      delay: 10
+      failed_when: wait_for_activate_result | regex_search('activate-failed')
+
+  rescue:
+    - name: Failed while attempting software deploy activate
+      fail:
+        msg: |
+          {{ software_deploy_error_msg }}
+
+          Step error:
+            {{ ansible_failed_result | to_nice_yaml | indent(2) }}
+
+
+- name: Complete the software deployment
+  block:
+    - name: Do software deploy complete
+      command: software deploy complete
+
+    - name: Do software deploy delete
+      command: software deploy delete
+
+  rescue:
+    - name: Failed while attempting software deploy complete or delete
+      fail:
+        msg: |
+          {{ software_deploy_error_msg }}
+
+          Step error:
+            {{ ansible_failed_result | to_nice_yaml | indent(2) }}

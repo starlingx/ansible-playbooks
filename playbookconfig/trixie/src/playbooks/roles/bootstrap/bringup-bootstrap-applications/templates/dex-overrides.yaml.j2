@@ -1,0 +1,42 @@
+config:
+  expiry:
+    idTokens: "24h"
+  connectors:
+  - type: ldap
+    name: ldap-1
+    id: ldap-1
+    config:
+      host: {{ ldap_host }}
+      rootCA: /etc/ssl/certs/adcert/ca.crt
+      insecureNoSSL: false
+      insecureSkipVerify: false
+      bindDN: CN=ldapadmin,DC=cgcs,DC=local
+      bindPW: {{ ldap_bind_pw }}
+      usernamePrompt: Username
+      userSearch:
+        baseDN: ou=People,dc=cgcs,dc=local
+        filter: "(objectClass=posixAccount)"
+        username: uid
+        idAttr: DN
+        emailAttr: uid
+        nameAttr: gecos
+      groupSearch:
+        baseDN: ou=Group,dc=cgcs,dc=local
+        filter: "(objectClass=posixGroup)"
+        userMatchers:
+        - userAttr: uid
+          groupAttr: memberUid
+        nameAttr: cn
+volumeMounts:
+- mountPath: /etc/ssl/certs/adcert
+  name: certdir
+- mountPath: /etc/dex/tls
+  name: https-tls
+volumes:
+- name: certdir
+  secret:
+    secretName: oidc-auth-apps-certificate
+- name: https-tls
+  secret:
+    defaultMode: 420
+    secretName: oidc-auth-apps-certificate

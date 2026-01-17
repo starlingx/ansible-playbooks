@@ -1,0 +1,66 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get cluster status prior to migration to Bluestore
+  command: timeout 30 ceph -s
+  register: ceph_status
+  changed_when: false
+
+- name: Display cluster status
+  debug:
+    var: ceph_status.stdout_lines
+
+- name: Get OSD tree before migrating OSD
+  command: timeout 30 ceph osd tree
+  register: ceph_osd_tree_output
+  changed_when: false
+
+- name: Display OSD tree
+  debug:
+    var: ceph_osd_tree_output.stdout_lines
+
+- name: Create Ceph user
+  include_tasks: create_ceph_user.yaml
+
+- name: Remove pmon.d files
+  include_tasks: "{{ role_path_common }}/tasks/remove_pmon_files.yaml"
+
+- name: Migrate one OSD at a time
+  include_tasks: migrate_one_by_one_osd.yaml
+  loop: "{{ hostvars[system.active_controller]['disks_by_host'][inventory_hostname] }}"
+  loop_control:
+    label: "Host {{ inventory_hostname }} OSD id = {{ item.osd_id }}"
+  when:
+    - system.system_deployment == "AIO-SX"
+    - item.osd_objectstore == "filestore"
+
+- name: Migrate all OSDs from a host at a time
+  include_tasks: migrate_multi_osds.yaml
+  vars:
+    host_osd_info: "{{ hostvars[system.active_controller]['disks_by_host'][inventory_hostname] }}"
+  when: system.system_deployment != "AIO-SX"
+
+- name: Fix ceph runtime directory for root user
+  file:
+    path: /var/run/ceph
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Remove ceph user
+  user:
+    name: ceph
+    state: absent
+
+- name: Get Bluestore OSD count
+  command: timeout 30 ceph osd count-metadata osd_objectstore
+  register: bluestore_osd_count
+  changed_when: false
+
+- name: Debug Bluestore OSD count
+  debug:
+    var: bluestore_osd_count.stdout_lines

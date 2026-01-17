@@ -1,0 +1,85 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Bootstrap FM:
+#     - Generate fm.conf
+#     - Generate api-paste.ini
+#     - Configure FM DB/User
+#     - Install FM packages
+#     - Enable fm-api service
+
+- name: Read the required fm var file contents
+  shell: |
+    cd /tmp/puppet/hieradata
+    grep -h "fm::" personality.yaml secure_static.yaml runtime.yaml
+  register: fm_vars
+  no_log: true
+
+- name: Convert fm var file content to a dictionary
+  set_fact:
+    fm_var_dict: "{{ fm_vars.stdout | from_yaml }}"
+
+- name: Set up db sql_connection string, remove psycopg2 if it exists
+  set_fact:
+    sql_connection: "{{ fm_var_dict['fm::database_connection'] | regex_replace('^postgresql\\+psycopg2:', 'postgresql:') }}"
+
+- name: Set up db real_connection string, add psycopg2 driver to postgresql if it's missing
+  set_fact:
+    real_connection: "{{ fm_var_dict['fm::database_connection'] | regex_replace('^postgresql:', 'postgresql+psycopg2:') }}"
+
+- name: Generate fm.conf
+  template:
+    src: fm.conf.j2
+    dest: /etc/fm/fm.conf
+    mode: 0600
+
+- set_fact:
+    fm_api_pipeline: "request_id authtoken api_v1"
+    request_id_filter_factory: "oslo_middleware:RequestId.factory"
+    acl_public_routes: "/, /v1"
+    authtoken_filter_factory: "fm.api.middleware.auth_token:AuthTokenMiddleware.factory"
+    app_factory: "fm.api.app:app_factory"
+
+- name: Generate api-paste.ini
+  template:
+    src: api-paste.ini.j2
+    dest: /etc/fm/api-paste.ini
+    mode: 0644
+
+- name: Ensure PostgreSQL fm database and user is created
+  become_user: postgres
+  postgresql_db:
+    name: "fm"
+    state: present
+
+- name: Set PostgreSQL user password
+  become_user: postgres
+  postgresql_user:
+    db: "fm"
+    name: "admin-fm"
+    password: "{{ fm_var_dict['fm::db::postgresql::password'] }}"
+    priv: "ALL"
+
+- name: Ensure fm-rest-api package and fm python client package are installed
+  become: true
+  package:
+    name:
+      - python3-fmclient
+      - fm-rest-api
+    state: present
+
+- name: Ensure fm-api service is running and enabled
+  systemd:
+    name: fm-api
+    state: started
+    enabled: yes
+
+- name: Run fm-db-sync
+  command:
+    cmd: fm-dbsync --config-file /etc/fm/fm.conf
+    chdir: /usr/bin
+  become_user: root

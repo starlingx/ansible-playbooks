@@ -1,0 +1,240 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trident-controller
+  labels:
+    app: controller.csi.trident.netapp.io
+    kubectl.kubernetes.io/default-container: trident-main
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: controller.csi.trident.netapp.io
+  template:
+    metadata:
+      labels:
+        app: controller.csi.trident.netapp.io
+        # STX_change: add label component
+        app.starlingx.io/component: platform
+      annotations:
+        openshift.io/required-scc: trident-controller
+    spec:
+      serviceAccount: trident-controller
+      priorityClassName: system-cluster-critical
+      containers:
+      - name: trident-main
+        # STX_change: pull image from local registry
+        image: {{ local_registry }}/docker.io/netapp/trident:25.10.0
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          runAsNonRoot: false
+          capabilities:
+            drop:
+            - all
+        ports:
+        # STX_change: change ports
+        - containerPort: {{ trident_https_rest_api_port }}
+        - containerPort: {{ trident_metrics_port }}
+        command:
+        - /trident_orchestrator
+        args:
+        - "--crd_persistence"
+        - "--k8s_pod"
+        - "--https_rest"
+        # STX_change: change https port
+        - "--https_port={{ trident_https_rest_api_port }}"
+        - "--csi_node_name=$(KUBE_NODE_NAME)"
+        - "--csi_endpoint=$(CSI_ENDPOINT)"
+        - "--csi_role=controller"
+        - "--log_format=text"
+        - "--log_level=info"
+        - "--log_workflows="
+        - "--log_layers="
+        - "--disable_audit_log=true"
+        - "--address=127.0.0.1"
+        # STX_change: change port
+        - "--port={{ trident_rest_api_port }}"
+        - "--http_request_timeout=1m30s"
+        - "--enable_force_detach=false"
+        - "--enable_concurrency=false"
+        - "--metrics"
+        # STX_change: change metrics port
+        - "--metrics_port={{ trident_metrics_port }}"
+        #- -debug
+        livenessProbe:
+          exec:
+            command:
+            - tridentctl
+            - -s
+            # STX_change: change port
+            - "127.0.0.1:{{ trident_rest_api_port }}"
+            - version
+          failureThreshold: 2
+          initialDelaySeconds: 120
+          periodSeconds: 120
+          timeoutSeconds: 90
+        resources:
+          requests:
+            cpu: 10m
+            memory: 80Mi
+        env:
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CSI_ENDPOINT
+          value: unix://plugin/csi.sock
+        - name: TRIDENT_SERVER
+          # STX_change: change port
+          value: "127.0.0.1:{{ trident_rest_api_port }}"
+        volumeMounts:
+        - name: socket-dir
+          mountPath: /plugin
+        - name: certs
+          mountPath: /certs
+          readOnly: true
+
+      - name: csi-provisioner
+        # STX_change: pull image from local registry
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-provisioner:v5.3.0
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          capabilities:
+            drop:
+            - all
+        args:
+        - "--v=2"
+        - "--timeout=600s"
+        - "--csi-address=$(ADDRESS)"
+        - "--retry-interval-start=8s"
+        - "--retry-interval-max=30s"
+        - "--worker-threads=100"
+        resources:
+          requests:
+            cpu: 2m
+            memory: 20Mi
+        env:
+        - name: ADDRESS
+          value: /var/lib/csi/sockets/pluginproxy/csi.sock
+        volumeMounts:
+        - name: socket-dir
+          mountPath: /var/lib/csi/sockets/pluginproxy/
+      - name: csi-attacher
+        # STX_change: pull image from local registry
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-attacher:v4.10.0
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          capabilities:
+            drop:
+            - all
+        args:
+        - "--v=2"
+        - "--timeout=60s"
+        - "--retry-interval-start=10s"
+        - "--worker-threads=100"
+        - "--csi-address=$(ADDRESS)"
+        resources:
+          requests:
+            cpu: 2m
+            memory: 20Mi
+        env:
+        - name: ADDRESS
+          value: /var/lib/csi/sockets/pluginproxy/csi.sock
+        volumeMounts:
+        - name: socket-dir
+          mountPath: /var/lib/csi/sockets/pluginproxy/
+
+      - name: csi-resizer
+        # STX_change: pull image from local registry
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-resizer:v1.14.0
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          capabilities:
+            drop:
+            - all
+        args:
+        - "--v=2"
+        - "--timeout=300s"
+        - "--workers=100"
+        - "--csi-address=$(ADDRESS)"
+        resources:
+          requests:
+            cpu: 3m
+            memory: 20Mi
+        env:
+        - name: ADDRESS
+          value: /var/lib/csi/sockets/pluginproxy/csi.sock
+        volumeMounts:
+        - name: socket-dir
+          mountPath: /var/lib/csi/sockets/pluginproxy/
+
+      - name: csi-snapshotter
+        # STX_change: pull image from local registry
+        image: {{ local_registry }}/registry.k8s.io/sig-storage/csi-snapshotter:v8.3.0
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          capabilities:
+            drop:
+            - all
+        args:
+        - "--v=2"
+        - "--timeout=300s"
+        - "--worker-threads=100"
+        - "--csi-address=$(ADDRESS)"
+        resources:
+          requests:
+            cpu: 2m
+            memory: 20Mi
+        env:
+        - name: ADDRESS
+          value: /var/lib/csi/sockets/pluginproxy/csi.sock
+        volumeMounts:
+        - name: socket-dir
+          mountPath: /var/lib/csi/sockets/pluginproxy/
+      # STX_change: launch only on master nodes
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values:
+                    - arm64
+                    - amd64
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                    - linux
+      # STX_change: add tolerations
+      tolerations:
+      - key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      volumes:
+      - name: socket-dir
+        emptyDir:
+      - name: certs
+        projected:
+          sources:
+          - secret:
+              name: trident-csi
+          - secret:
+              name: trident-encryption-keys
+      - name: asup-dir
+        emptyDir:
+          medium: ""
+          sizeLimit: 1Gi

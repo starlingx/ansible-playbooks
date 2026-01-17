@@ -1,0 +1,87 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This is an auxiliary playbook used for the subcloud rehoming procedure
+# to recover expired certificates in subclouds standby and worker nodes
+#
+
+- hosts: all
+  gather_facts: no
+
+  tasks:
+    - name: Power on controller-1
+      shell: source /etc/platform/openrc; system host-power-on controller-1
+      register: poweron_result
+      failed_when: false
+
+    - name: Ask for manual power on if network power on fails
+      debug:
+        msg: Failed to start controller-1 over the network. Manual intervention required.
+      when: '"rc" in poweron_result and poweron_result.rc != 0'
+
+    - name: Wait for controller-1 to be running. Power on manually if necessary
+      shell: "ping controller-1 -c1 -w5 | grep ' 0% packet loss'"
+      register: c1_ping
+      # Wait up to 10 minutes for controller-1 to power on
+      retries: 40
+      delay: 15
+      until: c1_ping is not failed
+
+    - name: Wait sysadmin password synchronize to controller-1
+      include_tasks: roles/common/recover-subcloud-certificates/tasks/wait-password-to-sync.yml
+      loop: ['controller-1']
+
+    - name: Add standby controller to hosts standby controller group
+      add_host:
+        name: "controller-1"
+        groups: standby_group
+
+- hosts: standby_group
+
+  tasks:
+    - name: Wait for sm to be available before proceeding
+      command: sm-dump
+      register: sm_dump_output
+      retries: 24
+      delay: 10
+      until: '"/var/run/sm/sm.db not available" not in sm_dump_output.stdout'
+      become: yes
+
+    - name: Recover controller-1 certificates
+      import_role:
+        name: common/recover-subcloud-certificates
+
+- hosts: all
+  gather_facts: no
+
+  tasks:
+    - set_fact:
+        compute_node_list: >-
+          {{ compute_nodes.split('#') if compute_nodes | length > 0 else [] }}
+
+    - name: Wait for node to be running. Power on manually if necessary
+      shell: "ping {{ item }} -c1 -w5 | grep ' 0% packet loss'"
+      register: c1_ping
+      # Wait up to 10 minutes for node to power on
+      retries: 40
+      delay: 15
+      until: c1_ping is not failed
+      loop: "{{ compute_node_list }}"
+
+    - name: Wait sysadmin password synchronize to compute nodes
+      include_tasks: roles/common/recover-subcloud-certificates/tasks/wait-password-to-sync.yml
+      loop: "{{ compute_node_list }}"
+
+    - name: Add computes nodes to compute_group
+      add_host:
+        name: "{{item}}"
+        groups: compute_group
+      loop: "{{ compute_node_list }}"
+
+  # Will target compute nodes in parallel, in a batch of 5, as per stx ansible fork configuration
+- hosts: compute_group
+  roles:
+    - common/recover-subcloud-certificates

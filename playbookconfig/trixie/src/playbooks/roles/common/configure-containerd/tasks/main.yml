@@ -1,0 +1,140 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   Configure containerd to use local registry
+#
+- name: Create containerd config file directory
+  file:
+    path: /etc/containerd
+    state: directory
+    mode: 0700
+
+- name: Determine the stream_server_address for containerd
+  set_fact:
+    stream_server_address: "{{ '127.0.0.1' if ipv6_addressing == False else '::1' }}"
+
+- name: Get guest local registry credentials
+  vars:
+    script_content: |
+      import keyring
+      password = keyring.get_password("mtce", "services")
+      if not password:
+          raise Exception("Local registry password not found.")
+      print(dict(username='mtce', password=str(password)))
+  shell: "{{ script_content }}"
+  args:
+    executable: /usr/bin/python
+  register: guest_local_registry_credentials_output
+
+- set_fact:
+    guest_local_registry_credentials: "{{ guest_local_registry_credentials_output.stdout }}"
+
+- name: Determine the registry_auth for containerd
+  set_fact:
+    registry_auth: "{{ (guest_local_registry_credentials['username'] + ':'
+    + guest_local_registry_credentials['password']) | b64encode }}"
+
+- name: Create config.toml file for containerd configuration
+  template:
+    src: "config.toml.j2"
+    dest: /etc/containerd/config.toml
+    mode: 0600
+
+- name: Remove puppet template for insecure registries
+  replace:
+    path: /etc/containerd/config.toml
+    after: '# Begin of insecure registries'
+    regexp: '^(<%- @insecure_registries.+)\n(.+)\n(.+)\n(.+end -%>)'
+    replace: ''
+
+- name: Get local registry credentials
+  vars:
+    script_content: |
+      import keyring
+      password = keyring.get_password("sysinv", "services")
+      if not password:
+          raise Exception("Local registry password not found.")
+      print(dict(username='sysinv', password=str(password)))
+  shell: "{{ script_content }}"
+  args:
+    executable: /usr/bin/python
+  register: local_registry_credentials_output
+
+- set_fact:
+    local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
+
+- name: Create containerd certs.d directory
+  file:
+    path: /etc/containerd/certs.d
+    state: directory
+    mode: 0700
+
+- block:
+  - name: Check if /etc/containerd/certs.d/default exists
+    stat:
+      path: /etc/containerd/certs.d/default
+    register: old_default_mirror_dir
+
+  - name: Remove old /etc/containerd/certs.d/default if it exists
+    file:
+      path: /etc/containerd/certs.d/default
+      state: absent
+    when: old_default_mirror_dir.stat.exists
+
+  - name: Default mirror directory for all registries
+    file:
+      path: /etc/containerd/certs.d/_default
+      state: directory
+      mode: 0700
+
+  - name: Create hosts.toml file for containerd default mirrors configuration
+    template:
+      src: "mirror-hosts.toml.j2"
+      dest: /etc/containerd/certs.d/_default/hosts.toml
+      mode: 0600
+
+  when: insecure_registries is defined
+
+- name: Create containerd local registry directory
+  file:
+    path: "/etc/containerd/certs.d/{{ registry_local }}"
+    state: directory
+    mode: 0700
+
+- name: Create hosts.toml file for containerd host configuration
+  template:
+    src: "local-hosts.toml.j2"
+    dest: "/etc/containerd/certs.d/{{ registry_local }}/hosts.toml"
+    mode: 0600
+
+- block:
+  - name: Create containerd central registry directory
+    file:
+      path: "/etc/containerd/certs.d/{{ registry_central }}"
+      state: directory
+      mode: 0700
+
+  - name: Create hosts.toml file for containerd host configuration
+    template:
+      src: "central-hosts.toml.j2"
+      dest: "/etc/containerd/certs.d/{{ registry_central }}/hosts.toml"
+      mode: 0600
+
+  when: distributed_cloud_role == 'subcloud'
+
+- name: Add containerd service cpushares
+  ini_file:
+    dest: /etc/systemd/system/containerd.service.d/containerd-cpu-shares.conf
+    section: Service
+    option: Slice
+    value: k8splatform.slice
+    create: true
+
+- name: Restart containerd
+  systemd:
+    name: containerd
+    state: restarted

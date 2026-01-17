@@ -1,0 +1,25 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Validate comma separated dual-stack addresses vs subnets
+#   Both should be of same stack: either single-stack or dual-stack.
+#   In case both are of single-stack: should be of same ip family
+#   In case both are of dual-stack: ordering should be same: either ipv4,ipv6 or ipv6,ipv4.
+#
+
+- name: Validate comma separated dual-stack addresses vs subnets
+  script: roles/common/validate-addresses/files/validate_dual_stack_address_vs_subnet.py "{{ item.key }}" "{{
+          item.value.address }}" "{{ item.value.subnet.name }}" "{{ item.value.subnet.value }}"
+  register: result
+  failed_when: false
+
+- name: Fail if script validate_dual_stack_address_vs_subnet.py failed or error occurred
+  fail:
+    msg: >
+      Error validating address vs subnet, return code: {{ result.rc }}
+      Error output: {{ result.stderr }}
+  when: result.rc != 0

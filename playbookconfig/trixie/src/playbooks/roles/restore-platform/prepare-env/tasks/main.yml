@@ -1,0 +1,369 @@
+---
+#
+# Copyright (c) 2019-2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role performs the following tasks:
+#     1. Validate user input.
+#     2. Verify that the target is in the right state for platform restore.
+#     3. Transfer the backup tarball to the target if it is off-box, otherwise
+#        copy it to the designated staging directory (/opt/platform-backup).
+#     4. Extract the host override file from the tarball and load bootstrap
+#        parameters in memory.
+#     5. Create restore_in_progress flag.
+#
+
+- name: Set default local file path
+  set_fact:
+    local_backup_file_path: "{{ initial_backup_dir }}/{{ backup_filename }}"
+
+- name: Set default local file extraction command
+  set_fact:
+    extract_command_method: "cat '{{ local_backup_file_path }}'"
+
+- name: Set default filename for restore procedure
+  set_fact:
+    decrypted_backup_filename: "{{ backup_filename }}"
+    decrypted_backup_filepath: "{{ target_backup_dir }}/{{ backup_filename }}"
+
+- name: Retrieve backup file type
+  command: "file {{ local_backup_file_path }}"
+  register: local_backup_file_type
+  delegate_to: "{{ inspection_target }}"
+
+- name: Encryption variables
+  block:
+  - name: Assert that backup_filename is an encrypted file
+    assert:
+      that:
+      - '"GPG symmetrically encrypted data" in local_backup_file_type.stdout'
+      fail_msg: >
+        Platform backup file {{ local_backup_file_path }} is not encrypted
+
+  - name: Set platform tarball is encrypted boolean
+    set_fact:
+      platform_tarball_encrypted: true
+
+  - name: Copy name of encrypted platform file
+    set_fact:
+      encrypted_backup_filename: "{{ backup_filename }}"
+      encrypted_backup_filepath: "{{ local_backup_file_path }}"
+
+  - name: adjust filename for restore procedure
+    set_fact:
+      decrypted_backup_filename: "{{ backup_filename }}.tar.gz"
+      decrypted_backup_filepath: "{{ target_backup_dir }}/{{ backup_filename }}.tar.gz"
+
+  - name: Set encrypted file extraction command
+    set_fact:
+      extract_command_method: >-
+          gpg --no-symkey-cache -q
+          --passphrase-fd 0 --batch --pinentry-mode loopback
+          --decrypt '{{ local_backup_file_path }}'
+  when:
+    - backup_encryption_enabled|bool
+    - '"platform" in backup_encyption_include'
+
+- name: Assert that backup_filename is not encrypted
+  assert:
+    that:
+    - '"GPG symmetrically encrypted data" not in local_backup_file_type.stdout'
+    fail_msg: >
+      Platform backup file {{ local_backup_file_path }} is encrypted
+  when: not platform_tarball_encrypted|bool
+
+- name: Inspect the platform backup file locally
+  block:
+  - name: Extract subfunction from platform.conf in backup
+    shell:
+      cmd: >-
+        {{ extract_command_method }}
+        | tar --use-compress-program=pigz -xO etc/platform/platform.conf
+        | grep 'subfunction='
+      stdin: "{{ backup_encryption_passphrase }}"
+    args:
+      warn: false
+    failed_when: false
+    register: backup_subfunc
+
+  - name: Ensure subfunction was found in backup
+    fail:
+      msg: "Failed to extract subfunction from backup platform.conf"
+    when: backup_subfunc.stdout_lines is not defined or backup_subfunc.stdout_lines | length == 0
+
+  - name: Get subfunction set from backup platform.conf
+    set_fact:
+      backup_subfunc_set: "{{ backup_subfunc.stdout_lines[0].split('=')[1].split(',') }}"
+
+  - name: Get subfunction from the installed load
+    shell: grep -F 'subfunction' /etc/platform/platform.conf
+    register: installed_subfunc
+    delegate_to: "{{ inventory_hostname }}"
+
+  - name: Get subfunction set from installed platform.conf
+    set_fact:
+      installed_subfunc_set: "{{ installed_subfunc.stdout_lines[0].split('=')[1].split(',') }}"
+
+  - name: Check the difference between the two subfunction sets
+    set_fact:
+      diff_set: "{{ backup_subfunc_set | symmetric_difference(installed_subfunc_set) }}"
+
+  - name: Check if lowlatency is missing from the installed subfunction
+    set_fact:
+      missing_lowlatency: "{{ 'lowlatency' in backup_subfunc_set and 'lowlatency' not in installed_subfunc_set }}"
+
+  - name: Fail if subfunction of backup does not match the subfunction of the installed load
+    fail:
+      msg: "Subfunction mismatch - backup: {{ backup_subfunc_set }}, installed: {{ installed_subfunc_set }}"
+    when: diff_set != [] and not missing_lowlatency
+
+  - name: Set kernel to lowlatency to match backup subfunction
+    set_fact:
+      kernel: "lowlatency"
+    when: missing_lowlatency and system_type == 'All-in-one'
+
+  - name: Log kernel switch to lowlatency
+    debug:
+      msg: "Switching to lowlatency kernel."
+    when: missing_lowlatency
+
+  - name: Extract OS_REGION_NAME from openrc file
+    shell:
+      cmd: >-
+        {{ extract_command_method }}
+        | tar --use-compress-program=pigz -xO etc/platform/openrc
+        | grep 'OS_REGION_NAME='
+      stdin: "{{ backup_encryption_passphrase }}"
+    args:
+      warn: false
+    failed_when: false
+    register: os_region_name_search
+
+  - name: Ensure OS_REGION_NAME is found
+    fail:
+      msg: "OS_REGION_NAME not found in openrc file."
+    when: os_region_name_search.stdout == ""
+
+  - name: Parse OS_REGION_NAME
+    set_fact:
+      region_name: "{{ os_region_name_search.stdout.split('=')[1] | trim }}"
+    when: os_region_name_search.stdout != ""
+
+  - name: Validate that region_name matches the expected one
+    fail:
+      msg: "Backup and inventory region names don't match"
+    when: expected_region_name is defined and region_name != expected_region_name
+
+  - name: Look for override backup file in the backup tarball
+    shell:
+      cmd: >-
+          {{ extract_command_method }}
+          | tar --use-compress-program=pigz -t
+          | grep '_override_backup.yml'
+      stdin: "{{ backup_encryption_passphrase }}"
+    args:
+      warn: false
+    failed_when: false
+    register: search_result
+
+  - name: Fail if override file is missing
+    block:
+    - name: Fail with default message
+      fail:
+        msg: >
+          The override file is missing in the backup tarball
+          {{ local_backup_file_path }}!
+      when: not platform_tarball_encrypted|bool
+
+    - name: Fail with encryption message
+      fail:
+        msg: >
+          Cannot decrypt {{ local_backup_file_path }}
+          or the override file is missing in the backup tarball!
+      when: platform_tarball_encrypted|bool
+    when: search_result.rc != 0
+
+  - name: Extract kubeadm version from the backup tarball
+    # Match kube_cmd_versions VALUES from sysinv database table.
+    shell:
+      cmd: >-
+        {{ extract_command_method }}
+        | zgrep -aE '^INSERT INTO .*kube_cmd_versions VALUES'
+      stdin: "{{ backup_encryption_passphrase }}"
+    args:
+      warn: false
+    failed_when: false
+    register: kube_cmd_search
+
+  - name: Fail if kube_cmd_versions table is missing
+    fail:
+      msg: >
+        The kube_cmd_versions table is missing in the backup tarball
+        {{ local_backup_file_path }}!
+    when: kube_cmd_search.rc != 0
+
+  - name: Set restore kubernetes version for bootstrap
+    set_fact:
+      # Note: regex_search() returns a list containing capture groups.
+      # The first filter obtains the first grouped element and converts
+      # unicode string to string.
+      restore_k8s_version: "{{ kube_cmd_search.stdout_lines[0] \
+                           | regex_search(version_re, '\\1') \
+                           | first }}"
+    failed_when: restore_k8s_version|length == 0
+    vars:
+      # kubeadm_version is second last entry within VALUES tuple containing
+      # 6 CSV elements. Exclude the single quotes surrounding the version.
+      version_re: 'VALUES\s+\([^,]+,[^,]+,[^,]+,[^,]+,\s+''([^\s]+)'',[^,]+\);'
+
+  - debug:
+      msg: "kubeadm version from kube_cmd_versions {{ restore_k8s_version }}"
+  delegate_to: "{{ inspection_target }}"
+
+- name: Wait for system to become reachable
+  wait_for_connection:
+    timeout: 10
+
+- block:
+  # Bail if the host has been unlocked
+  - name: Check initial config flag
+    stat:
+      path: /etc/platform/.initial_config_complete
+    register: initial_config_done
+
+  - name: Fail if the host has been unlocked
+    fail:
+      msg: "Host {{ ansible_host }} has been unlocked. Cannot perform restore."
+    when: initial_config_done.stat.exists
+
+  - name: Set restore file parameter
+    set_fact:
+      restore_data_file: "{{ decrypted_backup_filepath }}"
+
+  - name: Stage backup tarballs
+    include_role:
+      name: backup-restore/stage-backup-archives
+
+  - name: Extract override file from backup tarball
+    command: >
+      tar --use-compress-program=pigz -C {{ target_backup_dir }}
+      -xf {{ decrypted_backup_filepath }} --transform='s,.*/,,'
+      {{ search_result.stdout_lines[0] }}
+    register: extract_result
+    failed_when: false
+    args:
+      warn: false
+
+  - name: Fail if host override file cannot be extracted from the backup tar file
+    fail:
+      msg: >
+        Failed to extract the host override file {{ search_result.stdout_lines[0] }}.
+        If the backup tar file is not on the host that is being restored, please either
+        transfer the tar file to the target or set on_box_data parameter to false and
+        try again.
+    when: extract_result.rc != 0
+
+  - name: Prepare to rename override file
+    set_fact:
+      override_filename: restore_platform_overrides.yml
+
+  - name: Rename override file for bootstrap
+    command: >
+      mv -f {{ target_backup_dir }}/{{ (search_result.stdout_lines[0] | basename) }}
+      {{ target_backup_dir }}/{{ override_filename }}
+
+  - name: Merge restore overrides
+    block:
+      - name: Read overrides from backup
+        command:
+          cmd: "cat {{ target_backup_dir }}/{{ override_filename }}"
+        register: original_overrides
+
+      - name: Merge new restore overrides
+        set_fact:
+          merged_overrides: >
+            {{
+              original_overrides.stdout
+              | from_yaml
+              | combine(restore_overrides, recursive=recursive)
+              | to_nice_yaml
+            }}
+        vars:
+          recursive: "{{ restore_overrides_recursive|bool }}"
+
+      - name: Write merged restored overrides
+        copy:
+          content: "{{ merged_overrides }}"
+          dest: "{{ target_backup_dir }}/{{ override_filename }}"
+
+    when: restore_overrides
+
+  - name: Load override data (local execution)
+    include_vars: "{{ target_backup_dir }}/{{ override_filename }}"
+    when: inventory_hostname == "localhost"
+    no_log: true
+
+  - block:
+      - name: Create a temporary file
+        tempfile:
+          state: file
+        register: host_override_tmp_file
+        delegate_to: localhost
+        become: no
+
+      - name: Fetch override file to temp file to Ansible control host
+        fetch:
+          src: "{{ target_backup_dir }}/{{ override_filename }}"
+          dest: "{{ host_override_tmp_file.path }}"
+          flat: yes
+
+      - name: Load override data (remote execution)
+        include_vars: "{{ host_override_tmp_file.path }}"
+        no_log: true
+
+      - name: Remove override temp file on Ansible control host
+        file:
+          path: "{{ host_override_tmp_file.path }}"
+          state: absent
+        delegate_to: localhost
+        become: no
+
+    when: inventory_hostname != "localhost"
+
+  # Call restore-sw-deployments from here so we don't need to
+  # play hide-and-seek with the in-progress flags.
+  - name: Restore software deployments
+    import_role:
+      name: restore-platform/restore-sw-deployments
+
+  - name: Create {{ restore_in_progress_flag }} flag file
+    file:
+      path: "{{ restore_in_progress_flag }}"
+      state: touch
+
+  become: yes
+  become_user: root
+
+- name: Save original docker_registries override value for later
+  set_fact:
+    original_overrides:
+      docker_registries: "{{ docker_registries }}"
+  no_log: true
+
+- name: Perform additional validation that requires values from after restore is started
+  import_role:
+    name: backup-restore/validate-with-overrides
+
+- name: Set archive parameters for bootstrap
+  set_fact:
+    archive_puppet_permdir: "opt/platform/puppet/{{ software_version }}/hieradata"
+    archive_ssh_config_permdir: "opt/platform/config/{{ software_version }}/ssh_config"
+    archive_config_permdir: "opt/platform/config/{{ software_version }}"
+    archive_keyring_permdir: "opt/platform/.keyring/{{ software_version }}/python_keyring"
+    archive_branding_permdir: "opt/platform/config/{{ software_version }}/branding"
+    archive_banner_permdir: "opt/platform/config/{{ software_version }}/banner/etc"
+    archive_deploy_permdir: "opt/platform/deploy/{{ software_version }}"
+    archive_helm_permdir: "opt/platform/helm/{{ software_version }}"
+  when: not upgrade_in_progress or (previous_software_version == "22.06")

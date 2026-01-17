@@ -1,0 +1,31 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# Reusable task to check application status directly from sysinv DB
+# Required: app_name_to_check
+# Optional: success_statuses, failure_statuses, retries, delay, ignore_errors
+
+- name: Check {{ app_name_to_check }} status in sysinv DB
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -c
+    "SELECT status FROM kube_app WHERE name='{{ app_name_to_check }}' AND status!='inactive';"
+  register: app_status_check
+  changed_when: false
+  retries: "{{ retries | default(1) }}"
+  delay: "{{ delay | default(5) }}"
+  until:
+    - app_status_check.rc == 0
+    - app_status_check.stdout is defined
+    - app_status_check.stdout.strip() in (success_statuses | default(['applied']))
+  failed_when: >
+    app_status_check.rc != 0 or
+    (
+      app_status_check.stdout is defined and
+      app_status_check.stdout.strip() in (failure_statuses | default([]))
+    )
+  ignore_errors: "{{ ignore_errors | default(false) }}"

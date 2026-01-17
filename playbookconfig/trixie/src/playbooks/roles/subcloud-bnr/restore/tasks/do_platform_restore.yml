@@ -1,0 +1,133 @@
+---
+#
+# Copyright (c) 2022-2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# TASKS DESCRIPTION:
+#   - Transfer platform backup file from central storage to staging
+#     directory on the subcloud as needed.
+#   - Invoke subcloud playbook to perform platform restore.
+#
+- name: Perform platform restore
+  block:
+  - block:
+    - name: Get system controller oam ip
+      shell: grep oamcontroller /etc/hosts|awk '{print $1}'
+      register: sc_oam_ip
+      connection: local
+
+    - name: Set system controller oam ip fact
+      set_fact:
+        sc_oam_ip: "{{ sc_oam_ip.stdout | ipwrap }}"
+
+    # It's necessary to create the staging dir with 775 permission
+    # so the system controller can push the backup files to the subcloud,
+    # since the files are in a folder only the root can access and synchronize
+    # only support passwordless sudo operations (limitation from rsync itself).
+    - name: Create staging dir
+      file:
+        path: "{{ default_local_staging_dir }}"
+        state: directory
+        mode: '0775'
+
+    - name: Set backup_dir to local_staging_dir in subcloud overrides file
+      lineinfile:
+        path: "{{ subcloud_overrides }}"
+        regexp: '^initial_backup_dir(.*)$'
+        line: "initial_backup_dir: {{ default_local_staging_dir }}"
+        backrefs: yes
+
+    - name: Transfer platform backup to {{ inventory_hostname }}
+      synchronize:
+        mode: push
+        src: "{{ backup_dir }}/"
+        dest: "{{ default_local_staging_dir }}/"
+        rsync_opts: "--omit-dir-times,--no-perms"
+      register: backup_transfer
+      until: backup_transfer.rc == 0
+      retries: 3
+      delay: 2
+      become: false
+
+    when: not local
+
+  - name: Run {{ inventory_hostname }} platform restore playbook
+    command: >
+      ansible-playbook /usr/share/ansible/stx-ansible/playbooks/restore_platform.yml -e
+      "@{{ subcloud_overrides }}"
+    register: platform_restore_output
+
+  - name: Print the output of platform restore playbook
+    debug:
+      msg: "{{ platform_restore_output.stdout }}"
+
+  - name: Reconfigure OAM network post factory restore
+    block:
+      # We only care about the primary OAM
+      - name: Get current OAM configuration
+        shell: |
+          source /etc/platform/openrc
+          system oam-show | awk '
+            /oam_ip[^_]/ { oam_ip = $4 }
+            /oam_gateway_ip/ { gateway = $4 }
+            /oam_subnet/ { subnet = $4 }
+            END { print oam_ip, gateway, subnet }
+          '
+        register: oam_show_output
+        retries: 3
+        delay: 5
+        until: oam_show_output.rc == 0
+        changed_when: false
+
+      - name: Parse current OAM values
+        set_fact:
+          current_oam_ip: "{{ oam_show_output.stdout.split()[0] }}"
+          current_oam_gateway: "{{ oam_show_output.stdout.split()[1] }}"
+          current_oam_subnet: "{{ oam_show_output.stdout.split()[2] }}"
+
+      - name: Determine if OAM reconfiguration is required
+        set_fact:
+          oam_reconfig_required: >-
+            {{ current_oam_ip != external_oam_floating_address or
+              current_oam_gateway != external_oam_gateway_address or
+              current_oam_subnet != external_oam_subnet }}
+
+      - name: Apply OAM configuration changes
+        shell: >-
+          source /etc/platform/openrc;
+          system oam-modify
+          oam_subnet={{ external_oam_subnet }}
+          oam_gateway_ip={{ external_oam_gateway_address }}
+          oam_ip={{ external_oam_floating_address }}
+        register: oam_modify_result
+        retries: 3
+        delay: 5
+        until: oam_modify_result.rc == 0
+        when: oam_reconfig_required | bool
+
+    when:
+      - auto_restore_mode | default('') == "factory"
+      - subcloud_is_aio_sx
+      - not (ipmi_monitor_enabled | default(true))
+
+  - name: Restore sys_protected ACL on admin.conf
+    acl:
+      path: /etc/kubernetes/admin.conf
+      entity: sys_protected
+      etype: group
+      permissions: r
+      state: present
+
+  always:
+    - name: Remove subcloud overrides file on {{ inventory_hostname }}
+      file:
+        path: "{{ subcloud_overrides }}"
+        state: absent
+      when: not restore_registry_images or optimized_bnr_supported
+
+    - name: Remove staging backup directory from {{ inventory_hostname }}
+      file:
+        path: "{{ default_local_staging_dir }}"
+        state: absent
+      when: not local

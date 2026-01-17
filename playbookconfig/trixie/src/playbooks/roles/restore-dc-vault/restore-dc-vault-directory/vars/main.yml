@@ -1,0 +1,9 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+platform_conf_path: /etc/platform
+restore_dc_vault_in_progress_flag: "{{ platform_conf_path }}/.restore_dc_vault_in_progress_flag"
+dc_vault_permdir: /opt/dc-vault

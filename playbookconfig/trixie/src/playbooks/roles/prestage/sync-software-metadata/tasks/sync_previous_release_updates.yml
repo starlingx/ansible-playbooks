@@ -1,0 +1,53 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#
+#   This role syncronizes the System Controller updates packages directory
+#   to the subcloud when prestaging an N-1 software version. That directory
+#   is required by USM to perform the deployment of the N-1 release.
+#
+#   The conditions to execute this role are:
+#   - The provided software version must be less than the current System
+#     Controller software version.
+#   - The prestage_source must be 'local' (this means that the host release
+#     version is the same as the user provided in prestage command line).
+#   - There must not be a commit defined in any of the metadata files for
+#     the given release.
+
+- name: Perform updates packages full sync
+  block:
+    - name: Temporarily change the ownership of updates directory {{ software_updates_dir }}
+      file:
+        path: "{{ software_updates_dir }}"
+        state: directory
+        owner: sysadmin
+        recurse: yes
+
+    - name: Delete packages directory on subcloud
+      file:
+        path: "{{ rel_updates_dir }}"
+        state: absent
+
+    - name: Transfer system controller packages to subcloud
+      synchronize:
+        mode: "push"
+        src: "{{ rel_updates_dir }}/"
+        dest: "{{ rel_updates_dir }}/"
+        rsync_opts: "--delete"
+      register: software_updates_transfer
+      retries: 3
+      delay: 5
+      until: software_updates_transfer.rc == 0
+
+  always:
+    - name: Restore ownership of updates directory {{ software_updates_dir }}
+      file:
+        path: "{{ software_updates_dir }}"
+        state: directory
+        owner: root
+        recurse: yes
+  become: true
