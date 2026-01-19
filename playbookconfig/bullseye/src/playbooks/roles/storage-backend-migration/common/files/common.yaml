@@ -1136,6 +1136,15 @@ subjects:
     name: rook-ceph-system
     namespace: rook-ceph # namespace:operator
 ---
+# Default service account for rook-ceph namespace
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: default
+  namespace: rook-ceph
+imagePullSecrets:
+  - name: default-registry-key
+---
 # Service account for Ceph COSI driver
 apiVersion: v1
 kind: ServiceAccount

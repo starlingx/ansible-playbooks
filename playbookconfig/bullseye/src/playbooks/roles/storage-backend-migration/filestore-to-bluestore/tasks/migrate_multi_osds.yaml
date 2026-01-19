@@ -7,12 +7,85 @@
 - name: Deprovision ceph-osd service
   command: sm-deprovision service-group-member --apply storage-services ceph-osd
 
+- name: Give ceph-osd services a few extra seconds to identify the changes
+  pause:
+    seconds: 12
+  delegate_to: "{{ system.active_controller }}"
+  changed_when: false
+
+- name: Stop all filestore OSDs on this host first
+  command: /etc/init.d/ceph stop osd
+  register: stop_osds_result
+
+- name: Debug stopped OSDs
+  debug:
+    var: stop_osds_result
+
+- name: Give ceph some time to know what to do with OSDs down
+  pause:
+    seconds: 10
+  delegate_to: "{{ system.active_controller }}"
+  changed_when: false
+
+- name: Wait for all PGs not be incomplete|inactive|peering
+  command: timeout 30 ceph pg stat
+  register: ceph_pg_stat
+  retries: 180
+  delay: 10
+  until: >
+    'incomplete' not in ceph_pg_stat.stdout and
+    'inactive' not in ceph_pg_stat.stdout and
+    'peering' not in ceph_pg_stat.stdout
+  changed_when: false
+
+- name: Wait until the 'recover' keyword goes away from ceph status
+  command: timeout 30 ceph -s
+  register: ceph_status
+  until: >
+    'recover' not in ceph_status.stdout
+  retries: 120
+  delay: 10
+  changed_when: false
+
+- name: Display cluster status
+  debug:
+    var: ceph_status.stdout_lines
+
+- name: Give Ceph some time to rellocate the active PGs
+  pause:
+    seconds: 20
+  delegate_to: "{{ system.active_controller }}"
+  changed_when: false
+
 - name: Migrate OSDs all at once
   include_tasks: migrate_single_osd.yaml
   loop: "{{ host_osd_info }}"
   loop_control:
     label: "Host {{ inventory_hostname }} OSD id = {{ item.osd_id }}"
   when: item.osd_objectstore == "filestore"
+
+- name: Give ceph some time to know what to do with OSDs purged
+  pause:
+    seconds: 10
+  delegate_to: "{{ system.active_controller }}"
+  changed_when: false
+
+- name: Wait for cluster to stabilize after OSD destroy/purge
+  command: timeout 30 ceph pg stat
+  register: ceph_pg_stat_after_destroy
+  until: >
+    'incomplete' not in ceph_pg_stat_after_destroy.stdout and
+    'inactive' not in ceph_pg_stat_after_destroy.stdout and
+    'peering' not in ceph_pg_stat_after_destroy.stdout
+  retries: 60
+  delay: 10
+  changed_when: false
+
+- name: Give Ceph some time to rellocate the active PGs before starting OSDs
+  pause:
+    seconds: 20
+  delegate_to: "{{ system.active_controller }}"
+  changed_when: false
 
 - name: Reload systemd
   systemd:
@@ -47,7 +120,7 @@
 - name: Wait until cluster finishes recovery
   command: ceph health -f json
   register: ceph_health
-  retries: 360
+  retries: 720
   delay: 10
   until: >
     (
@@ -69,7 +142,7 @@
   register: ceph_pg_stat
   until: >
     ceph_pg_stat.stdout is search('^([0-9]+) pgs: \\1 active\\+clean')
-  retries: 120
+  retries: 240
   delay: 10
   changed_when: false
 
@@ -78,7 +151,7 @@
   register: ceph_status
   until: >
     'recover' not in ceph_status.stdout
-  retries: 60
+  retries: 120
   delay: 10
   changed_when: false
 

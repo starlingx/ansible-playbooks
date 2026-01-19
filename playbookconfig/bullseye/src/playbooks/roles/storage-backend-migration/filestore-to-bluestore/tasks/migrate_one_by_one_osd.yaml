@@ -30,13 +30,20 @@
         '[Complete]: Rebalancing after osd.' ~ item.osd_id ~ ' marked out' in ceph_progress.stdout
         or
         (('Nothing in progress' in ceph_progress.stderr or ceph_progress.stdout == '') and ceph_progress.attempts >= 3)
-      retries: 360
+      retries: 720
       delay: 10
       changed_when: false
   when: hostvars[system.active_controller]['pool_size'] | int < 2
 
 - name: Migrate one OSD
   include_tasks: migrate_single_osd.yaml # it takes an item
+
+- name: Give Ceph some time to rellocate the active PGs when replica is bigger than 1
+  pause:
+    seconds: 5
+  delegate_to: "{{ system.active_controller }}"
+  changed_when: false
+  when: hostvars[system.active_controller]['pool_size'] | int > 1
 
 - name: Reload systemd
   systemd:
@@ -51,7 +58,7 @@
 - name: Wait until OSDs are up
   command: ceph osd tree -f json
   register: ceph_osd_tree
-  retries: 60
+  retries: 120
   delay: 10
   until: >
     ceph_osd_tree.stdout | from_json | json_query("nodes[?type=='osd'].status") is not none and
@@ -66,7 +73,7 @@
 - name: Wait until cluster finishes recovery
   command: ceph health -f json
   register: ceph_health
-  retries: 360
+  retries: 720
   delay: 10
   until: >
     (
@@ -88,7 +95,7 @@
   register: ceph_pg_stat
   until: >
     ceph_pg_stat.stdout is search('^([0-9]+) pgs: \\1 active\\+clean')
-  retries: 120
+  retries: 240
   delay: 10
   changed_when: false
 
@@ -97,7 +104,7 @@
   register: ceph_status
   until: >
     'recover' not in ceph_status.stdout
-  retries: 60
+  retries: 120
   delay: 10
   changed_when: false
 
