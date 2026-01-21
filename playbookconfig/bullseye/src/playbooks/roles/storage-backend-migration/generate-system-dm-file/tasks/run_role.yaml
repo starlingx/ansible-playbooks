@@ -31,6 +31,12 @@
     target_dm_file_name: "secrets-fixed.yaml"
     dm_script_name: "remove_incomplete_secrets.py"
 
+- name: Remove docker registry references from service parameters in DM file
+  include_tasks: change_dm_file.yaml
+  vars:
+    target_dm_file_name: "no-docker-registries.yaml"
+    dm_script_name: "remove_docker_registry_service_params.py"
+
 - name: Backup final DM file
   include_tasks: backup_dm_file.yaml
 
