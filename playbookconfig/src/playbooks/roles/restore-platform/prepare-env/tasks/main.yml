@@ -378,7 +378,7 @@
     archive_puppet_permdir: "opt/platform/puppet/{{ software_version }}/hieradata"
     archive_ssh_config_permdir: "opt/platform/config/{{ software_version }}/ssh_config"
     archive_config_permdir: "opt/platform/config/{{ software_version }}"
-    archive_keyring_permdir: "opt/platform/.keyring/{{ software_version }}/python_keyring"
+    archive_keyring_permdir: "var/luks/stx/luks_fs/controller/.keyring/{{ software_version }}/python_keyring"
     archive_branding_permdir: "opt/platform/config/{{ software_version }}/branding"
     archive_banner_permdir: "opt/platform/config/{{ software_version }}/banner/etc"
     archive_deploy_permdir: "opt/platform/deploy/{{ software_version }}"
