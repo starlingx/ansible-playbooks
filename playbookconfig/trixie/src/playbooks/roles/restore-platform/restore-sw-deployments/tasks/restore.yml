@@ -1,0 +1,50 @@
+---
+#
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Validate the system before restoring software deployments
+  include_tasks: validate.yml
+  when: do_sw_deployments_prepare|bool
+
+- name: Set {{ restore_patching_in_progress_flag }} flag
+  file:
+    path: "{{ restore_patching_in_progress_flag }}"
+    state: touch
+
+- name: Prepare to restore software deployments
+  include_tasks: prepare.yml
+  when: do_sw_deployments_prepare|bool
+
+- name: Do software deployments restore
+  block:
+    - name: Begin restoring software deployments
+      include_tasks: begin.yml
+      when: do_sw_deployments_begin|bool
+
+    - name: Do software deployments reboot if required
+      include_tasks: reboot.yml
+      when: do_sw_deployments_reboot|bool
+
+    - name: Clear {{ restore_patching_rr_flag }} flag
+      file:
+        path: "{{ restore_patching_rr_flag }}"
+        state: absent
+
+    - name: Finish restoring software deployments
+      include_tasks: end.yml
+      when: do_sw_deployments_end|bool
+
+  when: do_sw_deployments_restore|bool
+
+- name: Clear {{ restore_patching_in_progress_flag }} flag
+  file:
+    path: "{{ restore_patching_in_progress_flag }}"
+    state: absent
+
+- name: Set {{ restore_patching_complete_flag }} flag
+  file:
+    path: "{{ restore_patching_complete_flag }}"
+    state: touch

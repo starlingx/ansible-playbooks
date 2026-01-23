@@ -1,0 +1,8 @@
+---
+#
+# Copyright (c) 2021 Intel Corporation
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+containerd_cfg_dir: /etc/containerd
+containerd_bin_dir: /usr/bin

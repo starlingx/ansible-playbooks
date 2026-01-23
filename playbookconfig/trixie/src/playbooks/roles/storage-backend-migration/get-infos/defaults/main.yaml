@@ -1,0 +1,13 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+extra_pools:
+  - images
+  - cinder.backups
+  - cinder-volumes
+  - ephemeral
+
+vg_name: cgts-vg

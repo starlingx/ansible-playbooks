@@ -1,0 +1,33 @@
+---
+#
+# Copyright (c) 2021-2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Define variables (flags) that will be used in certificate creation.
+# Depending on the boolean value of the flags, the certificates will be
+# issued by local cluster issuer using 'system-local-ca' secret.
+# The platform certificates are:
+#   - OIDC-Auth-Apps (not required)
+#   - Local OpenLDAP (required for standalone and DC SystemController)
+#   - Docker Registry (required)
+#   - REST API / Web Server GUI (required)
+#
+- name: Check if oidc-auth-apps is applied
+  shell: |
+    source /etc/platform/openrc
+    system application-show oidc-auth-apps --column status --format value | \
+    awk  '{ if ($0 == "applied") print "true"; else print "false"; }'
+  register: oidc_applied
+
+- name: Get distributed_cloud role
+  shell: |
+    source /etc/platform/openrc
+    system show | grep distributed_cloud_role | awk '{ print $4 }'
+  register: dc_role
+
+- set_fact:
+    install_oidc_auth_apps_certificate: "{{ true if oidc_applied.stdout | bool else false }}"
+    install_system_open_ldap_certificate: "{{ true if dc_role.stdout != 'subcloud' else false }}"
+    install_system_registry_local_certificate: true
+    install_system_restapi_gui_certificate: true

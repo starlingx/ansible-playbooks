@@ -1,0 +1,30 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role gets minimum supported release version from upgrade metadata.xml.
+#
+# Example of metadata.xml
+# <build>
+#     <version>xxxSW_VERSIONxxx</version>
+#     <supported_upgrades>
+#         <upgrade>
+#             <version>22.12</version>
+#         </upgrade>
+#     </supported_upgrades>
+# </build>
+
+- name: Parse versions from upgrades metadata XML file
+  xml:
+    path: /opt/upgrades/metadata.xml
+    xpath: "/build/supported_upgrades/upgrade/version"
+    content: text
+  register: versions_result
+  connection: local
+
+- name: Extract minimum version
+  set_fact:
+    minimum_supported_release_version: "{{ versions_result.matches | map(attribute='version') | min }}"

@@ -1,0 +1,30 @@
+---
+#
+# Copyright (c) 2021 Intel Corporation
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- hosts: localhost
+  gather_facts: no
+  become: true
+  roles:
+    - role: provision-edgeworker/prepare-controller/platform
+      when: groups['edgeworker'] | length > 0
+
+    - role: provision-edgeworker/prepare-controller/kubernetes
+      when: groups['edgeworker'] | length > 0
+
+- hosts: edgeworker
+  become: true
+  strategy: free
+  roles:
+    - role: provision-edgeworker/prepare-edgeworker/os
+
+    - role: provision-edgeworker/prepare-edgeworker/kubernetes
+
+- hosts: localhost
+  gather_facts: no
+  become: true
+  roles:
+    - role: provision-edgeworker/prepare-controller/cleanup
+      when: groups['edgeworker'] | length > 0

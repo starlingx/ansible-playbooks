@@ -1,0 +1,58 @@
+---
+#
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Setup networking so that restoring can be completed.
+#   Networking should match the state it would be in after
+#   completing a typical bootstrapping, so that unlocking can
+#   be performed immediately after optimized restore is complete.
+
+- name: Remove network configuration files
+  file:
+    path: "{{ network_scripts }}"
+    state: absent
+
+- block:
+    - name: Restore network configuration files from Debian
+      command: >-
+        tar --use-compress-program=pigz -C / --overwrite
+        -xpf {{ platform_backup_fqpn | quote }} {{ network_scripts.lstrip('/') | quote }}
+      args:
+        warn: false
+
+    - name: Bring up original networking
+      shell:
+        cmd: |
+          ifup $(ls ifcfg-* | sed 's/ifcfg-//') --ignore-errors --force
+        chdir: /etc/network/interfaces.d/
+      async: 120
+      poll: 5
+
+  when: previous_software_version != '21.12'
+
+- name: Bring up temporary addresses
+  block:
+    # This will create a list of currently available internal IP addresses on the system
+    - name: Read current IP addresses
+      shell: ip addr | awk '$1 ~ "inet" {print $2}' | cut -d'/' -f1
+      register: all_addr_result
+
+    # System values contains the puppet hieradata values for networking addresses.
+    # Here we get the respective address from hieradata and add it if it's missing from
+    # our list of already available internal addresses.
+    - name: Add missing controller IP addresses
+      command: "ip addr add {{ system_values[item] }} dev lo scope host"
+      when:
+        - system_values[item] not in all_addr_result.stdout_lines
+        - not (system_mode == 'simplex' and item == 'platform::network::pxeboot::params::controller0_address')
+      loop: "{{ network_address_keys }}"
+
+- name: Start dnsmasq for internal FQDN
+  command: dnsmasq
+  args:
+    warn: false
+  become: yes
+  when: previous_software_version is version('22.12', '>')

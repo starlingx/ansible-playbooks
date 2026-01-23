@@ -1,0 +1,3 @@
+---
+# The staging area to process the data from the backup tarball
+staging_dir: /opt/backups

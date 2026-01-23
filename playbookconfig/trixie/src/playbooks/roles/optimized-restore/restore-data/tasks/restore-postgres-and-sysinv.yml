@@ -1,0 +1,136 @@
+---
+#
+# Copyright (c) 2022-2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Restore sysinv and flock services.  The sysinv data is stored
+#   in postgres, so that is restored first.  After flock services
+#   are restarted to pick up changes.
+
+- name: Shutdown mtcAgent
+  command: /usr/lib/ocf/resource.d/platform/mtcAgent stop
+  environment:
+    OCF_ROOT: "/usr/lib/ocf"
+    OCF_RESKEY_state: "active"
+
+- name: Stop flock services
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+  loop:
+    - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
+    - fminit
+    - fm-api
+    - sysinv-conductor
+    - sysinv-agent
+    - sysinv-api
+    - mtcClient
+    - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
+    - sm-api
+
+- name: Restore Postgres
+  import_role:
+    name: backup-restore/restore-postgres
+
+- name: Upgrade path
+  block:
+    # N3000 reset requires running a container,
+    # containerd hasn't been setup yet so it's unavailable.
+    # Creating this flag will have the reset be skipped during migration if it's triggered.
+    # This flag is deleted on reboot so reset will still be done after unlock.
+    - name: Disable N3000 reset during migration
+      file:
+        name: /var/run/.sysinv_n3000_reset
+        state: touch
+      become: true
+
+    - name: Migrate databases and platform data
+      command: "upgrade_controller_simplex {{ restore_data_file }}"
+      register: migration_output
+
+    - debug:
+        var: migration_output.stdout_lines
+
+    # Shell required for wildcard
+    - name: Migrate remaining config data
+      shell: "mv {{ src }} {{ dest }}"
+      failed_when: false
+      vars:
+        src: "/opt/platform/config/{{ previous_software_version }}/{*,.*}"
+        dest: "/opt/platform/config/{{ software_version }}"
+
+    - name: Update postgresql pg_hba.conf with IPv6 address if system is IPv6
+      command: "{{ item }}"
+      args:
+        warn: false
+      with_items:
+        - "sed --follow-symlinks -i -e 's|0.0.0.0/0|::0/0|g' /etc/postgresql/pg_hba.conf"
+        - "sed --follow-symlinks -i -e 's|0.0.0.0/32|::0/128|g' /etc/postgresql/pg_hba.conf"
+      when: ipv6_addressing is defined and ipv6_addressing != False
+
+  when: upgrade_in_progress
+
+# restore-more-data/tasks/main.yml#459
+# Set all the hosts including controller-0 to locked/disabled/offline state.
+# After the services are restarted, mtce will update controller-0 to
+# locked/disabled/online state. Setting controller-0 to offline state now
+# will ensure that keystone, sysinv and mtcAgent are indeed in-service after being restarted.
+- name: Set all the hosts to locked/disabled/offline state
+  shell: >-
+    psql -c "update i_host set administrative='locked', operational='disabled',
+    availability='offline'" sysinv
+  become_user: postgres
+
+# Container images may not be present after restore. Inform sysinv so it
+# can download the images. Kubernetes will then start the apps.
+- name: Set applied apps to "restore-requested" state
+  shell: psql -c "update kube_app set status='restore-requested' where status='applied'" sysinv
+  become_user: postgres
+
+- name: Set platform-integ-apps to applied state when set to wipe osds disks to remove the app later
+  command: >-
+    psql -c "update kube_app set status='applied' where name='platform-integ-apps'
+    and status='restore-requested'" sysinv
+  become_user: postgres
+  when: wipe_ceph_osds|bool
+
+- name: Set rook-ceph to applied state when set to wipe osds disks to remove the app later
+  command: >-
+    psql -c "update kube_app set status='applied' where name='rook-ceph'
+    and status='restore-requested'" sysinv
+  become_user: postgres
+  when: wipe_ceph_osds|bool
+
+# Ensure hostwd sees the node as locked during optimized restore.
+# Normally mtcClient creates those flags, but it's stopped here.
+# Without those flags, hostwd may trigger a crashdump on quorum failure.
+- name: Ensure node lock flags exist for hostwd
+  file:
+    path: "{{ item }}"
+    state: touch
+  loop:
+    - /var/run/.node_locked
+    - /var/persist/mtc/.node_locked
+
+- name: Bringup flock services
+  systemd:
+    name: "{{ item }}"
+    state: restarted
+  loop:
+    - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
+    - fminit
+    - fm-api
+    - sysinv-conductor
+    - sysinv-agent
+    - sysinv-api
+    - mtcClient
+    - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
+    - sm-api
+
+- name: Bringup mtcAgent
+  command: "/usr/lib/ocf/resource.d/platform/mtcAgent start"
+  environment:
+    OCF_ROOT: "/usr/lib/ocf"
+    OCF_RESKEY_state: "active"

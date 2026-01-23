@@ -1,0 +1,2 @@
+---
+image_repository: registry.local:9001/registry.k8s.io

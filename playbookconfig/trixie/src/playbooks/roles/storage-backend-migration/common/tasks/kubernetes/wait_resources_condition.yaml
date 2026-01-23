@@ -1,0 +1,61 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get {{ k8s_resource_type | default('job') }}s matching "{{ k8s_resource_prefix }}"
+  delegate_to: "{{ system.active_controller }}"
+  shell: |
+    kubectl get {{ k8s_resource_type | default('job') }} -n {{ k8s_namespace }} --no-headers \
+      -o custom-columns=":metadata.name" | grep "{{ k8s_resource_prefix }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: resources_list
+  retries: "{{ k8s_retries | default(60) }}"
+  delay: "{{ k8s_delay | default(10) }}"
+  until: resources_list.stdout_lines | list | length > 0
+  changed_when: false
+  when: wait_mode == "created"
+
+- name: Set resource list fact dynamically
+  delegate_to: "{{ system.active_controller }}"
+  set_fact:
+    "{{ fact_name }}": "{{ resources_list.stdout_lines | list }}"
+  when: wait_mode == "created"
+
+- name: Wait for all {{ k8s_resource_type | default('job') }}s to {{ wait_mode }}
+  delegate_to: "{{ system.active_controller }}"
+  shell: >
+    kubectl wait --for=condition={{ wait_mode }} -n {{ k8s_namespace }} \
+    {{ k8s_resource_type | default('job') }}/{{ item }} \
+    --timeout={{ k8s_wait_timeout | default('600s') }}
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  loop: "{{ k8s_resource_list }}"
+  loop_control:
+    label: "{{ item }}"
+  register: wait_resources
+  changed_when: false
+  when: wait_mode != "created" and wait_mode != "deleted" and k8s_resource_list is defined
+
+- name: Wait for {{ k8s_resource_type | default('job') }}s to be deleted (by label or prefix)
+  delegate_to: "{{ system.active_controller }}"
+  shell: |
+    {% if k8s_resource_label is defined and k8s_resource_label | length > 0 %}
+      kubectl get {{ k8s_resource_type | default('job') }} -n {{ k8s_namespace }} \
+        -l "{{ k8s_resource_label }}" --no-headers | grep -q "."
+    {% else %}
+      kubectl get {{ k8s_resource_type | default('job') }} -n {{ k8s_namespace }} --no-headers \
+        -o custom-columns=":metadata.name" | grep "{{ k8s_resource_prefix }}"
+    {% endif %}
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: resources_remaining
+  until: resources_remaining.rc == 1
+  retries: "{{ k8s_retries | default(60) }}"
+  delay: "{{ k8s_delay | default(10) }}"
+  failed_when: resources_remaining.rc != 0 and resources_remaining.rc != 1
+  changed_when: false
+  when: wait_mode == "deleted"
+

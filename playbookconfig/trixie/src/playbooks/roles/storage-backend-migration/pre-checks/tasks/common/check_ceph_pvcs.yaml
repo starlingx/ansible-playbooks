@@ -1,0 +1,59 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Check if any Ceph/general PVCs are in use and fail if so
+  shell: |
+    set -euo pipefail
+
+    JSONPATH_PVC='{range .items[?(@.spec.storageClassName=="general")]}{.metadata.namespace}{"/"}{.metadata.name}{"\n"}{end}'
+    JSONPATH_PVC+='{range .items[?(@.spec.storageClassName=="cephfs")]}{.metadata.namespace}{"/"}{.metadata.name}{"\n"}{end}'
+
+    TARGET_PVCS=$(kubectl get pvc -A -o jsonpath="$JSONPATH_PVC")
+
+    # Exit early if no target PVCs
+    [[ -z "$TARGET_PVCS" ]] && exit 0
+
+    IN_USE=""
+
+    while IFS=/ read -r ns pvc; do
+      [[ -z "$ns" || -z "$pvc" ]] && continue
+
+      # Consume ENTIRE kubectl describe output in a bash loop to prevent any printing, extract "Used By" on-the-fly
+      used_by=""
+      found_used_by=false
+      while IFS= read -r line; do
+        if ! $found_used_by && [[ $line =~ ^Used\ By:[[:space:]]+([^[:space:]].*[^[:space:]]) ]]; then
+          used_by="${BASH_REMATCH[1]}"
+          found_used_by=true
+        fi
+        [[ "$line" =~ ^Events: ]] && break  # Early stop if needed, but consume all anyway
+      done < <(kubectl describe pvc "$pvc" -n "$ns" 2>&1)
+
+      if [[ -n "$used_by" && "$used_by" != "<none>" ]]; then
+        IN_USE="${IN_USE}\n$pvc -> $used_by"
+      fi
+
+    done <<< "$TARGET_PVCS"
+
+    if [[ -n "$IN_USE" ]]; then
+      echo -e "${IN_USE#\\n}"  # Strip leading \n
+      exit 1
+    fi
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: ceph_pvc_check
+  changed_when: false
+  failed_when: false
+
+- name: List of PVCs still in use
+  debug:
+    var: ceph_pvc_check.stdout_lines
+  when: ceph_pvc_check.rc != 0
+
+- name: Fail if any Ceph PVCs are still in use
+  fail:
+    msg: "One or more Ceph PVCs are still in use or query failed"
+  when: ceph_pvc_check.rc != 0

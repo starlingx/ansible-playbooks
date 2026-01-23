@@ -1,0 +1,20 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role will prevent you from re-running restores
+#   unless you provde the force_restore flag.
+#
+- name: Check if restore is in progress
+  stat:
+    path: "{{ restore_in_progress_flag }}"
+  register: restore_in_progress
+
+- name: Fail if restore is already in progress
+  fail:
+    msg: "Restore is already in progress!"
+  when: restore_in_progress.stat.exists
+  ignore_errors: "{{ force_restore|bool }}"

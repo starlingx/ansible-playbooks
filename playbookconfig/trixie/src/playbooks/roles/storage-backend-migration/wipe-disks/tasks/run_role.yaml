@@ -1,0 +1,22 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Wipe OSD disks
+  shell: |
+    wipefs -a -f {{ item.disk_device_path }}
+    sgdisk --zap-all {{ item.disk_device_path }}
+    kpartx -d {{ item.disk_device_path }}
+  loop: "{{ hostvars[system.active_controller]['disks_by_host'][inventory_hostname] }}"
+  loop_control:
+    label: "OSD id = {{ item.osd_id }}"
+  register: wipe_osds_output
+
+- name: Debug wipe OSDs
+  debug:
+    msg: "{{ item.stdout_lines | replace('\\n', '\n') }}"
+  loop: "{{ wipe_osds_output.results }}"
+  loop_control:
+    label: "OSD id = {{ item.item.osd_id }}"

@@ -1,0 +1,104 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get active controller hostname
+  command: hostname
+  register: active_controller_output
+  changed_when: false
+
+- name: Wrap system values to pass to inventory groups
+  set_fact:
+    system:
+      sw_version: "{{ platform.sw_version }}"
+      system_type: "{{ platform.system_type }}"
+      system_mode: "{{ platform.system_mode }}"
+      system_deployment: "{{ system_deployment }}"
+      active_controller: "{{ active_controller_output.stdout }}"
+
+- name: Show values
+  debug:
+    var: system
+
+- name: Add hosts to inventory grouped by personality
+  add_host:
+    name: "{{ item.hostname }}"
+    groups: "{{ item.personality }}s"
+    ansible_become_pass: "{{ ansible_become_pass }}"
+    ansible_password: "{{ ansible_password }}"
+    system: "{{ system }}"
+  loop: "{{ hosts }}"
+
+- name: Add active controller group
+  add_host:
+    name: "{{ system.active_controller }}"
+    groups: active_controller
+    ansible_connection: "{{ ansible_connection }}"
+    ansible_become_pass: "{{ ansible_become_pass }}"
+    ansible_password: "{{ ansible_password }}"
+    system: "{{ system }}"
+    system_env: "{{ system_env }}"
+
+- name: Add standby controller group
+  add_host:
+    name: "{{ groups.controllers | difference(groups.active_controller) | first }}"
+    groups: standby_controller
+    ansible_become_pass: "{{ ansible_become_pass }}"
+    ansible_password: "{{ ansible_password }}"
+    system: "{{ system }}"
+  when: groups.controllers | length > 1
+
+# DX+ on bare-metal ceph has 2 fixed and one floating monitor
+# On rook-ceph it needs 3 fixed monitors
+- name: Add third fixed monitor for DX+
+  set_fact:
+    third_monitor_host: "{{ groups.workers | first }}"
+    cacheable: true
+  when:
+    - system.system_deployment == "AIO-DX+"
+    - third_monitor_host is undefined
+
+- name: Display third fixed monitor
+  debug:
+    var: third_monitor_host
+  when: third_monitor_host is defined
+
+- name: Set hosts_with_monitor if undefined
+  block:
+    - name: Retrieve hosts with monitors
+      become: true
+      become_user: postgres
+      command: >
+        psql -d sysinv -t -A
+        -c "SELECT h.hostname FROM i_host h JOIN ceph_mon c ON h.id = c.forihostid WHERE c.state='configured';"
+      register: with_monitor_output
+      changed_when: false
+
+    - name: Register hosts with monitors
+      set_fact:
+        hosts_with_monitor: "{{ with_monitor_output.stdout_lines }}"
+        cacheable: true
+  when: hosts_with_monitor is undefined
+
+- name: Add third monitor to hosts_with_monitor
+  set_fact:
+    hosts_with_monitor: "{{ hosts_with_monitor + [third_monitor_host] }}"
+    cacheable: true
+  when:
+    - third_monitor_host is defined
+    - third_monitor_host is not in hosts_with_monitor
+
+- name: Add with_monitor group
+  add_host:
+    name: "{{ item }}"
+    groups: with_monitor
+    ansible_become_pass: "{{ ansible_become_pass }}"
+    ansible_password: "{{ ansible_password }}"
+    system: "{{ system }}"
+  loop: "{{ hosts_with_monitor }}"
+
+- name: Show all inventory groups
+  debug:
+    var: groups

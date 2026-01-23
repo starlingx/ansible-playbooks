@@ -1,0 +1,22 @@
+
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Check openstack app state
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -c
+    "SELECT status FROM kube_app WHERE name LIKE '%-openstack' AND status!='inactive';"
+  register: app_status_check
+  changed_when: false
+  ignore_errors: true
+
+- name: Fail if openstack app is applied
+  fail:
+    msg: |
+      Migration is not supported with openstack app applied.
+  when: app_status_check.stdout | default('') | trim == 'applied'

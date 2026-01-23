@@ -1,0 +1,54 @@
+---
+#
+# Copyright (c) 2021 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role exists to restore the dc-vault directory
+#   It will run only if the node is an unlocked system controller
+#
+- block:
+    - name: Set dc-vault backup file path
+      set_fact:
+        dc_vault_backup_file: "{{ target_backup_dir }}/{{ backup_filename }}"
+
+    - name: Check if dc-vault backup file exists
+      stat:
+        path: "{{ dc_vault_backup_file }}"
+      register: dc_vault_backup_file_result
+
+    - name: Fail if dc-vault backup is missing
+      fail:
+        msg: "dc-vault backup file is missing"
+      when: not dc_vault_backup_file_result.stat.exists
+
+    - name: 'Create {{ restore_dc_vault_in_progress_flag }} flag file'
+      file:
+        path: "{{ restore_dc_vault_in_progress_flag }}"
+        state: touch
+
+    - name: Set dc-vault path in the archive
+      set_fact:
+        archive_dc_vault_permdir: "{{ dc_vault_permdir | regex_replace('^\\/', '') }}"
+
+    - name: Look for dc-vault filesystem
+      shell: "tar -tf {{ dc_vault_backup_file }} | grep '{{ dc_vault_permdir|basename }}'"
+      args:
+        warn: false
+      failed_when: false
+      register: search_result
+
+    - name: Restore dc-vault filesystem
+      command: >-
+        tar -C / --overwrite -xpf {{ dc_vault_backup_file }}
+        {{ archive_dc_vault_permdir }}
+      args:
+        warn: false
+      when: search_result.rc == 0
+
+  always:
+    - name: 'Remove the {{ restore_dc_vault_in_progress_flag }} file'
+      file:
+        path: "{{ restore_dc_vault_in_progress_flag }}"
+        state: absent

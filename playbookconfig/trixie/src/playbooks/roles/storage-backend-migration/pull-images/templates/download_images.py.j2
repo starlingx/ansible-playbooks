@@ -1,0 +1,52 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+from oslo_config import cfg
+from sysinv.common import constants
+from sysinv.common import utils
+from sysinv.conductor import kube_app
+from sysinv.db import api
+import functools
+import eventlet
+
+eventlet.monkey_patch()
+
+import logging
+import sys
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+
+cfg.CONF(default_config_files=['/etc/sysinv/sysinv.conf'])
+
+dbapi = api.get_instance()
+_docker = kube_app.DockerHelper(dbapi)
+
+
+from sysinv.conductor import kube_app
+
+rpc_app = dbapi.kube_app_get(constants.HELM_APP_PLATFORM)
+
+app = kube_app.AppOperator.Application(rpc_app)
+
+images_to_download = {{ images_to_download }}
+
+registries_info = _docker.retrieve_specified_registries()
+local_registry_auth = utils.get_local_docker_registry_auth()
+docker_registry_server = constants.DOCKER_REGISTRY_SERVER
+
+pool = eventlet.greenpool.GreenPool(size={{ max_parallel_download | int }})
+for tag, success in pool.imap(
+    functools.partial(_docker.download_an_image,
+                      app,
+                      registries_info),
+                      images_to_download):
+    if not success:
+        raise Exception("Some images were not downloaded")

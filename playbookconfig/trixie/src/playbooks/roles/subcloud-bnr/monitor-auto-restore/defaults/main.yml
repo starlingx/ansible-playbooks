@@ -1,0 +1,12 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# Timeout in seconds for the whole auto-restore process
+restore_timeout: 3600
+
+# Initial delay in seconds before checking connectivity
+boot_wait_time: 300

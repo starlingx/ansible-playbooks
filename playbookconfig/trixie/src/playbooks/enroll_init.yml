@@ -1,0 +1,275 @@
+---
+#
+# Copyright (c) 2024-2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#  This playbook executes the enroll-init stage of subcloud enrollment,
+#  using cloud-init on the target system and rvmc to insert a seed image.
+#  Overall, this triggers OAM network and password updates required for subsequent
+#  enrollment stages.
+#
+
+- name: Enroll Init Playbook
+  hosts: all
+  gather_facts: false
+  become: no
+
+  tasks:
+    # The reboot operation is not needed for the enroll-init stage.
+    # So we set the wait_for_timeout to 420 seconds to allow for
+    # the system to complete the enroll-init stage without rebooting
+    # to give the system enough time to reconfigure the OAM network
+    # and monitor the Sysinv endpoint for the new address.
+    - set_fact:
+        ipmi_monitor_enabled: "{{ ipmi_sel_event_monitoring | default(true) }}"
+
+    - set_fact:
+        sysinv_port: "{{ sysinv_port | default(6385) }}"
+        cloud_init_wait_time: "{{ cloud_init_wait_time | default(
+            0 if ipmi_monitor_enabled else 40
+          ) }}"
+        wait_for_timeout: "{{ enroll_wait_for_timeout | default(420) }}"
+        job_retry_delay: "{{ 120 | random }}"
+        protocol: "{{ protocol | default('https') }}"
+        operation_string: "enroll-init"
+
+    # Get the last SEL ID before starting the enroll-init process
+    - block:
+        - name: Get last SEL event ID before enroll-init
+          command:
+            argv:
+              - /usr/local/bin/ipmi_sel_event_monitor.py
+              - --config-file
+              - "{{ rvmc_config_file }}"
+              - --get-last-event
+          register: last_sel_result
+          delegate_to: localhost
+
+        - name: Parse last SEL ID from result
+          set_fact:
+            initial_sel_id: "{{ (last_sel_result.stdout | from_json).last_event_id | default('') }}"
+
+        - debug:
+            msg: "Starting IPMI monitoring from SEL ID: {{ initial_sel_id | default('beginning') }}"
+      when: ipmi_monitor_enabled
+
+    # We need to exclude the set_boot_override and poweroff_host operations
+    # from the RVMC script, as these are not needed for the enroll-init stage.
+    # The set_boot_override operation is not needed as the system is already
+    # booted from the seed image, and the poweroff_host operation is not needed
+    # as the system will not be powered off during the enroll-init stage.
+    # The RVMC script will be run with the --excluded_operations flag set to
+    # exclude these operations.
+    - name: Run RVMC script to execute enroll-init
+      include_role:
+        name: common/rvmc
+      vars:
+        excluded_operations: "set_boot_override, poweroff_host"
+
+    - debug:
+        msg: "Waiting for the system to enroll init..."
+
+    # Monitor each enroll-init stage sequentially. Can be skipped by setting
+    # ipmi_sel_event_monitoring to false.
+    - block:
+        - name: Set facts for enroll-init IPMI monitoring
+          set_fact:
+            enroll_init_stages:
+              - name: "Factory setup"
+                timeout: "{{ factory_setup_timeout | default(90) }}"
+                success_code: "cc10e0"
+                failure_codes:
+                  cc10e1: "Factory setup failed, factory-install completion flag not found"
+
+              - name: "Manual CA certificates check"
+                timeout: "{{ manual_cacerts_timeout | default(90) }}"
+                success_code: "cc10e7"
+                failure_codes:
+                  cc10e8: "Kubernetes Root CA or Front Proxy CA expired"
+                  cc10e9: "ETCD Root CA is expired"
+                  cc10ea: "ETCD Root CA, Kubernetes Root CA and Front Proxy CA are expired"
+
+              - name: "Kubernetes leaf server/client certificates check"
+                timeout: "{{ k8s_leaf_certs_timeout | default(300) }}"
+                success_code: "cc10e2"
+                failure_codes:
+                  cc10e3: "Kubernetes leaf server/client certificates recovery failed. Manual recovery is required"
+                  cc10e4: "Kubectl failed to reply within timeout. Manual recovery is required"
+                  cc10e5: "Kubernetes pods failed to reach Running state after restart"
+                  cc10e6: "RESTAPI or Docker registry certs did not renew within timeout"
+
+              - name: "Platform system-local-ca certificate check"
+                timeout: "{{ slocal_cert_timeout | default(20) }}"
+                success_code: "cc10eb"
+                failure_codes:
+                  cc10ec: "Platform system-local-ca certificate is expired. Manual recovery is required"
+
+              - name: "Platform cloud-init"
+                timeout: "{{ platform_cloudinit_timeout | default(300) }}"
+                success_code: "cc10ed"
+                failure_codes:
+                  cc10ee: "Platform cloud-init configuration failed during execution"
+
+              - name: "Custom cloud-init"
+                timeout: "{{ custom_cloudinit_timeout | default(300) }}"
+                success_code: "cc10ef"
+                failure_codes:
+                  cc10d0: "Custom cloud-init scripts failed during execution"
+
+        - name: Monitor enroll-init stages
+          include_role:
+            name: enroll-subcloud/monitor-enroll-init-ipmi
+          vars:
+            ipmi_initial_event_id: "{{ initial_sel_id }}"
+            ipmi_check_interval: 5
+
+      when: ipmi_monitor_enabled
+
+    - debug:
+        msg: "IPMI SEL event monitoring disabled, proceeding without stage validation"
+      when: not ipmi_monitor_enabled
+
+    # Wait for the sysinv API to open, ensuring that endpoints
+    # are reconfigured with the new address.
+    - name: Waiting {{ wait_for_timeout }} seconds for port {{ sysinv_port }} become open on {{ enroll_reconfigured_oam }}
+      local_action:
+        module: wait_for
+          port={{ sysinv_port }}
+          host={{ enroll_reconfigured_oam }}
+          delay={{ cloud_init_wait_time }}
+          timeout={{ wait_for_timeout }}
+          state=started
+          msg="Timeout waiting for {{ enroll_reconfigured_oam }}:{{ sysinv_port }}. Err_code=wait_enroll_init"
+
+    # The seed ISO must be ejected to prevent it from being reapplied on reboot.
+    # This is necessary because cloud-config is set to run always and cloud-init services
+    # remain enabled until enrollment is complete (allowing for the possibility
+    # of re-running enroll-init if needed)
+    - name: Run RVMC script to eject image
+      include_role:
+        name: common/rvmc
+      vars:
+        eject_image_only: true
+
+    # During the OAM update, several async operations may trigger one another.
+    # Although the endpoints are reconfigured by now, the API and certs may not
+    # be fully updated. A simple curl request can be used to verify both, specifically
+    # checking the region_id API, which will be needed shortly after this playbook completes.
+    - set_fact:
+        sysinv_check_endpoint: >-
+          {{ protocol }}://{{ enroll_reconfigured_oam | ipwrap }}:{{ sysinv_port }}/v1/isystems/region_id
+
+    - name: Wait for the sysinv API to be ready and for certs to be updated for the reconfigured OAM endpoint
+      shell: |
+        curl -s -o /dev/null -w '%{http_code}' {{ sysinv_check_endpoint }}
+      register: api_response
+      retries: 45
+      delay: 20
+      until: api_response.stdout == "200"
+      delegate_to: localhost
+      failed_when: false
+      args:
+        # Disable warning that suggests using the get_url and uri module:
+        # - get_url is unnecessary as we're not actually downloading.
+        # - uri module doesn't seem to work for our cert update check
+        warn: false
+
+    - name: Check and retry certificate renewal upon timeout
+      block:
+      - name: Perform insecure sysinv API check to confirm invalid cert
+        shell: |
+          curl -k -s -o /dev/null -w '%{http_code}' {{ sysinv_check_endpoint }}
+        register: insecure_api_response
+        delegate_to: localhost
+        failed_when: false
+        args:
+          warn: false
+
+      - name: Abort on failed insecure sysinv endpoint request
+        fail:
+          msg: >-
+            Requests to sysinv API through the OAM network are not succeeding. Check the
+            subcloud logs (cloud-init-output.log) and for errors in the network
+            reconfiguration and reattempt.
+        when: insecure_api_response.rc != 0 or insecure_api_response.stdout != "200"
+
+      - name: Register system controller certificates
+        shell: >-
+          kubectl get secret system-local-ca -n cert-manager -o
+          jsonpath='{.data.{{ item.parentKey }}\.{{ item.key }}}'
+          | base64 -d | openssl {{ item.command }} -noout -modulus | openssl md5
+        environment:
+          KUBECONFIG: "/etc/kubernetes/admin.conf"
+        register: system_controller_data_cert
+        changed_when: false
+        with_items:
+          - { parentKey: 'ca', key: 'crt', command: 'x509' }
+          - { parentKey: 'tls', key: 'crt', command: 'x509' }
+          - { parentKey: 'tls', key: 'key', command: 'rsa' }
+        delegate_to: localhost
+
+      - name: Check Connectivity
+        include_role:
+          name: common/check-connectivity
+
+      - name: Register subcloud certificates
+        shell: >-
+          kubectl get secret system-local-ca -n cert-manager -o
+          jsonpath='{.data.{{ item.parentKey }}\.{{ item.key }}}'
+          | base64 -d | openssl {{ item.command }} -noout -modulus | openssl md5
+        environment:
+          KUBECONFIG: "/etc/kubernetes/admin.conf"
+        register: subcloud_data_cert
+        changed_when: false
+        with_items:
+          - { parentKey: 'ca', key: 'crt', command: 'x509' }
+          - { parentKey: 'tls', key: 'crt', command: 'x509' }
+          - { parentKey: 'tls', key: 'key', command: 'rsa' }
+        delegate_to: "{{ enroll_reconfigured_oam }}"
+
+      - name: Fail if certificates are different
+        fail:
+          msg: "{{ item.0.item.parentKey }} - {{ item.0.item.key }} do
+                not match between the system controller and subcloud.
+                Ensure that the same system-local-ca (local_ca_cert,
+                local_ca_key, and root_ca_cert) are installed on both
+                the system controller and the subcloud."
+        when: (item.0.stdout != item.1.stdout )
+        with_items:
+          - "{{ system_controller_data_cert.results | zip(subcloud_data_cert.results) | list }}"
+
+      - name: Check the existence of the k8s Certificate
+        command: kubectl get certificate -n deployment system-restapi-gui-certificate
+        environment:
+          KUBECONFIG: "/etc/kubernetes/admin.conf"
+        register: cert_get_result
+
+      - name: Fail if REST/API GUI K8s Certificate doesn't exist
+        fail:
+          msg: >-
+            REST/API GUI certificate is not managed by cert-manager. The procedure to
+            update platform certificates (previously known as cert-manager migration)
+            should be followed to create the required resources.
+        when: cert_get_result.rc != 0
+
+      - name: Renew Rest API/GUI certificate
+        shell: |
+          kubectl delete secret -n deployment system-restapi-gui-certificate
+          kubectl wait certificate -n deployment system-restapi-gui-certificate \
+          --for=condition=Ready --timeout=90s
+        environment:
+          KUBECONFIG: "/etc/kubernetes/admin.conf"
+
+      - name: Retry waiting for sysinv API and REST API/GUI certificate to be updated for the new OAM endpoint
+        shell: |
+          curl -s -o /dev/null -w '%{http_code}' {{ sysinv_check_endpoint }}
+        register: api_response
+        retries: 15
+        delay: 20
+        until: api_response.stdout == "200"
+        delegate_to: localhost
+        args:
+          warn: false
+      when:
+        - api_response.rc != 0 or api_response.stdout != "200"

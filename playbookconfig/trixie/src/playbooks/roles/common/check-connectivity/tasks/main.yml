@@ -1,0 +1,54 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to perform connectivity check on the target
+#   hosts.
+#
+# Check host connectivity
+- block:
+    - name: Set SSH port
+      set_fact:
+        ansible_port: "{{ ansible_port | default(22) }}"
+
+    - name: Format the ansible host if it is an IP address
+      set_fact:
+        ansible_host: "{{ ansible_host | ipaddr }}"
+      when: ansible_host | ipaddr
+
+    - name: Check connectivity
+      local_action:
+        module: wait_for
+          port={{ ansible_port }}
+          host={{ ansible_host }}
+          timeout=10
+          state=started
+
+    - name: Gather remote SSH public key
+      command: >
+        ssh-keyscan -T 20 -t ecdsa -p {{ ansible_port if ansible_port else 22 }} {{ ansible_host }}
+      register: remote_keyscan
+      until: remote_keyscan.stdout != ""
+      retries: 6
+      delay: "{{ 3 | random }}"
+      delegate_to: localhost
+
+    - name: Print warning if ssh-keyscan command is timed out
+      debug:
+        msg: "ssh-keyscan command is timed out."
+      when: remote_keyscan.stdout == ""
+
+    - name: Add remote SSH public keys into the known_hosts
+      lineinfile:
+        path: "~/.ssh/known_hosts"
+        create: yes
+        line: "{{ item }}"
+      with_items: "{{ remote_keyscan.stdout_lines | list }}"
+      register: add_sshkey
+      until: not add_sshkey.changed
+      retries: 6
+      delay: "{{ 3 | random }}"
+      delegate_to: localhost

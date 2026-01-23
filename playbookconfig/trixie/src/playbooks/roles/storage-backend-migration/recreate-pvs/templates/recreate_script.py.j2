@@ -1,0 +1,129 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+import yaml
+
+filename="{{ tmp_workspace }}/{{ pv_name }}.yaml"
+
+with open(filename, 'r') as f:
+    data = yaml.safe_load(f)
+
+is_old_version = False
+rbd_or_cephfs = "rbd"
+migration_type = "{{ migration_type }}"
+handle_id = "{{ rbd_pool_id.stdout }}"
+
+if 'rbd' in data['spec']:
+    rbd_or_cephfs = "rbd"
+    is_old_version = True
+elif 'cephfs' in data['spec']:
+    rbd_or_cephfs = "cephfs"
+    is_old_version = True
+elif 'csi' in data['spec'] and 'subvolumeName' in data['spec']['csi']['volumeAttributes']:
+    rbd_or_cephfs = "cephfs"
+
+data['metadata']['annotations']['pv.kubernetes.io/provisioned-by'] = f"rook-ceph.{rbd_or_cephfs}.csi.ceph.com"
+data['metadata']['annotations']['volume.kubernetes.io/provisioner-deletion-secret-name'] = f"rook-csi-{rbd_or_cephfs}-provisioner"
+data['metadata']['annotations']['volume.kubernetes.io/provisioner-deletion-secret-namespace'] = "rook-ceph"
+
+subvolumeName = None
+subvolumePath = None
+subvolumePrefix = None
+normalized_volumeId = None
+
+if is_old_version:
+    data['spec']['csi'] = {}
+    data['spec']['csi']['controllerExpandSecretRef'] = {}
+    data['spec']['csi']['nodeStageSecretRef'] = {}
+    data['spec']['csi']['volumeAttributes'] = {}
+
+    if rbd_or_cephfs == "cephfs":
+        if 'cephFSProvisionerIdentity' in data['metadata']['annotations']:
+            del data['metadata']['annotations']['cephFSProvisionerIdentity']
+        if 'cephShare' in data['metadata']['annotations']:
+            subvolumeName = data['metadata']['annotations']['cephShare']
+            del data['metadata']['annotations']['cephShare']
+        if 'selfLink' in data['metadata']:
+            del data['metadata']['selfLink']
+
+        data['spec']['csi']['volumeAttributes']['fsName'] = "kube-cephfs"
+        data['spec']['csi']['volumeAttributes']['pool'] = "kube-cephfs-data"
+
+        subvolumePath = data['spec']['cephfs']['path'].replace("/pvc-volumes/kubernetes/", "/volumes/csi/")
+        subvolumePrefix = "kubernetes-dynamic-pvc"
+        normalized_volumeId = subvolumeName.replace(subvolumePrefix, "").lstrip('-')
+
+        data['spec']['csi']['fsType'] = "ext4"
+
+        del data['spec']['cephfs']
+
+    elif rbd_or_cephfs == "rbd":
+        rbd_image = data['spec']['rbd']['image']
+
+        data['spec']['csi']['volumeAttributes']['imageName'] = rbd_image.replace("kubernetes-dynamic-pvc", "csi-vol")
+        data['spec']['csi']['volumeAttributes']['imageFeatures'] = "layering"
+        data['spec']['csi']['volumeAttributes']['journalPool'] = "kube-rbd"
+        data['spec']['csi']['volumeAttributes']['pool'] = "kube-rbd"
+
+        normalized_volumeId = rbd_image.replace("kubernetes-dynamic-pvc-", "").lstrip('-')
+
+        del data['spec']['rbd']
+
+elif not is_old_version and rbd_or_cephfs == "cephfs":
+    subvolumeName = data['spec']['csi']['volumeAttributes']['subvolumeName']
+    subvolumePath = data['spec']['csi']['volumeAttributes']['subvolumePath']
+    subvolumePrefix = "pvc-volumes"
+    subvolumeId = subvolumeName.replace(subvolumePrefix, "")
+    normalized_volumeId = subvolumeId.lstrip('-')
+
+if rbd_or_cephfs == "cephfs":
+    handle_id = "{{ fscid }}"
+    new_subvolumeName = subvolumeName
+    new_subvolumePath = subvolumePath
+
+    if migration_type == "export_import":
+        new_subvolumeName = subvolumeName.replace(subvolumePrefix, "csi-vol")
+        new_subvolumePath = subvolumePath.replace(subvolumePrefix, "csi-vol")
+
+    data['spec']['csi']['volumeAttributes']['subvolumeName'] = new_subvolumeName
+    data['spec']['csi']['volumeAttributes']['subvolumePath'] = new_subvolumePath
+
+    if not normalized_volumeId:
+        normalized_volumeId = new_subvolumeName.replace("csi-vol", "").lstrip('-')
+
+    if 'kernelMountOptions' in data['spec']['csi']['volumeAttributes']:
+        del data['spec']['csi']['volumeAttributes']['kernelMountOptions']
+
+    if 'volumeNamePrefix' in data['spec']['csi']['volumeAttributes']:
+        del data['spec']['csi']['volumeAttributes']['volumeNamePrefix']
+
+    data['spec']['csi']['volumeAttributes']['storage.kubernetes.io/csiProvisionerIdentity'] = "{{ cephfs_holder_identity }}"
+else:
+    if not normalized_volumeId:
+        normalized_volumeId = data['spec']['csi']['volumeAttributes']['imageName'].replace("csi-vol", "").lstrip('-')
+
+    data['spec']['csi']['volumeAttributes']['storage.kubernetes.io/csiProvisionerIdentity'] = "{{ rbd_holder_identity }}"
+
+data['spec']['csi']['controllerExpandSecretRef']['name'] = f"rook-csi-{rbd_or_cephfs}-provisioner"
+data['spec']['csi']['controllerExpandSecretRef']['namespace'] = "rook-ceph"
+
+data['spec']['csi']['driver'] = f"rook-ceph.{rbd_or_cephfs}.csi.ceph.com"
+
+data['spec']['csi']['nodeStageSecretRef']['name'] = f"rook-csi-{rbd_or_cephfs}-node"
+data['spec']['csi']['nodeStageSecretRef']['namespace'] = "rook-ceph"
+
+data['spec']['csi']['volumeAttributes']['clusterID'] = "rook-ceph"
+
+data['spec']['csi']['volumeHandle'] = f"0001-0009-rook-ceph-000000000000000{handle_id}-{normalized_volumeId}"
+
+with open(filename, 'w') as f:
+  yaml.dump(
+      data,
+      f,
+      default_flow_style=False,
+      sort_keys=False,
+      indent=2
+  )

@@ -1,0 +1,25 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Populate system in-sync list
+  include_tasks: "{{ role_path_common }}/tasks/get_system_in_sync.yaml"
+
+- name: Check if system is in-sync and reconciled
+  debug:
+    msg: >
+      System is NOT in-sync and reconciled:
+      {{
+        bad_system_in_sync
+        | map(attribute='metadata.name')
+        | unique
+        | list
+      }}
+  when: bad_system_in_sync | length > 0
+
+- name: System in-sync and reconciled
+  debug:
+    msg: "System in-sync=true and reconciled=true"
+  when: bad_system_in_sync | length == 0

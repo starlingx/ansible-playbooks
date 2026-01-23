@@ -1,0 +1,49 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Ensure {{ tmp_workspace }} exist"
+  file:
+    path: "{{ tmp_workspace }}"
+    state: directory
+
+- name: Check if hosts are in-sync and reconciled
+  include_tasks: "check_hosts_in_sync.yaml"
+
+- name: Check if system is in-sync and reconciled
+  include_tasks: "check_system_in_sync.yaml"
+
+- name: Raise not-in-sync migration alarm if hosts are not in-sync or not reconciled
+  script: "{{ role_path_common }}/files/fm_alarm.py --entity-uuid {{ storage_backend.uuid }} --set not_in_sync --file-name {{ final_dm_file_path }}"
+  vars:
+    storage_backend: "{{ hostvars[system.active_controller].storage_backend }}"
+    final_dm_file_path:  "{{ hostvars[system.active_controller].final_dm_full_file_path }}"
+  when: bad_hosts_in_sync | length > 0 or bad_system_in_sync | length > 0
+
+- name: Clear not-in-sync migration alarm if hosts and system are in-sync and reconciled
+  script: "{{ role_path_common }}/files/fm_alarm.py --entity-uuid {{ storage_backend.uuid }} --clear not_in_sync --file-name {{ final_dm_file_path }}"
+  vars:
+    storage_backend: "{{ hostvars[system.active_controller].storage_backend }}"
+    final_dm_file_path:  "{{ hostvars[system.active_controller].final_dm_full_file_path }}"
+  when:
+    - bad_system_in_sync | length == 0
+    - bad_hosts_in_sync | length == 0
+
+- name: Display system alarms after migration
+  include_tasks: "{{ roles_dir_path }}/pre-checks/tasks/common/display_alarms.yaml"
+
+- name: Check Ceph cluster status
+  command: timeout 30 ceph -s
+  register: ceph_status
+  changed_when: false
+
+- name: Final Ceph Cluster status
+  debug:
+    var: ceph_status.stdout_lines
+
+- name: Cleanup temporary workspace folder
+  file:
+    path: "{{ tmp_workspace }}"
+    state: absent

@@ -1,0 +1,97 @@
+---
+#
+# Copyright (c) 2019, 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Validate addresses in provided range and the range size
+#
+
+- set_fact:
+    network: "{{ item.key }}"
+    start_addr: "{{ item.value['start'] }}"
+    end_addr: "{{ item.value['end'] }}"
+    subnet: "{{ item.value['subnet'] }}"
+    system_mode: "{{ item.value['system_mode'] | default(omit) }}"
+
+- block:
+  - name: Validate {{ network }} start and end address format
+    debug:
+      msg: "{{ network }}: {{ start_addr }} {{ end_addr }}"
+    failed_when: (start_addr | ipaddr == False) or (end_addr | ipaddr == False)
+
+  - block:
+    - name: Validate {{ network }} start and end range
+      vars:
+        script_content: |
+          from netaddr import IPAddress
+          from netaddr import IPNetwork
+          from netaddr import IPRange
+
+          start = IPAddress("{{ start_addr }}")
+          end = IPAddress("{{ end_addr }}")
+          subnet = IPNetwork("{{ subnet }}")
+
+          start_end_equal_allowed = ['admin','management','cluster_host','pxeboot']
+
+          if not start < end:
+            if "{{ network }}" in start_end_equal_allowed and not start == end:
+                raise Exception("Failed validation, {{ network }} start address must be less than or equal to end address.")
+            elif "{{ network }}" not in start_end_equal_allowed:
+                raise Exception("Failed validation, {{ network }} start address must be less than end address.")
+
+          if start not in subnet or end not in subnet:
+            raise Exception("Failed validation, {{ network }} start or end address must be within its subnet range.")
+
+          # min_subnet_size = number of hosts + 1 network address + 1 broadcast address
+          # Note: the admin network is currently only used in distributed cloud systems
+          # for communication between subcloud (controllers) and the system controller.
+          min_size = 5
+          if "{{ system_mode }}" == 'simplex' and "{{ network }}" in start_end_equal_allowed:
+            min_size = 3
+          min_subnet_sizes = {
+              'cluster_pod': 65536,
+              'cluster_service': 65536,
+              'pxeboot': min_size,
+              'multicast': 6,
+              'management': min_size,
+              'cluster_host': min_size,
+              'oam': 5,
+              'admin': min_size
+          }
+          max_subnet_sizes = {
+              'cluster_service': 1048576
+          }
+          range = IPRange("{{ start_addr }}", "{{ end_addr }}")
+          subnet_min_size = min_subnet_sizes.get("{{ network }}")
+          subnet_max_size = max_subnet_sizes.get("{{ network }}", None)
+          if subnet.size < subnet_min_size:
+              raise Exception("Failed validation, {{ network }} subnet must contain at least %d addresses." %
+                              subnet_min_size)
+
+          if subnet_max_size and subnet.size > subnet_max_size:
+              raise Exception("Failed validation, {{ network }} subnet must not contain more than %d addresses." %
+                              subnet_max_size)
+
+          range_min_size = subnet_min_size - 2
+          if range.size < range_min_size:
+              raise Exception("Failed validation, {{ network }} address range must contain at least %d addresses." %
+                              range_min_size)
+
+          if ("{{ distributed_cloud_role }}" == 'systemcontroller' and  "{{ network }}" == 'management' and
+              range.size >= (subnet.size - 2)):
+            raise Exception("Failed validation, {{ network }} address range too large, no addresses left for "
+                            "System Controller gateway(s)")
+      shell: "{{ script_content }}"
+      args:
+        executable: /usr/bin/python
+      failed_when: false
+      register: range_check_result
+
+    - name: Fail if address range did not meet required criteria
+      fail:
+        msg: "{{ range_check_result.stderr_lines[-1] }}"
+      when: range_check_result.rc != 0
+
+    when: network != 'oam_node'

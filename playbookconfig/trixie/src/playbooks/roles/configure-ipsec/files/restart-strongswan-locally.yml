@@ -1,0 +1,33 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   This task execute charon daemon restart. It ensures to flush
+#   policies and state from xframe and perform charon full start
+#   and stop actions.
+#
+
+- block:
+  - name: Stop charon with pmon request
+    command: pmon-stop charon
+
+  - name: Disable strongswan-starter service
+    systemd:
+      name: strongswan-starter
+      enabled: no
+      state: stopped
+
+  - name: Flush policies
+    command: ip xfrm policy flush
+
+  - name: Flush state
+    command: ip xfrm state flush
+
+  - name: Enable strongswan-starter service
+    systemd:
+      name: strongswan-starter
+      enabled: yes
+      state: started

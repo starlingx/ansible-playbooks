@@ -1,0 +1,167 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   Shred the file or directory specified by shred_path variable.
+#
+#   The linux shred command overwrites the contents of specified files.
+#   This role also implements shredding the file content of a directory
+#   using the 'find' and 'args' commands to specify files to the shred
+#   command.
+#
+#   When shredding a single file with the default options, the command
+#   line will be as follows:
+#
+#       shred --force -n 3 -u -z "{{ shred_path }}"
+#
+#   When shredding a directory, the overall default command line appears
+#   as follows, with the additional behaviour of using ansible file
+#   module to finally delete the directory (and any remaining content).
+#
+#       find "{{ shred_path }}" -type f -print0 | xargs -0 -L 1 \
+#           shred --force -n 3 -u -z {{ xargs argument }}
+#
+#   Refer to vars/main.yml for the role's options
+
+- name: Assert that the shred command exists
+  command: "{{ shred_command }} --version"
+  changed_when: false
+
+- name: Assert that shred_path is provided
+  assert:
+    that:
+    - shred_path is string
+    - shred_path|length > 0
+
+- name: Get the file stat of shred_path
+  stat:
+    path: "{{ shred_path }}"
+  register: shred_internal_file
+
+- name: Issue log if the path does not exist
+  debug:
+    msg: "The path {{ shred_path }} does not exist"
+  when: not shred_internal_file.stat.exists
+
+- name: Shred if the path exists
+  block:
+  - name: Copy shred_args when provided
+    set_fact:
+      shred_internal_cmd: "{{ [shred_command] + shred_args }}"
+    when: shred_args|length > 0
+
+  - name: Gather shred options
+    block:
+    - name: Add shred command to the command line
+      set_fact:
+        shred_internal_cmd: "{{ [shred_command] }}"
+
+    - name: Gather shred option force
+      set_fact:
+        shred_internal_cmd: "{{ shred_internal_cmd + ['--force'] }}"
+      when: shred_force|bool
+
+    - name: Assert that string iterations is a positive integer
+      assert:
+        that:
+        - shred_iterations is regex("^[0-9]+$")
+        - shred_iterations|int >= 0
+      when: shred_iterations is string
+
+    - name: Fail if iterations is not an integer
+      assert:
+        that:
+        - shred_iterations is number
+        - shred_iterations >= 0
+      when: shred_iterations is not string
+
+    - name: Gather shred option iterations
+      set_fact:
+        shred_internal_cmd: "{{ shred_internal_cmd + ['-n', shred_iterations] }}"
+
+    - name: Gather shred option remove
+      set_fact:
+        shred_internal_cmd: "{{ shred_internal_cmd + ['-u'] }}"
+      when: shred_remove|bool
+
+    - name: Gather shred option zero
+      set_fact:
+        shred_internal_cmd: "{{ shred_internal_cmd + ['-z'] }}"
+      when: shred_zero|bool
+    when: shred_args|length == 0
+
+  - name: Fail if file type is not supported
+    fail:
+      msg:
+      - "The path {{ shred_path }} is not a support type."
+      - "Neither a file nor directory."
+    when: not shred_internal_file.stat.isreg and not shred_internal_file.stat.isdir
+
+  - name: Shred a file
+    block:
+    - name: Append path to shred command
+      set_fact:
+        shred_internal_cmd: "{{ shred_internal_cmd + [shred_path] }}"
+
+    - name: Run shred command
+      command:
+        argv: "{{ shred_internal_cmd }}"
+        removes: "{{ shred_path }}"
+    when: shred_internal_file.stat.isreg
+
+  - name: Shred a directory
+    block:
+    - name: Fail if shred_args is provided
+      fail:
+        msg:
+        - "shred_args is not supported when shred_path is a directory"
+      when: shred_args|length > 0
+
+    - name: Prepare the find command file discovery
+      set_fact:
+        shred_internal_find_cmd:
+        - 'find'
+        - "{{ shred_path|quote }}"
+        - '-type'
+        - 'f'
+        - '-print0'
+        - '|'
+        - 'xargs'
+        - '-0'
+        - '-L'
+        - '1'
+
+    - name: Prepare the command-line for shredding a directory
+      set_fact:
+        shred_internal_dir_cmd: "{{ (shred_internal_find_cmd + shred_internal_cmd) | join(' ') }}"
+
+    - name: Run shred command for files in the directory
+      shell:
+        cmd: "{{ shred_internal_dir_cmd }}"
+
+    # finally, remove whatever is left after shredding the file content
+    # recursively
+    - name: Remove shred_path directory and its content
+      file:
+        path: "{{ shred_path }}"
+        state: absent
+      when: shred_remove|bool
+    when: shred_internal_file.stat.isdir
+
+  - name: Check stat of shredded file when remove requested
+    block:
+    - name: Check stat of shredded file
+      stat:
+        path: "{{ shred_path }}"
+      register: shred_internal_file_removed
+
+    - name: Check absence of shredded file
+      fail:
+        msg:
+        - "Shred did not remove: {{ shred_path }}"
+      when: shred_internal_file_removed.stat.exists
+    when: shred_remove|bool and shred_args|length == 0
+  when: shred_internal_file.stat.exists

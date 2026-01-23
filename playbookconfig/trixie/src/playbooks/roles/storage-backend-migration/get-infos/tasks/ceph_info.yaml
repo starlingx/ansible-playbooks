@@ -1,0 +1,70 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Set pool_size and pool_minsize if undefined
+  block:
+    - name: Get storage backend replication values
+      become: true
+      become_user: postgres
+      command: >
+        psql -d sysinv -t -A -c
+        "SELECT
+          capabilities::json->>'replication',
+          capabilities::json->>'min_replication'
+        FROM storage_backend;"
+      register: pool_info
+      changed_when: false
+
+    - name: Show storage backend replication values
+      debug:
+        var: pool_info.stdout_lines
+      when: pool_info.stdout_lines is defined
+
+    - name: Set pool_size and pool_minsize facts
+      set_fact:
+        pool_size: "{{ pool_info.stdout.split('|')[0] | trim }}"
+        pool_minsize: "{{ pool_info.stdout.split('|')[1] | trim }}"
+        cacheable: true
+      changed_when: false
+  when: pool_size is undefined or pool_minsize is undefined
+
+- name: Show replication factor
+  debug:
+    msg: "Replication: {{ pool_size | trim }} - Minimum Replication: {{ pool_minsize | trim }}"
+
+- name: Set ceph fsid if undefined
+  block:
+    - name: Get ceph fsid from database
+      become: true
+      become_user: postgres
+      command: psql -d sysinv -t -A -F '|' -c "SELECT cluster_uuid from clusters"
+      register: ceph_fsid_output
+      changed_when: false
+
+    - name: Set ceph fsid as fact
+      set_fact:
+        ceph_fsid: "{{ ceph_fsid_output.stdout }}"
+        cacheable: true
+  when: ceph_fsid is undefined
+
+- name: Debug ceph_fsid var
+  debug:
+    var: ceph_fsid
+
+- name: Set deployment_model if undefined
+  set_fact:
+    deployment_model: >-
+      {%- if system.system_deployment == 'STORAGE' -%}
+      dedicated
+      {%- else -%}
+      controller
+      {%- endif -%}
+    cacheable: true
+  when: deployment_model is undefined
+
+- name: Debug deployment_model var
+  debug:
+    var: deployment_model

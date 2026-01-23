@@ -1,0 +1,54 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This role monitors multiple enroll-init stage by waiting for IPMI SEL events
+# and checking the results. It waits for either success or failure events for the
+# given stage and fails immediately if a failure event is detected.
+#
+# This role is included by the enroll_init.yml playbook for all monitoring stages
+# (factory setup, manual ca certs check, k8s leaf certs check, system local ca certs,
+# platform cloud-init, and custom cloud-init).
+#
+
+- name: Setup monitoring variables
+  set_fact:
+    all_success_codes: "{{ enroll_init_stages | map(attribute='success_code') | list }}"
+
+    success_code_to_index: >-
+      {{
+        dict(enroll_init_stages |
+        map(attribute='success_code') |
+        zip(range(0, enroll_init_stages | length)))
+      }}
+
+    success_code_to_name: >-
+      {{
+        dict(enroll_init_stages |
+        map(attribute='success_code') |
+        zip(enroll_init_stages | map(attribute='name')))
+      }}
+
+    current_stage_index: 0
+    completed_stages: []
+    total_stages: "{{ enroll_init_stages | length }}"
+    current_event_id: "{{ ipmi_initial_event_id }}"
+
+- name: Build failure codes list and mapping
+  set_fact:
+    all_failure_codes: "{{ all_failure_codes + (item.failure_codes.keys() | list) }}"
+    failure_code_to_message: "{{ failure_code_to_message | combine(item.failure_codes) }}"
+  loop: "{{ enroll_init_stages }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Start monitoring
+  include_tasks: monitor.yml
+  when: (current_stage_index | int) < (total_stages | int)
+
+- name: All stages completed
+  debug:
+    msg: "SUCCESS: All enroll-init stages completed: {{ completed_stages | join(', ') }}"
+  when: (current_stage_index | int) >= (total_stages | int)

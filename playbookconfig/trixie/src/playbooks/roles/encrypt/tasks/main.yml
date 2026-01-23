@@ -1,0 +1,95 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   Encrypt the file specified by encrypt_file variable.
+#   Refer to vars/main.yml for options
+#
+
+- name: Assert that the encrypt command exists
+  command: "{{ encrypt_command }} --version"
+  changed_when: false
+
+- name: Assert that encrypt_file is provided
+  assert:
+    that:
+    - encrypt_file is string
+    - encrypt_file | length > 0
+
+- name: Assert that encrypt_passphrase is provided
+  assert:
+    that:
+    - encrypt_passphrase is string
+    - encrypt_passphrase | length > 0
+
+- name: Get the file stat of encrypt_file
+  stat:
+    path: "{{ encrypt_file }}"
+  register: encrypt_internal_file
+
+- name: Fail if the input file does not exist
+  fail:
+    msg: "The path {{ encrypt_file }} does not exist"
+  when: not encrypt_internal_file.stat.exists
+
+- name: Fail if the input file is not a regular file
+  fail:
+    msg: "The path {{ encrypt_file }} is not a regular file"
+  when: not encrypt_internal_file.stat.isreg
+
+- name: Fail if the encrypt_output_file is not a string
+  fail:
+    msg: "encrypt_output_file must be a string"
+  when: encrypt_output_file is not string
+
+- name: Compose output file path if not provided
+  set_fact:
+    encrypt_output_file: "{{ encrypt_file }}.{{ encrypt_file_extension }}"
+  when: encrypt_output_file | length == 0
+
+- name: Get the file stat of encrypt_output_file
+  stat:
+    path: "{{ encrypt_output_file }}"
+  register: encrypt_internal_output_file
+
+- name: Fail if the output file exists
+  fail:
+    msg: "The output path {{ encrypt_output_file }} exists"
+  when: encrypt_internal_output_file.stat.exists
+
+- name: Run the encryption command
+  command:
+    argv:
+    - "{{ encrypt_command }}"
+    - "--symmetric"
+    - "--no-symkey-cache"
+    - "-o"
+    - "{{ encrypt_output_file }}"
+    - "--passphrase-fd"
+    - "0"
+    - "--batch"
+    - "--pinentry-mode"
+    - "loopback"
+    - "{{ encrypt_file }}"
+    stdin: "{{ encrypt_passphrase }}"
+  changed_when: true
+
+- name: Get the file stat of new file
+  stat:
+    path: "{{ encrypt_output_file }}"
+  register: encrypt_internal_new_file
+
+- name: Fail if the output file does not exist
+  fail:
+    msg: "{{ encrypt_command }} did not create {{ encrypt_output_file }}"
+  when: not encrypt_internal_new_file.stat.exists
+
+- name: Import the shred role
+  import_role:
+    name: shred
+  vars:
+    shred_path: "{{ encrypt_file }}"
+  when: encrypt_shred|bool

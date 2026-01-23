@@ -1,0 +1,32 @@
+---
+#
+# Copyright (c) 2021-2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- hosts: all
+  gather_facts: no
+
+  vars_files:
+    - vars/common/main.yml
+    - host_vars/rehome-subcloud/default.yml
+
+  roles:
+    - common/prepare-env
+    - common/validate-target
+    - common/recover-subcloud-certificates
+    - rehome-subcloud/validate-before-rehome
+    - common/check-services-status
+    - rehome-enroll-common/prepare-env
+    - rehome-enroll-common/update-ca-cert
+    - common/update-sc-admin-endpoints
+    - role: common/update-sc-cert
+      when: subcloud_dc_admin_ep_cert_chain_recovered is undefined
+    - rehome-subcloud/update-network-config
+    - role: rehome-enroll-common/update-keystone-data
+      become: yes
+    - rehome-subcloud/validate-after-rehome
+
+  vars:
+    mode: 'rehoming'

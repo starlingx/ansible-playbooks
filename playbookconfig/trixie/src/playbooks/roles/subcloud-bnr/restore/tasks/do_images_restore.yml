@@ -1,0 +1,36 @@
+---
+#
+# Copyright (c) 2022 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# TASKS DESCRIPTION:
+#   - Update subcloud overrides for user images restore
+#   - Invoke subcloud playbook to perform user images restore
+#
+- name: Perform user images restore
+  block:
+  - name: Update backup directory in subcloud overrides
+    lineinfile:
+      path: "{{ subcloud_overrides }}"
+      regexp: "{{ item.pattern }}"
+      line: "{{ item.line }}"
+    loop:
+      - { pattern: '^initial_backup_dir(.*)$', line: 'initial_backup_dir: {{ images_backup_dir }}' }
+      - { pattern: '^backup_filename(.*)$', line: 'backup_filename: {{ images_backup_filename }}' }
+
+  - name: Run {{ inventory_hostname }} user images restore playbook
+    command: >
+      ansible-playbook /usr/share/ansible/stx-ansible/playbooks/restore_user_images.yml -e
+      "@{{ subcloud_overrides }}"
+    register: images_restore_output
+
+  - name: Print the output of platform restore playbook
+    debug:
+      msg: "{{ images_restore_output.stdout }}"
+
+  always:
+    - name: Remove subcloud overrides file on {{ inventory_hostname }}
+      file:
+        path: "{{ subcloud_overrides }}"
+        state: absent

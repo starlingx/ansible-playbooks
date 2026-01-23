@@ -1,0 +1,75 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Query a registry from Sysinv via Sysinv CLI
+
+- block:
+  - name: Query the {{ registry.name }}
+    shell: source /etc/platform/openrc;
+      system service-parameter-list --section "{{ registry.name | regex_replace('_', '-') }}"
+      --column name --column value --format yaml
+    register: running_registry_output
+
+  # Make sure variables are empty to allow successive executions
+  - set_fact:
+      running_registry: { }
+      registry_filtered: { }
+
+  - set_fact:
+      running_registry: "{{ running_registry|default({}) | combine({inner_item.name:inner_item.value}) }}"
+    with_items: "{{ running_registry_output.stdout | from_yaml }}"
+    no_log: true
+    loop_control:
+      loop_var: inner_item
+
+  - block:
+    - name: Validate {{ registry.name }} information if it exists
+      fail:
+        msg: "{{ registry.name }}'s url doesn't exist"
+      when: running_registry['url'] is not defined
+
+    - name: Set secure to bool
+      set_fact:
+        running_registry: "{{ running_registry | combine({ 'secure' : running_registry['secure']|bool }) }}"
+      when: running_registry['secure'] is defined
+
+    - block:
+      - name: Get the {{ registry.name }} barbican secret if it's authenticated
+        shell: >-
+          source /etc/platform/openrc; openstack secret get {{ running_registry['auth-secret'] }} -p -f value
+        register: registry_credentials
+
+      - name: Validate {{ registry.name }} secret
+        fail:
+          msg: "Unknown format of the {{ registry.name }} secret"
+        when: (registry_credentials.stdout is not search('username:') or
+               registry_credentials.stdout is not search('password:'))
+
+      - set_fact:
+          registry_username: "{{ registry_credentials.stdout.split()[0].split('username:')[1] }}"
+          registry_password: "{{ registry_credentials.stdout.split()[1].split('password:')[1] }}"
+        when: registry_credentials.stdout | length > 0
+
+      - set_fact:
+          running_registry:
+            "{{ running_registry | combine(
+            {'username': registry_username, 'password': registry_password}, recursive=True) }}"
+      when: running_registry['auth-secret'] is defined
+
+    # remove auth-secret key from the registry dictionary as it is no longer used
+    - set_fact:
+        registry_filtered: "{{ registry_filtered|default({}) | combine({inner_item.key: inner_item.value}) }}"
+      when: inner_item.key not in ['auth-secret']
+      with_dict: "{{ running_registry }}"
+      no_log: true
+      loop_control:
+        loop_var: inner_item
+
+    when: running_registry
+
+  - set_fact:
+      "{{ registry.name }}": "{{ registry.value if not registry_filtered else registry_filtered }}"

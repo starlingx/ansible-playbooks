@@ -1,0 +1,81 @@
+---
+#
+# Copyright (c) 2020,2023-2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to configure a storage class for a Netapp backend
+#
+
+# Configure kubernetes storage class
+- name: Set StorageClass filename
+  set_fact:
+    storageclass_file: "{{ trident_setup_dir }}/storage-class-{{ storage_class.metadata.name }}.yml"
+
+- name: Remove provisioner from content
+  set_fact:
+    sc_without_provisioner: "{% set copy=storage_class.copy() %}{% set removed=copy.pop('provisioner') %}{{ copy }}"
+  with_items: "{{ storage_class }}"
+  when: "item == 'provisioner'"
+
+- name: Set StorageClass headers
+  set_fact:
+    storageclass_headers:
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      provisioner: "{{ trident_provisioner }}"
+
+- name: Prepare StorageClass content
+  set_fact:
+    storageclass: "{{ storageclass_headers | combine(storage_class_) }}"
+  vars:
+    storage_class_: "{{ sc_without_provisioner | default(storage_class) }}"
+
+- name: Create storage-class.yaml
+  copy:
+    content: "{{ storageclass | to_nice_yaml }}"
+    dest: "{{ storageclass_file }}"
+
+- name: Remove StorageClass if it exists
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf
+    -n {{ trident_namespace }}
+    delete storageclass {{ storage_class.metadata.name }}
+  failed_when: false
+
+- name: Wait for StorageClass and TridentStorageClass to be deleted
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf
+    -n {{ trident_namespace }}
+    get {{ item }} {{ storage_class.metadata.name }}
+  register: check
+  loop_control:
+    label: "{{ item }}"
+  loop:
+    - storageclass
+    - tridentstorageclass
+  until: check.rc == 1
+  retries: 60
+  delay: 10
+  failed_when: check.rc != 1
+  changed_when: false
+
+- name: Create K8s StorageClass
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf -n {{ trident_namespace }} apply -f {{ storageclass_file }}"
+
+- name: Wait for StorageClass and TridentStorageClass to be created
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf
+    -n {{ trident_namespace }}
+    get {{ item }} {{ storage_class.metadata.name }}
+  register: check
+  loop_control:
+    label: "{{ item }}"
+  loop:
+    - storageclass
+    - tridentstorageclass
+  until: check.rc == 0
+  retries: 60
+  delay: 10
+  changed_when: false

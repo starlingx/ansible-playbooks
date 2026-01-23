@@ -1,0 +1,18 @@
+---
+#
+# Copyright (c) 2020,2024-2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- hosts: localhost
+  gather_facts: no
+
+  vars_files:
+    - host_vars/netapp/default.yml
+
+  # Main play
+  roles:
+    - { role: common/prepare-env }
+    - { role: common/get-kube-version, become: yes }
+    - { role: roles/common/push-docker-images, become: yes }
+    - { role: roles/k8s-storage-backends/netapp, become: yes }

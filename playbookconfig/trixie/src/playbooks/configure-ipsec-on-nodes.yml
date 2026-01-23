@@ -1,0 +1,18 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- hosts: all
+  gather_facts: no
+
+  roles:
+    - role: configure-ipsec/enable-ipsec-on-nodes
+      tags: activate
+      become: yes
+
+    - role: configure-ipsec/disable-ipsec-on-nodes
+      tags: activate-rollback
+      become: yes

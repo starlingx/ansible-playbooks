@@ -1,0 +1,62 @@
+---
+#
+# Copyright (c) 2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# These tasks get addresses of network type and network stack (primary/secondary)
+# from the running system
+#
+# Variables expected to be passed in:
+#   network_type: The type of network to query (e.g., mgmt, oam, cluster-host, admin)
+#   network_stack: The stack of the network to query (e.g., primary, secondary)
+# OR
+#   network_requests: A list of dictionaries with keys 'network_type' and 'network_stack'
+#
+
+- name: Normalize network request variables into a list
+  set_fact:
+    net_list: |
+      {{
+        network_requests | default([
+          {
+            "network_type": network_type,
+            "network_stack": network_stack
+          }
+        ])
+      }}
+
+- name: Call to get addresses of given network type and stack
+  script: roles/common/get_network_addresses_from_sysinv/files/get_network_addresses_from_sysinv.py '{{
+          net_list | to_json }}'
+  register: result
+  failed_when: false
+
+- name: Fail if get addresses script throws an exception
+  fail:
+    msg: >
+      Failed to get {{ network_stack }} addresses of {{ network_type }} network-type,
+      return code: {{ result.rc }}
+      Error output: {{ result.stderr }}
+  when: result.rc != 0
+
+- name: Set parsed output as variable
+  set_fact:
+    address_lines: "{{ result.stdout_lines }}"
+
+- name: Initialize addresses as empty
+  set_fact:
+    addresses: { }
+
+- name: Parse script output and set addresses
+  vars:
+    parsed_json: "{{ result.stdout | from_json }}"
+  set_fact:
+    addresses: |
+      {{
+        parsed_json if (parsed_json | length > 1)
+        else (parsed_json.values() | list)[0]
+        | to_json
+        | replace(': null', ': false')
+        | from_json
+      }}

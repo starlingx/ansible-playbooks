@@ -1,0 +1,12 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+fs_name: "kube-cephfs"
+data_pool_name: "kube-cephfs-data"
+metadata_pool_name: "kube-cephfs-metadata"
+
+rook_ceph_template_manifests:
+  - name: filesystem.yaml

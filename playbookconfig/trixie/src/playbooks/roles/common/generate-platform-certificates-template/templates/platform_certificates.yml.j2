@@ -1,0 +1,164 @@
+## strips out any bad character from region name. Only [^A-Za-z0-9-]" is supported
+{% set clean_region_name = region_name_register.stdout | replace("_", "-") | regex_replace("[^A-Za-z0-9-]","") | lower %}
+---
+apiVersion: v1
+data:
+  ca.crt: "{{ system_root_ca_cert | default('', true) }}"
+  tls.crt: "{{ system_local_ca_cert }}"
+  tls.key: "{{ system_local_ca_key }}"
+kind: Secret
+metadata:
+  name: system-local-ca
+  namespace: cert-manager
+type: kubernetes.io/tls
+---
+apiVersion: v1
+items:
+- apiVersion: "{{ cert_manager_api_version.stdout | default(default.cert_manager_version, true) }}"
+  kind: ClusterIssuer
+  metadata:
+    creationTimestamp: null
+    name: system-local-ca
+  spec:
+    ca:
+      secretName: system-local-ca
+  status: {}
+{% if install_system_restapi_gui_certificate | bool %}
+{% set short_certificate_name = 'system-restapi-gui' %}
+- apiVersion: "{{ cert_manager_api_version.stdout | default(default.cert_manager_version, true) }}"
+  kind: Certificate
+  metadata:
+    creationTimestamp: null
+    name: system-restapi-gui-certificate
+    namespace: deployment
+  spec:
+    dnsNames:
+    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain, true) }}"
+    duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
+    ipAddresses:
+    - "{{ oam_ip_primary }}"
+{% if oam_ip_secondary is truthy %}
+    - "{{ oam_ip_secondary }}"
+{% endif %}
+    issuerRef:
+      kind: ClusterIssuer
+      name: system-local-ca
+    renewBefore: "{{ system_platform_certificate.renewBefore | default(default.renewBefore, true) }}"
+    secretName: system-restapi-gui-certificate
+{% include 'subject_snippet.j2' %}
+  status: {}
+{% endif %}
+{% if install_system_registry_local_certificate | bool %}
+{% set short_certificate_name = 'system-registry-local' %}
+- apiVersion: "{{ cert_manager_api_version.stdout | default(default.cert_manager_version, true) }}"
+  kind: Certificate
+  metadata:
+    creationTimestamp: null
+    name: system-registry-local-certificate
+    namespace: deployment
+  spec:
+    dnsNames:
+    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain, true) }}"
+    - registry.local
+{% if dc_role.stdout == 'systemcontroller' %}
+    - registry.central
+{% endif %}
+    duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
+    ipAddresses:
+    - "{{ oam_ip_primary }}"
+{% if oam_ip_secondary is truthy %}
+    - "{{ oam_ip_secondary }}"
+{% endif %}
+    issuerRef:
+      kind: ClusterIssuer
+      name: system-local-ca
+    renewBefore: "{{ system_platform_certificate.renewBefore | default(default.renewBefore, true) }}"
+    secretName: system-registry-local-certificate
+{% include 'subject_snippet.j2' %}
+  status: {}
+{% endif %}
+{% if install_oidc_auth_apps_certificate | bool %}
+{% set short_certificate_name = 'system-oidc-dex' %}
+- apiVersion: "{{ cert_manager_api_version.stdout | default(default.cert_manager_version, true) }}"
+  kind: Certificate
+  metadata:
+    creationTimestamp: null
+    name: oidc-auth-apps-certificate
+    namespace: kube-system
+  spec:
+    dnsNames:
+    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain, true) }}"
+    duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
+    ipAddresses:
+    - "{{ oam_ip_primary }}"
+{% if oam_ip_secondary is truthy %}
+    - "{{ oam_ip_secondary }}"
+{% endif %}
+    # Add kubernetes cluster ip to make sure certificate has issuer ip in san list
+    # https://bugs.launchpad.net/starlingx/+bug/1971500
+    - "{{ kubernetes_cluster_floating_ip_primary }}"
+{% if kubernetes_cluster_c0_ip_primary is truthy %}
+    - "{{ kubernetes_cluster_c0_ip_primary }}"
+{% endif %}
+{% if kubernetes_cluster_c1_ip_primary is truthy %}
+    - "{{ kubernetes_cluster_c1_ip_primary }}"
+{% endif %}
+{% if kubernetes_cluster_floating_ip_secondary is truthy %}
+    - "{{ kubernetes_cluster_floating_ip_secondary }}"
+{% endif %}
+{% if kubernetes_cluster_c0_ip_secondary is truthy %}
+    - "{{ kubernetes_cluster_c0_ip_secondary }}"
+{% endif %}
+{% if kubernetes_cluster_c1_ip_secondary is truthy %}
+    - "{{ kubernetes_cluster_c1_ip_secondary }}"
+{% endif %}
+    issuerRef:
+      kind: ClusterIssuer
+      name: system-local-ca
+    renewBefore: "{{ system_platform_certificate.renewBefore | default(default.renewBefore, true) }}"
+    secretName: oidc-auth-apps-certificate
+{% include 'subject_snippet.j2' %}
+  status: {}
+{% endif %}
+{% if install_system_open_ldap_certificate | bool %}
+{% set short_certificate_name = 'system-openldap' %}
+- apiVersion: "{{ cert_manager_api_version.stdout | default(default.cert_manager_version, true) }}"
+  kind: Certificate
+  metadata:
+    creationTimestamp: null
+    name: system-openldap-local-certificate
+    namespace: deployment
+  spec:
+    dnsNames:
+    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain, true) }}"
+    - controller
+    - controller-0
+    - controller-1
+    duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
+    ipAddresses:
+    - "{{ management_floating_ip_primary }}"
+{% if management_c0_ip_primary is truthy %}
+    - "{{ management_c0_ip_primary }}"
+{% endif %}
+{% if management_c1_ip_primary is truthy %}
+    - "{{ management_c1_ip_primary }}"
+{% endif %}
+{% if management_floating_ip_secondary is truthy %}
+    - "{{ management_floating_ip_secondary }}"
+{% endif %}
+{% if management_c0_ip_secondary is truthy %}
+    - "{{ management_c0_ip_secondary }}"
+{% endif %}
+{% if management_c1_ip_secondary is truthy %}
+    - "{{ management_c1_ip_secondary }}"
+{% endif %}
+    issuerRef:
+      kind: ClusterIssuer
+      name: system-local-ca
+    renewBefore: "{{ system_platform_certificate.renewBefore | default(default.renewBefore, true) }}"
+    secretName: system-openldap-local-certificate
+{% include 'subject_snippet.j2' %}
+  status: {}
+{% endif %}
+kind: List
+metadata: {}

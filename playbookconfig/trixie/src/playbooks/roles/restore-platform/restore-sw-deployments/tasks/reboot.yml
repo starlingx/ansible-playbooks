@@ -1,0 +1,23 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+
+- name: Set {{ restore_patching_rr_flag }} flag
+  file:
+    path: "{{ restore_patching_rr_flag }}"
+    state: touch
+
+# TODO(jkraitbe): Remote playbook execution can support reboot module
+- name: Reboot the controller in one minute
+  command: shutdown -r +1
+
+- name: Terminate the platform restore
+  fail:
+    msg: |
+      The restore has been terminated due to a required controller node reboot.
+      A reboot will be triggered in approximately one minute.
+      Please re-run the playbook to restore the platform after the reboot is completed.

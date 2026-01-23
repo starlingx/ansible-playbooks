@@ -1,0 +1,53 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Force lock storages
+  environment: "{{ system_env }}"
+  command: system host-lock {{ item }} --force
+  loop: "{{ groups.storages }}"
+  loop_control:
+    label: "{{ item }}"
+  register: host_force_lock_output
+
+- name: Debug host_force_lock_output result
+  debug:
+    msg: "{{ item.stdout_lines | replace('\\n', '\n') }}"
+  loop: "{{ host_force_lock_output.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+# Sometimes they jump to locked|disabled|online briefly, so give them a chance to reboot
+# before proceeding, 2 minutes should be fine
+- name: Wait until all storage nodes are offline, if they need to
+  become: true
+  become_user: postgres
+  command: >-
+    psql -d sysinv -t -A -c
+    "SELECT COUNT(*) FROM i_host
+     WHERE hostname LIKE 'storage%'
+       AND availability = 'offline';"
+  register: storage_host_offline_count
+  until: storage_host_offline_count.stdout | int == groups.storages | length
+  retries: 12 # yes, that little
+  delay: 10
+  changed_when: false
+  failed_when: false # they do not go offline everytime
+
+- name: Wait until all storage nodes are locked|disabled|online
+  become: true
+  become_user: postgres
+  command: >-
+    psql -d sysinv -t -A -c
+    "SELECT COUNT(*) FROM i_host
+     WHERE hostname LIKE 'storage%'
+       AND administrative = 'locked'
+       AND operational = 'disabled'
+       AND availability = 'online';"
+  register: storage_host_ready_count
+  until: storage_host_ready_count.stdout | int == groups.storages | length
+  retries: 360
+  delay: 10
+  changed_when: false

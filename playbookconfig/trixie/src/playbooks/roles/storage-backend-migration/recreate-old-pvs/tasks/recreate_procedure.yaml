@@ -1,0 +1,39 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Check if PV {{ pv_name }}-old exists"
+  shell: "kubectl get pv {{ pv_name }}-old"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: pv_check
+  failed_when: false
+  changed_when: false
+
+- name: Recreate PV {{ pv_name }}
+  include_tasks: recreate_pv.yaml
+  when: pv_check.rc != 0
+
+- name: "Check if PVC {{ pv_name }}-old exists"
+  command: "kubectl get pvc -n {{ pvc_map[pv_name].namespace }} {{ pvc_map[pv_name].name }}-old"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: pvc_check
+  failed_when: false
+  changed_when: false
+
+- name: Recreate PVC from PV {{ pv_name }}
+  include_tasks: recreate_pvc.yaml
+  when: pvc_check.rc != 0
+
+- name: Create temporary PVC from PV {{ pv_name }}
+  include_tasks: create_temp_pvc.yaml
+
+- name: Migrate data from old PVC to new PVC
+  include_tasks: migrate_data.yaml
+  when: pv_name not in (pv_migrated_list | default([]))
+
+- name: Align PV and PVC from PV {{ pv_name }}
+  include_tasks: align_resources.yaml

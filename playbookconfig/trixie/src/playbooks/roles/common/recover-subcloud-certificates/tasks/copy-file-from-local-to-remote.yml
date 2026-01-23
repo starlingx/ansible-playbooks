@@ -1,0 +1,43 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   These tasks copy files from systemcontroller to subcloud
+#   They allow copying between two directories with root only access
+#
+- block:
+  - name: Create tmp file to facilitate copying between root only access dirs
+    tempfile:
+      state: file
+      prefix: tmp_cert_copy_
+      path: /tmp/
+    register: tmp_cert_file
+
+  - name: Copy file from source to temporary location first
+    copy:
+      src: "{{ item.path }}"
+      dest: "{{ tmp_cert_file.path }}"
+      remote_src: true
+    become: yes
+    connection: local
+
+  - name: Copy from temporary location to remote
+    copy:
+      src: "{{ tmp_cert_file.path }}"
+      dest: "{{ item.path }}"
+      owner: root
+      group: root
+      mode: "{{ item.perms | default(0644) }}"
+    become: yes
+
+  always:
+    - name: Delete temporary file after use
+      file:
+        path: "{{ tmp_cert_file.path }}"
+        state: absent
+      connection: local
+      become: yes
+      failed_when: false

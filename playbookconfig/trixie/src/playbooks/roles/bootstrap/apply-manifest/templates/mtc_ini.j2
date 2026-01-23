@@ -1,0 +1,77 @@
+# Puppet Managed Maintenance Configuration
+[agent]                       ; Agent Configuration
+keystone_auth_username = {{ mtce_var_dict['platform::mtce::params::auth_username'] }} ; mtce auth username
+keystone_auth_pw       = {{ mtce_var_dict['platform::mtce::params::auth_pw'] }} ; mtce auth password
+keystone_auth_project  = {{ mtce_var_dict['platform::mtce::params::auth_project'] }} ; mtce auth project
+keystone_user_domain   = {{ mtce_var_dict['platform::mtce::params::auth_user_domain'] }} ; mtce user domain
+keystone_project_domain = {{ mtce_var_dict['platform::mtce::params::auth_project_domain'] }} ; mtce project domain
+keystone_auth_host = {{ mtce_var_dict['platform::mtce::params::auth_host'] }} ; keystone auth url
+keystone_auth_uri = {{ mtce_var_dict['platform::mtce::params::auth_uri'] }} ; keystone auth uri
+keystone_auth_port = {{ mtce_var_dict['platform::mtce::params::auth_port'] }} ; keystone auth port
+keystone_region_name = {{ mtce_var_dict['platform::mtce::params::auth_region'] }} ; keystone region
+keyring_directory = {{ mtce_var_dict['platform::client::credentials::params::keyring_directory'] }} ; keyring directory
+multicast = {{ mtce_var_dict['platform::mtce::params::mtce_multicast'] }}  ; Heartbeat Multicast Address
+heartbeat_period = {{ mtce_var_dict['platform::mtce::agent::params::heartbeat_period'] }} ; Heartbeat period in milliseconds
+heartbeat_failure_threshold = {{ mtce_var_dict['platform::mtce::agent::params::heartbeat_failure_threshold'] }} ; Heartbeat failure threshold count.
+heartbeat_degrade_threshold = {{ mtce_var_dict['platform::mtce::agent::params::heartbeat_degrade_threshold'] }} ; Heartbeat degrade threshold count.
+
+; Communication ports between SM and maintenance
+sm_server_port = {{ mtce_var_dict['platform::mtce::params::sm_server_port'] }} ; port sm receives mtce commands from
+sm_client_port = {{ mtce_var_dict['platform::mtce::params::sm_client_port'] }} ; port mtce receives sm commands from
+
+; Heartbeat Loss / Failure Action Selection.
+; The action to take on host heartbeat failure.
+; Supported actions are
+;      fail = fail host and raise network specific heartbeat alarms
+;   degrade = degrade host and raise network specific heartbeat alarms
+;     alarm = raise network specific heartbeat alarms only
+;      none = no action and no alarms
+; Selected action applies to all hosts in the system
+; Default is fail
+; To modify execute:
+;  system service-parameter-modify platform maintenance heartbeat_failure_action=<action>
+heartbeat_failure_action = {{ mtce_var_dict['platform::mtce::agent::params::heartbeat_failure_action'] }}
+
+; Multi-Node Failure Avoidance (MNFA) Activation and Deactivation threshold.
+; The minimum number of hosts that fail heartbeat within the
+;  heartbeat_failure_threshold upon which Maintenance activates MNFA Mode.
+; Once the number of failing hosts drop below this threshold then mainteance
+;  deactivates MNFA mode while remaining failing hosts are Gracefully Recovered.
+; Default value is 2
+; Minimum value is 2
+; To modify execute:
+;  system service-parameter-modify platform maintenance mnfa_threshold=<value>
+mnfa_threshold = {{ mtce_var_dict['platform::mtce::agent::params::mnfa_threshold'] }}
+
+; Board Management Controller (BMC) Access Method
+; Controls the access method maintenance uses when communicating with
+;  provisioned BMCs for power/reset control and sensor monitoring.
+; Supported Methods are
+;       ipmi = use ipmi for bmc communications
+;    redfish = use redfish for bmc communications
+;      learn = use redfish if BMC supports it, otherwise use ipmi
+; Default is learn
+; Changes are automatically detected and handled by maintenance when
+;  modified through system service parameter CLI command.
+; To modify execute:
+;  system service-parameter-modify platform maintenance bmc_access_method=<method>
+;  system service-parameter-apply platform
+bmc_access_method = {{ mtce_var_dict['platform::mtce::agent::params::bmc_access_method'] }}
+
+[timeouts]
+worker_boot_timeout = {{ mtce_var_dict['platform::mtce::agent::params::worker_boot_timeout'] }} ; The max time (seconds) that Mtce waits for the mtcAlive
+controller_boot_timeout = {{ mtce_var_dict['platform::mtce::agent::params::controller_boot_timeout'] }} ; message after which it will time out and fail the host.
+
+; Multi-Node Failure Avoidance (MNFA) Lifecycle Timer.
+; MNFA Activation starts a timer with this timeout value.
+;  See mnfa_threshold above.
+; Maintenance automatically Deactivates MNFA mode if the number of hosts that
+;  are failing heartbeat doesn't drop below mnfa_threshold before timer expires.
+; Timer is in seconds.
+; A zero value means infinite lifecycle or until the number of
+;  heartbeat failing hosts drops below the mnfa_threshold before expiry.
+; Default value is 0
+; Minimum non-zero value is 100 ; maximum is 86400
+; To modify execute:
+;  system service-parameter-modify platform maintenance mnfa_timeout=<value>
+mnfa_timeout = {{ mtce_var_dict['platform::mtce::agent::params::mnfa_timeout'] }}

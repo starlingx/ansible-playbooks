@@ -1,0 +1,99 @@
+---
+#
+# Copyright (c) 2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This will upgrade storage images during a kubernetes upgrade
+
+- name: Fail if kubernetes_version is not defined
+  fail: msg="The mandatory parameter kubernetes_version is not defined."
+  when: kubernetes_version is not defined
+
+- name: Backup mode variable
+  set_fact:
+    previous_mode: "{{ mode }}"
+  when: mode is defined
+
+- name: Initialize variables
+  set_fact:
+    overrides_file: "/tmp/upgrade_overrides.yaml"
+    mode: "upgrade_k8s_storage"
+
+- name: Set kubernetes long version
+  set_fact:
+    kubernetes_long_version: "{{ kubernetes_version if kubernetes_version.startswith('v')
+                              else 'v' + kubernetes_version }}"
+  when: kubernetes_long_version is not defined
+
+- name: Create the upgrade overrides file
+  command: "/usr/bin/sysinv-utils create-host-overrides {{ overrides_file }}"
+
+- name: Read the overrides variables
+  include_vars:
+    file: "{{ overrides_file }}"
+  when: inventory_hostname == 'localhost'
+
+- block:
+  - name: Fetch local copy of overrides
+    fetch:
+      src: "{{ overrides_file }}"
+      dest: /tmp/
+    register: fetched
+
+  - name: Read the overrides variables
+    include_vars:
+      file: "{{ fetched.dest }}"
+
+  - name: Remove local overrides copy
+    local_action:
+      module: file
+      path: "{{ fetched.dest }}"
+      state: absent
+    become: no
+
+  when: inventory_hostname != 'localhost'
+
+- name: Upgrade k8s storage images
+  import_role:
+    name: common/push-docker-images
+
+- name: Update Snapshot CRDs
+  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f roles/k8s-storage-backends/snapshot\
+            -controller/files/k8s-{{ kubernetes_long_version }}/crd/"
+  retries: 5
+  delay: 3
+
+- name: Create Snapshot-controller config file
+  template:
+    src: "roles/k8s-storage-backends/snapshot-controller/templates/k8s-{{ kubernetes_long_version }}/volume\
+          -snapshot-controller/volume-snapshot-controller-deployment.yaml.j2"
+    dest: /etc/kubernetes/update_snapshot-controller.yaml
+
+- name: Update Snapshot-Controller
+  command: 'kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f
+            /etc/kubernetes/update_snapshot-controller.yaml'
+  retries: 5
+  delay: 3
+  register: result
+  until: result.rc == 0
+
+- name: Create rbac-volume-snapshot-controller config file
+  template:
+    src: "roles/k8s-storage-backends/snapshot-controller/templates/k8s-{{ kubernetes_long_version }}/volume\
+          -snapshot-controller/rbac-snapshot-controller.yaml.j2"
+    dest: /etc/kubernetes/update_rbac-volume-snapshot-controller.yaml
+
+- name: Update Rbac-volume-snapshot-controller
+  command: 'kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f
+            /etc/kubernetes/update_rbac-volume-snapshot-controller.yaml'
+  retries: 5
+  delay: 3
+  register: result
+  until: result.rc == 0
+
+- name: Restore mode variable
+  set_fact:
+    mode: "{{ previous_mode }}"
+  when: previous_mode is defined

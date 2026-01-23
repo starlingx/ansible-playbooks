@@ -1,0 +1,16 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get all system alarms
+  command: fm alarm-list
+  environment: "{{ system_env }}"
+  register: system_alarms
+  changed_when: false
+
+- name: Display all system alarms if any
+  debug:
+    var: system_alarms.stdout_lines
+  when: system_alarms.stdout_lines | length > 0

@@ -1,0 +1,36 @@
+---
+#
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Apply final changes to system after restoring files is complete,
+#   but before data is restored.
+
+- name: Update kernel parameters for iptables
+  command: sysctl --system &>/dev/null
+
+# The grub.cfg used during the first boot is /boot/grub2/grub.cfg.
+# After the first boot, the grub.cfg becomes /boot/efi/EFI/BOOT/grub.cfg.
+# Instead of using grub-install to change now, we copy the config
+# And use it from the temporary location for first boot.
+- name: Create temporary bootloader configuration
+  copy:
+    src: /boot/efi/EFI/BOOT/grub.cfg
+    dest: /boot/grub2/grub.cfg
+    remote_src: true
+
+- name: Create a symlink to PXE config files
+  file:
+    src: "{{ pxelinux_config_permdir }}"
+    dest: /var/pxeboot/pxelinux.cfg
+    state: link
+    force: true
+
+- name: Upgrade path
+  block:
+    - name: Add default security feature to kernel parameters
+      command: /usr/local/bin/puppet-update-grub-env.py --add-kernelparams '{{ default_security_feature }}'
+
+  when: upgrade_in_progress

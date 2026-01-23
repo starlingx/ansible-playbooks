@@ -1,0 +1,407 @@
+---
+#
+# Copyright (c) 2019-2024 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is to bring up Kubernetes and essential flock services required
+#   for initial controller unlock.
+#
+
+- block:
+  - name: Prepare for adding loopback interface
+    set_fact:
+      add_items:
+        - source /etc/platform/openrc; system host-if-add controller-0 lo virtual none lo -c platform -m 1500
+        - source /etc/platform/openrc; system interface-network-assign controller-0 lo mgmt
+        - source /etc/platform/openrc; system interface-network-assign controller-0 lo cluster-host
+
+  - name: Add loopback interface via system
+    shell: "{{ item }}"
+    register: add_loopback
+    failed_when: false
+    with_items: "{{ add_items }}"
+
+  - name: Fail if adding loopback interface failed
+    fail:
+      msg: "{{ item.item }} failed for reason: {{ item.stderr }}."
+    when: item.rc != 0 and not incomplete_bootstrap
+    with_items: "{{ add_loopback.results }}"
+
+  - name: Remove previous management floating address if management network config has changed
+    command: ip addr delete {{ prev_mgmt_floating_virtual }} dev lo scope host
+    when: last_config_file_exists and reconfigure_endpoints and
+          (mgmt_floating_virtual != prev_mgmt_floating_virtual)
+
+  - name: Remove previous management virtual address if management network config has changed
+    command: ip addr delete {{ prev_mgmt_virtual }} brd {{ management_broadcast }} dev lo:1 scope host
+    when: last_config_file_exists and reconfigure_endpoints and
+          (mgmt_virtual != prev_mgmt_virtual)
+
+  # ip addr delete for secondary management
+  - block:
+    - name: Remove previous secondary management floating address if management network config has changed
+      command: ip addr delete {{ prev_mgmt_floating_virtual_secondary }} dev lo scope host
+      when: (last_config_file_exists and reconfigure_endpoints and
+            prev_mgmt_floating_virtual_secondary is defined) and
+            (mgmt_floating_virtual_secondary is not defined or
+            (mgmt_floating_virtual_secondary is defined and
+            (mgmt_floating_virtual_secondary != prev_mgmt_floating_virtual_secondary)))
+
+    - name: Remove previous secondary management virtual address if management network config has changed
+      command: ip addr delete {{ prev_mgmt_virtual_secondary }} brd {{ prev_mgmt_broadcast_secondary }} dev lo:1 scope host
+      when: (last_config_file_exists and reconfigure_endpoints and
+            prev_mgmt_virtual_secondary is defined and
+            prev_mgmt_broadcast_secondary is defined) and
+            (mgmt_virtual_secondary is not defined or
+            (mgmt_virtual_secondary is defined and
+            (mgmt_virtual_secondary != prev_mgmt_virtual_secondary)))
+
+  - name: Add IPs
+    set_fact:
+      add_items:
+        - ip addr add {{ pxe_virtual }} dev lo scope host
+        - ip addr add {{ cluster_floating_virtual }} dev lo scope host
+
+  - name: Add cluster virtual IP for loopback interface if not simplex
+    set_fact:
+      add_items: "{{ add_items + [item] }}"
+    with_items:
+      - ip addr add {{ cluster_virtual }}  brd {{ cluster_broadcast }} dev lo scope host label lo:5
+    when: system_mode != 'simplex'
+
+  - name: Add admin IP for loopback interface if configured
+    set_fact:
+      add_items: "{{ add_items + [item] }}"
+    with_items:
+      - ip addr add {{ admin_virtual }} dev lo scope host
+    when: admin_virtual is defined
+
+  # add secondary addresses for loopback interface
+  - block:
+    - name: Add secondary cluster on the loopback interface
+      set_fact:
+        add_items: "{{ add_items + [item] }}"
+      with_items:
+        - "ip addr add {{ cluster_virtual_secondary }}  brd {{ cluster_broadcast_secondary }} dev lo scope host label lo:5"
+      when: system_mode != 'simplex' and cluster_virtual_secondary is defined and cluster_broadcast_secondary is defined
+
+    - name: Add secondary cluster floating on the loopback interface
+      set_fact:
+        add_items: "{{ add_items + [item] }}"
+      with_items:
+        - "ip addr add {{ cluster_floating_virtual_secondary }} dev lo scope host"
+      when: cluster_floating_virtual_secondary is defined
+
+    - name: Add admin secondary IP for loopback interface if configured
+      set_fact:
+        add_items: "{{ add_items + [item] }}"
+      with_items:
+        - "ip addr add {{ admin_virtual_secondary }} dev lo scope host"
+      when: admin_virtual_secondary is defined
+
+  - name: Add loopback interface address
+    # Use shell instead of command module as source is an internal shell command
+    shell: "{{ item }}"
+    register: add_addresses
+    failed_when: false
+    with_items: "{{ add_items }}"
+
+  - name: Fail if adding interface addresses failed for reason other than it has been done before
+    fail:
+      msg: "{{ item.item }} failed for reason: {{ item.stderr }}."
+    when: item.rc != 0 and not incomplete_bootstrap
+    with_items: "{{ add_addresses.results }}"
+
+  - name: Create symlinks for current Kubernetes version
+    import_role:
+      name: common/k8s-symlinks
+
+  - name: Refresh local DNS (i.e. /etc/hosts)
+    import_tasks: refresh_local_dns.yml
+
+  - name: Set up default route to the oam gateway
+    include_tasks: setup_default_route.yml
+
+  - name: Copy the central registry certificate
+    include_tasks: copy_central_registry_cert.yml
+    when: distributed_cloud_role == 'subcloud'
+
+  - name: Set insecure registries
+    set_fact:
+      insecure_registries:
+        "{{ (insecure_registries|default([]) + [item.url|regex_replace('/.*', '')]) | unique }}"
+    with_items:
+      - "{{ docker_registry }}"
+      - "{{ gcr_registry }}"
+      - "{{ k8s_registry }}"
+      - "{{ quay_registry }}"
+      - "{{ elastic_registry }}"
+      - "{{ ghcr_registry }}"
+      - "{{ registryk8s_registry }}"
+      - "{{ icr_registry }}"
+    when: (item.secure is defined and not item.secure)
+    no_log: true
+
+  - name: Configure local docker registry
+    import_tasks: configure_local_registry.yml
+
+  - name: Bring up local docker registry
+    import_tasks: bringup_local_registry.yml
+
+  - name: Configure dockerd to use local registry
+    import_tasks: configure_dockerd.yml
+
+  - name: Configure containerd to use local registry
+    import_role:
+      name: common/configure-containerd
+
+  - name: Populate image registry data to /var/lib/docker-distribution
+    shell: pigz -dc {{ bootstrap_registry_filesystem_fqpn }} | tar -C / --overwrite -xpf - var/lib/docker-distribution
+    args:
+      warn: false
+    when: bootstrap_registry_filesystem
+    ignore_errors: true
+
+  - name: Populate local image registry
+    import_role:
+      name: common/push-docker-images
+
+  # TODO (heitormatsui): remove when CentOS -> Debian upgrade support is deprecated
+  - name: Ensure etcd config file from CentOS backup doesn't exist on Debian
+    file:
+      path: /etc/etcd/etcd.conf
+      state: absent
+    when: os_release == "debian"
+
+  - name: Bring up etcd
+    systemd:
+      name: etcd
+      state: started
+
+  - name: Bring up Kubernetes master
+    import_role:
+      name: common/bringup-kubemaster
+
+  - name: Bring up Helm
+    import_tasks: bringup_helm.yml
+
+  - name: Bring up essential flock services
+    import_tasks: bringup_flock_services.yml
+
+  - name: Set dnsmasq.leases flag for unlock
+    file:
+      path: "{{ config_permdir }}/dnsmasq.leases"
+      state: touch
+
+  - name: Update resolv.conf file for unlock
+    lineinfile:
+      path: /etc/resolv.conf
+      line: "nameserver {{ controller_floating_address }}"
+      insertbefore: BOF
+
+  - name: Check controller-0 is in online state
+    shell: source /etc/platform/openrc; system host-show controller-0 --column availability --format value
+    register: check_online
+    retries: 15
+    delay: 10
+    until: check_online.stdout == "online"
+
+  - name: Set async parameters
+    set_fact:
+      async_timeout: 30
+      async_retries: 10
+
+  - name: Set Kubernetes components list
+    set_fact:
+      kube_component_list:
+        - k8s-app=calico-node
+        - k8s-app=kube-proxy
+        - app=multus
+        - app=sriov-cni
+        - component=kube-apiserver
+        - component=kube-controller-manager
+        - component=kube-scheduler
+
+  - block:
+    - name: Update Kubernetes components list
+      set_fact:
+        # We skip the calico-node pod on AIO-DX and STANDARD setups
+        # because the pods running on a different host than controller-0 will
+        # be unreachable at this moment and the calico-node pods
+        # will try to connect to them and fail forever
+        kube_component_list: >-
+         {{ kube_component_list | reject('search', 'calico-node') | list }}
+
+    - name: Get coredns deployment desired replicas
+      command: >-
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get deployment
+        -n kube-system coredns -o jsonpath={.spec.replicas}
+      register: coredns_get_replicas
+
+      # We scale these deployments down and back up because in setups with more
+      # than 3 nodes, the cluster could be in the PartialDisruption state and
+      # the pods may not be rescheduled off of a down
+      # node. This ensures that the pods will be on controller-0 and will
+      # become available.
+    - name: Scale calico-kube-controllers & coredns deployments to 0
+      command: >-
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf scale deployment
+        -n {{ item.namespace }} {{ item.deployment }} --replicas=0
+      with_items:
+        - { namespace: kube-system, deployment: calico-kube-controllers }
+        - { namespace: kube-system, deployment: coredns }
+
+    - name: Scale calico-kube-controllers deployments back to 1
+      command: >-
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf scale deployment
+        -n {{ item.namespace }} {{ item.deployment }} --replicas=1
+      with_items:
+        - { namespace: kube-system, deployment: calico-kube-controllers }
+
+    - name: Scale coredns deployment back to original size
+      command: >-
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf scale deployment
+        -n kube-system coredns --replicas={{ coredns_get_replicas.stdout }}
+
+    - name: Override async parameters
+      set_fact:
+        async_timeout: 120
+        async_retries: 40
+
+    - name: Wait for 30 seconds to ensure deployments have time to scale back up
+      wait_for:
+        timeout: 30
+
+    when: mode == 'restore'
+
+  - name: Convert Kubernetes components list to a grep pattern string
+    set_fact:
+      # The component list items are in the format "key=value" (neccessary for the --selector flag input).
+      # However, we're searching the pod labels, which has the labels listed in the format "key:value"
+      kube_component_grep_pattern: "{{ kube_component_list | join('\\|') | replace('=',':') }}"
+
+  # In order to avoid a race between pod creation and the subsequent Kubernetes tasks,
+  # we must block until the kube-system pod resources are created.
+  # Otherwise, the subsequent task "kubectl wait" may fail with 'resource not found' error
+  # if task runs before the pods are created. This is a known limitation of kubectl wait,
+  # and a common workaround is to use "kubectl get" to ensure that the resource exists
+  # before attemtping a wait [1]. This task can be reworked in the future once "kubectl wait"
+  # supports the --wait-for-creation flag [2].
+  #
+  # [1] https://github.com/kubernetes/kubectl/issues/1516
+  # [2] https://github.com/kubernetes/kubernetes/pull/122994
+  - name: Ensure kube-system pods are all started
+    # Retrieve the number of pods for 'kube-system' that are tagged with the
+    # kube_component_list labels. Each kube_component_list label is exclusive to
+    # a single pod on given node (i.e., one-to-one mapping between label and node-pod),
+    # so the number of pods must equal to the length of kube_component_list when all pods are created.
+    shell: |
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods \
+        --namespace=kube-system \
+        --field-selector spec.nodeName=controller-0 \
+        -o custom-columns=LABELS:.metadata.labels |
+      grep "{{ kube_component_grep_pattern }}" |
+      wc -l
+    register: result
+    until: result.stdout|int >= kube_component_list|length
+    retries: 10
+    delay: 12
+    failed_when: false
+
+  - name: Start parallel tasks to wait for Kubernetes component and Networking pods to reach ready state
+    # Only check for pods on the current host to avoid waiting for pods on downed nodes
+    # This speeds up "Get wait tasks results" on multi-node systems
+    command: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --namespace=kube-system
+      --for=condition=Ready pods --selector {{ item }} --field-selector spec.nodeName=controller-0
+      --timeout={{ async_timeout }}s
+    async: "{{ async_timeout }}"
+    poll: 0
+    with_items: "{{ kube_component_list }}"
+    register: wait_for_kube_system_pods
+
+  - name: Start wait for calico-kube-controllers & coredns deployments to reach Available state
+    # Check the deployment status rather than the pod status in case some pods are down on other nodes
+    command: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --namespace={{ item.namespace }}
+      --for=condition=Available deployment {{ item.deployment }} --timeout={{ async_timeout }}s
+    async: "{{ async_timeout }}"
+    poll: 0
+    with_items:
+      - { namespace: kube-system, deployment: calico-kube-controllers }
+      - { namespace: kube-system, deployment: coredns }
+    register: wait_for_deployments
+
+  - name: Get wait tasks results
+    async_status:
+      jid: "{{ item.ansible_job_id }}"
+    register: wait_job_result
+    until: wait_job_result.finished
+    # The retry length should be x2 the length of the async_timeout
+    # eg async_retries = async_timeout * 2 / delay
+    retries: "{{ async_retries }}"
+    delay: 6
+    failed_when: false
+    with_items:
+      - "{{ wait_for_kube_system_pods.results }}"
+      - "{{ wait_for_deployments.results }}"
+
+  - name: Fail if any of the Kubernetes component or Networking pod are not ready by this time
+    fail:
+      msg: "Pod {{ item.item.item }} is still not ready."
+    when: item.stdout is not search(" condition met")
+    with_items: "{{ wait_job_result.results }}"
+
+  - name: Bring up FluxCD helm and source controllers
+    import_role:
+      name: common/fluxcd-controllers
+
+  - name: Enable volume snapshot support
+    include_role:
+      name: k8s-storage-backends/snapshot-controller
+    when: enable_volume_snapshot_support|bool and mode != 'restore'
+
+  - name: Configure k8s-coredump-handler
+    block:
+      - name: Create user account for k8s coredump handler
+        command: kubectl apply -f /etc/k8s-coredump/k8s-coredump.yaml
+        environment:
+          KUBECONFIG: /etc/kubernetes/admin.conf
+        register: create_k8s_coredump_handler_account
+        until: create_k8s_coredump_handler_account is not failed
+        retries: 5
+        delay: 10
+
+      - name: Get secret token from created user account
+        command: kubectl -n kube-system get secrets coredump-secret-token -ojsonpath='{.data.token}'
+        environment:
+          KUBECONFIG: /etc/kubernetes/admin.conf
+        register: k8s_auth_token
+        until: k8s_auth_token is not failed
+        retries: 5
+        delay: 10
+
+      - name: Decode token in base64
+        shell: echo {{ k8s_auth_token.stdout }} | base64 -d
+        register: k8s_auth_token
+
+      - set_fact:
+          k8s_auth_token: "{{ k8s_auth_token.stdout }}"
+
+      - name: Create k8s-coredump-conf.json for k8s-coredump-handler
+        template:
+          src: "k8s-coredump-conf.json.j2"
+          dest: /etc/k8s-coredump-conf.json
+          mode: 0700
+
+      - name: Make k8s-coredump-config.json file available for other nodes config
+        template:
+          src: "k8s-coredump-conf.json.j2"
+          dest: /opt/platform/config/{{ software_version }}/k8s-coredump-conf.json
+          mode: 0700
+
+    when: os_release == 'debian'
+
+  when: (not replayed) or (restart_services)

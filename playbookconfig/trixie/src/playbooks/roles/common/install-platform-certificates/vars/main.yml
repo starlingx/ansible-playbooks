@@ -1,0 +1,19 @@
+---
+#
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+cert_manager_spec_file: /tmp/platform_certificates.yaml
+platform_config_dir: /opt/platform/config/{{ software_version }}
+create_platform_certificates_flag_filename: .create_platform_certificates
+system_local_ca_data_provided_flag_filename: .system_local_ca_data_provided
+
+system_local_ca_data_obtained: false
+install_rca_as_trusted: false
+
+install_oidc_auth_apps_certificate: false
+install_system_open_ldap_certificate: false
+install_system_registry_local_certificate: false
+install_system_restapi_gui_certificate: false

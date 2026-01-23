@@ -1,0 +1,130 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Validate device exists
+  stat:
+    path: "{{ item.disk_device_path }}"
+  register: dev_stat
+
+- fail:
+    msg: "Device {{ item.disk_device_path }} is not valid"
+  when: not dev_stat.stat.exists
+
+- name: Get OSD metadata
+  command: "timeout 30 ceph osd metadata {{ item.osd_id }}"
+  changed_when: false
+  register: osd_metadata_output
+  failed_when:
+    - osd_metadata_output is failed
+    - osd_metadata_output.rc != 2  # rc == 2 -> Error ENOENT: osd.x does not exist
+
+- name: Determine if OSD is already purged
+  set_fact:
+    is_osd_purged: "{{ osd_metadata_output.rc == 2 }}"
+
+- name: Determine if OSD is filestore or bluestore
+  set_fact:
+    osd_type: "{{ (osd_metadata_output.stdout | from_json).osd_objectstore }}"
+  when: not is_osd_purged
+
+- name: Purge OSD if its type is filestore
+  when:
+    - not is_osd_purged
+    - osd_type == 'filestore'
+  block:
+    - name: Stop OSD service
+      command: /etc/init.d/ceph stop osd.{{ item.osd_id }}
+      register: single_osd_stop_result
+
+    - name: Debug stopped single OSD
+      debug:
+        var: single_osd_stop_result.stdout_lines
+
+    - name: Unmount OSD
+      mount:
+        path: "/var/lib/ceph/osd/ceph-{{ item.osd_id }}"
+        state: unmounted
+      ignore_errors: true
+
+    - name: Wipe device
+      shell: |
+        wipefs -a -f {{ item.disk_device_path  }}
+        sgdisk --zap-all {{ item.disk_device_path  }}
+        kpartx -d {{ item.disk_device_path }}
+      register: wipe_osd_disk
+
+    - name: Debug wipe OSD disk
+      debug:
+        var: wipe_osd_disk.stdout_lines
+
+    - name: Destroy OSD
+      command: "ceph osd destroy {{ item.osd_id }} --yes-i-really-mean-it"
+      register: osd_destroy_output
+
+    - name: Purge OSD
+      command: "ceph osd purge {{ item.osd_id }} --yes-i-really-mean-it"
+      register: osd_purge_output
+
+- name: Get OSD disk FSTYPE
+  command: "lsblk --nodeps --noheadings --output FSTYPE {{ item.disk_device_path }}"
+  register: fstype_output
+  changed_when: false
+
+- name: Prepare Bluestore
+  command: "ceph-volume --cluster ceph raw prepare --bluestore --data {{ item.disk_device_path }}"
+  when: fstype_output.stdout != "ceph_bluestore"
+
+- name: Activate Bluestore
+  command: "ceph-volume --cluster ceph raw activate --no-systemd --device {{ item.disk_device_path }}"
+
+- name: Restore device class
+  command: "ceph osd crush set-device-class {{ item.osd_class }} osd.{{ item.osd_id }}"
+
+- name: Restore reweight
+  command: "ceph osd reweight {{ item.osd_id }} {{ item.osd_reweight }}"
+
+- name: Restore CRUSH location
+  shell: >
+    ceph osd crush add osd.{{ item.osd_id }}
+    {{ item.osd_weight }} {{ item.osd_crush_location }}
+
+- name: Create systemd unit file for OSD
+  copy:
+    dest: "/etc/systemd/system/ceph-osd@{{ item.osd_id }}.service"
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Ceph object storage daemon (OSD)
+      Documentation=man:ceph-osd
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      ExecStart=/usr/bin/ceph-osd --id {{ item.osd_id }} --foreground --cluster ceph --osd-data /var/lib/ceph/osd/ceph-{{ item.osd_id }} --setuser root --setgroup root
+      LimitNOFILE=327680
+      Restart=on-failure
+      RestartSec=30
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Change ownership of the OSD block device
+  file:
+    path: "{{ item.disk_device_path }}"
+    owner: root
+    group: disk
+    mode: '0660'
+
+- name: Change ownership of the OSD data directory
+  file:
+    path: "/var/lib/ceph/osd/ceph-{{ item.osd_id }}"
+    owner: root
+    group: root
+    state: directory
+    mode: '0755'
+    recurse: yes

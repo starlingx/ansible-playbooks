@@ -1,0 +1,23 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Deprovision services
+  command: sm-deprovision service-group-member --apply {{ item.group }} {{ item.member }}
+  loop:
+    - group: "storage-services"
+      member: "ceph-osd"
+    - group: "controller-services"
+      member: "ceph-mon"
+    - group: "storage-monitoring-services"
+      member: "ceph-manager"
+    - group: "storage-services"
+      member: "mgr-restful-plugin"
+    - group: "controller-services"
+      member: "drbd-cephmon"
+    - group: "storage-services"
+      member: "storage-networking"
+  loop_control:
+    label: "{{ item.group }}/{{ item.member }}"

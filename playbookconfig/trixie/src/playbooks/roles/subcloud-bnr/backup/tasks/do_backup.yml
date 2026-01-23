@@ -1,0 +1,170 @@
+---
+#
+# Copyright (c) 2022-2023 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# TASKS DESCRIPTION:
+#   - Ensure no more than 2 software release backups can exist at a time
+#   - Perform subcloud backup
+#   - Restore the previous backup if exists in case of failure
+#
+- name: Perform subcloud backup
+  block:
+  - name: Set working directory and connection facts
+    set_fact:
+      working_dir: "{{ backup_dir if local else central_backup_dir }}"
+      target_connection: "{{ 'ssh' if local else 'local' }}"
+
+  - name: Purge old backup files
+    block:
+    - name: Check if the previous backup of {{ software_version }} already exists
+      stat:
+        path: "{{ working_dir }}"
+      register: wd_result
+      connection: "{{ target_connection }}"
+
+    - block:
+      - name: Set previous backup dir fact
+        set_fact:
+          previous_backup_dir: "{{ working_dir }}.tbd"
+
+      - name: Temporarily save the previous backup
+        command: mv {{ working_dir }} {{ previous_backup_dir }}
+        connection: "{{ target_connection }}"
+      when: wd_result.stat.exists and wd_result.stat.isdir
+
+    - name: Get current number of backup versions
+      find:
+        paths: "{{ working_dir | dirname }}"
+        file_type: directory
+        recurse: no
+        use_regex: yes
+        patterns: '^[0-9][0-9].[0-9][0-9]$'
+      register: find_result
+      connection: "{{ target_connection }}"
+
+    - block:
+      - name: Build list of backup directories
+        set_fact:
+          release_list: "{{ find_result.files | map(attribute='path') | list | sort }}"
+
+      - name: Remove backup directory of older release(s), keep only the newest version
+        file:
+          path: "{{ item }}"
+          state: absent
+        loop: "{{ release_list[0:-1] }}"
+        connection: "{{ target_connection }}"
+      when: find_result.matched > 1
+
+    when: not local or backup_dir == default_local_backup_dir
+
+  - name: Create local backup directory if it does not exist
+    file:
+      path: "{{ backup_dir }}"
+      state: directory
+      mode: '0755'
+
+  - name: Check content of {{ backup_dir }} before proceeding
+    find:
+      paths: "{{ backup_dir }}"
+    register: existing_files_before_backup
+
+  - name: Run {{ inventory_hostname }} backup playbook
+    command: |
+      ansible-playbook /usr/share/ansible/stx-ansible/playbooks/backup.yml -e "@{{ subcloud_overrides }}"
+    register: platform_backup_output
+
+  - name: Print the output of platform backup playbook
+    debug:
+      msg: "{{ platform_backup_output.stdout }}"
+
+  - name: Remove previous backup upon successful subcloud backup (local storage)
+    file:
+      path: "{{ previous_backup_dir }}"
+      state: absent
+    when: previous_backup_dir is defined and local
+
+  rescue:
+    - block:
+      - name: Get backup files in {{ backup_dir }}
+        find:
+          paths: "{{ backup_dir }}"
+          patterns: "{{ platform_backup_filename_prefix }}*"
+        register: backup_files
+
+      - name: Filter out existing files
+        set_fact:
+          filter_list: "{{ existing_files_before_backup.files | map(attribute='path') | list }}"
+
+      - name: Filter out existing files
+        set_fact:
+          filtered_files: "{{ backup_files.files | rejectattr('path', 'in', filter_list) | list }}"
+
+      - block:
+        - name: Get latest backup file
+          set_fact:
+            local_backup_file: "{{ (filtered_files | sort(attribute='mtime') | last).path }}"
+
+        - name: Remove incomplete backup file if existent
+          file:
+            path: "{{ local_backup_file }}"
+            state: absent
+          connection: "{{ target_connection }}"
+
+        when: filtered_files | length > 0
+      when: existing_files_before_backup.matched > 0
+
+    - name: Remove {{ backup_dir }} directory
+      file:
+        path: "{{ backup_dir }}"
+        state: absent
+      connection: "{{ target_connection }}"
+      when: existing_files_before_backup.matched == 0
+
+    - name: Restore previous backup upon failure
+      command: mv {{ previous_backup_dir }} {{ working_dir }}
+      connection: "{{ target_connection }}"
+      when: previous_backup_dir is defined
+
+    # Task to catch issues in this playbook.
+    # Two possible situations:
+    # 1. Failures in this playbook, but not in the nested playbooks.
+    # In this case, the task 'Set failure message for platform backup failure'
+    # won't be executed.
+    # 2. Errors in the nested playbooks. In this case, all tasks in the rescue
+    # block will be executed, and the output will be a combination of
+    # 'ansible_failed_task/result' and 'platform_backup_output.stdout_lines'.
+    - name: Set local failed task result message
+      set_fact:
+        failure_msg: >
+          Failed task: {{ ansible_failed_task.name }}
+          failed with error : {{ ansible_failed_result.msg }}
+      when: ansible_failed_task is defined and ansible_failed_result is defined
+
+    # Specific catch for playbook backup call.
+    # Extracting all output lines from the playbook execution that
+    # contain the keyword 'failure_msg'.
+    - name: Set failure message for platform backup failure
+      set_fact:
+        failure_msg: >
+          {{ failure_msg }}
+          {{ platform_backup_output.stdout_lines
+          | select('search', 'failure_msg') | list | join('\n') }}
+      when: platform_backup_output is defined and platform_backup_output.failed
+
+    - name: Force fail post rescue of backup task failure
+      fail:
+        msg: >
+          Failed to perform backup of {{ inventory_hostname }}
+          {{ failure_msg }}
+      when: failure_msg is defined
+
+  always:
+    # Error ignored to prevent reporting the incorrect error.
+    # If this task fails, it's a consequence, not the root cause.
+    - name: Remove subcloud overrides file on {{ inventory_hostname }}
+      file:
+        path: "{{ subcloud_overrides }}"
+        state: absent
+      failed_when: false

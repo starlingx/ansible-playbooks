@@ -1,0 +1,19 @@
+---
+#
+# Copyright (c) 2019 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+- hosts: all
+  # If gathering facts is really necessary, run setup task AFTER host connectivity
+  # check block in common role.
+  gather_facts: no
+
+  vars_files:
+    - host_vars/backup-restore/default.yml
+
+  # Main play
+  roles:
+    - { role: common/prepare-env }
+    - { role: restore-openstack/prepare-env, when: not restore_openstack_continue|bool }
+    - { role: restore-openstack/restore, become: yes }

@@ -1,0 +1,30 @@
+---
+#
+# Copyright (c) 2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+
+- name: Read current OSTree commit
+  command: ostree rev-parse starlingx
+  register: ostree_commit_result
+
+- name: Verify current commit matches target commit
+  fail:
+    msg: |
+      Cannot initiate software deployments restore.
+
+      Mismatch detected between OSTree commits.
+      Expected: {{ sw_deployments_info.target_commit }}
+      Found:    {{ ostree_commit_result.stdout.strip() }}
+
+      This means that the system has been reinstalled with a
+      different ISO or has already been manually patched.
+
+      If you have already manually patched software deployments
+      rerun restore with `exclude_sw_deployments=true`.
+
+      If you reinstalled with a different ISO and wish to ignore this
+      rerun restore with `verify_base_commit=false`.
+  when: ostree_commit_result.stdout.strip() != sw_deployments_info.target_commit

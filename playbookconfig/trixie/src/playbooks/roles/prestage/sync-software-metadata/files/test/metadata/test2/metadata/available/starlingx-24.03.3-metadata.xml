@@ -1,0 +1,25 @@
+<patch>
+  <id>starlingx-24.03.3</id>
+  <sw_version>24.03.3</sw_version>
+  <component>starlingx</component>
+  <summary>Sample inservice test patch</summary>
+  <description>Test</description>
+  <install_instructions>Sample instructions</install_instructions>
+  <warnings>Sample warning</warnings>
+  <status>DEV</status>
+  <unremovable>N</unremovable>
+  <reboot_required>N</reboot_required>
+  <semantics />
+  <requires>
+    <req_patch_id>starlingx-24.03.0</req_patch_id>
+  </requires>
+  <pre_install>pre-install.sh</pre_install>
+  <post_install>post-install.sh</post_install>
+  <deploy_precheck>deploy-precheck.sh</deploy_precheck>
+  <packages>
+    <deb>logmgmt_1.0-1.stx.9_all.deb</deb>
+  </packages>
+  <number_of_commits>1</number_of_commits>
+  <previous_commit>aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa</previous_commit>
+  <commit>bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb</commit>
+</patch>

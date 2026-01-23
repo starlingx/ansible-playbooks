@@ -1,0 +1,75 @@
+---
+#
+# Copyright (c) 2022-2025 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role is used to validate input and prepare environment on the target host
+#   for packages/images prestaging.
+#
+
+- name: Fail if software version for prestaging is not specified
+  fail:
+    msg: "Please specify software version for prestaging."
+  when: software_version is not defined
+
+- name: Get minimum supported release version
+  import_role:
+    name: common/minimum-upgradable-release
+
+- name: Fail if software major release is not supported for prestaging
+  fail:
+    msg: >-
+      The specified software major release {{ software_version }} is not supported.
+      Minimum supported release versions for prestage: {{ minimum_supported_release_version }}
+  when: software_version is version(minimum_supported_release_version, "<")
+
+- name: Set prestage software version and cleanup directores fact
+  set_fact:
+    cleanup_dirs: "{{ cleanup_dirs|default([]) + [software_version] }}"
+
+- name: Set prestage dir and subdirectory facts
+  set_fact:
+    prestage_source: remote
+    software_bin: "/usr/bin/software"
+    prestage_dir: "{{ platform_backup_dir }}/{{ software_version }}"
+    host_software_metadata_dir: "/opt/software/metadata"
+    patches_prestage_dir: "{{ platform_backup_dir }}/{{ software_version }}/patches"
+    host_patch_metadata_dir: "{{ '/opt/patching/metadata' if software_version
+                              is version('24.09', '<') else '/opt/software/metadata' }}"
+
+- name: Retrieve current software version of the system controller
+  shell: source /etc/build.info; echo $SW_VERSION
+  register: system_controller_current_sw_version
+  delegate_to: localhost
+
+- name: Retrieve current software version of the host
+  shell: source /etc/build.info; echo $SW_VERSION
+  register: current_software_version
+
+- name: Set host_software_version fact
+  set_fact:
+    host_software_version: "{{ current_software_version.stdout }}"
+
+- name: Change prestage_source to local
+  set_fact:
+    prestage_source: local
+  when: software_version == host_software_version
+
+- name: Prepare prestaging packages
+  include_tasks: prepare-sw-packages-prestage-env.yml
+  when: prestage_type == 'packages'
+
+- name: Prepare prestaging images
+  include_tasks: prepare-images-prestage-env.yml
+  when: prestage_type == 'images'
+
+- name: Prepare platform-backup directory for {{ prestage_type }} prestaging
+  include_tasks: cleanup_prestage_dir.yml
+  loop: "{{ cleanup_dirs | flatten(1) }}"
+  loop_control:
+    loop_var: input_dir
+  args:
+    apply:
+      become: yes
