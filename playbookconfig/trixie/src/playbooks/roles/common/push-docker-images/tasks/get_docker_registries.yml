@@ -10,7 +10,9 @@
 - block:
 
   - name: Get docker registries
-    include: get_docker_registry.yml registry={{ item }}
+    include_tasks: get_docker_registry.yml
+    vars:
+      registry: "{{ item }}"
     with_items:
       - { name: 'k8s_registry', value: { } }
       - { name: 'gcr_registry', value: { } }
