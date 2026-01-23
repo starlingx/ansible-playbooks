@@ -36,12 +36,5 @@
     rbd_vsc | length > 0 or
     rbd_snap_images_output.results | selectattr('rc', 'equalto', 0) | list | length > 0)
 
-- name: Fail if there is no enough space available for backups
-  fail:
-    msg: >-
-      There is no enough space available for backups.
-      The {{ backups_dest_name }} has {{ avail_space_bytes | int | human_readable }} of free space.
-      But ceph data requires {{ backups_required_bytes | int | human_readable }}
-      (total ceph used data + 256MiB of safety margin).
-  when: avail_space_bytes | int < backups_required_bytes | int
-
+- name: Check space for backups
+  include_tasks: "{{ role_path_common }}/tasks/check_space_for_backups.yaml"

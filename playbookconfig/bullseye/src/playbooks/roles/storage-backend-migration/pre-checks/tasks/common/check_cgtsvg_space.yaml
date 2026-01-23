@@ -45,7 +45,6 @@
   vars:
     host_metrics: "{{ lvm_metrics[item] }}"
     cgtsvg_max_free_gib: "{{ host_metrics.cgtsvg_max_free_gib }}"
-
   fail:
     msg: |
       For host {{ item }}: Volume Group 'cgts-vg' has only {{ cgtsvg_max_free_gib }} GiB free, which is insufficient for the required monitor with {{ min_required_free_gib }} GiB.
@@ -54,3 +53,19 @@
   loop: "{{ groups.with_monitor }}"
   loop_control:
     label: "Checking insufficient space on {{ item }} for ceph monitor"
+
+- name: Fail if cgts-vg free space is insufficient for active controller with required backup data
+  fail:
+    msg: |
+      For host {{ system.active_controller }}: Volume Group 'cgts-vg' has only {{ cgtsvg_max_free_gib }} GiB free, which is insufficient for the required monitor with {{ min_required_free_gib }} GiB,
+      plus the ceph required size {{ backups_required_gib }} GiB.
+      Please free up space to proceed.
+  vars:
+    host_metrics: "{{ lvm_metrics[system.active_controller] }}"
+    cgtsvg_max_free_gib: "{{ host_metrics.cgtsvg_max_free_gib }}"
+    backups_required_gib: "{{ backups_required_bytes | int // (1024**3) }}"
+  when:
+    - backups_required_bytes is defined
+    - create_migration_lv | bool
+    - system.active_controller in groups.with_monitor
+    - cgtsvg_max_free_gib | int < min_required_free_gib | int + backups_required_gib | float

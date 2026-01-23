@@ -1,0 +1,14 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Fail if there is not enough space available for backups
+  fail:
+    msg: >-
+      There is not enough space available for backups.
+      The {{ backups_dest_name }} has {{ avail_space_bytes | int | human_readable }} of free space.
+      But ceph data requires {{ backups_required_bytes | int | human_readable }}
+      (total ceph used data + {{ backups_safety_margin_bytes | int | human_readable }} of safety margin).
+  when: avail_space_bytes | int < backups_required_bytes | int
