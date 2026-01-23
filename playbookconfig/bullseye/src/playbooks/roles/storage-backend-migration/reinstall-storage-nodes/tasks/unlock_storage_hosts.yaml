@@ -28,6 +28,9 @@
   loop_control:
     label: "{{ item }}"
   register: host_unlock_output
+  retries: 60 # pending runtime configs can be detected in a 2 minute window
+  delay: 10
+  until: host_unlock_output is succeeded
 
 - name: Debug host_unlock_output result
   debug:

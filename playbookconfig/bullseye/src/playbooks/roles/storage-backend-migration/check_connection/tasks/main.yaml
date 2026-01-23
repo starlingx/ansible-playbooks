@@ -12,4 +12,10 @@
       register: conn_check
 
   rescue:
+    - name: "Handle connection failure"
+      debug:
+        msg: "Connection failed for {{ inventory_hostname }}: {{ ansible_failed_result.msg | default('Unknown error') }}"
+      when: "'Permission denied' not in (ansible_failed_result.msg | default(''))"
+
     - include_tasks: "{{ role_path_common }}/tasks/fail_playbook.yaml"
+      when: "'Permission denied' not in (ansible_failed_result.msg | default(''))"
