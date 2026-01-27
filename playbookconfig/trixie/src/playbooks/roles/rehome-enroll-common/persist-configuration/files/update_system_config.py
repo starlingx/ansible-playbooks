@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (c) 2024-2025 Wind River Systems, Inc.
+# Copyright (c) 2024-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -19,6 +19,7 @@ from datetime import datetime
 from keystoneclient.auth.identity import v3
 from keystoneclient import session
 from netaddr import IPNetwork
+from packaging.version import Version, InvalidVersion
 from sysinv.common import constants as sysinv_constants
 from tsconfig.tsconfig import MGMT_NETWORK_RECONFIGURATION_ONGOING
 
@@ -51,6 +52,13 @@ def wait_for_file(file_path, timeout=300, interval=5):
         print_with_timestamp(f"Waiting for {file_path}...")
         time.sleep(interval)
     print_with_timestamp(f"File found: {file_path}")
+
+
+def is_supported_version(version, minimum_version):
+    try:
+        return Version(version) >= Version(minimum_version)
+    except InvalidVersion:
+        return False
 
 
 class BaseClient(object):
@@ -393,16 +401,12 @@ def populate_registry_dns_host_records(client, section_name):
             section_name, "SYSTEM_CONTROLLER_OAM_FLOATING_ADDRESS"
         )
 
-    registry_central_as_local_scope = False
     for parameter in parameters:
         if parameter.name == 'registry.central' and \
            parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DNS_HOST_RECORD:
             client.sysinv.service_parameter.delete(parameter.uuid)
         elif virtual_system and parameter.name == 'registry.local':
             client.sysinv.service_parameter.delete(parameter.uuid)
-        elif parameter.name == 'registry.central' and \
-            parameter.section == sysinv_constants.SERVICE_PARAM_SECTION_DNS_LOCAL:
-            registry_central_as_local_scope = True
 
     values = {
         'service': sysinv_constants.SERVICE_TYPE_DNS,
@@ -425,21 +429,23 @@ def populate_registry_dns_host_records(client, section_name):
     client.sysinv.service_parameter.create(**values)
     print_with_timestamp("DNS host record for registry completed.")
 
-    if not registry_central_as_local_scope:
-        values = {
-            'service': sysinv_constants.SERVICE_TYPE_DNS,
-            'section': sysinv_constants.SERVICE_PARAM_SECTION_DNS_LOCAL,
-            'personality': None,
-            'resource': None,
-            'parameters': {
-                'registry.central': (
-                    "registry.central"
-                )
+    # SERVICE_PARAM_SECTION_DNS_LOCAL was added in SW version 26.03
+    software_version = CONF.get(section_name, "SW_VERSION")
+    if is_supported_version(software_version, "26.03"):
+        if not any(p.name == 'registry.central' and
+                   p.section == sysinv_constants.SERVICE_PARAM_SECTION_DNS_LOCAL
+                   for p in parameters):
+            # create the SERVICE_PARAM_SECTION_DNS_LOCAL since it does not exist
+            values = {
+                'service': sysinv_constants.SERVICE_TYPE_DNS,
+                'section': sysinv_constants.SERVICE_PARAM_SECTION_DNS_LOCAL,
+                'personality': None,
+                'resource': None,
+                'parameters': {'registry.central': "registry.central"}
             }
-        }
-        print_with_timestamp("Populating/Updating DNS local domain for registry.central...")
-        client.sysinv.service_parameter.create(**values)
-        print_with_timestamp("DNS host local domain for registry.central completed.")
+            print_with_timestamp("Populating/Updating DNS local domain for registry.central...")
+            client.sysinv.service_parameter.create(**values)
+            print_with_timestamp("DNS host local domain for registry.central completed.")
 
 
 def populate_docker_config(client, section_name):
