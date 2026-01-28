@@ -185,6 +185,23 @@
       when: platform_tarball_encrypted|bool
     when: search_result.rc != 0
 
+  - name: Extract etcd version from the backup tarball
+    shell:
+      cmd: >-
+        {{ extract_command_method }}
+        | tar --use-compress-program=pigz -xO --wildcards '*etcd-binary-version'
+      stdin: "{{ backup_encryption_passphrase }}"
+    args:
+      warn: false
+    failed_when: false
+    register: etcd_version_ex
+
+  - name: Read etcd_version value from the backup tarball
+    set_fact:
+      restore_etcd_version: "{{ etcd_version_ex.stdout_lines | first | trim }}"
+    failed_when: etcd_version_ex.stdout | length == 0
+    when: etcd_version_ex.rc == 0
+
   - name: Extract kubeadm version from the backup tarball
     # Match kube_cmd_versions VALUES from sysinv database table.
     shell:

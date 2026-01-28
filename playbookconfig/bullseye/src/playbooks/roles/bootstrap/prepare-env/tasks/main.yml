@@ -239,6 +239,35 @@
 - name: Check if external certificates were embedded as strings and install them
   include_tasks: convert_embedded_certificates.yml
 
+# TODO(jgauld): etcd version; TBD handling for: fresh_install, restore, upgrades,
+# and mechanism for latest_etcd_version
+- name: Get installed etcd versions sorted by natural version
+  command: ls -v /usr/local/etcd
+  failed_when: false
+  register: etcd_binary_versions
+
+- name: Latest etcd version
+  set_fact:
+    latest_etcd_version: "{{ etcd_binary_versions.stdout_lines | list | last }}"
+
+# Set the etcd_version if the user hasn't overridden it
+- name: Check if etcd_version is specified
+  set_fact:
+    found_etcd_version: "{{ etcd_version is defined }}"
+
+- block:
+  - name: Set etcd_version for fresh installs.
+    set_fact:
+      etcd_version: "{{ latest_etcd_version }}"
+    when: restore_etcd_version is not defined
+
+  - name: Set etcd_version for restores.
+    set_fact:
+      etcd_version: "{{ restore_etcd_version }}"
+    when: restore_etcd_version is defined and restore_etcd_version|length > 0
+
+  when: not found_etcd_version
+
 # Set the kubernetes_version if the user hasn't overridden it
 - name: Check if kubernetes_version is specified
   set_fact:

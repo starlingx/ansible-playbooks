@@ -41,6 +41,12 @@
   import_role:
     name: common/k8s-symlinks
 
+# TODO(jgauld): Did we fail here too?
+# NEED TO have etcd_version defined.
+- name: Create symlinks for current etcd version
+  import_role:
+    name: common/etcd-symlinks
+
 - name: Enable kubelet
   systemd:
     name: kubelet

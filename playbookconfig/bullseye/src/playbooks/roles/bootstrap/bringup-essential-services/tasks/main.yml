@@ -114,6 +114,10 @@
     when: item.rc != 0 and not incomplete_bootstrap
     with_items: "{{ add_addresses.results }}"
 
+  - name: Create symlinks for current etcd version
+    import_role:
+      name: common/etcd-symlinks
+
   - name: Create symlinks for current Kubernetes version
     import_role:
       name: common/k8s-symlinks
