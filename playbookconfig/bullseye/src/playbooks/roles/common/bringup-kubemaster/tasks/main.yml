@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2024 Wind River Systems, Inc.
+# Copyright (c) 2021-2024, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -139,7 +139,9 @@
     src: "encryption-provider.yaml.j2"
     dest: "{{ encryption_provider_config }}"
     mode: 0600
-  when: mode == 'bootstrap'
+  when:
+    - mode == 'bootstrap'
+    - not replayed
 
 - name: Create default audit policy config
   copy:
@@ -453,6 +455,10 @@
   - name: Restrict coredns to 1 pod for simplex
     command: kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system scale --replicas=1 deployment coredns
     when: system_mode == 'simplex'
+
+  - name: Restart the daemonset pods during bootstrap replay
+    command: kubectl --kubeconfig=/etc/kubernetes/admin.conf rollout restart daemonset -n kube-system
+    when: replayed
 
   when: mode == 'bootstrap'
 
