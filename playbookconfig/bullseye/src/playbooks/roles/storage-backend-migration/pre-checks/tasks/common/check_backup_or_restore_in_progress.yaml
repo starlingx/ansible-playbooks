@@ -27,3 +27,37 @@
       Restore is in progress.
       Please complete the restore before migrating.
   when: restore_in_progress_flag.stat.exists
+
+- name: Check for blocking backup/restore states
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -c
+    "SELECT state
+     FROM backup_restore
+     WHERE state NOT IN (
+       'restore-completed',
+       'complete-local',
+       'complete-central'
+     );"
+  changed_when: false
+  register: backup_restore_blocking_states
+
+- name: Debug blocking backup/restore states
+  debug:
+    var: backup_restore_blocking_states.stdout_lines
+  when: backup_restore_blocking_states.stdout_lines | length > 0
+
+- name: Fail if backup or restore is in a blocking state
+  fail:
+    msg: >-
+      One or more backup/restore operations are not in a safe state.
+      Accepted states are:
+        - restore-completed
+        - complete-local
+        - complete-central
+        - empty (no rows)
+      Found:
+      {{ backup_restore_blocking_states.stdout_lines }}
+  when: backup_restore_blocking_states.stdout_lines | length > 0
+
