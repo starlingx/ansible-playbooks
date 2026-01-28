@@ -20,9 +20,6 @@ data:
     mon_max_pg_per_osd = 2048
 
     [osd]
-    osd_mkfs_type = xfs
-    osd_mkfs_options_xfs = "-f"
-    osd_mount_options_xfs = "rw,noatime,inode64,logbufs=8,logbsize=256k"
     bluestore_fsck_quick_fix_on_mount = true
 
     [mon]

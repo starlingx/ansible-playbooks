@@ -41,6 +41,10 @@ cgts_vg_min_required_free_gib: "20"
 
 osd_usage_safety_margin_percent: 25 # for SX in-service check
 
+# Backup safety margin is the higher between 1024 MiB and 5% of ceph data used
+backups_min_safety_margin_bytes: 1073741824 # 1024 MiB
+backups_max_safety_margin_percent: 5
+
 erase_rbd_snapshots: false
 
 block_openstack_app: true

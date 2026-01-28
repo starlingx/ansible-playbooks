@@ -23,6 +23,8 @@
 # - minimum_platform_mem_workers: 1000 <= int <= 100000
 # - storage_backend_migration_backup_dir: string
 # - backups_path: <path/to/backups> (for export-import migration type or in-service if using kube-rbdkube-system pool)
+# - backups_min_safety_margin_bytes: int
+# - backups_max_safety_margin_percent: 0 <= int <= 100
 #
 
 - import_playbook: storage-backend-migration-init.yaml

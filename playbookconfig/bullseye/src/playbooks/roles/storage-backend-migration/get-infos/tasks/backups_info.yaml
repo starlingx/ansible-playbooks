@@ -61,21 +61,31 @@
              | sum }}
       when: old_pool_exist
 
-    - name: Register backups required space for export_import with an extra safety margin of 256mib
+    - name: Register backups required space for export_import
       set_fact:
-        backups_required_bytes: >
+        backups_required_bytes_no_margin: >
           {{ [ceph_used_bytes | default(0) | int,
               old_pool_bytes | default(0) | int]
-              | max + 268435456 }}
-        cacheable: true
+              | max }}
       when: migration_type == 'export_import'
 
-    - name: Register backups required space for in_service with an extra safety margin of 256mib
+    - name: Register backups required space for in_service
+      set_fact:
+        backups_required_bytes_no_margin: >
+          {{ old_pool_bytes | default(0) }}
+      when: migration_type == 'in_service'
+
+    - name: Calculate safety margin for backups
+      set_fact:
+        backups_safety_margin_bytes: >
+          {{ [backups_required_bytes_no_margin | int * (backups_max_safety_margin_percent | int / 100),
+              backups_min_safety_margin_bytes | int] | max }}
+
+    - name: Register final backups required space with an extra safety margin
       set_fact:
         backups_required_bytes: >
-          {{ old_pool_bytes | default(0) | int + 268435456 }}
+          {{ backups_required_bytes_no_margin | int + backups_safety_margin_bytes | int }}
         cacheable: true
-      when: migration_type == 'in_service'
   when: backups_required_bytes is undefined
 
 - name: Show available space in bytes

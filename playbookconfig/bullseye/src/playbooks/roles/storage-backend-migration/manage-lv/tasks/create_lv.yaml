@@ -28,12 +28,12 @@
 # A multiple of the VG extent size, avoids error in LV creation with sizes not
 # multiple of the block size, since extent size is already a multiple of block
 # size. And avoids LVM rounding up the LV size passed to be conformant with the
-# extent size.
+# extent size by itself.
 - name: >
-    Round down LV size required ({{ backups_required_bytes }})
+    Round up LV size required ({{ backups_required_bytes }})
     to a multiple of the VG extent size"
   set_fact:
-    lv_size_bytes: "{{ (backups_required_bytes | int // vg_extent_size.stdout | int) * vg_extent_size.stdout | int }}"
+    lv_size_bytes: "{{ ((backups_required_bytes | int + vg_extent_size.stdout | int - 1) // vg_extent_size.stdout | int) * vg_extent_size.stdout | int }}"
 
 - name: "Show LV size"
   debug:

@@ -39,6 +39,8 @@
 # - minimum_platform_mem_workers: 1000 <= int <= 100000
 # - storage_backend_migration_backup_dir: string
 # - backups_path: <path/to/backups> (for export-import migration type or in-service if using kube-rbdkube-system pool)
+# - backups_min_safety_margin_bytes: int
+# - backups_max_safety_margin_percent: 0 <= int <= 100
 # - erase_rbd_snapshots: bool
 #
 
@@ -100,6 +102,24 @@
         fail_msg: "storage_backend_migration_backup_dir must be a non-empty string"
       when: storage_backend_migration_backup_dir is defined
 
+    - name: Validate backups_max_safety_margin_percent
+      assert:
+        that:
+          - backups_max_safety_margin_percent | int >= 0 and backups_max_safety_margin_percent | int <= 100
+        fail_msg: >
+          "backups_max_safety_margin_percent must be between 0 and 100,
+          got: {{ backups_max_safety_margin_percent }}"
+      when: backups_max_safety_margin_percent is defined
+
+    - name: Validate backups_min_safety_margin_bytes
+      assert:
+        that:
+          - backups_min_safety_margin_bytes | int is integer
+        fail_msg: >
+          backups_min_safety_margin_bytes must be an integer,
+          got: {{ backups_min_safety_margin_bytes }}
+      when: backups_min_safety_margin_bytes is defined
+
     - name: Validate backups_path
       assert:
         that:
@@ -148,9 +168,6 @@
       set_fact:
         extra_vars_arg: >
           {%- set vars_list = [] -%}
-          {%- if backups_path is defined -%}
-            {%- set _ = vars_list.append('backups_path=' + backups_path) -%}
-          {%- endif -%}
           {%- if osd_usage_safety_margin_percent is defined -%}
             {%- set _ = vars_list.append('osd_usage_safety_margin_percent=' + osd_usage_safety_margin_percent | string) -%}
           {%- endif -%}
@@ -165,6 +182,12 @@
           {%- endif -%}
           {%- if backups_path is defined -%}
             {%- set _ = vars_list.append('backups_path=' + backups_path) -%}
+          {%- endif -%}
+          {%- if backups_min_safety_margin_bytes is defined -%}
+            {%- set _ = vars_list.append('backups_min_safety_margin_bytes=' + backups_min_safety_margin_bytes | string) -%}
+          {%- endif -%}
+          {%- if osd_usage_safety_margin_percent is defined -%}
+            {%- set _ = vars_list.append('osd_usage_safety_margin_percent=' + osd_usage_safety_margin_percent | string) -%}
           {%- endif -%}
           {%- if erase_rbd_snapshots is defined -%}
             {%- set _ = vars_list.append('erase_rbd_snapshots=' + erase_rbd_snapshots) -%}

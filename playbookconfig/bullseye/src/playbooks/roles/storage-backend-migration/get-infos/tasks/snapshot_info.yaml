@@ -29,7 +29,7 @@
     - name: Get VolumeSnapshot for RBD
       shell: >
         kubectl get VolumeSnapshot
-        -o jsonpath='{range .items[?(@.spec.volumeSnapshotClassName=="rbd-snapshot")]}{.metadata.name}{"\n"}{end}'
+        -o jsonpath='{range .items[?(@.spec.volumeSnapshotClassName=="rbd-snapshot")]}{.metadata.name}{"\n"}{end}' -A
       register: rbd_vs_output
       environment:
         KUBECONFIG: "{{ kubeconfig }}"
@@ -69,7 +69,7 @@
     - name: Get VolumeSnapshot for CephFs
       shell: >
         kubectl get VolumeSnapshot
-        -o jsonpath='{range .items[?(@.spec.volumeSnapshotClassName=="cephfs-snapshot")]}{.metadata.name}{"\n"}{end}'
+        -o jsonpath='{range .items[?(@.spec.volumeSnapshotClassName=="cephfs-snapshot")]}{.metadata.name}{"\n"}{end}' -A
       register: cephfs_vs_output
       environment:
         KUBECONFIG: "{{ kubeconfig }}"
