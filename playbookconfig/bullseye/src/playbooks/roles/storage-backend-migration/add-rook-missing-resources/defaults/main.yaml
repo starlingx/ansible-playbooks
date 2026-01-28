@@ -1,0 +1,8 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+yaml_files:
+  - ceph_wipe_disks_service_account.yaml

@@ -117,6 +117,7 @@
 
   roles:
     - role: deploy-rook-post-checks
+    - role: add-rook-missing-resources
     - role: recreate-pvcs
       when: migration_type == "redeploy"
 

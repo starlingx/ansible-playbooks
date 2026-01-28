@@ -281,6 +281,7 @@
 
   roles:
     - role: deploy-rook-post-checks
+    - role: add-rook-missing-resources
     - role: recreate-pvs
     - role: manage-snapshotter
       snap_action: disable
