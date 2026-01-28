@@ -167,7 +167,7 @@ initialize_env() {
 
     export OSTREE_REPO="/var/www/pages/feed/rel-${MAJOR_SW_VERSION}/ostree_repo"
     export OSTREE_SYSROOT_REPO="/sysroot/ostree/repo"
-    export OSTREE_REMOTE=starlingx
+    export OSTREE_REMOTE="prestage-source"
     export OSTREE_BRANCH=starlingx
     export OSTREE_LOCAL_REF="${OSTREE_REMOTE}"
     export OSTREE_REMOTE_REF="${OSTREE_REMOTE}:${OSTREE_BRANCH}"
