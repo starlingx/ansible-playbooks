@@ -7,8 +7,8 @@
 - name: Display system alarms if any
   include_tasks: "display_alarms.yaml"
 
-- name: Check if any applications are in applying state
-  include_tasks: "check_any_applications_applying.yaml"
+- name: Check if any applications are in a undesired state
+  include_tasks: "check_any_applications_state.yaml"
 
 - name: Check Ceph cluster health
   include_tasks: "check_ceph_cluster_health.yaml"
@@ -60,3 +60,6 @@
 
 - name: Check if any pods are using Ceph PVCs
   include_tasks: "check_ceph_pvcs.yaml"
+
+- name: Check if any VolumeSnapshot is not ready
+  include_tasks: "check_volume_snapshots.yaml"

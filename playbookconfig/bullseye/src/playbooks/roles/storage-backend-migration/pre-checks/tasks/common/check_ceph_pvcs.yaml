@@ -57,3 +57,21 @@
   fail:
     msg: "One or more Ceph PVCs are still in use or query failed"
   when: ceph_pvc_check.rc != 0
+
+- name: Check if any Ceph PVCs are not bound
+  shell: |
+    kubectl get pvc \
+    -o jsonpath='{range .items[?(@.status.phase!="Bound")]}{.metadata.namespace}{" "}{.metadata.name}{" "}{.spec.storageClassName}{"\n"}{end}' -A \
+    | awk '$3 == "cephfs" || $3 == "general"'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: pending_pvcs
+
+- name: Fail if any Ceph PVCs are not bound
+  fail:
+    msg: |
+      One or more Ceph PVCs are not bound:
+      {% for item in pending_pvcs.stdout_lines %}
+      - {{ item }}
+      {% endfor %}
+  when: pending_pvcs.stdout_lines | length > 0
