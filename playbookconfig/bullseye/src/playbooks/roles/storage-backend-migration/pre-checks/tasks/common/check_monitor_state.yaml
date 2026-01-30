@@ -1,0 +1,28 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get monitor states in DB
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A
+    -c "SELECT h.hostname, c.state FROM i_host h JOIN ceph_mon c ON h.id = c.forihostid WHERE c.state != 'configured';"
+  register: get_monitor_states_output
+  changed_when: false
+
+- name: Debug monitors not in configured
+  debug:
+    var: get_monitor_states_output.stdout_lines
+
+- name: Fail if monitors are not in configured state
+  fail:
+    msg: |
+      Found monitors not in configured state:
+      {% for line in get_monitor_states_output.stdout_lines %}
+      {% set parts = line.split('|') %}
+      - Host {{ parts[0] }}: Monitor (state: {{ parts[1] }})
+      {% endfor %}
+  when: get_monitor_states_output.stdout_lines | length > 0

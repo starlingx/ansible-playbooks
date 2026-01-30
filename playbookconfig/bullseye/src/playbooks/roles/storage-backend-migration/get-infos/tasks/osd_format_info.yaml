@@ -25,7 +25,6 @@
 
 - name: Build OSD info lookup table with metadata
   shell: "ceph osd metadata {{ item }} -f json"
-  delegate_to: "{{ host_with_mon_and_osd }}"
   register: osd_metadata_results
   changed_when: false
   loop: "{{ all_osd_ids }}"
