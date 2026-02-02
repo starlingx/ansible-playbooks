@@ -38,17 +38,21 @@
   vars:
     app_name_to_check: "rook-ceph"
 
-- name: Abort rook-ceph apply if not in apply-failed
+- name: Abort rook-ceph apply if not in apply-failed or applied
   block:
     - name: Abort app apply
       environment: "{{ system_env }}"
       command: system application-abort rook-ceph
+      register: abort_result
+      failed_when: >
+        abort_result.rc != 0 and
+        "operation is not allowed while the current status is applied" not in abort_result.stderr
 
-    - name: Wait for rook-ceph to reach 'apply-failed' status
+    - name: Wait for rook-ceph to reach acceptable status
       include_tasks: "{{ role_path_common }}/tasks/check_app_status.yaml"
       vars:
         app_name_to_check: "rook-ceph"
-        success_statuses: "apply-failed"
+        success_statuses: ["apply-failed", "applied"]
         retries: 60
         delay: 10
   when: app_status_check.stdout | trim not in ['apply-failed', 'applied']
