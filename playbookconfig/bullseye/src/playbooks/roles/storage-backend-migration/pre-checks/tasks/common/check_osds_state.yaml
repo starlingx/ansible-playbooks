@@ -1,0 +1,30 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get OSD states in DB
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A
+    -c "SELECT i_istor.osdid, i_host.hostname, i_istor.state
+    FROM i_istor JOIN i_host ON i_istor.forihostid = i_host.id
+    WHERE i_istor.state != 'configured';"
+  register: get_osd_states_output
+  changed_when: false
+
+- name: Debug OSDs not in configured
+  debug:
+    var: get_osd_states_output.stdout_lines
+
+- name: Fail if OSDs are not in configured state
+  fail:
+    msg: |
+      Found OSDs not in configured state:
+      {% for line in get_osd_states_output.stdout_lines %}
+      {% set parts = line.split('|') %}
+      - Host {{ parts[1] }}: OSD {{ parts[0] }} (state: {{ parts[2] }})
+      {% endfor %}
+  when: get_osd_states_output.stdout_lines | length > 0

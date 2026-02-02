@@ -35,6 +35,12 @@
 - name: Check if system is in-sync and reconciled
   include_tasks: "check_system_in_sync_reconciled.yaml"
 
+- name: Check if any monitors are not configured
+  include_tasks: "check_monitor_state.yaml"
+
+- name: Check if any OSDs are not configured
+  include_tasks: "check_osds_state.yaml"
+
 - name: Check if there is a backup or restore in progress
   include_tasks: "check_backup_or_restore_in_progress.yaml"
 

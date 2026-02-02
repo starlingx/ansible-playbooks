@@ -67,27 +67,35 @@
     ansible_password: "{{ ansible_password }}"
     system: "{{ system }}"
   loop: "{{ groups.with_osds | intersect(groups.with_monitor) }}"
+  when:
+    - groups.with_osds | default([]) | length > 0
+    - groups.with_monitor | default([]) | length > 0
 
 - name: Debug with_mon_and_osd group
   debug:
     var: groups.with_mon_and_osds
+  when: groups.with_mon_and_osds is defined
 
 # NOTE: For storage, since we don't have OSDs on controllers, the
 #       host_with_mon_and_osd must be the storage-0 after setting the host-fs (mon).
 - name: Set main host with mon and OSD
   set_fact:
-    host_with_mon_and_osd: "{{ groups.with_mon_and_osds | first }}"
+    host_with_mon_and_osd: "{{ groups.with_mon_and_osds | default([]) | first | default('') }}"
     cacheable: true
   when: host_with_mon_and_osd is undefined
 
 - name: Debug host_with_mon_and_osd
   debug:
     var: host_with_mon_and_osd
+  when: host_with_mon_and_osd is defined
 
 - name: Set disks_by_host if undefined
   include_tasks: osd_format_info.yaml
-  when: disks_by_host is undefined
+  when:
+    - disks_by_host is undefined
+    - groups.with_osds | length > 0
 
 - name: Debug disks_by_host
   debug:
     var: disks_by_host
+  when: disks_by_host is defined
