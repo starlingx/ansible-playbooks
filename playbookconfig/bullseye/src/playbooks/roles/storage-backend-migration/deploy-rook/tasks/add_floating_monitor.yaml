@@ -31,6 +31,13 @@
   delay: 10
   changed_when: false
 
+- name: Give the standby host a few extra seconds
+  pause:
+    seconds: 20
+  run_once: true
+  delegate_to: "{{ system.active_controller }}"
+  changed_when: false
+
 - name: Create floating monitor
   environment: "{{ system_env }}"
   command: system controllerfs-add ceph-float=20
@@ -54,7 +61,7 @@
     FROM controller_fs WHERE name='ceph-float';"
   register: ceph_float_check
   until: ceph_float_check.stdout == "available"
-  retries: 60
+  retries: 240
   delay: 10
   changed_when: false
 
