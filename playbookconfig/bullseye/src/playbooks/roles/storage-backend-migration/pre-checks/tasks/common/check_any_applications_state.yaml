@@ -1,0 +1,26 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Check for applications not in applied or uploaded state
+  become: true
+  become_user: postgres
+  command: psql -d sysinv -t -A -c "SELECT name FROM kube_app WHERE status NOT IN ('inactive', 'applied', 'uploaded');"
+  changed_when: false
+  register: apps_checking_check
+
+- name: Debug applications in non-terminal state
+  debug:
+    var: apps_checking_check.stdout_lines
+  when: apps_checking_check.stdout_lines | length > 0
+
+- name: Fail if any applications are not in applied or uploaded state
+  fail:
+    msg: >-
+      One or more applications are not in "applied" or "uploaded" state.
+      Please wait until all applications reach expected states.
+      Output:
+      {{ apps_checking_check.stdout_lines }}
+  when: apps_checking_check.stdout_lines | length > 0

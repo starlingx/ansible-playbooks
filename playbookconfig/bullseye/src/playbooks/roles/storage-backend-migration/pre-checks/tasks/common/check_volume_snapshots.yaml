@@ -1,0 +1,23 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Check if any Ceph VolumeSnapshot is not ready
+  shell: |
+    kubectl get volumesnapshot \
+    -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,READY:.status.readyToUse,SNAPSHOT:.spec.volumeSnapshotClassName -A \
+    | awk '$3 != "true" && ($4 == "cephfs-snapshot" || $4 == "rbd-snapshot")'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: not_ready_vs
+
+- name: Fail if any Ceph VolumeSnapshot is not ready
+  fail:
+    msg: |
+      One or more Ceph VolumeSnapshots are not ready:
+      {% for item in not_ready_vs.stdout_lines %}
+      - {{ item }}
+      {% endfor %}
+  when: not_ready_vs.stdout_lines | length > 0
