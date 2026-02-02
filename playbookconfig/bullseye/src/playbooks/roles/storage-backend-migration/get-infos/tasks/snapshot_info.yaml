@@ -29,20 +29,35 @@
     - name: Get VolumeSnapshot for RBD
       shell: >
         kubectl get VolumeSnapshot
-        -o jsonpath='{range .items[?(@.spec.volumeSnapshotClassName=="rbd-snapshot")]}{.metadata.name}{"\n"}{end}' -A
+        -o jsonpath='{range .items[?(@.spec.volumeSnapshotClassName=="rbd-snapshot")]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' -A
       register: rbd_vs_output
       environment:
         KUBECONFIG: "{{ kubeconfig }}"
 
-    - name: Set rbd_vs
+    - name: Set rbd_vs_raw
       set_fact:
-        rbd_vs: "{{ rbd_vs_output.stdout_lines }}"
+        rbd_vs_raw: "{{ rbd_vs_output.stdout_lines }}"
         cacheable: true
-  when: rbd_vs is undefined
+  when: rbd_vs_raw is undefined
 
-- name: Display rbd VolumeSnapshot
+- name: Build dict with RBD VolumeSnapshot names keyed by namespace
+  set_fact:
+    rbd_vs_by_namespace: >
+      {{
+      rbd_vs_by_namespace
+      | default({})
+      | combine(
+          { item.split()[0]: [{ 'name': item.split()[1] }]},
+          list_merge='append'
+        )
+      }}
+  loop: "{{ rbd_vs_raw }}"
+  when: rbd_vs_raw | default([]) | length > 0
+
+- name: Display rbd VolumeSnapshot by namespace
   debug:
-    var: rbd_vs
+    var: rbd_vs_by_namespace
+  when: rbd_vs_by_namespace is defined
 
 - name: Get VolumeSnapshotContent for CephFs and set var
   block:
@@ -69,17 +84,32 @@
     - name: Get VolumeSnapshot for CephFs
       shell: >
         kubectl get VolumeSnapshot
-        -o jsonpath='{range .items[?(@.spec.volumeSnapshotClassName=="cephfs-snapshot")]}{.metadata.name}{"\n"}{end}' -A
+        -o jsonpath='{range .items[?(@.spec.volumeSnapshotClassName=="cephfs-snapshot")]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' -A
       register: cephfs_vs_output
       environment:
         KUBECONFIG: "{{ kubeconfig }}"
 
-    - name: Set cephfs_vs
+    - name: Set cephfs_vs_raw
       set_fact:
-        cephfs_vs: "{{ cephfs_vs_output.stdout_lines }}"
+        cephfs_vs_raw: "{{ cephfs_vs_output.stdout_lines }}"
         cacheable: true
-  when: cephfs_vs is undefined
+  when: cephfs_vs_raw is undefined
 
-- name: Display CephFs VolumeSnapshot
+- name: Build dict with CephFs VolumeSnapshot names keyed by namespace
+  set_fact:
+    cephfs_vs_by_namespace: >
+      {{
+      cephfs_vs_by_namespace
+      | default({})
+      | combine(
+          { item.split()[0]: [{ 'name': item.split()[1] }]},
+          list_merge='append'
+        )
+      }}
+  loop: "{{ cephfs_vs_raw }}"
+  when: cephfs_vs_raw | default([]) | length > 0
+
+- name: Display CephFs VolumeSnapshot by namespace
   debug:
-    var: cephfs_vs
+    var: cephfs_vs_by_namespace
+  when: cephfs_vs_by_namespace is defined

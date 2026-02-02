@@ -29,10 +29,10 @@
       Also check RBD snap images using 'rbd ls' on the RBD pools.
 
       VolumeSnapshotsContents: {{ rbd_vsc }}
-      VolumeSnapshots: {{ rbd_vs }}
+      VolumeSnapshots: {{ rbd_vs_by_namespace | default({}) }}
   when: >
     not erase_rbd_snapshots_cache | bool and
-    (rbd_vs | length > 0 or
+    (rbd_vs_raw | length > 0 or
     rbd_vsc | length > 0 or
     rbd_snap_images_output.results | selectattr('rc', 'equalto', 0) | list | length > 0)
 

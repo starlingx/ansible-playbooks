@@ -4,16 +4,15 @@
       include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
       vars:
         kind: VolumeSnapshot
-        namespace: "-A"
-        name: "{{ item }}"
-      loop: "{{ cephfs_vs }}"
-      when: cephfs_vs | length > 0
+        k8s_namespace: "{{ item.0.key }}"
+        name: "{{ item.1.name }}"
+      loop: "{{ cephfs_vs_by_namespace | dict2items | subelements('value') }}"
+      when: cephfs_vs_by_namespace | default({}) | length > 0
 
     - name: Delete CephFs VSC
       include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
       vars:
         kind: VolumeSnapshotContents
-        namespace: "-A"
         name: "{{ item }}"
       loop: "{{ cephfs_vsc }}"
       when: cephfs_vsc | length > 0
@@ -23,16 +22,15 @@
   include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
   vars:
     kind: VolumeSnapshot
-    namespace: "-A"
-    name: "{{ item }}"
-  loop: "{{ rbd_vs }}"
-  when: rbd_vs | length > 0
+    k8s_namespace: "{{ item.0.key }}"
+    name: "{{ item.1.name }}"
+  loop: "{{ rbd_vs_by_namespace | dict2items | subelements('value') }}"
+  when: rbd_vs_by_namespace | default({}) | length > 0
 
 - name: Delete RBD VSC
   include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
   vars:
     kind: VolumeSnapshotContents
-    namespace: "-A"
     name: "{{ item }}"
   loop: "{{ rbd_vsc }}"
   when: rbd_vsc | length > 0
