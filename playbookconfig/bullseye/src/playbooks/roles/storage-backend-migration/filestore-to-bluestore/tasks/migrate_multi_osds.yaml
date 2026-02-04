@@ -4,6 +4,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+- name: Unmanage ceph-osd service
+  command: sm-unmanage service ceph-osd
+
 - name: Deprovision ceph-osd service
   command: sm-deprovision service-group-member --apply storage-services ceph-osd
 
