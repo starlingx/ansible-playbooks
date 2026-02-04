@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2023,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -45,17 +45,26 @@
       connection: "{{ target_connection }}"
 
     - block:
-      - name: Build list of backup directories
-        set_fact:
-          release_list: "{{ find_result.files | map(attribute='path') | list | sort }}"
+      - name: Get minimum supported release version
+        import_role:
+          name: common/minimum-upgradable-release
 
-      - name: Remove backup directory of older release(s), keep only the newest version
+      - set_fact:
+          old_backups: []
+
+      - name: Filter old backup directories to remove
+        set_fact:
+          old_backups: "{{ old_backups + [item] }}"
+        when: item | basename is version(minimum_supported_release_version, '<')
+        loop: "{{ find_result.files | map(attribute='path') | list }}"
+
+      - name: Remove backup directories older than minimum supported version
         file:
           path: "{{ item }}"
           state: absent
-        loop: "{{ release_list[0:-1] }}"
+        loop: "{{ old_backups }}"
         connection: "{{ target_connection }}"
-      when: find_result.matched > 1
+      when: find_result.matched > 0
 
     when: not local or backup_dir == default_local_backup_dir
 
