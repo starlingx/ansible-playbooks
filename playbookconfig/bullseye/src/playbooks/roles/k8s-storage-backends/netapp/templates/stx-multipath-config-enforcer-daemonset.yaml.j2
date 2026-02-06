@@ -95,6 +95,7 @@ spec:
         volumeMounts:
         - name: host-system
           mountPath: /host
+          mountPropagation: "Bidirectional"
         securityContext:
           privileged: true
       volumes:

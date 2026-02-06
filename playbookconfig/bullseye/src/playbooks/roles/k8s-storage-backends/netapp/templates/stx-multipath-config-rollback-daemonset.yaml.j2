@@ -28,7 +28,7 @@ spec:
           # Print the verification time
           date
 
-          if [ -f "$FLAG_DONE_FILE" ]; then
+          if [ -f "$DONE_FLAG_FILE" ]; then
             echo "The flag already exists, so the rollback has already been done."
             sleep infinity
           fi
@@ -84,6 +84,7 @@ spec:
         volumeMounts:
         - name: host-system
           mountPath: /host
+          mountPropagation: "Bidirectional"
         securityContext:
           privileged: true
       volumes:
