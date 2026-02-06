@@ -37,7 +37,7 @@
     - name: Clear storage-backend migration capability
       become: true
       become_user: postgres
-      command: >
+      shell: >
         psql -d sysinv -c "
         UPDATE storage_backend
         SET capabilities = (capabilities::jsonb - 'migration_type' - 'migration_step' - 'migration_status')::text
