@@ -12,6 +12,22 @@
     - name: Clear Facts Cache (Ansible Cache)
       meta: clear_facts
 
+    - name: Clear Facts Cache (Ansible Cache) for localhost in dynamic place
+      file:
+        path: "~/.storage-backend-migration-ansible-cache/localhost"
+        state: absent
+      delegate_to: localhost
+      become: false
+      ignore_errors: true
+
+    - name: Clear Facts Cache (Ansible Cache) for localhost in a fixed place
+      file:
+        path: "/home/sysadmin/.storage-backend-migration-ansible-cache/localhost"
+        state: absent
+      delegate_to: localhost
+      become: false
+      ignore_errors: true
+
     - name: Show that cleanup is complete
       debug:
         msg: "The checkpoint tasks failed and the Ansible facts cache has been cleared."
