@@ -62,8 +62,6 @@
         storage_hardware: "{{ storage_hardware_tmp }}"
         cacheable: true
 
-  when: storage_hardware is undefined
-
 - name: Check for NUMA 1 existance on storage nodes
   block:
     - name: Check for NUMA 1 on memory show
@@ -77,7 +75,6 @@
       set_fact:
         storages_have_numa_1: "{{ numa_1_check.rc == 0 }}"
         cacheable: true
-  when: storages_have_numa_1 is undefined
 
 - name: Display storages_have_numa_1
   debug:
@@ -90,7 +87,7 @@
 - name: Compute minimum values for CPU and memory
   set_fact:
     min_storage_cpus: "{{ [storage_hardware.values() | map(attribute='cpu_cores') | min | int - 1, 1] | max }}" # either all cpus - 1 or at least 1
-    min_storage_memory_mib: "{{ [(storage_hardware.values() | map(attribute='total_memory_mib') | min | int) * 2 // 3, minimum_platform_mem_workers | int] | max }}" # either 2/3 of the memory or at least minimum_platform_mem_workers
+    min_storage_memory_mib: "{{ [((storage_hardware.values() | map(attribute='total_memory_mib') | min | int) * 2 // 3) - 200, minimum_platform_mem_workers | int] | max }}" # either 2/3 of the memory -200 or at least minimum_platform_mem_workers
     cacheable: true
 
 - name: Debug min_storage_cpus
