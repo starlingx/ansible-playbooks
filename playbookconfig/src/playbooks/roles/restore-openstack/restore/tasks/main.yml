@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019,2022 Wind River Systems, Inc.
+# Copyright (c) 2019,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -99,6 +99,29 @@
     register: helm_overrides_sqldump_dir
     become_user: postgres
 
+  - name: Dump current helm_overrides from MariaDB (SQL format)
+    shell: >
+      psql -At -c "
+      select
+      'update helm_overrides set '
+      || 'system_overrides='
+      || coalesce(quote_literal(system_overrides), 'NULL')
+      || ', user_overrides='
+      || coalesce(quote_literal(user_overrides), 'NULL')
+      || ' where name='''
+      || name
+      || ''' and namespace=''openstack'';'
+      from helm_overrides
+      where namespace='openstack';
+      " sysinv
+    become_user: postgres
+    register: current_overrides_sql
+
+  - name: Write current overrides SQL to tmp file
+    copy:
+      dest: "{{ helm_overrides_sqldump_dir.path }}/current_overrides.sql"
+      content: "{{ current_overrides_sql.stdout }}"
+
   - name: Restore Helm Overrides dump file
     command: >-
       tar -C {{ helm_overrides_sqldump_dir.path }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
@@ -106,9 +129,16 @@
     args:
       warn: false
 
+  - name: Merge user_overrides
+    command: >
+      python3 roles/restore-openstack/files/merge_user_overrides.py
+      {{ helm_overrides_sqldump_dir.path }}/helm_overrides_dump.sql
+      {{ helm_overrides_sqldump_dir.path }}/current_overrides.sql
+      {{ helm_overrides_sqldump_dir.path }}/merged_overrides.sql
+
   - name: Apply Helm Overrides dump file
     shell: >-
-      psql -f {{ helm_overrides_sqldump_dir.path }}/helm_overrides_dump.sql sysinv
+      psql -f {{ helm_overrides_sqldump_dir.path }}/merged_overrides.sql sysinv
     become_user: postgres
 
   - name: Remove Helm Overrides backup directory
