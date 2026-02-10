@@ -4,8 +4,17 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+- name: Create SM crash prevention file
+  file:
+    path: /var/run/.sm_no_trap_conn_loss_exit
+    state: touch
+    modification_time: preserve
+    access_time: preserve
+  when: inventory_hostname in groups.controllers
+
 - name: Deprovision Services
   include_tasks: deprovision_services.yaml
+  when: inventory_hostname in groups.controllers
 
 - name: Retrieve all ceph backends aside from original
   become: true
@@ -81,3 +90,9 @@
 
 - name: Cleanup ceph files
   include_tasks: cleanup_ceph_files.yaml
+
+- name: Remove SM crash prevention file
+  file:
+    path: /var/run/.sm_no_trap_conn_loss_exit
+    state: absent
+  when: inventory_hostname in groups.controllers

@@ -4,19 +4,30 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+- name: Unmanage services
+  command: sm-unmanage service {{ item }}
+  loop:
+    - "ceph-osd"
+    - "mgr-restful-plugin"
+    - "ceph-manager"
+    - "cephmon-fs" # Gets deprovisioned later
+    - "drbd-cephmon"
+    - "ceph-mon"
+    - "storage-networking"
+
 - name: Deprovision services
   command: sm-deprovision service-group-member --apply {{ item.group }} {{ item.member }}
   loop:
     - group: "storage-services"
       member: "ceph-osd"
-    - group: "storage-monitoring-services"
-      member: "ceph-manager"
     - group: "storage-services"
       member: "mgr-restful-plugin"
-    - group: "controller-services"
-      member: "ceph-mon"
+    - group: "storage-monitoring-services"
+      member: "ceph-manager"
     - group: "controller-services"
       member: "drbd-cephmon"
+    - group: "controller-services"
+      member: "ceph-mon"
     - group: "storage-services"
       member: "storage-networking"
   loop_control:
