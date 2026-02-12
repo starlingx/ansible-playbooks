@@ -115,6 +115,12 @@
   include_tasks: setup_oidc_auth_apps_requirements.yml
   when: distributed_cloud_role != 'subcloud'
 
+- name: Precheck Dex NodePort conflict before OIDC apply
+  include_tasks: check_dex_nodeport_conflict.yml
+  when:
+    - mode != 'restore'
+    - distributed_cloud_role != 'subcloud'
+
 # To apply oidc-auth-apps, it's needed common/install-platform-certificates
 # to be done due the required oidc-auth-apps-certificate
 - name: Apply oidc-auth-apps

@@ -1,0 +1,35 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Verify Dex NodePort availability right before applying OIDC.
+#   This is a fail-fast precheck to avoid a later Helm/apply failure
+#   when NodePort 30556 is already allocated by another Service.
+
+- name: Check whether NodePort 30556 is already used
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  shell: >-
+    kubectl get svc -A -o jsonpath='{range .items[*]}
+    {.metadata.namespace}/{.metadata.name}{" "}{range .spec.ports[*]}
+    {.nodePort}{" "}{end}{"\n"}{end}' | grep -w '30556' || true
+  args:
+    executable: /bin/bash
+  register: dex_port_conflict
+  changed_when: false
+
+- name: Fail bootstrap if NodePort 30556 is in use
+  fail:
+    msg: |
+      Bootstrap aborted before OIDC apply: NodePort 30556 is already allocated.
+      Conflicting service(s):
+      {{ dex_port_conflict.stdout }}
+  when: dex_port_conflict.stdout | trim != ""
+
+- name: Log success when NodePort 30556 is free
+  debug:
+    msg: "Precheck passed: NodePort 30556 is free."
+  when: dex_port_conflict.stdout | trim == ""
