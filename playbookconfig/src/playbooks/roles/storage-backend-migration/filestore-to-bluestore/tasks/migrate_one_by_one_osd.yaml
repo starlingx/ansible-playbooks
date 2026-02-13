@@ -14,7 +14,7 @@
       command: ceph osd safe-to-destroy {{ item.osd_id }}
       register: safe_to_destroy_check
       until: safe_to_destroy_check.rc == 0
-      retries: 720
+      retries: 1080
       delay: 10
       failed_when: safe_to_destroy_check.rc != 0
       changed_when: false
@@ -110,7 +110,7 @@
 - name: Wait until cluster finishes recovery
   command: ceph health -f json
   register: ceph_health
-  retries: 720
+  retries: 1080
   delay: 10
   until: >
     (
