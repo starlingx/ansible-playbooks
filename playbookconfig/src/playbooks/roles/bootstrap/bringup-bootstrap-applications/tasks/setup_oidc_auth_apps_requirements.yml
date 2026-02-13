@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2025 Wind River Systems, Inc.
+# Copyright (c) 2025,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -102,7 +102,7 @@
         {% if 'oidc-auth-apps' in path %}
           { {{ path | to_json }}: {{ {'overrides': oidc_overrides} | to_json }} }
         {% else %}
-          { {{ path | to_json }}: null }
+          { {{ path | to_json }}: {{ app[path] | to_json }} }
         {% endif %}
         {% if not loop.last %},{% endif %}
       {% endfor %}
