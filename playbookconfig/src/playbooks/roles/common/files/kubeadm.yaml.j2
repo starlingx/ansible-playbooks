@@ -9,15 +9,15 @@ nodeRegistration:
   # taint "node-role.kubernetes.io/master:NoSchedule" to control plane nodes
   taints: {{ kubelet_taints }}
   kubeletExtraArgs:
-    {{kubelet_extra_args | to_nice_yaml(width=512) | indent(4, indentfirst=False)}}
+    {{kubelet_extra_args | to_nice_yaml(width=512) | indent(4, false)}}
 ---
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: ClusterConfiguration
 apiServer:
   certSANs:
-  {{ apiserver_cert_list | to_nice_yaml(width=512) | indent(2, indentfirst=False) }}
+  {{ apiserver_cert_list | to_nice_yaml(width=512) | indent(2, false) }}
   extraArgs:
-    {{apiserver_extra_args | to_nice_yaml(width=512) | indent(4, indentfirst=False)}}
+    {{apiserver_extra_args | to_nice_yaml(width=512) | indent(4, false)}}
   extraVolumes:
 {% for volume in apiserver_extra_volumes %}
     - name: "{{ volume.name }}"
@@ -37,7 +37,7 @@ apiServer:
 {% endfor %}
 controllerManager:
   extraArgs:
-    {{controllermanager_extra_args | to_nice_yaml(width=512) | indent(4, indentfirst=False)}}
+    {{controllermanager_extra_args | to_nice_yaml(width=512) | indent(4, false)}}
   extraVolumes:
 {% for volume in controllermanager_extra_volumes %}
     - name: "{{ volume.name }}"
@@ -57,7 +57,7 @@ controllerManager:
 {% endfor %}
 scheduler:
   extraArgs:
-    {{scheduler_extra_args | to_nice_yaml(width=512) | indent(4, indentfirst=False)}}
+    {{scheduler_extra_args | to_nice_yaml(width=512) | indent(4, false)}}
   extraVolumes:
 {% for volume in scheduler_extra_volumes %}
     - name: "{{ volume.name }}"
@@ -91,8 +91,8 @@ dns:
 imageRepository: {{ image_repository }}
 kubernetesVersion: {{ kubernetes_long_version }}
 networking:
-  {{networking_configurations | to_nice_yaml(width=512) | indent(2, indentfirst=False)}}
+  {{networking_configurations | to_nice_yaml(width=512) | indent(2, false)}}
 ---
 kind: KubeletConfiguration
 apiVersion: kubelet.config.k8s.io/v1beta1
-{{kubelet_configurations | to_nice_yaml(width=512) | indent(0, indentfirst=False)}}
+{{kubelet_configurations | to_nice_yaml(width=512) | indent(0, false)}}
