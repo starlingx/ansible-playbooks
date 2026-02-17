@@ -105,8 +105,7 @@
         dest: "{{ branding_config_dir }}"
         remote_src: yes
         mode: preserve
-      loop:
-        - "{{ bt_result.files }}"
+      loop: "{{ bt_result.files }}"
 
   when: branding_result.stat.exists and branding_result.stat.isdir
 

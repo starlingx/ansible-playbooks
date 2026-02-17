@@ -66,7 +66,7 @@
         Docker registries are
         {%+ for k, v in docker_registries.items() %}
         {%+ if "password" in v %}
-        {%+ set _ = v.update({"password": "REDACTED"}) %}
+        {%+ set v = v | combine({"password": "REDACTED"}) %}
         {%+ endif %}
           {{ k }}:
             {{ (v | to_nice_yaml | indent(4)).rstrip() }}
@@ -901,7 +901,8 @@
                                       if system_mode != 'simplex'
                                       else cluster_floating_address }}"
       controller_1_cluster_host: "{{ cluster_floating_address|ipmath(2)
-                                      if system_mode != 'simplex' }}"
+                                      if system_mode != 'simplex'
+                                      else omit }}"
       controller_floating_address_url:
         "{{ controller_floating_address|ipwrap if controller_floating_address|ipv6 != False
         else controller_floating_address}}"
@@ -943,7 +944,8 @@
                                                   if system_mode != 'simplex'
                                                   else cluster_floating_address_secondary }}"
         controller_1_cluster_host_secondary: "{{ cluster_floating_address_secondary|ipmath(2)
-                                                  if system_mode != 'simplex' }}"
+                                                  if system_mode != 'simplex'
+                                                  else omit }}"
       when: cluster_floating_address_secondary is defined
 
     - name: Set secondary controller_floating_address_url_secondary addresses for subsequent tasks/roles
@@ -1160,19 +1162,19 @@
 # nginx need to be applied before cert manager
 - name: Append default nginx entry if not present
   set_fact:
-    applications: "[ {'{{ item.path }}': None}] + {{ applications }}"
+    applications: "{{ [ {item.path: None}] + applications }}"
   loop: "{{ find_nginx_tarball_output.files }}"
   when: item.path not in all_applications
 
 - name: Append default cert manager entry if not present
   set_fact:
-    applications: "{{ applications }} + [ {'{{ item.path }}': None}]"
+    applications: "{{ applications + [ {item.path: None}] }}"
   loop: "{{ find_cert_manager_tarball_output.files }}"
   when: item.path not in all_applications
 
 - name: Append default oidc-auth-apps entry if not present
   set_fact:
-    applications: "{{ applications }} + [ {'{{ item.path }}': None}]"
+    applications: "{{ applications + [ {item.path: None}] }}"
   loop: "{{ find_oidc_auth_apps_tarball_output.files }}"
   when:
     - item.path not in all_applications

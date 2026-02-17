@@ -479,7 +479,7 @@
     include_role:
       name: bootstrap/plugins
       tasks_from: "{{ item }}"
-    loop: "{{ k8s_plugins }}"
+    loop: "{{ k8s_plugins | default([],true) }}"
 
   - name: Create kube plugin list file
     copy:
@@ -603,8 +603,7 @@
       configmap "kube-apiserver-volumes---{{ item.item.name }}"
       -n kube-system --from-file "{{ item.item.hostPath }}"
     when: item.item.pathType == 'File' and item.rc != 0
-    loop:
-      - "{{ existent_configmaps.results }}"
+    loop: "{{ existent_configmaps.results }}"
 
   - name: Checking existing kube-controller-manager configmaps
     command: >
@@ -621,8 +620,7 @@
       "kube-controller-manager-volumes---{{ item.item.name }}"
       -n kube-system --from-file "{{ item.item.hostPath }}"
     when: item.item.pathType == 'File' and item.rc != 0
-    loop:
-      - "{{ existent_configmaps.results }}"
+    loop: "{{ existent_configmaps.results }}"
 
   - name: Checking existing kube-scheduler configmaps
     command: >
@@ -639,8 +637,7 @@
       configmap "kube-scheduler-volumes---{{ item.item.name }}"
       -n kube-system --from-file "{{ item.item.hostPath }}"
     when: item.item.pathType == 'File' and item.rc != 0
-    loop:
-      - "{{ existent_configmaps.results }}"
+    loop: "{{ existent_configmaps.results }}"
 
 # The following labels are used by pod security admission controller.
 # Also was added the label app.starlingx.io/component which is used

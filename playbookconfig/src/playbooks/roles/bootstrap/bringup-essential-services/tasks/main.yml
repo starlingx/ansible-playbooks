@@ -345,9 +345,7 @@
     retries: "{{ async_retries }}"
     delay: 6
     failed_when: false
-    loop:
-      - "{{ wait_for_kube_system_pods.results }}"
-      - "{{ wait_for_deployments.results }}"
+    loop: "{{ wait_for_kube_system_pods.results + wait_for_deployments.results }}"
 
   - name: Fail if any of the Kubernetes component or Networking pod are not ready by this time
     fail:

@@ -56,3 +56,4 @@
               trim == 'False' else item.split('=')[1] | trim )
         }) }}"
     loop: "{{ network_param_lines }}"
+    when: item | length > 0 and "=" in item
