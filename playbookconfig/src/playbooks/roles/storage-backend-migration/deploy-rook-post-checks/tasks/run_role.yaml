@@ -19,11 +19,6 @@
   debug:
     msg: "Final rook-ceph status: {{ app_status_check.stdout | trim }}"
 
-- name: Archive recent Ceph crashes
-  command: timeout 30 ceph crash archive-all
-  register: ceph_crash_result
-  changed_when: ceph_crash_result.stdout | length > 0
-
 - name: Give the cluster a few extra seconds to scrub and be stable
   pause:
     seconds: 10
@@ -34,8 +29,8 @@
 - name: Wait for Ceph cluster to reach HEALTH_OK
   command: timeout 30 ceph health detail
   register: ceph_health
-  until: "'HEALTH_OK' in ceph_health.stdout" # is HEALTH_WARN good enough?
-  retries: 60
+  until: "'HEALTH_OK' in ceph_health.stdout"
+  retries: 120
   delay: 10
   changed_when: false
 
