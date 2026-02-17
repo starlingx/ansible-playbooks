@@ -84,7 +84,14 @@
     db: "barbican"
     name: "admin-barbican"
     password: "{{ barbican_var_dict['barbican::db::postgresql::password'] }}"
-    priv: "ALL"
+
+- name: Grant ALL privileges to admin-barbican user
+  become_user: postgres
+  postgresql_privs:
+    db: barbican
+    role: admin-barbican
+    privs: ALL
+    type: database
 
 - name: Create barbican database
   postgresql_db:

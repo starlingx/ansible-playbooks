@@ -51,7 +51,19 @@
     db: sysinv
     name: "{{ sysinv_var_dict['sysinv::db::postgresql::user'] }}"
     password: "{{ sysinv_var_dict['sysinv::db::postgresql::password'] }}"
-    priv: ALL
+
+- name: Grant schema modification privileges to sysinv user
+  command: >-
+    psql -d sysinv -c "
+    GRANT CREATE ON DATABASE sysinv TO \"{{ sysinv_var_dict['sysinv::db::postgresql::user'] }}\";
+    GRANT CREATE, USAGE ON SCHEMA public TO \"{{ sysinv_var_dict['sysinv::db::postgresql::user'] }}\";
+    GRANT ALL ON ALL TABLES IN SCHEMA public TO \"{{ sysinv_var_dict['sysinv::db::postgresql::user'] }}\";
+    GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO \"{{ sysinv_var_dict['sysinv::db::postgresql::user'] }}\";
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON
+                                      TABLES TO \"{{ sysinv_var_dict['sysinv::db::postgresql::user'] }}\";
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON
+                                      SEQUENCES TO \"{{ sysinv_var_dict['sysinv::db::postgresql::user'] }}\";"
+  become_user: postgres
 
 - name: Create sysinv endpoints
   script: >

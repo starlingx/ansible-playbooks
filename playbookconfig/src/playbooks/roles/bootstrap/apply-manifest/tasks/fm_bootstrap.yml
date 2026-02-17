@@ -62,7 +62,17 @@
     db: "fm"
     name: "admin-fm"
     password: "{{ fm_var_dict['fm::db::postgresql::password'] }}"
-    priv: "ALL"
+
+- name: Grant schema modification privileges to fm user
+  command: >-
+    psql -d fm -c "
+    GRANT CREATE ON DATABASE fm TO \"admin-fm\";
+    GRANT CREATE, USAGE ON SCHEMA public TO \"admin-fm\";
+    GRANT ALL ON ALL TABLES IN SCHEMA public TO \"admin-fm\";
+    GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO \"admin-fm\";
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO \"admin-fm\";
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO \"admin-fm\";"
+  become_user: postgres
 
 - name: Ensure fm-rest-api package and fm python client package are installed
   become: true
