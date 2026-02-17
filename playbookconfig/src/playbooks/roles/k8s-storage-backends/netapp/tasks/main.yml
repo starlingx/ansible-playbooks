@@ -24,8 +24,7 @@
   template:
     src: "{{ item }}"
     dest: "{{ trident_setup_dir }}/setup/{{ item | basename | regex_replace('\\.j2$', '') }}"
-  with_fileglob:
-  - ../templates/*.j2
+  loop: "{{ query('fileglob', '../templates/*.j2') }}"
 
 # To check if trident is already installed we make a call to the REST-API of the trident server
 # using tridentctl. If we force a reinstall, we don't need to check

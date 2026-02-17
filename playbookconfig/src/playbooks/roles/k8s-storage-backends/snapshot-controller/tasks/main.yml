@@ -24,15 +24,14 @@
     src: "{{ item }}"
     dest: >-
       {{ snapshot_controller_setup_dir }}/volume-snapshot-controller/{{ item | basename | regex_replace('\.j2$', '') }}
-  with_fileglob:
-  - "{{ role_path }}/templates/k8s-{{ kubernetes_long_version }}/volume-snapshot-controller/*.j2"
+  loop: "{{ query('fileglob',
+            role_path ~ '/templates/k8s-' ~ kubernetes_long_version ~ '/volume-snapshot-controller/*.j2') }}"
 
 - name: Copy snapshots CRD files
   copy:
     src: "{{ item }}"
     dest: "{{ snapshot_controller_setup_dir }}/crd/{{ item | basename }}"
-  with_fileglob:
-  - k8s-{{ kubernetes_long_version }}/crd/*.yaml
+  loop: "{{ query('fileglob', 'k8s-' ~ kubernetes_long_version ~ '/crd/*.yaml') }}"
 
 - name: Add Snapshot CRDs
   command: "kubectl apply -f {{ snapshot_controller_setup_dir }}/crd"
