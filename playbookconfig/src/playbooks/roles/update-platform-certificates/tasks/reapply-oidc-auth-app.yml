@@ -21,7 +21,7 @@
 - name: Delete system-local-ca-oidc-secret before recreating it
   include_role:
     name: common/delete-kubernetes-resources
-  with_items:
+  loop:
     - { name: system-local-ca-oidc-secret, namespace: kube-system, type: secret }
 
 - name: Create override file for oidc-client helm chart
@@ -95,7 +95,7 @@
   until: helm_updates is not failed
   retries: 10
   delay: 30
-  with_items:
+  loop:
     - { chart: oidc-client, overrides_file: /tmp/oidc-client-override.yaml }
     - { chart: dex, overrides_file: /tmp/dex-override.yaml }
     - { chart: secret-observer, overrides_file: /tmp/secret-observer-override.yaml }

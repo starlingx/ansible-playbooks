@@ -20,7 +20,7 @@
   - name: Determine which postgresql database files exist
     stat:
       path: "{{ postgres_staging_dir }}/{{ item }}"
-    with_items:
+    loop:
       - "dcmanager.postgreSql.data"
       - "dcorch.postgreSql.data"
     register: pgfiles_dc
@@ -28,7 +28,7 @@
   - name: Restore postgres db for DC systemcontroller
     shell: "psql -f {{ item.stat.path }} {{ item.item.split('.')[0] }}"
     become_user: postgres
-    with_items: "{{ pgfiles_dc.results }}"
+    loop: "{{ pgfiles_dc.results }}"
     when: item.stat.exists
 
   - name: Extract .subcloud_alarm.csv if exist

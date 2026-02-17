@@ -15,7 +15,7 @@
 
   - name: Shutdown FM services
     command: "{{ item }}"
-    with_items:
+    loop:
       - /etc/init.d/fminit stop
       - /etc/init.d/fm-api stop
 
@@ -62,7 +62,7 @@
 
     - name: Delete stale kube-apiserver pod to ensure new one picks up new etcd client certs
       shell: "{{ item }}"
-      with_items:
+      loop:
         - "crictl stopp {{ kube_apiserver_pod_id.stdout }}"
         - "crictl rmp {{ kube_apiserver_pod_id.stdout }}"
 
@@ -251,7 +251,7 @@
   - name: Add admin address of the loopback interface on removal list
     set_fact:
       remove_items: "{{ remove_items + [item] }}"
-    with_items:
+    loop:
       - "ip addr delete {{ prev_admin_floating_virtual }} brd {{ prev_admin_broadcast }} dev lo:8 scope host"
     when: (prev_admin_network|bool == true)
 
@@ -260,14 +260,14 @@
     - name: Add secondary cluster floating of the loopback interface on removal list
       set_fact:
         remove_items: "{{ remove_items + [item] }}"
-      with_items:
+      loop:
         - "ip addr delete {{ prev_cluster_floating_virtual_secondary }} dev lo scope host"
       when: prev_cluster_floating_virtual_secondary is defined
 
     - name: Add secondary cluster floating of the loopback interface on removal list
       set_fact:
         remove_items: "{{ remove_items + [item] }}"
-      with_items:
+      loop:
         - "ip addr delete {{ prev_cluster_virtual_secondary }}  brd {{
           cluster_broadcast_secondary }} dev lo:5 scope host"
       when: prev_cluster_virtual_secondary is defined and cluster_broadcast_secondary is defined
@@ -275,7 +275,7 @@
     - name: Add secondary admin address of the loopback interface on removal list
       set_fact:
         remove_items: "{{ remove_items + [item] }}"
-      with_items:
+      loop:
         - "ip addr delete {{ prev_admin_floating_virtual_secondary }} brd {{
           prev_admin_broadcast_secondary }} dev lo:8 scope host"
       when: ((prev_admin_network|bool == true)
@@ -286,12 +286,12 @@
     shell: "{{ item }}"
     register: remove_addresses
     failed_when: false
-    with_items: "{{ remove_items }}"
+    loop: "{{ remove_items }}"
 
   - name: Fail if removing interface addresses failed for reason other than it has been done already
     fail:
       msg: "{{ item.item }} failed for reason: {{ item.stderr }}."
     when: item.rc != 0 and not incomplete_bootstrap
-    with_items: "{{ remove_addresses.results }}"
+    loop: "{{ remove_addresses.results }}"
 
   when: last_config_file_exists

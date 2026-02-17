@@ -22,7 +22,7 @@
     debug:
       msg: "{{ network_param.key }}:{{ network_param.value }} Validating:{{ item }}"
     failed_when: item|ipaddr == False
-    with_items: '{{ network_param.value.split(",") }}'
+    loop: '{{ network_param.value.split(",") }}'
 
   - set_fact:
       network_param_lines: ""
@@ -54,4 +54,4 @@
         {% set key, val = item.partition('=')[::2]|map('trim') -%}
         {% set val = False if val=='False' else val -%}
         {{ dual_stack_network_params|default({}) | combine ({network_param.key+"_"+key: val}) }}
-    with_items: "{{ network_param_lines }}"
+    loop: "{{ network_param_lines }}"

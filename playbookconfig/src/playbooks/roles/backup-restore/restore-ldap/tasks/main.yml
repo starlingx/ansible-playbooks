@@ -142,6 +142,6 @@
       file:
         path: "{{ item }}"
         state: absent
-      with_items:
+      loop:
         - "{{ staging_dir }}/ldap.db"
         - "{{ staging_dir }}/openldap"

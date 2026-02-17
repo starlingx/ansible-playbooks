@@ -50,7 +50,7 @@
     owner: "{{ item.owner }}"
     group: "{{ item.group }}"
     mode: 0755
-  with_items:
+  loop:
     - { path: "{{ config_permdir }}", owner: "root", group: "root" }
     - { path: "{{ sysinv_permdir }}", owner: "sysinv", group: "sysinv" }
 
@@ -65,7 +65,7 @@
     file:
       path: "{{ config_permdir }}/{{ item.path | basename}}"
       state: absent
-    with_items: "{{ config_find.files }}"
+    loop: "{{ config_find.files }}"
 
   - name: Move new config files to permanent location
     # Can't use command module due to wildcard
@@ -107,7 +107,7 @@
     dest: "{{ etcd_certs_dir }}/{{ item }}"
     remote_src: yes
     force: yes
-  with_items:
+  loop:
     - "etcd-server.crt"
     - "etcd-server.key"
     - "ca.crt"
@@ -181,7 +181,7 @@
   - name: Find old registry secrets in Barbican
     shell: "{{ item }}"
     failed_when: false
-    with_items:
+    loop:
       - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n k8s-registry-secret -f value"
       - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n gcr-registry-secret -f value"
       - "source /etc/platform/openrc; openstack secret list -c 'Secret href' -n quay-registry-secret -f value"
@@ -194,7 +194,7 @@
 
   - name: Delete old registry secrets in Barbican
     shell: "source /etc/platform/openrc; openstack secret delete {{ item }}"
-    with_items:
+    loop:
       - "{{ old_barbican_secrets.results | map(attribute='stdout_lines') | flatten }}"
 
   when: replayed
@@ -394,7 +394,7 @@
       owner: root
       group: root
       mode: 0755
-    with_items:
+    loop:
       - /etc/systemd/system/docker.service.d
       - /etc/systemd/system/containerd.service.d
 
@@ -407,7 +407,7 @@
       group: root
       mode: 0644
       remote_src: yes
-    with_items:
+    loop:
       - "{{ docker_proxy_conf }}"
       - "{{ containerd_proxy_conf }}"
 
@@ -415,7 +415,7 @@
     lineinfile:
       path: "{{ item }}"
       line: "[Service]"
-    with_items:
+    loop:
       - "{{ docker_proxy_conf }}"
       - "{{ containerd_proxy_conf }}"
 
@@ -423,7 +423,7 @@
     lineinfile:
       path: "{{ item }}"
       line: "Environment='HTTP_PROXY={{ docker_http_proxy }}'"
-    with_items:
+    loop:
       - "{{ docker_proxy_conf }}"
       - "{{ containerd_proxy_conf }}"
     when: docker_http_proxy != 'undef'
@@ -432,7 +432,7 @@
     lineinfile:
       path: "{{ item }}"
       line: "Environment='HTTPS_PROXY={{ docker_https_proxy }}'"
-    with_items:
+    loop:
       - "{{ docker_proxy_conf }}"
       - "{{ containerd_proxy_conf }}"
     when: docker_https_proxy != 'undef'
@@ -464,7 +464,7 @@
       state: restarted
       daemon_reload: yes
       name: "{{ item }}"
-    with_items:
+    loop:
       - docker
       - containerd
 
@@ -480,7 +480,7 @@
 
   - name: Delete existing ssl_ca certificates
     shell: source /etc/platform/openrc; system ca-certificate-uninstall {{ item }} --yes
-    with_items:
+    loop:
     - "{{ existing_ssl_ca_certificates_uuid.stdout_lines }}"
     when: existing_ssl_ca_certificates_uuid.stdout_lines | length > 0
 
@@ -540,7 +540,7 @@
     dest: "/var/pxeboot/{{ item.dest }}"
     state: link
     force: yes
-  with_items:
+  loop:
     - { src: '{{ pxe_default }}', dest: 'pxelinux.cfg/default' }
     - { src: '{{ pxe_grub_cfg }}', dest: 'pxelinux.cfg/grub.cfg' }
 
@@ -554,7 +554,7 @@
   lineinfile:
     path: /etc/platform/platform.conf
     line: "{{ item }}"
-  with_items:
+  loop:
     - sw_version={{ software_version }}
     - vswitch_type=none
 
@@ -617,7 +617,7 @@
     owner: www
     group: root
     mode: 0755
-  with_items:
+  loop:
     - "{{ source_device_image_bind_dir }}"
     - "{{ target_device_image_bind_dir }}"
 

@@ -30,7 +30,7 @@
     path: /etc/sysctl.d/80-k8s.conf
     line: "{{ item }}"
     create: yes
-  with_items:
+  loop:
     - net.bridge.bridge-nf-call-ip6tables = 1
     - net.bridge.bridge-nf-call-iptables = 1
     - net.ipv4.ip_forward = 1
@@ -327,7 +327,7 @@
     shell: tar --use-compress-program=pigz -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
     args:
       warn: false
-    with_items:
+    loop:
       - "{{ kubeadm_pki_dir | regex_replace('^\\/', '') }}"
     become_user: root
 
@@ -335,7 +335,7 @@
     file:
       path: "{{ kubeadm_pki_dir }}/{{ item }}"
       state: absent
-    with_items:
+    loop:
       - "apiserver.crt"
       - "apiserver.key"
       - "apiserver-kubelet-client.crt"
@@ -348,7 +348,7 @@
     shell: tar --use-compress-program=pigz -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
     args:
       warn: false
-    with_items:
+    loop:
       - "{{ encryption_provider_config | regex_replace('^\\/', '') }}"
     become_user: root
 
@@ -484,7 +484,7 @@
     include_role:
       name: bootstrap/plugins
       tasks_from: "{{ item }}"
-    with_items: "{{ k8s_plugins }}"
+    loop: "{{ k8s_plugins }}"
 
   - name: Create kube plugin list file
     copy:
@@ -536,7 +536,7 @@
     remote_src: yes
     force: yes
     mode: 0700
-  with_items:
+  loop:
     - ca.crt
     - ca.key
     - sa.pub
@@ -608,7 +608,7 @@
       configmap "kube-apiserver-volumes---{{ item.item.name }}"
       -n kube-system --from-file "{{ item.item.hostPath }}"
     when: item.item.pathType == 'File' and item.rc != 0
-    with_items:
+    loop:
       - "{{ existent_configmaps.results }}"
 
   - name: Checking existing kube-controller-manager configmaps
@@ -626,7 +626,7 @@
       "kube-controller-manager-volumes---{{ item.item.name }}"
       -n kube-system --from-file "{{ item.item.hostPath }}"
     when: item.item.pathType == 'File' and item.rc != 0
-    with_items:
+    loop:
       - "{{ existent_configmaps.results }}"
 
   - name: Checking existing kube-scheduler configmaps
@@ -644,7 +644,7 @@
       configmap "kube-scheduler-volumes---{{ item.item.name }}"
       -n kube-system --from-file "{{ item.item.hostPath }}"
     when: item.item.pathType == 'File' and item.rc != 0
-    with_items:
+    loop:
       - "{{ existent_configmaps.results }}"
 
 # The following labels are used by pod security admission controller.

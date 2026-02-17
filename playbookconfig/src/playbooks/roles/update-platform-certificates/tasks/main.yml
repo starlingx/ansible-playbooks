@@ -46,7 +46,7 @@
         remote_src: true
         src: /etc/ssl/private/{{item}}
         dest: "{{ backup_directory.path }}/{{item}}"
-      with_items:
+      loop:
         - registry-cert.crt
         - server-cert.pem
       become: true
@@ -97,14 +97,14 @@
     - name: Delete the 'system-local-ca' clusterIssuer and secret if they exist
       include_role:
         name: common/delete-kubernetes-resources
-      with_items:
+      loop:
         - { name: system-local-ca, namespace: cert-manager, type: clusterissuer }
         - { name: system-local-ca, namespace: cert-manager, type: secret }
 
     - name: Remove default leaf certificates
       include_role:
         name: common/delete-kubernetes-resources
-      with_items:
+      loop:
         - { name: system-openldap-local-certificate, namespace: deployment, type: certificate }
         - { name: system-registry-local-certificate, namespace: deployment, type: certificate }
         - { name: system-restapi-gui-certificate, namespace: deployment, type: certificate }
@@ -112,7 +112,7 @@
     - name: Remove OIDC certificate if we are recreating it
       include_role:
         name: common/delete-kubernetes-resources
-      with_items:
+      loop:
         - { name: oidc-auth-apps-certificate, namespace: kube-system, type: certificate }
       when: install_oidc_auth_apps_certificate
 
@@ -340,14 +340,14 @@
     - name: Delete certificates
       include_role:
         name: common/delete-kubernetes-resources
-      with_items:
+      loop:
         - { name: system-registry-local-certificate, namespace: deployment, type: certificate }
         - { name: system-restapi-gui-certificate, namespace: deployment, type: certificate }
 
     - name: Delete secrets
       include_role:
         name: common/delete-kubernetes-resources
-      with_items:
+      loop:
         - { name: system-registry-local-certificate, namespace: deployment, type: secret }
         - { name: system-restapi-gui-certificate, namespace: deployment, type: secret }
 
@@ -366,7 +366,7 @@
 
     - name: Get summary of certificates installed
       include_tasks: get-certificates-summary.yml
-      with_items:
+      loop:
         - {
           secret: system-registry-local-certificate,
           namespace: deployment,

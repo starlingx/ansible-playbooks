@@ -89,7 +89,7 @@
     args:
       warn: false
     become_user: root
-    with_items:
+    loop:
       - "{{ helm_charts_permdir | regex_replace('^\\/', '') }}"
       - "{{ fluxcd_permdir | regex_replace('^\\/', '') }}"
 
@@ -222,14 +222,14 @@
     shell: >-
       {{ kube_cmd_prefix }}
       'exec mysql -uroot -p"$MYSQL_DBADMIN_PASSWORD" -e"create database {{ (item|basename).split('.')[0] }}"'
-    with_items: "{{ mariadb_files.stdout_lines }}"
+    loop: "{{ mariadb_files.stdout_lines }}"
 
   - name: Restore MariaDB data
     shell: >-
       {{ kube_cmd_prefix }}
       'exec mysql -uroot -p"$MYSQL_DBADMIN_PASSWORD" {{ (item|basename).split('.')[0] }}'
       < {{ item }}
-    with_items: "{{ mariadb_files.stdout_lines }}"
+    loop: "{{ mariadb_files.stdout_lines }}"
 
   - name: Remove MariaDB backup directory
     file:

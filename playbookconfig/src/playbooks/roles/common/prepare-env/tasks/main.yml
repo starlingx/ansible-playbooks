@@ -16,7 +16,7 @@
 - stat:
     path: "{{ item }}"
   register: files_to_import
-  with_items:
+  loop:
     - "{{ override_files_dir }}/secrets.yml"
     - "{{ override_files_dir }}/{{ inventory_hostname }}_secrets.yml"
     - "{{ override_files_dir }}/site.yml"
@@ -25,7 +25,7 @@
 
 - include_vars: "{{ item.item }}"
   when: item.stat.exists
-  with_items: "{{ files_to_import.results }}"
+  loop: "{{ files_to_import.results }}"
   no_log: true
 
 # Check host connectivity, change password if provided

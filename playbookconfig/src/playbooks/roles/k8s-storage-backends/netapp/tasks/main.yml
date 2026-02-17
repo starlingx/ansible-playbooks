@@ -124,25 +124,25 @@
 # Configure NetApp backends
 - name: Configure tbc secret
   include_tasks: configure-trident-backend-config-secret.yml
-  with_items: "{{ tbc_secret }}"
+  loop: "{{ tbc_secret }}"
   loop_control:
     loop_var: backend_secret
 
 - name: Configure tbc backends
   include_tasks: configure-trident-backend-config.yml
-  with_items: "{{ netapp_backends }}"
+  loop: "{{ netapp_backends }}"
   loop_control:
     loop_var: backend
 
 - name: Configure kubernetes storage classes
   include_tasks: configure-storage-classes.yml
-  with_items: "{{ netapp_k8s_storageclasses }}"
+  loop: "{{ netapp_k8s_storageclasses }}"
   loop_control:
     loop_var: storage_class
 
 - name: Configure kubernetes snapshot storage classes
   include_tasks: configure-snapshot-storage-classes.yml
-  with_items: "{{ netapp_k8s_snapshotstorageclasses }}"
+  loop: "{{ netapp_k8s_snapshotstorageclasses }}"
   loop_control:
     loop_var: snapshot_storage_class
 

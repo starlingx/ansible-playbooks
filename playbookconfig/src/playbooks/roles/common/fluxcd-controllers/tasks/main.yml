@@ -64,7 +64,7 @@
       --for=condition=Available deployment {{ item.deployment }} --timeout={{ async_timeout }}s
     async: "{{ async_timeout }}"
     poll: 0
-    with_items:
+    loop:
       - { namespace: flux-helm, deployment: helm-controller }
       - { namespace: flux-helm, deployment: source-controller }
     register: wait_for_fluxcd_deployments
@@ -79,10 +79,10 @@
     retries: "{{ async_retries }}"
     delay: "{{ delay_time }}"
     failed_when: false
-    with_items: "{{ wait_for_fluxcd_deployments.results }}"
+    loop: "{{ wait_for_fluxcd_deployments.results }}"
 
   - name: Fail if the helm and source controllers are not ready by this time
     fail:
       msg: "Pod {{ item.item.item }} is still not ready."
     when: item.stdout is not search(" condition met")
-    with_items: "{{ wait_fluxcd_job_result.results }}"
+    loop: "{{ wait_fluxcd_job_result.results }}"

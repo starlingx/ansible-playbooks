@@ -21,13 +21,13 @@
     shell: "{{ item }}"
     register: add_loopback
     failed_when: false
-    with_items: "{{ add_items }}"
+    loop: "{{ add_items }}"
 
   - name: Fail if adding loopback interface failed
     fail:
       msg: "{{ item.item }} failed for reason: {{ item.stderr }}."
     when: item.rc != 0 and not incomplete_bootstrap
-    with_items: "{{ add_loopback.results }}"
+    loop: "{{ add_loopback.results }}"
 
   - name: Remove previous management floating address if management network config has changed
     command: ip addr delete {{ prev_mgmt_floating_virtual }} dev lo scope host
@@ -67,14 +67,14 @@
   - name: Add cluster virtual IP for loopback interface if not simplex
     set_fact:
       add_items: "{{ add_items + [item] }}"
-    with_items:
+    loop:
       - ip addr add {{ cluster_virtual }}  brd {{ cluster_broadcast }} dev lo scope host label lo:5
     when: system_mode != 'simplex'
 
   - name: Add admin IP for loopback interface if configured
     set_fact:
       add_items: "{{ add_items + [item] }}"
-    with_items:
+    loop:
       - ip addr add {{ admin_virtual }} dev lo scope host
     when: admin_virtual is defined
 
@@ -83,21 +83,21 @@
     - name: Add secondary cluster on the loopback interface
       set_fact:
         add_items: "{{ add_items + [item] }}"
-      with_items:
+      loop:
         - "ip addr add {{ cluster_virtual_secondary }}  brd {{ cluster_broadcast_secondary }} dev lo scope host label lo:5"
       when: system_mode != 'simplex' and cluster_virtual_secondary is defined and cluster_broadcast_secondary is defined
 
     - name: Add secondary cluster floating on the loopback interface
       set_fact:
         add_items: "{{ add_items + [item] }}"
-      with_items:
+      loop:
         - "ip addr add {{ cluster_floating_virtual_secondary }} dev lo scope host"
       when: cluster_floating_virtual_secondary is defined
 
     - name: Add admin secondary IP for loopback interface if configured
       set_fact:
         add_items: "{{ add_items + [item] }}"
-      with_items:
+      loop:
         - "ip addr add {{ admin_virtual_secondary }} dev lo scope host"
       when: admin_virtual_secondary is defined
 
@@ -106,13 +106,13 @@
     shell: "{{ item }}"
     register: add_addresses
     failed_when: false
-    with_items: "{{ add_items }}"
+    loop: "{{ add_items }}"
 
   - name: Fail if adding interface addresses failed for reason other than it has been done before
     fail:
       msg: "{{ item.item }} failed for reason: {{ item.stderr }}."
     when: item.rc != 0 and not incomplete_bootstrap
-    with_items: "{{ add_addresses.results }}"
+    loop: "{{ add_addresses.results }}"
 
   - name: Create symlinks for current etcd version
     import_role:
@@ -136,7 +136,7 @@
     set_fact:
       insecure_registries:
         "{{ (insecure_registries|default([]) + [item.url|regex_replace('/.*', '')]) | unique }}"
-    with_items:
+    loop:
       - "{{ docker_registry }}"
       - "{{ gcr_registry }}"
       - "{{ k8s_registry }}"
@@ -252,7 +252,7 @@
       command: >-
         kubectl --kubeconfig=/etc/kubernetes/admin.conf scale deployment
         -n {{ item.namespace }} {{ item.deployment }} --replicas=0
-      with_items:
+      loop:
         - { namespace: kube-system, deployment: calico-kube-controllers }
         - { namespace: kube-system, deployment: coredns }
 
@@ -260,7 +260,7 @@
       command: >-
         kubectl --kubeconfig=/etc/kubernetes/admin.conf scale deployment
         -n {{ item.namespace }} {{ item.deployment }} --replicas=1
-      with_items:
+      loop:
         - { namespace: kube-system, deployment: calico-kube-controllers }
 
     - name: Scale coredns deployment back to original size
@@ -322,7 +322,7 @@
       --timeout={{ async_timeout }}s
     async: "{{ async_timeout }}"
     poll: 0
-    with_items: "{{ kube_component_list }}"
+    loop: "{{ kube_component_list }}"
     register: wait_for_kube_system_pods
 
   - name: Start wait for calico-kube-controllers & coredns deployments to reach Available state
@@ -332,7 +332,7 @@
       --for=condition=Available deployment {{ item.deployment }} --timeout={{ async_timeout }}s
     async: "{{ async_timeout }}"
     poll: 0
-    with_items:
+    loop:
       - { namespace: kube-system, deployment: calico-kube-controllers }
       - { namespace: kube-system, deployment: coredns }
     register: wait_for_deployments
@@ -347,7 +347,7 @@
     retries: "{{ async_retries }}"
     delay: 6
     failed_when: false
-    with_items:
+    loop:
       - "{{ wait_for_kube_system_pods.results }}"
       - "{{ wait_for_deployments.results }}"
 
@@ -355,7 +355,7 @@
     fail:
       msg: "Pod {{ item.item.item }} is still not ready."
     when: item.stdout is not search(" condition met")
-    with_items: "{{ wait_job_result.results }}"
+    loop: "{{ wait_job_result.results }}"
 
   - name: Bring up FluxCD helm and source controllers
     import_role:

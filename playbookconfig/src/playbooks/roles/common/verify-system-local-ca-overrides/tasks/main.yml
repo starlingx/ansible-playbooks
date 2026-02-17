@@ -74,7 +74,7 @@
   file:
     path: "{{ file_item }}"
     state: absent
-  with_items:
+  loop:
     - "{{ local_ca_file.path }}"
     - "{{ root_ca_file.path }}"
     - "{{ local_ca_key_file.path }}"

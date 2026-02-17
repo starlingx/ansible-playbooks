@@ -42,7 +42,7 @@
   fail:
     msg: "Mandatory configuration parameter {{ item }} is not defined."
   when: item is not defined
-  with_items:
+  loop:
     - system_mode
     - timezone
     - pxeboot_subnet

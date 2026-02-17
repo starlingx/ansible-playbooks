@@ -164,14 +164,14 @@
   debug:
     msg: "DNS Server: {{ item }}"
   failed_when: item | ipaddr == False
-  with_items: "{{ dns_servers }}"
+  loop: "{{ dns_servers }}"
 
 - name: Update resolv.conf with list of dns servers
   lineinfile:
     path: /etc/resolv.conf
     line: "nameserver {{ item }}"
     insertbefore: BOF
-  with_items: "{{ dns_servers |reverse }}"
+  loop: "{{ dns_servers |reverse }}"
 
 # Networks config validation
 - block:
@@ -379,7 +379,7 @@
     debug:
       msg: "WARNING: Subnet prefix of less than /24 is not typical. This will affect scaling of the system!"
     when: item|ipaddr('prefix')|int < typical_subnet_prefix and system_type == 'Standard'
-    with_items:
+    loop:
       - "{{ network_params.pxeboot_subnet_primary }}"
       - "{{ network_params.management_subnet_primary }}"
       - "{{ network_params.cluster_host_subnet_primary }}"
@@ -418,7 +418,7 @@
     fail:
       msg: "Invalid multicast subnet: {{ item.name }} -> {{ item.address }}"
     when: (item.address != False) and (item.address | ipaddr('multicast') == None)
-    with_items:
+    loop:
       - { name: 'management_multicast_subnet', address: "{{ network_params.management_multicast_subnet_primary }}" }
       - { name: 'management_multicast_subnet', address: "{{ network_params.management_multicast_subnet_secondary }}" }
 
@@ -428,7 +428,7 @@
     when: |
       ((item.net_ref|ipv4 != False and item.net_param|ipv6 != False) or
         (item.net_ref|ipv6 != False and item.net_param|ipv4 != False))
-    with_items:
+    loop:
       - { net_ref: "{{ network_params.management_subnet_primary }}",
           net_param: "{{ network_params.management_multicast_subnet_primary }}" }
       - { net_ref: "{{ network_params.management_subnet_primary }}",
@@ -1122,7 +1122,7 @@
 # System applications validation
 - name: Validate applications
   include: validate_application.yml application={{ item }}
-  with_items: "{{ applications }}"
+  loop: "{{ applications }}"
   when: applications
 
 - name: Build application list
@@ -1132,7 +1132,7 @@
 - name: Append applications to application list
   set_fact:
     all_applications: "{{ all_applications }} + [ '{{ item.keys()|list|first }}' ]"
-  with_items: "{{ applications }}"
+  loop: "{{ applications }}"
 
 - name: Get the name of the nginx tarball
   find:
@@ -1161,19 +1161,19 @@
 - name: Append default nginx entry if not present
   set_fact:
     applications: "[ {'{{ item.path }}': None}] + {{ applications }}"
-  with_items: "{{ find_nginx_tarball_output.files }}"
+  loop: "{{ find_nginx_tarball_output.files }}"
   when: item.path not in all_applications
 
 - name: Append default cert manager entry if not present
   set_fact:
     applications: "{{ applications }} + [ {'{{ item.path }}': None}]"
-  with_items: "{{ find_cert_manager_tarball_output.files }}"
+  loop: "{{ find_cert_manager_tarball_output.files }}"
   when: item.path not in all_applications
 
 - name: Append default oidc-auth-apps entry if not present
   set_fact:
     applications: "{{ applications }} + [ {'{{ item.path }}': None}]"
-  with_items: "{{ find_oidc_auth_apps_tarball_output.files }}"
+  loop: "{{ find_oidc_auth_apps_tarball_output.files }}"
   when:
     - item.path not in all_applications
     - distributed_cloud_role != 'subcloud'
@@ -1205,7 +1205,7 @@
   - block:
     - name: Purge old applications
       include: purge_application.yml application={{ item }}
-      with_items: "{{ old_application_list }}"
+      loop: "{{ old_application_list }}"
 
     # we check the return code from sysinv to see that application-list ran successfully
     # in a non replay, or weird replay cases, sysinv could be not up at which point
@@ -1225,7 +1225,7 @@
     stat:
       path: "{{ lookup('vars', cert_override, default='') }}"
     register: external_ca_files
-    with_items: "{{ external_cert_overrides_list }}"
+    loop: "{{ external_cert_overrides_list }}"
     loop_control:
       loop_var: cert_override
 

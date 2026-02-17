@@ -32,7 +32,7 @@
 
 - name: Migrate keystone user IDs
   script: migrate_keystone_ids.py {{ item.name }} {{ item.id }} 'user'
-  with_items:
+  loop:
     - { name: 'admin', id: "{{ system_controller_keystone_admin_user_id }}" }
     - { name: 'sysinv', id: "{{ system_controller_keystone_sysinv_user_id }}" }
   become_user: postgres
@@ -40,7 +40,7 @@
 
 - name: Migrate keystone project IDs
   script: migrate_keystone_ids.py {{ item.name }} {{ item.id }} 'project'
-  with_items:
+  loop:
     - { name: 'admin', id: "{{ system_controller_keystone_admin_project_id }}" }
     - { name: 'services', id: "{{ system_controller_keystone_services_project_id }}" }
   become_user: postgres

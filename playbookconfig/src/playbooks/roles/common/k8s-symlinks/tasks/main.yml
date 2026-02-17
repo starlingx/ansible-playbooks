@@ -22,7 +22,7 @@
       src: "{{ kube_local_dir }}/{{ kubernetes_version }}/{{ item }}"
       dest: "{{ kube_symlink_dir }}/{{ item }}"
       state: link
-    with_items:
+    loop:
       - "stage1"
       - "stage2"
 

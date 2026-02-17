@@ -264,7 +264,7 @@
         src: "{{ usm_software_dir }}/rel-{{ item }}"
         dest: "{{ usm_software_dir }}/"
         rsync_opts: "--delete"
-      with_items: "{{ system_controller_releases }}"
+      loop: "{{ system_controller_releases }}"
       register: releases_transfer
       retries: 3
       delay: 2

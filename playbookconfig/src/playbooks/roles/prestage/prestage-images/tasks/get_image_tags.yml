@@ -19,5 +19,5 @@
 - name: Assign tag to {{ img }}
   set_fact:
     registry_images: "{{ registry_images|default([]) + [img + ':' + item] }}"
-  with_items:
+  loop:
     - "{{ tags.stdout_lines }}"

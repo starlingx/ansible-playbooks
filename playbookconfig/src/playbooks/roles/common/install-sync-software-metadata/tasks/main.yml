@@ -215,7 +215,7 @@
       systemd:
         name: "{{ item }}"
         state: restarted
-      with_items:
+      loop:
         - software-controller-daemon
         - software-agent
       become: true

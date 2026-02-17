@@ -16,7 +16,7 @@
 - name: Remove provisioner from content
   set_fact:
     sc_without_provisioner: "{% set copy=storage_class.copy() %}{% set removed=copy.pop('provisioner') %}{{ copy }}"
-  with_items: "{{ storage_class }}"
+  loop: "{{ storage_class }}"
   when: "item == 'provisioner'"
 
 - name: Set StorageClass headers

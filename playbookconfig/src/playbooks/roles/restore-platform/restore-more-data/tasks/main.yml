@@ -38,7 +38,7 @@
     file:
       path: "{{ item }}"
       state: absent
-    with_items:
+    loop:
       - "{{ puppet_permdir }}/hieradata/{{ controller_floating_address|ipmath(1) }}.yaml"
       - "{{ puppet_permdir }}/hieradata/system.yaml"
       - "{{ puppet_permdir }}/hieradata/secure_system.yaml"
@@ -65,7 +65,7 @@
       dest: "{{ staging_dir }}/platform.conf"
       regexp: "{{ item }}"
       state: absent
-    with_items:
+    loop:
       - '^oam_interface='
       - '^cluster_host_interface='
       - '^UUID='
@@ -204,7 +204,7 @@
       file:
         path: "{{ item }}"
         mode: 0600
-      with_items: "{{ pvt_keys.stdout_lines }}"
+      loop: "{{ pvt_keys.stdout_lines }}"
     when: backup_os_release == "centos" and os_release == "debian"
 
   - block:
@@ -222,7 +222,7 @@
         path: "~/.ssh/known_hosts"
         create: yes
         line: "{{ item }}"
-      with_items: "{{ remote_keyscan.stdout_lines | list }}"
+      loop: "{{ remote_keyscan.stdout_lines | list }}"
       register: add_sshkey
       until: not add_sshkey.changed
       retries: 6
@@ -332,7 +332,7 @@
   args:
     warn: false
   become_user: root
-  with_items:
+  loop:
     - "{{ extension_permdir | regex_replace('^\\/', '') }}"
 
 - name: Check if fluxcd folder is present in the backup tarball
@@ -347,7 +347,7 @@
   args:
     warn: false
   become_user: root
-  with_items:
+  loop:
     - "{{ fluxcd_permdir | regex_replace('^\\/', '') }}"
   when: bkp_has_fluxcd.rc is defined and
         bkp_has_fluxcd.rc == 0
@@ -482,7 +482,7 @@
     systemd:
       name: "{{ item }}"
       state: stopped
-    with_items:
+    loop:
       - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
       - fminit
       - fm-api
@@ -594,7 +594,7 @@
     systemd:
       name: "{{ item }}"
       state: restarted
-    with_items:
+    loop:
       - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
       - fminit
       - fm-api
@@ -921,7 +921,7 @@
       shell: |
         source /etc/platform/openrc
         system service-parameter-add {{ item }}
-      with_items: "{{ default_k8s_service_parameters.stdout_lines }}"
+      loop: "{{ default_k8s_service_parameters.stdout_lines }}"
       register: k8s_parameter_add
       failed_when: >
         k8s_parameter_add.rc != 0 and

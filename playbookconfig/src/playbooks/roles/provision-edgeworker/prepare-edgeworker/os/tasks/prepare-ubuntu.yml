@@ -21,7 +21,7 @@
     or
     mgmt_ip_addr in ((hostvars[ansible_host]['ansible_%s' % item]|default({}))
     .get('ipv4_secondaries'))|map(attribute='address')|list
-  with_items:
+  loop:
     - "{{ ansible_interfaces }}"
 
 - name: Set systemd-networkd interface config

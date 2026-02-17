@@ -48,7 +48,7 @@
   - name: Determine which postgresql database files exist
     stat:
       path: "{{ postgres_staging_dir }}/{{ item }}"
-    with_items:
+    loop:
       - "postgres.postgreSql.config"
       - "postgres.postgreSql.data"
       - "template1.postgreSql.data"
@@ -61,7 +61,7 @@
   - name: Restore postgres db
     shell: "psql -f {{ item.stat.path }} {{ item.item.split('.')[0] }}"
     become_user: postgres
-    with_items: "{{ pgfiles.results }}"
+    loop: "{{ pgfiles.results }}"
     when: item.stat.exists
 
   - name: Remove expired ssl_ca certs on the system
@@ -107,7 +107,7 @@
       file:
         path: "/opt/platform/config/{{ software_version }}/ssl_ca/{{ item }}"
         state: absent
-      with_items: "{{ invalid_certs.stdout | regex_findall('ssl_ca_[0-9]+') }}"
+      loop: "{{ invalid_certs.stdout | regex_findall('ssl_ca_[0-9]+') }}"
       become: yes
     when: restore_mode|default(none) == 'optimized'
 

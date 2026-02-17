@@ -21,7 +21,7 @@
   - name: Check if IPsec configuration files exist
     stat:
       path: "{{ item }}"
-    with_items:
+    loop:
       - /etc/swanctl/swanctl_active.conf
       - /etc/swanctl/swanctl_standby.conf
     register: files_output

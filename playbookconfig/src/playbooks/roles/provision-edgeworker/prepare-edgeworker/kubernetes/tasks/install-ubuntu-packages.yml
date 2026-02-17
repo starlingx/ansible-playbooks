@@ -62,4 +62,4 @@
   until: install_task_result is succeeded
   retries: 5
   delay: "{{ retry_stagger | d(5) }}"
-  with_items: "{{ k8s_package_info.pkgs }}"
+  loop: "{{ k8s_package_info.pkgs }}"

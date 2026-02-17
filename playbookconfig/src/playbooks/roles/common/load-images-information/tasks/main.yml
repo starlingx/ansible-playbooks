@@ -224,20 +224,20 @@
   - name: Append additional storage images if rook-ceph backend is configured
     set_fact:
       storage_images: "{{ storage_images }} + [ '{{ item | replace('registry.local:9001/', '') }}' ] "
-    with_items: "{{ additional_storage_images_list }} "
+    loop: "{{ additional_storage_images_list }} "
     when: additional_storage_images_list is defined
 
   - name: Append additional static images if provisioned
     set_fact:
       static_images: "{{ static_images }} + [ '{{item.value}}' ]"
-    with_items: "{{ additional_static_images_list | default({})| dict2items }}"
+    loop: "{{ additional_static_images_list | default({})| dict2items }}"
     when: additional_static_images_list is defined
 
   - block:
     - name: Append additional static images for a DC system controller if provisioned
       set_fact:
         static_images: "{{ static_images }} + [ '{{item.value}}' ]"
-      with_items: "{{ additional_system_controller_static_images_list | default({})| dict2items }}"
+      loop: "{{ additional_system_controller_static_images_list | default({})| dict2items }}"
       when: additional_system_controller_static_images_list is defined
 
     when: (distributed_cloud_role is defined and

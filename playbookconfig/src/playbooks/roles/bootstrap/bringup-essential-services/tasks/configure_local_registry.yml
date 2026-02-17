@@ -27,7 +27,7 @@
   command: "{{ item }}"
   args:
     warn: false
-  with_items:
+  loop:
     - "sed -i -e 's|<%= @registry_readonly %>|'false'|g' {{ registry_runtime_config_file }}"
     - "sed -i -e 's|<%= @registry_readonly %>|'true'|g' {{ registry_readonly_config_file }}"
     - "sed -i -e 's|<%= @docker_registry_host %>|'$DOCKER_REGISTRY_HOST'|g' {{ registry_runtime_config_file }}"
@@ -53,7 +53,7 @@
   command: "{{ item }}"
   args:
     warn: false
-  with_items:
+  loop:
     - "sed -i -e 's|<%= @docker_registry_host %>|'$DOCKER_REGISTRY_HOST'|g' {{ registry_token_server_file }}"
     - "sed -i -e 's|<%= @registry_ks_endpoint %>|'$REGISTRY_KS_ENDPOINT'|g' {{ registry_token_server_file }}"
   environment:

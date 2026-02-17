@@ -102,7 +102,7 @@
     dest: "{{ config_permdir }}"
     remote_src: yes
     mode: 0400
-  with_items:
+  loop:
     - "/etc/pki/ca-trust/source/anchors/{{ dc_adminep_root_ca_cert }}"
   when: mode is defined and mode == 'bootstrap'
 

@@ -20,7 +20,7 @@
     - name: Seek for data matching application tarball name
       set_fact:
         application: "{{ application_data }}"
-      with_items: "{{ applications }}"
+      loop: "{{ applications }}"
       loop_control:
         loop_var: application_data
       when: (application_data.keys() | list | first) is

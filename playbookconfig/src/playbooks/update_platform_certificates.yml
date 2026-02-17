@@ -55,7 +55,7 @@
           add_host:
             name: "{{ item }}"
             groups: target_group
-          with_items: "{{ subclouds.stdout_lines }}"
+          loop: "{{ subclouds.stdout_lines }}"
 
       when: "'all_online_subclouds' in target_list"
 
@@ -63,7 +63,7 @@
       add_host:
         name: "{{ item }}"
         groups: target_group
-      with_items: "{{ target_list.split(',') }}"
+      loop: "{{ target_list.split(',') }}"
       when: "item != 'all_online_subclouds'"
 
 - hosts: target_group

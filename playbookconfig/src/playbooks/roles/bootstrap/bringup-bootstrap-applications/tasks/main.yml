@@ -25,7 +25,7 @@
 # Order has to be ensured, nginx needs to be applied before cert-manager.
 - name: Apply essential applications
   include_tasks: upload_and_apply_application.yml
-  with_items:
+  loop:
     - nginx-ingress-controller
     - cert-manager
   vars:
@@ -125,7 +125,7 @@
 # to be done due the required oidc-auth-apps-certificate
 - name: Apply oidc-auth-apps
   include_tasks: upload_and_apply_application.yml
-  with_items:
+  loop:
     - oidc-auth-apps
   vars:
     searched_app_name: "{{ item }}"

@@ -12,7 +12,7 @@
   fail:
     msg: "Unknown registry key: '{{ item }}'. Acceptable keys are {{ known_registry_keys|join(', ') }} "
   when: not item in known_registry_keys
-  with_items: "{{ user_defined_registry_keys }}"
+  loop: "{{ user_defined_registry_keys }}"
 
 # error check the password section of docker registries
 # check password parameters before trying to hide the password

@@ -28,7 +28,7 @@
   shell: |
     {{ source_env_command }}
     software --software-url {{ software_url }} upload "{{ patches_dir }}/{{ item }}"
-  with_items: "{{ patches }}"
+  loop: "{{ patches }}"
 
 - block:
   - name: Deploy precheck
@@ -205,11 +205,11 @@
     software --software-url {{ software_url }} show {{ item }} | \
     awk '$2 == "state" { print $4 }'
   register: applied_releases_deploy_state
-  with_items: "{{ release_ids }}"
+  loop: "{{ release_ids }}"
   failed_when: false
 
 - name: Verify all releases deployed
   fail:
     msg: "{{ item.stdout }} failed to deploy "
-  with_items: "{{ applied_releases_deploy_state.results }}"
+  loop: "{{ applied_releases_deploy_state.results }}"
   when: item.stdout != "deployed"

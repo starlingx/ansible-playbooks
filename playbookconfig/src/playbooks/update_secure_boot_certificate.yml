@@ -52,14 +52,14 @@
           add_host:
             name: "{{ item }}"
             groups: target_group
-          with_items: "{{ subclouds.stdout_lines }}"
+          loop: "{{ subclouds.stdout_lines }}"
       when: "'all_online_subclouds' in target_list"
 
     - name: Get additional hosts from extra-vars
       add_host:
         name: "{{ item }}"
         groups: target_group
-      with_items: "{{ target_list.split(',') }}"
+      loop: "{{ target_list.split(',') }}"
       when: "item not in ('localhost', 'all_online_subclouds')"
 
 - name: Run playbook in subclouds
@@ -98,7 +98,7 @@
       add_host:
         name: "{{ item }}"
         groups: skip_group
-      with_items: "{{ groups.get('target_group', []) }}"
+      loop: "{{ groups.get('target_group', []) }}"
 
     - name: Get available hosts
       shell: |
@@ -111,7 +111,7 @@
       add_host:
         name: "{{ item.hostname }}"
         groups: target_group
-      with_items: "{{ stx_hosts.stdout | from_yaml | json_query('[?availability!=`offline`]') }}"
+      loop: "{{ stx_hosts.stdout | from_yaml | json_query('[?availability!=`offline`]') }}"
 
 # Run the role only on discovered hosts in the current region:
 # - Skips localhost, since controller-0 and controller-1 are in `target_group`

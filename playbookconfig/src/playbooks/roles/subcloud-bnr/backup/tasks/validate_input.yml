@@ -114,7 +114,7 @@
     lineinfile:
       path: "{{ subcloud_overrides }}"
       line: "{{ item }}"
-    with_items:
+    loop:
       - "backup_user_images: true"
       - "backup_user_local_registry: true"
       - "default_user_images_backup_prefix: {{ default_user_images_backup_prefix }}"

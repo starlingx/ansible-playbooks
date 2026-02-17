@@ -32,7 +32,7 @@
 
 - name: Restart sm managed services
   command: sm-restart-safe service {{ item }}
-  with_items: "{{ services_restart_list }}"
+  loop: "{{ services_restart_list }}"
 
 - name: Wait until services are restarted
   shell: sm-query service {{ item }} | grep -c enabled-active

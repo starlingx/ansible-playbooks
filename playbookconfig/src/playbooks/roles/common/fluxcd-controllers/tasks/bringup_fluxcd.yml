@@ -93,7 +93,7 @@
       command: >-
         kubectl --kubeconfig=/etc/kubernetes/admin.conf scale deployment
         -n {{ item.namespace }} {{ item.deployment }} --replicas=0
-      with_items:
+      loop:
         - { namespace: flux-helm, deployment: helm-controller }
         - { namespace: flux-helm, deployment: source-controller }
       when: (mode is defined and mode == 'restore') and

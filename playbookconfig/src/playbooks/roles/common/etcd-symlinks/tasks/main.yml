@@ -20,7 +20,7 @@
       src: "{{ etcd_local_dir }}/{{ etcd_version }}/{{ item }}"
       dest: "{{ etcd_symlink_dir }}/{{ item }}"
       state: link
-    with_items:
+    loop:
       - "stage0"
 
   when: etcd_version is defined

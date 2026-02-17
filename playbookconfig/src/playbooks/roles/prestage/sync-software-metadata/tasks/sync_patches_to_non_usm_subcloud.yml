@@ -53,7 +53,7 @@
     copy:
       src: "{{ item }}"
       dest: "{{ usm_metadata_dir }}/available/{{ item | basename }}"
-    with_items: "{{ system_controller_metadata_files.stdout_lines }}"
+    loop: "{{ system_controller_metadata_files.stdout_lines }}"
 
   # We want to transfer the rel-MM-mm directories that may exist in the system
   # controller to the subcloud. There will always be at least one, which corresponds
@@ -65,7 +65,7 @@
       src: "{{ usm_software_dir }}/rel-{{ item }}"
       dest: "{{ usm_software_dir }}/"
       rsync_opts: "--delete"
-    with_items: "{{ system_controller_releases }}"
+    loop: "{{ system_controller_releases }}"
     register: releases_transfer
     retries: 3
     delay: 2

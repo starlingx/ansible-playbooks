@@ -21,7 +21,7 @@
 
   - set_fact:
       running_registry: "{{ running_registry|default({}) | combine({inner_item.name:inner_item.value}) }}"
-    with_items: "{{ running_registry_output.stdout | from_yaml }}"
+    loop: "{{ running_registry_output.stdout | from_yaml }}"
     no_log: true
     loop_control:
       loop_var: inner_item

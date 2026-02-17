@@ -39,7 +39,7 @@
 - name: Set a list for node hostname and ip address
   set_fact:
     hostname_ip_list: "{{ hostname_ip_list | default({}) | combine({item.hostname: item.mgmt_ip}) }}"
-  with_items: "{{ host_list_result.stdout | from_yaml }}"
+  loop: "{{ host_list_result.stdout | from_yaml }}"
 
 - name: Set ansible_host of edgeworker
   add_host:

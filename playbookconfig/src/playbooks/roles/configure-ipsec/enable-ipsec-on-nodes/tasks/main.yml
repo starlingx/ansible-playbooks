@@ -130,7 +130,7 @@
       ansible all -i "{{ item }}," -m command -a "systemctl enable ipsec-server.service --now"
       -b -e "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
       ansible_become_pass={{ ansible_become_pass }}"
-    with_items:
+    loop:
       - controller-0
       - controller-1
 
@@ -139,7 +139,7 @@
       ansible all -i "{{ item }}," -m command -a "sm-provision service-group-member
       controller-services ipsec-config --apply" -b -e "ansible_ssh_user={{ ansible_ssh_user }}
       ansible_ssh_pass={{ ansible_ssh_pass }} ansible_become_pass={{ ansible_become_pass }}"
-    with_items:
+    loop:
       - controller-0
       - controller-1
 

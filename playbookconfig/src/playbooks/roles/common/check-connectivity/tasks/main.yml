@@ -46,7 +46,7 @@
         path: "~/.ssh/known_hosts"
         create: yes
         line: "{{ item }}"
-      with_items: "{{ remote_keyscan.stdout_lines | list }}"
+      loop: "{{ remote_keyscan.stdout_lines | list }}"
       register: add_sshkey
       until: not add_sshkey.changed
       retries: 6

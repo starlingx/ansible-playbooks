@@ -49,13 +49,13 @@
   - name: Delete old 'system-local-ca' certificate if it exists
     include_role:
       name: common/delete-kubernetes-resources
-    with_items:
+    loop:
       - { name: system-local-ca, namespace: cert-manager, type: certificate }
 
   - name: Delete old 'system-local-ca' secret
     include_role:
       name: common/delete-kubernetes-resources
-    with_items:
+    loop:
       - { name: system-local-ca, namespace: cert-manager, type: secret }
 
   - name: Apply kubernetes yaml to create cert-manager resources

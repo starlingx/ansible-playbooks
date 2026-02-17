@@ -17,5 +17,5 @@
   command: kubectl delete psp {{ item }}
   environment:
     KUBECONFIG: "/etc/kubernetes/admin.conf"
-  with_items: "{{ kubectl_get_psp_result.stdout }}"
+  loop: "{{ kubectl_get_psp_result.stdout }}"
   when: "'trident' in item"

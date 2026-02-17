@@ -30,7 +30,7 @@
           path: /etc/hosts
           line: "{{ item }}"
           create: yes
-        with_items:
+        loop:
           - "{{ controller_floating_address }}\tcontroller controller-platform-nfs"
           - "{{ cluster_floating_address }}\tcontroller-cluster-host"
           - "{{ controller_pxeboot_floating_address }}\tpxecontroller"
@@ -46,7 +46,7 @@
           lineinfile:
             path: /etc/hosts
             line: "{{ item }}"
-          with_items: "{{ user_dns_host_records_lines }}"
+          loop: "{{ user_dns_host_records_lines }}"
           when: is_dnsmasq_running.stdout == ""
 
         when: user_dns_host_records

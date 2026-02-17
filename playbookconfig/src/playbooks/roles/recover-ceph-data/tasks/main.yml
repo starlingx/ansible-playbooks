@@ -83,7 +83,7 @@
           path: "{{ ceph_conf }}"
           section: "{{ item }}"
           state: absent
-        with_items: "{{ ceph_conf_osd_list.stdout_lines }}"
+        loop: "{{ ceph_conf_osd_list.stdout_lines }}"
 
       when: backup_taken_from != 'controller-1'
 
@@ -154,7 +154,7 @@
 
     - name: Shut down Ceph monitor and OSDs if they are running
       command: "{{ item }}"
-      with_items:
+      loop:
         - /etc/init.d/ceph stop osd
         - /etc/init.d/ceph stop mon
       when: ceph_mons.stdout != ""
@@ -209,7 +209,7 @@
       command: "{{ item }}"
       args:
         warn: false
-      with_items:
+      loop:
         - "sed -ri -e '/mon.'$MON_NAME'/!b;n;s/public_addr = '$ESTART'(.*)'$EEND':'$MON_PORT'$
            /public_addr = \\1/' /etc/ceph/ceph.conf"
         - "sed -ri -e '/mon.'$MON_NAME'/!b;n;!b;n;s/public_addr = '$ESTART'(.*)'$EEND':'$MON_PORT'$

@@ -21,7 +21,7 @@
     set_fact:
       system_platform_certificate:
         "{{ system_platform_certificate | combine({ item: '' }, recursive=true) }}"
-    with_items:
+    loop:
       "{{ system_platform_certificate.keys() | list }}"
     when: system_platform_certificate[item] is none
 

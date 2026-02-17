@@ -38,7 +38,7 @@
 
   - name: Restart FM API and bring up FM Manager
     command: "{{ item }}"
-    with_items:
+    loop:
       - /etc/init.d/fm-api restart
       - /etc/init.d/fminit start
 

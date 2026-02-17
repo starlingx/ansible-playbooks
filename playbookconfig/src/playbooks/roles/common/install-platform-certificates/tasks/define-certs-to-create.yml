@@ -31,7 +31,7 @@
       awk '{ if ($0 != "") print "true"; exit}'
     environment:
       KUBECONFIG: "/etc/kubernetes/admin.conf"
-    with_items:
+    loop:
       - system-openldap-local-certificate
       - system-registry-local-certificate
       - system-restapi-gui-certificate

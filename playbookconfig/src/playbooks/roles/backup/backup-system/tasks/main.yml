@@ -316,7 +316,7 @@
         {{ item }} > {{ postgres_dir.path }}/{{ item }}.postgreSql.data
       args:
         warn: false
-      with_items:
+      loop:
         - postgres
         - template1
         - sysinv
@@ -379,7 +379,7 @@
       - name: Update dcorch tables that will be excluded from backup
         set_fact:
           dcorch_db: "{{ dcorch_db }} --exclude-table={{ item }}"
-        with_items:
+        loop:
           - orch_job
           - orch_request
           - resource
@@ -415,7 +415,7 @@
         shell: >-
           {{ kube_cmd_prefix }} 'exec mysqldump -uroot -p"$MYSQL_DBADMIN_PASSWORD" {{ item }}' >
           {{ mariadb_dir.path }}/{{ item }}.mariadb.data
-        with_items: "{{ databases.stdout_lines | difference(skip_os_dbs) }}"
+        loop: "{{ databases.stdout_lines | difference(skip_os_dbs) }}"
 
       when: check_mariadb_pod.rc == 0
 
@@ -462,7 +462,7 @@
           user_overrides={{ item.user_overrides
           | ternary("'" ~ (item.user_overrides | replace("'", "''")) ~ "'", "NULL") }}
           where name='{{ item.name }}' and namespace='openstack';
-      with_items: "{{ helm_overrides_list.stdout_lines | map('from_json') | list }}"
+      loop: "{{ helm_overrides_list.stdout_lines | map('from_json') | list }}"
 
     - name: Backup Helm overrides
       copy:
@@ -490,7 +490,7 @@
             Please use large directories that can be recreated e.g.
             /opt/dc-vault/backups or /opt/dc-vault/loads
         when: item in protected_backup_exclude_dirs
-        with_items: "{{ input_exclude_dirs }}"
+        loop: "{{ input_exclude_dirs }}"
 
       when: exclude_dirs is defined
 
@@ -536,14 +536,14 @@
     - name: Check the size (in KiB) of directories that will be backed up for platform
       shell: "du -sh -k  {{ item }} --exclude {{ exclude_targets|join(' --exclude ') }} | awk '{print $1}'"
       register: size_output_platform
-      with_items: "{{ backup_targets }}"
+      loop: "{{ backup_targets }}"
 
     # Estimate the backup size. We add 128M overhead for things like ceph crushmap,
     # ldap data, etc. that will be generated and stored in the staging dir later on.
     - name: Estimate the total required disk size for platform backup archive
       set_fact:
         total_platform_size_estimation: "{{ total_platform_size_estimation|default(1024*128)|int + item.stdout|int }}"
-      with_items: "{{ size_output_platform.results }}"
+      loop: "{{ size_output_platform.results }}"
       loop_control:
         label: "{{ item.item }}"
 
@@ -554,12 +554,12 @@
         - name: Get the size of each image directories to be backed up (in KiB)
           shell: "du -sh -k  {{ item }} | awk '{print $1}'"
           register: size_output_registry_image_fs
-          with_items: "{{ image_backup.targets }}"
+          loop: "{{ image_backup.targets }}"
 
         - name: Determine the free disk space requirement for image registry backup
           set_fact:
             total_platform_size_estimation: "{{ total_platform_size_estimation|default(1024*128)|int + item.stdout|int }}"
-          with_items: "{{ size_output_registry_image_fs.results }}"
+          loop: "{{ size_output_registry_image_fs.results }}"
           loop_control:
             label: "{{ item.item }}"
 
@@ -600,7 +600,7 @@
       # Estimate the disk size requirement for the OpenStack backup archive.
       - name: Check the size (in KiB) of directories that will be backed up for openstack
         shell: "du -sh -k  {{ item }} | awk '{print $1}'"
-        with_items:
+        loop:
           - "{{ mariadb_dir.path }}"
           - "{{ helm_overrides_sqldump_dir.path }}"
           - "{{ fluxcd_permdir }}/{{ openstack_app_name }}"
@@ -611,7 +611,7 @@
       - name: Estimate the total required disk size for platform openstack archive
         set_fact:
           total_openstack_size_estimation: "{{ total_openstack_size_estimation|default(0)|int + item.stdout|int }}"
-        with_items: "{{ size_output_openstack.results }}"
+        loop: "{{ size_output_openstack.results }}"
         loop_control:
           label: "{{ item.item }}"
 
@@ -1102,7 +1102,7 @@
         owner: root
         group: root
         mode: 0640
-      with_items: "{{ backup_files_perm_change.files }}"
+      loop: "{{ backup_files_perm_change.files }}"
 
   always:
     - name: Shred and remove the temp dir

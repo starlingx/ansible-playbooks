@@ -13,7 +13,7 @@
   tempfile:
     path: /tmp/
   register: cert_tmp_file_names
-  with_items: "{{ external_cert_overrides_list }}"
+  loop: "{{ external_cert_overrides_list }}"
   loop_control:
     loop_var: cert_override
   when: lookup('vars', cert_override, default='') | length > 0

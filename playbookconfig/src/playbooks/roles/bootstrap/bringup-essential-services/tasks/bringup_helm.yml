@@ -48,7 +48,7 @@
     recurse: yes
     owner: www
     group: root
-  with_items:
+  loop:
     - /var/www/var
     - /var/www/var/log
 
@@ -65,7 +65,7 @@
   command: "{{ item }}"
   args:
     warn: false
-  with_items:
+  loop:
     - "sed -i -e 's|<%= @http_port %>|'$PORT_NUM'|g' /etc/lighttpd/lighttpd.conf"
     - "sed -i '/@enable_https/,/% else/d' /etc/lighttpd/lighttpd.conf"
     - "sed -i '/@tmp_object/,/%- end/d' /etc/lighttpd/lighttpd.conf"
@@ -100,7 +100,7 @@
     owner: www
     group: root
     mode: 0755
-  with_items:
+  loop:
     - "{{ source_helm_bind_dir }}"
     - "{{ target_helm_bind_dir }}"
 
@@ -109,7 +109,7 @@
   args:
     warn: false
   become_user: root
-  with_items:
+  loop:
     - "{{ source_helm_bind_dir | regex_replace('^\\/', '') }}"
   when: mode == "restore"
 
@@ -122,7 +122,7 @@
       group: root
       mode: 0755
     become_user: root
-    with_items:
+    loop:
       - "{{ source_helm_bind_dir }}/{{ helm_repo_name_apps }}"
       - "{{ source_helm_bind_dir }}/{{ helm_repo_name_platform }}"
   when: mode == 'bootstrap'
@@ -136,7 +136,7 @@
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
     HOME: /home/sysadmin
-  with_items:
+  loop:
     - "{{ helm_repo_name_apps }}"
     - "{{ helm_repo_name_platform }}"
 

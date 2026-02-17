@@ -16,7 +16,7 @@
     size: 4096
     state: present
     force: true
-  with_items:
+  loop:
     - "etcd-server"
     - "apiserver-etcd-client"
     - "etcd-client"
@@ -36,7 +36,7 @@
       - IP:{{ cluster_floating_address }}
       - IP:127.0.0.1
     force: true
-  with_items:
+  loop:
     - "etcd-server"
     - "apiserver-etcd-client"
 
@@ -51,7 +51,7 @@
       - serverAuth
       - clientAuth
     force: true
-  with_items:
+  loop:
     - "etcd-client"
 
 - name: Define values for etcd certificate and key
@@ -120,7 +120,7 @@
     ownca_not_after: "{{ next_year_date.stdout }}"
     provider: ownca
     force: true
-  with_items:
+  loop:
     - "etcd-server"
     - "apiserver-etcd-client"
     - "etcd-client"

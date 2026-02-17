@@ -50,7 +50,7 @@
     file:
       path: "{{ item }}"
       mode: 0400
-    with_items:
+    loop:
       - "{{ registry_cert_key }}"
       - "{{ registry_cert_crt }}"
       - "{{ registry_cert_pkcs1_key }}"
@@ -89,7 +89,7 @@
     dest: "{{ config_permdir }}"
     remote_src: yes
     mode: preserve
-  with_items:
+  loop:
     - "{{ registry_cert_key }}"
     - "{{ registry_cert_crt }}"
     - "{{ registry_cert_pkcs1_key }}"

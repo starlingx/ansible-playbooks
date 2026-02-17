@@ -65,7 +65,7 @@
       command: "{{ item }}"
       args:
         warn: false
-      with_items:
+      loop:
         - "sed --follow-symlinks -i -e 's|0.0.0.0/0|::0/0|g' /etc/postgresql/pg_hba.conf"
         - "sed --follow-symlinks -i -e 's|0.0.0.0/32|::0/128|g' /etc/postgresql/pg_hba.conf"
       when: ipv6_addressing is defined and ipv6_addressing != False
