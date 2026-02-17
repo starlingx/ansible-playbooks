@@ -123,7 +123,7 @@
 - name: Wait until cluster finishes recovery
   command: ceph health -f json
   register: ceph_health
-  retries: 720
+  retries: 1080
   delay: 10
   until: >
     (
