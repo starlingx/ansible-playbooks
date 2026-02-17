@@ -57,10 +57,10 @@
   script: >
     create_sysinv_endpoints.py '{{ OS_USERNAME }}' '{{ OS_PASSWORD }}' '{{ sysinv_password }}' '{{ admin_username }}'
   vars:
-    - OS_USERNAME: "{{ sysinv_var_dict['keystone::roles::admin::admin_tenant'] }}"
-    - OS_PASSWORD: "{{ sysinv_var_dict['platform::client::params::admin_password'] }}"
-    - sysinv_password: "{{ sysinv_var_dict['sysinv::api::keystone_password'] }}"
-    - admin_username: "{{ sysinv_var_dict['platform::client::params::admin_username'] }}"
+    OS_USERNAME: "{{ sysinv_var_dict['keystone::roles::admin::admin_tenant'] }}"
+    OS_PASSWORD: "{{ sysinv_var_dict['platform::client::params::admin_password'] }}"
+    sysinv_password: "{{ sysinv_var_dict['sysinv::api::keystone_password'] }}"
+    admin_username: "{{ sysinv_var_dict['platform::client::params::admin_username'] }}"
 
 - block:
     - name: Retrieve dc_sysinv_user_id_dict

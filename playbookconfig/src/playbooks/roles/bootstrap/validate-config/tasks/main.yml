@@ -1356,7 +1356,7 @@
           include_role:
             name: common/verify-system-local-ca-overrides
           vars:
-            - enforce_ica: true
+            enforce_ica: true
 
       when: system_local_ca_cert | length > 0
     when: mode != 'restore'
