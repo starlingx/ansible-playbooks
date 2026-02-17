@@ -835,14 +835,7 @@
 # for an Ansible bug/quirk.
 - name: Filter out blank lines from disk size check output
   set_fact:
-    disk_size_result: |
-      {% set disk_size_result = [] %}
-      {% for l in disk_size_check_result.stdout_lines %}
-      {% if l != "" %}
-      {% set _ = disk_size_result.append(l) %}
-      {% endif %}
-      {% endfor %}
-      {{ disk_size_result }}
+    disk_size_result: "{{ disk_size_check_result.stdout_lines | reject('equalto', '') | list }}"
 
 - debug: var=disk_size_check_result
 - debug: var=disk_size_result

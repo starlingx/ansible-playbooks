@@ -98,7 +98,7 @@
   no_log: true
 
 - set_fact:
-    docker_registries: "{{ docker_registries | combine(hide_pw, recursive=true) }}"
+    docker_registries: "{{ docker_registries | combine(hide_pw | from_yaml, recursive=true) }}"
   vars:
     hide_pw: "{ '{{ item.key }}': { 'password': 'secret' } }"
   with_dict: "{{ docker_registries }}"

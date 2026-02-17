@@ -13,11 +13,14 @@
   set_fact:
     storageclass_file: "{{ trident_setup_dir }}/storage-class-{{ storage_class.metadata.name }}.yml"
 
+
 - name: Remove provisioner from content
   set_fact:
-    sc_without_provisioner: "{% set copy=storage_class.copy() %}{% set removed=copy.pop('provisioner') %}{{ copy }}"
-  loop: "{{ storage_class }}"
-  when: "item == 'provisioner'"
+    sc_without_provisioner: >-
+      {{
+        dict(storage_class | dict2items
+        | rejectattr('key', 'equalto', 'provisioner'))
+      }}
 
 - name: Set StorageClass headers
   set_fact:

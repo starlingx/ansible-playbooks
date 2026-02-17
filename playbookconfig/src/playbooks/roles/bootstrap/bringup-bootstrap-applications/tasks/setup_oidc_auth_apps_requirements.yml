@@ -98,7 +98,7 @@
     applications_str: |
       [
       {% for app in applications %}
-        {% set path = app.keys() | first %}
+        {% set path = app.keys() | list | first %}
         {% if 'oidc-auth-apps' in path %}
           { {{ path | to_json }}: {{ {'overrides': oidc_overrides} | to_json }} }
         {% else %}

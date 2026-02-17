@@ -50,8 +50,9 @@
 - block:
   - name: Add dual-stack key/value on dual-stack network params
     set_fact:
-      dual_stack_network_params: >-
-        {% set key, val = item.partition('=')[::2]|map('trim') -%}
-        {% set val = False if val=='False' else val -%}
-        {{ dual_stack_network_params|default({}) | combine ({network_param.key+"_"+key: val}) }}
+      dual_stack_network_params: "{{ dual_stack_network_params | default({}) | combine({
+          (network_param.key ~ '_' ~ (item.split('=')[0] | trim)) :
+          ( (item.split('=')[1] | trim) | ternary(false, true) if item.split('=')[1] |
+              trim == 'False' else item.split('=')[1] | trim )
+        }) }}"
     loop: "{{ network_param_lines }}"

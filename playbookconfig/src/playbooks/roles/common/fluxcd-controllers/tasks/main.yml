@@ -18,14 +18,15 @@
         password = keyring.get_password("sysinv", "services")
         if not password:
             raise Exception("Local registry password not found.")
-        print(dict(username='sysinv', password=str(password)))
+        import json
+        print(json.dumps(dict(username='sysinv', password=str(password))))
     shell: "{{ script_content }}"
     args:
       executable: /usr/bin/python
     register: local_registry_credentials_output
 
   - set_fact:
-      local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
+      local_registry_credentials: "{{ local_registry_credentials_output.stdout | from_json }}"
       local_registry: "registry.local:9001"
   when: local_registry_credentials is not defined
   become: yes

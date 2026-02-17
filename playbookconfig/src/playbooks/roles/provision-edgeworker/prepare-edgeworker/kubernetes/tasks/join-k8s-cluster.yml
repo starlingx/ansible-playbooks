@@ -50,7 +50,8 @@
       password = str(keyring.get_password("CGCS", "admin"))
       if not password:
           raise Exception("Local registry password not found.")
-      print(dict(username='admin', password=password))
+      import json
+      print(json.dumps(dict(username='admin', password=password))))
     ansible_connection: local
   shell: "{{ script_content }}"
   args:
@@ -59,7 +60,7 @@
 
 - set_fact:
     local_registry: "registry.local:9001"
-    local_registry_credentials: "{{ local_registry_credentials_output.stdout }}"
+    local_registry_credentials: "{{ local_registry_credentials_output.stdout | from_json }}"
 
 - name: Pull k8s gcr images from controller registry to {{ inventory_hostname }}
   shell: >-
