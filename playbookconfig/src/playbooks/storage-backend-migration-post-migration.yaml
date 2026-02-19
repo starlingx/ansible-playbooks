@@ -19,12 +19,13 @@
       host_service_action: enable
       checkpoint_name: manage-host-services-enable
 
-- name: Generate new DM file and check final system state
+- name: Re-apply apps, generate new DM file and check final system state
   hosts: active_controller
   gather_facts: false
   become: true
 
   roles:
+    - role: wait-apps-reapply
     - role: generate-system-dm-file
     - role: final-system-state-check
 
