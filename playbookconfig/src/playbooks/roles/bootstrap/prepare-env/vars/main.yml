@@ -112,3 +112,14 @@ ca_cert_dir: "/etc/pki/ca-trust/source/anchors"
 # Registry filesystem
 bootstrap_registry_filesystem: false
 bootstrap_registry_filesystem_fqpn: null
+
+# Openbao Parameters
+# =====================
+# The following parameters are for the Openbao platform service on host,
+# Disabling Openbao is not supported.
+
+# For enabling the openbao tasks, puppet apply
+bootstrap_configure_openbao: true
+
+# For starting/enabling the openbao service
+bootstrap_start_openbao: true
