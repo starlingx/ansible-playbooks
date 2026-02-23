@@ -145,6 +145,22 @@
   when: check_platform_license.rc is defined and
         check_platform_license.rc == 0
 
+- name: Check if rolebinding exists in backup platform config (etc/platform)
+  command: tar -tf {{ restore_data_file }} '{{ archive_platform_conf_path }}/.rolebindings.conf'
+  register: check_platform_rolebindings
+  failed_when: false
+  args:
+    warn: false
+
+- name: Restore rolebinding in platform config (/etc/platform/)
+  command: >-
+    tar -C {{ platform_conf_path }} -xpf {{ restore_data_file }}
+    --overwrite --transform='s,.*/,,' '{{ archive_platform_conf_path }}/.rolebindings.conf'
+  args:
+    warn: false
+  when: check_platform_rolebindings.rc is defined and
+        check_platform_rolebindings.rc == 0
+
 - name: Check if SSH config directory exists in backup tarball
   command: tar -tf {{ restore_data_file }} --wildcards 'etc/ssh/*'
   register: check_ssh_dir

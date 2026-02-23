@@ -157,6 +157,22 @@
 
   when: previous_software_version != '21.12'
 
+- name: Check if /etc/platform/.rolebindings.conf is present in the backup
+  command:
+    cmd: "tar --use-compress-program=pigz -tf '{{ platform_backup_fqpn }}' etc/platform/.rolebindings.conf"
+  args:
+    warn: false
+  failed_when: false
+  register: platform_rolebindings_backup_found
+
+- name: Restore /etc/platform/.rolebindings.conf from the backup
+  command:
+    cmd: "tar --use-compress-program=pigz -C / -xpf '{{ platform_backup_fqpn }}' etc/platform/.rolebindings.conf"
+  args:
+    warn: false
+  when: platform_rolebindings_backup_found.rc is defined and
+        platform_rolebindings_backup_found.rc == 0
+
 - import_role:
     name: roles/bootstrap/prepare-env
     tasks_from: restore_prep_tasks.yml
