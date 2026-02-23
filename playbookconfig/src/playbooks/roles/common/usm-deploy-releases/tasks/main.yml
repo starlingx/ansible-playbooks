@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024-2025 Wind River Systems, Inc.
+# Copyright (c) 2024-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #   This role applies software updates (release deployment) on a
@@ -116,6 +116,13 @@
       Expected Status: deploy-host-done
       {{ general_deploy_fail_message }}
   when: check_deploy_host.stdout != "deploy-host-done"
+
+  # Update the OAM interface if in the process of enrollment to
+  # ensure OAM network connectivity post unlock.
+- name: Update OAM interface for enrollment
+  include_role:
+    name: enroll-subcloud/update-oam-interface
+  when: mode is defined and mode == "enroll" and reboot_required
 
 - name: Perform host unlock if reboot required
   include_role:

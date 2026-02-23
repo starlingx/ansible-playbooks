@@ -1,0 +1,27 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#   This role updates the OAM interface on controller-0
+#
+
+- name: Update OAM interface
+  script: >
+    update_oam_interface.py {{ bootstrap_interface }}
+    {% if bootstrap_vlan is defined and bootstrap_vlan != '' %}
+    {{ bootstrap_vlan }}
+    {% endif %}
+  register: update_result
+  failed_when: false
+
+- name: Handle update failure
+  fail:
+    msg: |
+      Failed to update OAM interface. Please manually update the OAM
+      interface, finish the software update, and resume the enrollment.
+      Error output:
+      {{ update_result.stdout }}
+      {{ update_result.stderr }}
+  when: update_result.rc != 0
