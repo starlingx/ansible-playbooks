@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2025 Wind River Systems, Inc.
+# Copyright (c) 2022-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -32,6 +32,27 @@
     {% endfor %}
   args:
     warn: false
+
+- name: Extract management_interface from backup
+  shell: >
+    set -o pipefail;
+    tar --use-compress-program=pigz -xOf {{ platform_backup_fqpn }} etc/platform/platform.conf
+    | grep '^management_interface='
+    | head -1
+  args:
+    executable: /bin/bash
+  register: mgmt_interface_line
+  failed_when: false
+
+- name: Update management_interface in platform.conf
+  lineinfile:
+    path: /etc/platform/platform.conf
+    regexp: '^management_interface='
+    line: "{{ mgmt_interface_line.stdout }}"
+    create: no
+  when:
+    - mgmt_interface_line.rc == 0
+    - mgmt_interface_line.stdout != ""
 
 - name: Restore patching data
   command: >-
