@@ -63,9 +63,15 @@
 
     - name: Update postgresql pg_hba.conf with IPv6 address if system is IPv6
       command: "{{ item }}"
-      loop:
-        - "sed --follow-symlinks -i -e 's|0.0.0.0/0|::0/0|g' /etc/postgresql/pg_hba.conf"
-        - "sed --follow-symlinks -i -e 's|0.0.0.0/32|::0/128|g' /etc/postgresql/pg_hba.conf"
+      args:
+        warn: false
+      with_items:
+        - >-
+          sed --follow-symlinks -i -e 's|0.0.0.0/0|::0/0|g'
+          /etc/postgresql/{{ '17/main/' if is_trixie else '' }}pg_hba.conf
+        - >-
+          sed --follow-symlinks -i -e 's|0.0.0.0/32|::0/128|g'
+          /etc/postgresql/{{ '17/main/' if is_trixie else '' }}pg_hba.conf
       when: ipv6_addressing is defined and ipv6_addressing != False
 
   when: upgrade_in_progress
