@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023,2025 Wind River Systems, Inc.
+# Copyright (c) 2023,2025-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -136,15 +136,6 @@
       register: slapadd_result
       failed_when: slapadd_result.rc != 0 and slapadd_result.rc != 1
     when: bkp_has_ldap_database.rc == 0
-
-  # TODO (rjosemat): remove when Centos -> Debian upgrade support become deprecated
-  - name: Update slapd configuration
-    include_tasks: update-slapd-configuration.yml
-    when:
-      - upgrade_in_progress
-      - os_release == "debian"
-      - bkp_has_centos_ldap_config.rc == 0
-      - previous_software_version in ["21.12", "22.06"]
 
   always:
     - name: Delete files from staging dir
