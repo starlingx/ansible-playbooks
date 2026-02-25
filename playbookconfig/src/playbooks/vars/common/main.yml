@@ -7,3 +7,7 @@ supported_release_versions:
 target_backup_dir: /opt/platform-backup
 
 source_env_command: "source /etc/platform/openrc;"
+
+# Debian version
+debian_version_bullseye: "11"
+debian_version_trixie: "13"
