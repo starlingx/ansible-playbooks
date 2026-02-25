@@ -39,7 +39,9 @@
       -out {{ registry_cert_crt }} -config {{ cert_cnf_file }}
 
   - name: Generate pkcs1 key file
-    command: openssl rsa -in {{ registry_cert_key }} -out {{ registry_cert_pkcs1_key }}
+    command: >-
+      openssl rsa {{ '-traditional' if is_trixie else '' }} -in
+      {{ registry_cert_key }} -out {{ registry_cert_pkcs1_key }}
 
   - name: Remove extfile used in certificate generation
     file:

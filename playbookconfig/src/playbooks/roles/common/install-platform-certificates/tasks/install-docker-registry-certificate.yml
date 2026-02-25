@@ -48,7 +48,7 @@
 
   - name: Get the key also in PKCS1 format
     shell: >-
-      echo "{{ registry_key_pkcs8_b64.stdout | b64decode }}" | openssl rsa
+      echo "{{ registry_key_pkcs8_b64.stdout | b64decode }}" | openssl rsa {{ '-traditional' if is_trixie else '' }}
     register: registry_key_pkcs1_b64
     no_log: true
 
