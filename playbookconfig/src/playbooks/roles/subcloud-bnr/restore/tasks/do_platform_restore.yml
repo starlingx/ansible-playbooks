@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2025 Wind River Systems, Inc.
+# Copyright (c) 2022-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -41,7 +41,7 @@
     - name: Transfer platform backup to {{ inventory_hostname }}
       synchronize:
         mode: push
-        src: "{{ backup_dir }}/"
+        src: "{{ platform_backup_dir }}/"
         dest: "{{ default_local_staging_dir }}/"
         rsync_opts: "--omit-dir-times,--no-perms"
       register: backup_transfer
