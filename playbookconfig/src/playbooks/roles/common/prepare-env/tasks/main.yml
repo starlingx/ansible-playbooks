@@ -104,3 +104,12 @@
       for ansible_become_pass should be the same as the sysadmin Linux user
       password.
   when: password_check.rc != 0
+
+- name: Get Debian codename
+  shell: grep VERSION_CODENAME /etc/os-release | cut -d'=' -f2
+  register: codename
+
+- name: Set codename facts
+  set_fact:
+    is_trixie: "{{ codename.stdout == 'trixie' }}"
+    is_bullseye: "{{ codename.stdout == 'bullseye' }}"
