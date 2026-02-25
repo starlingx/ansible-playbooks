@@ -115,16 +115,12 @@
 - block:
   - name: Check if SRIOV config file is present in the backup tarball
     shell: "tar -tf {{ restore_data_file }} | grep 'etc/pcidp/config.json'"
-    args:
-      warn: false
     failed_when: false
     register: sriov_config_file_check_output
 
   - name: Restore SRIOV config file
     shell: mkdir -p /etc/pcidp && tar -C /etc/pcidp/ -xpf {{ restore_data_file }}
-        --overwrite --transform='s,.*/,,' *pcidp/config.json*
-    args:
-      warn: false
+        --overwrite --transform='s,.*/,,' *pcidp/config.json*  # noqa 302
     failed_when: false
     when: sriov_config_file_check_output.rc == 0
 

@@ -47,8 +47,6 @@
     command: >-
       tar -C {{ staging_dir }} -xpf {{ restore_data_file }}  --transform='s,.*/,,'
       {{ archive_platform_conf_path }}/platform.conf
-    args:
-      warn: false
 
   - name: Search for the new INSTALL_UUID in /etc/platform/platform.conf
     shell: grep INSTALL_UUID {{ platform_conf_path }}/platform.conf
@@ -98,15 +96,11 @@
       '{{ archive_config_permdir }}/dc-adminep-root-ca.crt'
     register: check_ca_cert
     failed_when: false
-    args:
-      warn: false
 
   - name: Restore admin endpoint root CA certificate into config permdir (/opt/platform/config/...)
     command: >-
       tar -C {{ config_permdir }} -xpf {{ restore_data_file }}
       --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/dc-adminep-root-ca.crt'
-    args:
-      warn: false
     when: check_ca_cert.rc is defined and
           check_ca_cert.rc == 0
 
@@ -117,15 +111,11 @@
   command: tar -tf {{ restore_data_file }} '{{ archive_platform_conf_path }}/.license'
   register: check_permdir_license
   failed_when: false
-  args:
-    warn: false
 
 - name: Restore license in config permdir (/opt/platform/config/...)
   command: >-
     tar -C {{ config_permdir }} -xpf {{ restore_data_file }}
     --overwrite --transform='s,.*/,,' '{{ archive_platform_conf_path }}/.license'
-  args:
-    warn: false
   when: check_permdir_license.rc is defined and
         check_permdir_license.rc == 0
 
@@ -133,15 +123,11 @@
   command: tar -tf {{ restore_data_file }} '{{ archive_platform_conf_path }}/.license'
   register: check_platform_license
   failed_when: false
-  args:
-    warn: false
 
 - name: Restore license in platform config (/etc/platform/)
   command: >-
     tar -C {{ platform_conf_path }} -xpf {{ restore_data_file }}
     --overwrite --transform='s,.*/,,' '{{ archive_platform_conf_path }}/.license'
-  args:
-    warn: false
   when: check_platform_license.rc is defined and
         check_platform_license.rc == 0
 
@@ -165,8 +151,6 @@
   command: tar -tf {{ restore_data_file }} --wildcards 'etc/ssh/*'
   register: check_ssh_dir
   failed_when: false
-  args:
-    warn: false
 
 - block:
   - name: Get current MACs sshd config
@@ -177,8 +161,6 @@
     command: >-
       tar -C /etc/ssh -xpf {{ restore_data_file }} --overwrite
       --wildcards --transform='s,.*/,,' etc/ssh/*
-    args:
-      warn: false
 
   # if restoring on Debian, additional work is needed when restoring data from
   # a CentOS deployment or else sshd will fail when controller-0 is unlocked
@@ -237,22 +219,16 @@
   command: >-
     tar -C /etc -xpf {{ restore_data_file }} --overwrite
     --transform='s,.*/,,' etc/resolv.conf
-  args:
-    warn: false
 
 - name: Restore dnsmasq in config permdir (/opt/platform/config/...)
   command: >-
     tar -C {{ config_permdir }} -xpf {{ restore_data_file }} --wildcards
     --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/dnsmasq*'
-  args:
-    warn: false
 
 - name: Restore boot files in pxelinux.cfg dir
   command: >-
     tar -C {{ pxe_config_permdir }} -xpf {{ restore_data_file }} --wildcards
     --overwrite --transform='s,.*/,,' '{{ archive_config_permdir }}/pxelinux.cfg/*-*-*'
-  args:
-    warn: false
   when: not upgrade_in_progress
 
 # The grub.cfg used during the first boot is /boot/grub2/grub.cfg.
@@ -268,16 +244,12 @@
 - name: Check if /boot is present in the backup
   command:
     cmd: "tar --use-compress-program=pigz -tf '{{ platform_backup_fqpn }}' boot/"
-  args:
-    warn: false
   failed_when: false
   register: boot_backup_found
 
 - name: Restore /boot from the backup
   command:
     cmd: "tar --use-compress-program=pigz -C / -xpf '{{ platform_backup_fqpn }}' boot/"
-  args:
-    warn: false
   when:
     - boot_backup_found.rc == 0
 
@@ -286,8 +258,6 @@
 
 - name: Check if ldap LDIF configuration file exists in the backup archive
   shell: "tar -tf {{ restore_data_file }} | grep -E 'etc/.*ldap/schema/cn=config.ldif'"
-  args:
-    warn: false
   failed_when: false
   register: bkp_has_ldap_config_ldif
 
@@ -312,8 +282,6 @@
 # on Debian during upgrade.
 - name: Check if var/home directory is in the backup tarball
   command: "tar -tf {{ restore_data_file }} var/home"
-  args:
-    warn: false
   failed_when: false
   register: debian_homedir
 
@@ -323,29 +291,21 @@
 
 - name: Restore home directory
   shell: tar -C / --wildcards --overwrite -xpf {{ restore_data_file }} {{ home_dir_pattern }}
-  args:
-    warn: false
   become_user: root
 
 - name: Restore extension filesystem
   command: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
-  args:
-    warn: false
   become_user: root
   loop:
     - "{{ extension_permdir | regex_replace('^\\/', '') }}"
 
 - name: Check if fluxcd folder is present in the backup tarball
   shell: "tar -tf {{ restore_data_file }} | grep '{{ fluxcd_permdir | regex_replace('^\\/', '') }}'"
-  args:
-    warn: false
   failed_when: false
   register: bkp_has_fluxcd
 
 - name: Restore fluxcd manifests
   command: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
-  args:
-    warn: false
   become_user: root
   loop:
     - "{{ fluxcd_permdir | regex_replace('^\\/', '') }}"
@@ -354,51 +314,37 @@
 
 - name: Restore helm overrides
   command: tar -C / --overwrite -xpf {{ restore_data_file }} {{ archive_helm_permdir }}
-  args:
-    warn: false
   become_user: root
 
 - name: Restore sysinv default configuration file
   command: >-
     tar -C {{ sysinv_config_permdir }} -xpf {{ restore_data_file }}
     --wildcards --transform='s,.*/,,' '*/sysinv.conf.default'
-  args:
-    warn: false
 
 - name: Restore coredump.conf.d directory
   command: >-
     tar -C /etc/systemd/coredump.conf.d -xpf {{ restore_data_file }} --wildcards
     --overwrite --transform='s,.*/,,' etc/systemd/coredump.conf.d/*
-  args:
-    warn: false
 
 - name: Restore configuration files
   command: >-
     tar --use-compress-program=pigz -C / -xvpf {{ restore_data_file }} --overwrite
     {{ ' '.join(restore_items) }}
-  args:
-    warn: false
   when: restore_items | length > 0
 
 - name: Restore extra configuration files
   command: >-
     tar --use-compress-program=pigz -C / -xvpf {{ restore_data_file }} --overwrite
     {{ ' '.join(restore_extra_items) }}
-  args:
-    warn: false
   when: restore_extra_items | length > 0
 
 - name: Look for the flag indicating that ceph is configured
   shell: "tar -tf {{ restore_data_file }} | grep '{{ archive_ceph_backend_flag }}'"
-  args:
-    warn: false
   failed_when: false
   register: ceph_backend
 
 - name: Look for the flag indicating that rook is configured
   shell: "tar -tf {{ restore_data_file }} | grep '{{ archive_rook_backend_flag }}'"
-  args:
-    warn: false
   failed_when: false
   register: rook_backend
 
@@ -422,8 +368,6 @@
     command: >-
       tar -C {{ ceph_crushmap_dir }} -xpf {{ restore_data_file }}
       --wildcards --transform='s,.*/,,' '*/crushmap.bin.backup'
-    args:
-      warn: false
 
   # Need to remove osd info from the crushmap before it is loaded into ceph.
   # When osds are created they will be inserted into the crushmap by ceph.
@@ -443,8 +387,6 @@
 - name: Look for deploy files
   shell: "tar -tf {{ restore_data_file }} |
          grep {{ archive_deploy_permdir }}"
-  args:
-    warn: false
   failed_when: false
   register: deploy_search_result
 
@@ -452,8 +394,6 @@
   command: >-
     tar -C / --overwrite -xpf {{ restore_data_file }}
     {{ archive_deploy_permdir}}
-  args:
-    warn: false
   when: deploy_search_result.rc == 0
 
 # TODO: Restore ceph_external when it is supported
@@ -502,15 +442,11 @@
       command: tar -tf {{ restore_data_file }} {{ archive_fernet_keys_permdir }}
       register: check_fernet_keys_dir
       failed_when: false
-      args:
-        warn: false
 
     - name: Migrate fernet keys
       command: >-
         tar -C {{ fernet_keys_permdir }} -xpf {{ restore_data_file }} --overwrite
         --wildcards --transform='s,.*/,,' {{ archive_fernet_keys_permdir }}/*
-      args:
-        warn: false
       when: check_fernet_keys_dir.rc == 0
 
     - name: Migrate databases and platform data
@@ -748,8 +684,6 @@
             command: >-
               tar --use-compress-program=pigz -C {{ ceph_temp_dir }} --transform='s,.*/,,'
               -xpf {{ platform_backup_fqpn }} {{ ceph_monmap_backup_path_tgz.stdout_lines[0] }}
-            args:
-              warn: false
 
           - include_role:
               name: recover-rook-ceph-data
@@ -858,8 +792,6 @@
           shell: |
             rm -rf /var/lib/ceph/data/*
             rm -rf /var/lib/ceph/mon-float/*
-          args:
-            warn: false
 
         when: rook_backend.rc == 0
 

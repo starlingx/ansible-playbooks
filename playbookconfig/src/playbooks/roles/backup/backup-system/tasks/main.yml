@@ -61,8 +61,6 @@
 
         - name: Issue command to pkg manager
           command: "{{ 'rpm -q' if os_release == 'centos' else 'dpkg -l' }} pigz"
-          args:
-            warn: false
           failed_when: false
           register: check
 
@@ -307,15 +305,11 @@
       shell: >-
         sudo -u postgres pg_dumpall
         --clean --schema-only > {{ postgres_dir.path }}/postgres.postgreSql.config
-      args:
-        warn: false
 
     - name: Backup postgres, template1, sysinv, barbican db data
       shell: >-
         sudo -u postgres pg_dump --format=plain --inserts --disable-triggers --data-only
         {{ item }} > {{ postgres_dir.path }}/{{ item }}.postgreSql.data
-      args:
-        warn: false
       loop:
         - postgres
         - template1
@@ -347,15 +341,11 @@
       shell: >-
         sudo -u postgres pg_dump --format=plain --inserts --disable-triggers
         --data-only fm --exclude-table=alarm > {{ postgres_dir.path }}/fm.postgreSql.data
-      args:
-        warn: false
 
     - name: Backup keystone db data
       shell: >-
         sudo -u postgres pg_dump --format=plain --inserts --disable-triggers
         --data-only keystone > {{ postgres_dir.path }}/keystone.postgreSql.data
-      args:
-        warn: false
 
     - name: Check if it is dc controller
       command: >-
@@ -369,8 +359,6 @@
         shell: >-
           sudo -u postgres pg_dump --format=plain --inserts --disable-triggers
           --data-only dcmanager > {{ postgres_dir.path }}/dcmanager.postgreSql.data
-        args:
-          warn: false
 
       - name: Backup dcorch db for dc controller
         set_fact:
@@ -933,8 +921,6 @@
         $(ls -d
         {{ final_backup_targets | join(' ') }}
         2> /dev/null)
-      args:
-        warn: false
       # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it", which
       # makes tar return 1
       register: tar_cmd
@@ -949,8 +935,6 @@
         $(ls -d
         {{ dc_vault_permdir }}
         2> /dev/null)
-      args:
-        warn: false
       # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it", which
       # makes tar return 1
       register: tar_cmd
@@ -969,8 +953,6 @@
         {{ mariadb_dir.path }}
         {{ helm_overrides_sqldump_dir.path }}
         2> /dev/null)
-      args:
-        warn: false
       # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it", which
       # makes tar return 1
       register: tar_cmd
@@ -987,8 +969,6 @@
         $(ls -d
         {{ hc_vault_dir.path }}
         2> /dev/null)
-      args:
-        warn: false
       # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it", which
       # makes tar return 1
       register: tar_cmd
@@ -1005,8 +985,6 @@
         $(ls -d
         {{ openbao_dir.path }}
         2> /dev/null)
-      args:
-        warn: false
       # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it", which
       # makes tar return 1
       register: tar_cmd

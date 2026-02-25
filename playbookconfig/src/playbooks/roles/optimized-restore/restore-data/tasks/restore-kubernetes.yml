@@ -70,8 +70,6 @@
         cmd: >
           tar --wildcards --use-compress-program=pigz -O -xf
           {{ platform_backup_fqpn | quote }} 'opt/*/system_image_list.yaml'
-      args:
-        warn: false
       failed_when: false
       register: system_image_list
 
@@ -80,8 +78,6 @@
         cmd: >
           tar --wildcards --use-compress-program=pigz -O -xf
           {{ platform_backup_fqpn | quote }} 'opt/*/crictl_image_cache_list.txt'
-      args:
-        warn: false
       failed_when: false
       register: crictl_image_cache
 
@@ -126,8 +122,6 @@
     - name: Check if var/lib/kubelet is present in the backup
       command:
         cmd: "tar --use-compress-program=pigz -tf '{{ platform_backup_fqpn }}' var/lib/kubelet"
-      args:
-        warn: false
       failed_when: false
       register: kubelet_backup_found
 
@@ -142,8 +136,6 @@
              '{{ platform_backup_fqpn }}' var/lib/kubelet \
              --exclude var/lib/kubelet/cpu_manager_state \
              --exclude var/lib/kubelet/memory_manager_state"
-      args:
-        warn: false
       when: kubelet_backup_found.rc == 0
 
     - name: Create kubelet override config file

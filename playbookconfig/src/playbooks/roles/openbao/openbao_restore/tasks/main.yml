@@ -9,8 +9,6 @@
   command: >-
     tar --use-compress-program=pigz -C {{ openbao_backup_dir }} -xpf {{ backup_filepath }}
     --wildcards --transform='s,.*/,,'
-  args:
-    warn: false
   become: yes
 
 - name: Find the snapshot file

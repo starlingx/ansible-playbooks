@@ -34,8 +34,6 @@
 
     - name: Look for dc-vault filesystem
       shell: "tar -tf {{ dc_vault_backup_file }} | grep '{{ dc_vault_permdir|basename }}'"
-      args:
-        warn: false
       failed_when: false
       register: search_result
 
@@ -43,8 +41,6 @@
       command: >-
         tar -C / --overwrite -xpf {{ dc_vault_backup_file }}
         {{ archive_dc_vault_permdir }}
-      args:
-        warn: false
       when: search_result.rc == 0
 
   always:

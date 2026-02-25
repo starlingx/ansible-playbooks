@@ -325,8 +325,6 @@
 - block:
   - name: Restore kubernetes certificates
     shell: tar --use-compress-program=pigz -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
-    args:
-      warn: false
     loop:
       - "{{ kubeadm_pki_dir | regex_replace('^\\/', '') }}"
     become_user: root
@@ -346,8 +344,6 @@
 
   - name: Restore encryption provider config
     shell: tar --use-compress-program=pigz -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
-    args:
-      warn: false
     loop:
       - "{{ encryption_provider_config | regex_replace('^\\/', '') }}"
     become_user: root

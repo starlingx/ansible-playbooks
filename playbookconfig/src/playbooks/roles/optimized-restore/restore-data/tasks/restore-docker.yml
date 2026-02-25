@@ -22,8 +22,6 @@
     tar --use-compress-program=pigz
         -xpf {{ registry_backup_fqpn }}
         -C / --overwrite var/lib/docker-distribution
-  args:
-    warn: false
   when: restore_registry_filesystem
 
 # The following task is executed when the backup does not contain image registry filesystem archive
@@ -33,8 +31,6 @@
     tar --use-compress-program=pigz
         -xpf {{ prestage_registry_filesystem.stat.path }}
         -C / --overwrite var/lib/docker-distribution
-  args:
-    warn: false
   when:
     - not restore_registry_filesystem
     - prestage_registry_filesystem is defined
@@ -42,8 +38,6 @@
 
 - name: Disable local registry authentication
   command: "sed -i '/auth:/,$d' /etc/docker-distribution/registry/config.yml"
-  args:
-    warn: false
 
 - name: Restart docker services
   systemd:

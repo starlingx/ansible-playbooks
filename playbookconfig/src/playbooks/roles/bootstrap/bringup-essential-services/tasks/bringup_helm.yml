@@ -63,8 +63,6 @@
 # Resort to sed due to replace/lineinfile module deficiency
 - name: Update lighttpd.conf
   command: "{{ item }}"
-  args:
-    warn: false
   loop:
     - "sed -i -e 's|<%= @http_port %>|'$PORT_NUM'|g' /etc/lighttpd/lighttpd.conf"
     - "sed -i '/@enable_https/,/% else/d' /etc/lighttpd/lighttpd.conf"
@@ -106,8 +104,6 @@
 
 - name: Restore Helm charts if the host is bootstrapped in restore mode
   command: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
-  args:
-    warn: false
   become_user: root
   loop:
     - "{{ source_helm_bind_dir | regex_replace('^\\/', '') }}"
@@ -158,8 +154,6 @@
 - name: Bind mount on {{ target_helm_bind_dir }}
   # Due to deficiency of mount module, resort to command for now
   command: mount -o bind -t ext4 {{ source_helm_bind_dir }} {{ target_helm_bind_dir }}
-  args:
-    warn: false
 
 - name: Enable lighttpd
   command: systemctl enable lighttpd

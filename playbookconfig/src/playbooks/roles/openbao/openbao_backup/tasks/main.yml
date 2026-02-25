@@ -50,8 +50,6 @@
 
       - name: Issue command to pkg manager
         command: "{{ 'rpm -q' if os_release == 'centos' else 'dpkg -l' }} pigz"
-        args:
-          warn: false
         failed_when: false
         register: check
 
@@ -100,8 +98,6 @@
       $(ls -d
       {{ openbao_backup_dir }}
       2> /dev/null)
-    args:
-      warn: false
     # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it", which
     # makes tar return 1
     register: tar_cmd

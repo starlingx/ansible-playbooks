@@ -16,8 +16,6 @@
         --use-compress-program=pigz
         -xpf {{ restore_data_file }}
         '{{ ceph_conf[1:] }}'
-      args:
-        warn: false
       when: backup_taken_from != 'controller-1'
 
     # Restore ceph.conf from controller-0 if backup was taken on controller-1
@@ -28,8 +26,6 @@
           --use-compress-program=pigz
           -xpf {{ restore_data_file }} --wildcards
           --transform='s,.*/,,' '*/{{ ceph_conf_controller_0 | basename }}'
-        args:
-          warn: false
 
       - name: Replace ceph.conf with ceph_controller-0.conf
         copy:
@@ -161,8 +157,6 @@
 
     - name: Grab the mgr IP address
       command: "sed -nr -e '/mgr.'$MON_NAME'/!b;n;s/public_addr = (.*)/\\1/p' /etc/ceph/ceph.conf"
-      args:
-        warn: false
       register: result
       environment:
         MON_NAME: "{{ mon_name }}"
@@ -207,8 +201,6 @@
 
     - name: Explicitly enable Msgr V1 port on Ceph monitor public address
       command: "{{ item }}"
-      args:
-        warn: false
       loop:
         - "sed -ri -e '/mon.'$MON_NAME'/!b;n;s/public_addr = '$ESTART'(.*)'$EEND':'$MON_PORT'$
            /public_addr = \\1/' /etc/ceph/ceph.conf"

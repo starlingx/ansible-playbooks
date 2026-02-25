@@ -44,8 +44,6 @@
       shell: >-
         tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |
         grep 'etc/platform/.node_ceph_configured'
-      args:
-        warn: false
       failed_when: false
       register: ceph_backend
 
@@ -53,8 +51,6 @@
       shell: >-
         tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |
         grep 'etc/platform/.node_rook_configured'
-      args:
-        warn: false
       failed_when: false
       register: rook_backend
 
@@ -111,8 +107,6 @@
             command: >-
               tar --use-compress-program=pigz -C {{ ceph_temp_dir }}
               -xpf {{ platform_backup_fqpn }} {{ ceph_crushmap_backup_path_tgz.stdout_lines[0] }}
-            args:
-              warn: false
 
           - name: Set Ceph crushmap backup dir
             set_fact:
@@ -184,8 +178,6 @@
             command: >-
               tar --use-compress-program=pigz -C {{ ceph_temp_dir }} --transform='s,.*/,,'
               -xpf {{ platform_backup_fqpn }} {{ ceph_monmap_backup_path_tgz.stdout_lines[0] }}
-            args:
-              warn: false
 
           - name: Start Ceph recovery
             include_role:

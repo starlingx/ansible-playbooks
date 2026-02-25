@@ -51,13 +51,9 @@
 
   - name: Remove blank lines, comments, markers from images temp file
     command: sed -i -e '/^$/d; /#/d; /\[/d' {{ image_list_tempfile.path }}
-    args:
-      warn: false
 
   - name: Remove extra fields from images temp file
     command: sed -i 's/,.*//' {{ image_list_tempfile.path }}
-    args:
-      warn: false
 
   - name: Read in the images temp file content
     slurp:

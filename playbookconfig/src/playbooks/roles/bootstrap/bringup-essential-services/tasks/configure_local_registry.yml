@@ -25,8 +25,6 @@
 
 - name: Update local registry config files
   command: "{{ item }}"
-  args:
-    warn: false
   loop:
     - "sed -i -e 's|<%= @registry_readonly %>|'false'|g' {{ registry_runtime_config_file }}"
     - "sed -i -e 's|<%= @registry_readonly %>|'true'|g' {{ registry_readonly_config_file }}"
@@ -38,9 +36,11 @@
     DOCKER_REGISTRY_HOST: "{{ controller_floating_address_url }}"
 
 - name: Create symlink from local registry runtime config file
-  command: ln -fs {{ registry_runtime_config_file }} {{ registry_config_file }}
-  args:
-    warn: false
+  file:
+    src: "{{ registry_runtime_config_file }}"
+    dest: "{{ registry_config_file }}"
+    state: link
+    force: yes
 
 - name: Generate local registry token server config file from template
   copy:
@@ -51,8 +51,6 @@
 
 - name: Update local registry token server file
   command: "{{ item }}"
-  args:
-    warn: false
   loop:
     - "sed -i -e 's|<%= @docker_registry_host %>|'$DOCKER_REGISTRY_HOST'|g' {{ registry_token_server_file }}"
     - "sed -i -e 's|<%= @registry_ks_endpoint %>|'$REGISTRY_KS_ENDPOINT'|g' {{ registry_token_server_file }}"

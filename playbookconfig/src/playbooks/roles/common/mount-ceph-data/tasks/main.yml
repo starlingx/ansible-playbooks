@@ -11,8 +11,6 @@
   shell: >-
     tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |
     grep 'etc/platform/.node_rook_configured'
-  args:
-    warn: false
   failed_when: false
   register: rook_backend
 

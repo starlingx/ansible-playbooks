@@ -63,8 +63,6 @@
 
     - name: Update postgresql pg_hba.conf with IPv6 address if system is IPv6
       command: "{{ item }}"
-      args:
-        warn: false
       loop:
         - "sed --follow-symlinks -i -e 's|0.0.0.0/0|::0/0|g' /etc/postgresql/pg_hba.conf"
         - "sed --follow-symlinks -i -e 's|0.0.0.0/32|::0/128|g' /etc/postgresql/pg_hba.conf"

@@ -24,8 +24,6 @@
     -xpf {{ platform_backup_fqpn | quote }}
     --overwrite --transform='s,.*/,,'
     'opt/platform/puppet/{{ previous_software_version }}/hieradata'
-  args:
-    warn: false
 
 - name: Check if the controller0_hieradata file exists
   stat:
@@ -143,8 +141,6 @@
     sed -i
     '/{{ item }}/ s/{{ upgrade_metadata.from_release }}/{{ upgrade_metadata.to_release }}/g'
     {{ hieradata_workdir }}/static.yaml
-  args:
-    warn: false
   loop:
     - "platform::client::credentials::params::keyring_directory: "
     - "platform::client::credentials::params::keyring_file: "

@@ -122,9 +122,7 @@
     until: check_uploaded.stdout == "uploaded"
 
   - name: Remove content from ceph data directory
-    shell: rm -rf /var/lib/ceph/data/*
-    args:
-      warn: false
+    shell: rm -rf /var/lib/ceph/data/*  # noqa 302
     when: rook_backend.rc == 0
 
   when: wipe_ceph_osds|bool and (ceph_backend.rc == 0 or rook_backend.rc == 0)

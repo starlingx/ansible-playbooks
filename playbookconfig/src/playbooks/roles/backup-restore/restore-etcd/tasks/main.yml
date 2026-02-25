@@ -33,8 +33,6 @@
   command: >-
     tar --use-compress-program=pigz -C {{ etcd_tmp_dir }} -xpf {{ platform_backup_fqpn }}
     --wildcards --transform='s,.*/,,' '*/etcd-snapshot.db'
-  args:
-    warn: false
 
 # TODO(JGAULD): DEBUG.
 # NOTE we have already called Link etcd stage0 directory.
@@ -44,8 +42,6 @@
   command: >-
     tar --use-compress-program=pigz -xOf {{ platform_backup_fqpn }}
     --wildcards '*etcd-binary-version'
-  args:
-    warn: false
   failed_when: false
   register: etcd_version_ex
 

@@ -65,8 +65,6 @@
       {% for v in legacy_restore_exclude_items %}
       --exclude {{ v | quote }}
       {% endfor %}
-    args:
-      warn: false
 
   - name: Check if {{ server_cert_pem }} exists
     stat:
@@ -122,8 +120,6 @@
 - name: Update /etc/hosts with local registry host
   command: >-
     sed -i -e 's|'$CONTROLLER_ADDRESS'\t'$CONTROLLER'|'$CONTROLLER_ADDRESS'\t'$CONTROLLER'\t'$LOCAL_REGISTRY'|g' /etc/hosts
-  args:
-    warn: false
   environment:
     CONTROLLER_ADDRESS: "{{ controller_floating_address }}"
     CONTROLLER: "controller"

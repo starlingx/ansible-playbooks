@@ -72,8 +72,6 @@
       head -n 1
     register: backup_version_output
     changed_when: false
-    args:
-      warn: false
 
   - name: Set backup_software_version value
     set_fact:
@@ -86,8 +84,6 @@
 
   - name: Restore Helm charts, fluxcd manifests and extension filesystem
     command: tar -C / --overwrite -xpf {{ target_backup_dir }}/{{ backup_filename }} {{ item }}
-    args:
-      warn: false
     become_user: root
     loop:
       - "{{ helm_charts_permdir | regex_replace('^\\/', '') }}"
@@ -126,8 +122,6 @@
     command: >-
       tar -C {{ helm_overrides_sqldump_dir.path }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
       --wildcards --transform='s,.*/,,' '*/helm_overrides*.sql'
-    args:
-      warn: false
 
   - name: Merge user_overrides
     command: >
@@ -207,8 +201,6 @@
     command: >-
       tar -C {{ backup_dir }}/mariadb -xpf {{ target_backup_dir }}/{{ backup_filename }}
       --wildcards --transform='s,.*/,,' '*/*\.mariadb\.*'
-    args:
-      warn: false
 
   - name: Set k8s cmd prefix
     set_fact:

@@ -443,8 +443,6 @@
           system addrpool-modify {{ oam_uuid_ipv4 }} \
             --controller0-address {{ new_oam_c0_ipv4 }} \
             --controller1-address {{ new_oam_c1_ipv4 }}
-        args:
-          warn: false
         when: oam_uuid_ipv4 is defined and
              (current_oam_c0_ipv4 != new_oam_c0_ipv4 or
               current_oam_c1_ipv4 != new_oam_c1_ipv4)
@@ -455,8 +453,6 @@
           system addrpool-modify {{ oam_uuid_ipv6 }} \
             --controller0-address {{ new_oam_c0_ipv6 }} \
             --controller1-address {{ new_oam_c1_ipv6 }}
-        args:
-          warn: false
         when: oam_uuid_ipv6 is defined and
               (current_oam_c0_ipv6 != new_oam_c0_ipv6 or
                current_oam_c1_ipv6 != new_oam_c1_ipv6)
@@ -467,8 +463,6 @@
           system addrpool-modify {{ mgmt_uuid_ipv4 }} \
             --controller0-address {{ new_mgmt_c0_ipv4 }} \
             --controller1-address {{ new_mgmt_c1_ipv4 }}
-        args:
-          warn: false
         when: mgmt_uuid_ipv4 is defined and
              (current_mgmt_c0_ipv4 != new_mgmt_c0_ipv4 or
               current_mgmt_c1_ipv4 != new_mgmt_c1_ipv4)
@@ -479,8 +473,6 @@
           system addrpool-modify {{ mgmt_uuid_ipv6 }} \
             --controller0-address {{ new_mgmt_c0_ipv6 }} \
             --controller1-address {{ new_mgmt_c1_ipv6 }}
-        args:
-          warn: false
         when: mgmt_uuid_ipv6 is defined and
               (current_mgmt_c0_ipv6 != new_mgmt_c0_ipv6 or
                current_mgmt_c1_ipv6 != new_mgmt_c1_ipv6)
@@ -491,8 +483,6 @@
           system addrpool-modify {{ admin_uuid_ipv4 }} \
             --controller0-address {{ new_admin_c0_ipv4 }} \
             --controller1-address {{ new_admin_c1_ipv4 }}
-        args:
-          warn: false
         when: admin_uuid_ipv4 is defined and
              (current_admin_c0_ipv4 != new_admin_c0_ipv4 or
               current_admin_c1_ipv4 != new_admin_c1_ipv4)
@@ -503,8 +493,6 @@
           system addrpool-modify {{ admin_uuid_ipv6 }} \
             --controller0-address {{ new_admin_c0_ipv6 }} \
             --controller1-address {{ new_admin_c1_ipv6 }}
-        args:
-          warn: false
         when: admin_uuid_ipv6 is defined and
               (current_admin_c0_ipv6 != new_admin_c0_ipv6 or
                current_admin_c1_ipv6 != new_admin_c1_ipv6)
@@ -515,8 +503,6 @@
           system addrpool-modify {{ cluster_host_uuid_ipv4 }} \
             --controller0-address {{ new_cluster_host_c0_ipv4 }} \
             --controller1-address {{ new_cluster_host_c1_ipv4 }}
-        args:
-          warn: false
         when: cluster_host_uuid_ipv4 is defined and
              (current_cluster_host_c0_ipv4 != new_cluster_host_c0_ipv4 or
               current_cluster_host_c1_ipv4 != new_cluster_host_c1_ipv4)
@@ -527,8 +513,6 @@
           system addrpool-modify {{ cluster_host_uuid_ipv6 }} \
             --controller0-address {{ new_cluster_host_c0_ipv6 }} \
             --controller1-address {{ new_cluster_host_c1_ipv6 }}
-        args:
-          warn: false
         when: cluster_host_uuid_ipv6 is defined and
               (current_cluster_host_c0_ipv6 != new_cluster_host_c0_ipv6 or
                current_cluster_host_c1_ipv6 != new_cluster_host_c1_ipv6)
@@ -539,8 +523,6 @@
           system addrpool-modify {{ pxeboot_uuid_ipv4 }} \
             --controller0-address {{ new_pxeboot_c0_ipv4 }} \
             --controller1-address {{ new_pxeboot_c1_ipv4 }}
-        args:
-          warn: false
         when: pxeboot_uuid_ipv4 is defined and
              (current_pxeboot_c0_ipv4 != new_pxeboot_c0_ipv4 or
               current_pxeboot_c1_ipv4 != new_pxeboot_c1_ipv4)
@@ -551,8 +533,6 @@
           system addrpool-modify {{ storage_uuid_ipv4 }} \
             --controller0-address {{ new_storage_c0_ipv4 }} \
             --controller1-address {{ new_storage_c1_ipv4 }}
-        args:
-          warn: false
         when: storage_uuid_ipv4 is defined and
              (current_storage_c0_ipv4 != new_storage_c0_ipv4 or
               current_storage_c1_ipv4 != new_storage_c1_ipv4)
@@ -563,8 +543,6 @@
           system addrpool-modify {{ storage_uuid_ipv6 }} \
             --controller0-address {{ new_storage_c0_ipv6 }} \
             --controller1-address {{ new_storage_c1_ipv6 }}
-        args:
-          warn: false
         when: storage_uuid_ipv6 is defined and
               (current_storage_c0_ipv6 != new_storage_c0_ipv6 or
                current_storage_c1_ipv6 != new_storage_c1_ipv6)

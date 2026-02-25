@@ -30,8 +30,6 @@
     {% for v in restore_exclude_items %}
     --exclude {{ v | quote }}
     {% endfor %}
-  args:
-    warn: false
 
 - name: Extract management_interface from backup
   shell: >
@@ -58,23 +56,17 @@
   command: >-
     tar --use-compress-program=pigz -C / -xpf {{ patching_restore_data_file }} --overwrite
     opt/patching
-  args:
-    warn: false
   when: patching_restore_data_file is defined
 
 - name: Check if /boot is present in the backup
   command:
     cmd: "tar --use-compress-program=pigz -tf '{{ platform_backup_fqpn }}' boot/"
-  args:
-    warn: false
   failed_when: false
   register: boot_backup_found
 
 - name: Restore /boot from the backup
   command:
     cmd: "tar --use-compress-program=pigz -C / -xpf '{{ platform_backup_fqpn }}' boot/"
-  args:
-    warn: false
   when:
     - boot_backup_found.rc == 0
     - not upgrade_in_progress
@@ -91,8 +83,6 @@
           tar --use-compress-program=pigz -C / -xpf '{{ platform_backup_fqpn }}' --overwrite
           boot/1/kernel.env
           boot/efi/EFI/BOOT/boot.env
-      args:
-        warn: false
 
     - name: Update migrated kernel content
       replace:
@@ -111,8 +101,6 @@
   block:
     - name: Check if /var/lib/factory-install was backed up
       shell: "tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep 'var/lib/factory-install'"
-      args:
-        warn: false
       failed_when: false
       register: factory_install_dir_result
 
@@ -120,14 +108,10 @@
       command: >-
         tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }}
         --overwrite var/lib/factory-install
-      args:
-        warn: false
       when: factory_install_dir_result.rc == 0
 
     - name: Check if seed ISO rules were backed up
       shell: "tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep 'etc/udev/rules.d/99-seediso.rules'"
-      args:
-        warn: false
       failed_when: false
       register: seed_iso_rules_result
 
@@ -135,16 +119,12 @@
       command: >-
         tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }}
         --overwrite etc/udev/rules.d/99-seediso.rules
-      args:
-        warn: false
       when: seed_iso_rules_result.rc == 0
 
 - name: Check home dir for CentOS
   block:
     - name: Check if home was backed up
       shell: "tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep -E '^home\\/'"
-      args:
-        warn: false
       failed_when: false
       register: home_dir_result
 
@@ -155,8 +135,6 @@
         -C / -xpf {{ platform_backup_fqpn }}
         --exclude home/sysadmin/ansible.log
         --overwrite home/**/*
-      args:
-        warn: false
       when: home_dir_result.rc == 0
 
   when: previous_software_version == '21.12'
@@ -165,15 +143,11 @@
   block:
     - name: Check if home was backed up
       shell: "tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep 'var/home/'"
-      args:
-        warn: false
       failed_when: false
       register: home_dir_result
 
     - name: Restore home directory
       command: "tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }} --overwrite var/home/"
-      args:
-        warn: false
       when: home_dir_result.rc == 0
 
   when: previous_software_version != '21.12'
@@ -233,9 +207,7 @@
 
     # Shell required for wildcard
     - name: Fix host key permissions
-      shell: chmod 600 /etc/ssh/ssh_host_*_key
-      args:
-        warn: false
+      shell: chmod 600 /etc/ssh/ssh_host_*_key  # noqa 302
 
     - name: Update values from CentOS with Debian's
       block:

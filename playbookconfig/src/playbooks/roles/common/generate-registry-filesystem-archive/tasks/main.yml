@@ -41,8 +41,6 @@
     tar --use-compress-program={{ compress_program }}
     -cf {{ registry_archive_fqpn }}
     $(ls -d /var/lib/docker-distribution 2> /dev/null)
-  args:
-    warn: false
   # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it",
   # which makes tar return 1
   register: img_tar_cmd

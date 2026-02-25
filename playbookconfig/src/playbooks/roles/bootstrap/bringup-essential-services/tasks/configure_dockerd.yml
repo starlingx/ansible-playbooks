@@ -18,15 +18,11 @@
 
     - name: Update daemon.json with registry IP
       command: "sed -i -e 's|<%= @insecure_registries %>|$INSECURE_REGISTRIES|g' /etc/docker/daemon.json"
-      args:
-        warn: false
       environment:
         INSECURE_REGISTRIES: "{{ insecure_registries | to_json }}"
 
     - name: Update daemon.json with default max concurrent downloads/uploads
       command: "{{ item }}"
-      args:
-        warn: false
       loop:
         - "sed -i 's/<%= @max_concurrent_uploads %>/5/g' /etc/docker/daemon.json"
         - "sed -i 's/<%= @max_concurrent_downloads %>/3/g' /etc/docker/daemon.json"

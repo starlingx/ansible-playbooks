@@ -13,15 +13,11 @@
 
 - name: Check if CentOS openldap configuration is included in the backup
   shell: "tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep -E 'etc\\/openldap\\/.*'"
-  args:
-    warn: false
   failed_when: false
   register: bkp_has_centos_ldap_config
 
 - name: Check if ldap database is included in the backup
   shell: "tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep -E '*/ldap.db'"
-  args:
-    warn: false
   failed_when: false
   register: bkp_has_ldap_database
 
@@ -30,15 +26,11 @@
     - name: Restore openldap configuration
       command: tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }}
        --wildcards --overwrite etc/openldap/*
-      args:
-        warn: false
 
     # TODO (heitormatsui): remove when Centos -> Debian upgrade support become deprecated
     - block:
         - name: Copy openldap configuration to staging directory
           command: cp -Rf /etc/openldap/ {{ staging_dir }}/openldap
-          args:
-            warn: false
 
         - name: Replace Centos paths with Debian paths on files
           shell: >-
@@ -46,8 +38,6 @@
             "s#/usr/lib64/openldap#/usr/lib/ldap#;
             s#/var/lib/openldap-data#/var/lib/ldap#;
             s#/etc/openldap#/etc/ldap#"
-          args:
-            warn: false
 
         # Remove files that should be from the to-release side
         - name: Remove files that come from the backup but shouldn't be used
@@ -88,16 +78,12 @@
   - block:
       - name: Check if Debian ldap configuration is included in the backup
         shell: "tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep -E 'etc\\/ldap\\/.*'"
-        args:
-          warn: false
         failed_when: false
         register: bkp_has_debian_ldap_config
 
       - name: Restore ldap configuration
         command: tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }}
          --wildcards --overwrite etc/ldap/*
-        args:
-          warn: false
         when: bkp_has_debian_ldap_config.rc == 0
     when: not upgrade_in_progress or bkp_has_centos_ldap_config.rc != 0
 
@@ -106,16 +92,12 @@
       command: >-
         tar --use-compress-program=pigz -C {{ staging_dir }} -xpf {{ platform_backup_fqpn }} --wildcards
         --transform='s,.*/,,' '*/ldap.db'
-      args:
-        warn: false
 
     # Conversion of provider value in Duplex Set-up and has no effect in AIO-SX
     - name: Replace controller-0 to controller-1 in ldap configuration
       command: >-
         sed -i 's/controller-0/controller-1/'
         {{ldap_schema_path}}/cn=config/olcDatabase={1}mdb.ldif
-      args:
-        warn: false
 
     - name: Delete ldap directory
       file:

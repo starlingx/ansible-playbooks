@@ -160,8 +160,6 @@
 
 - name: Look for override backup file in the backup tarball
   shell: "tar --use-compress-program=pigz -tf {{ restore_data_file }} | grep '_override_backup.yml'"
-  args:
-    warn: false
   failed_when: false
   register: search_result
 
@@ -176,8 +174,6 @@
     tar -C {{ temp_upgrade_platform_dir }} -xf {{ restore_data_file }} --transform='s,.*/,,'
     --use-compress-program=pigz
     {{ search_result.stdout_lines[0] }}
-  args:
-    warn: false
 
 - name: Rename override file for bootstrap
   command: >-
@@ -242,8 +238,6 @@
     tar --use-compress-program=pigz --wildcards -Oxf
     {{ restore_data_file }} */sysinv.postgreSql.data |
     grep -E '^INSERT INTO .*kube_cmd_versions VALUES'
-  args:
-    warn: false
   failed_when: false
   register: kube_search_cmd
 

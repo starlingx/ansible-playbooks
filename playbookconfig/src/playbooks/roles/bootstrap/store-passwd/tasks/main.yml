@@ -124,8 +124,6 @@
     command: >-
       tar -C {{ temp_keyring_dir }} -xpf {{ restore_data_file }} --transform='s,.*/,,'
       {{ archive_keyring_permdir }}
-    args:
-      warn: false
 
   - name: Remove the unwanted directory
     file:

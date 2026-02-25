@@ -20,8 +20,6 @@
       command: >-
         tar --use-compress-program=pigz -C / --overwrite
         -xpf {{ platform_backup_fqpn | quote }} {{ network_scripts.lstrip('/') | quote }}
-      args:
-        warn: false
 
     - name: Bring up original networking
       shell:
@@ -52,7 +50,5 @@
 
 - name: Start dnsmasq for internal FQDN
   command: dnsmasq
-  args:
-    warn: false
   become: yes
   when: previous_software_version is version('22.12', '>')

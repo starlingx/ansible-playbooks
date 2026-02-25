@@ -81,19 +81,13 @@
   # https://github.com/kubernetes/kubernetes/commit/6845c66efbb888d2f73e1a1c17f0e06b34d8e261
   - name: Mount kubelet-lv
     command: bash -c 'mountpoint -q /var/lib/kubelet || mount /var/lib/kubelet'
-    args:
-      warn: false
 
   # it looks like k8s 1.16 unmounts the folder before clearing it
   - name: Clear kubelet data
-    shell: /bin/rm -rf /var/lib/kubelet/*
-    args:
-      warn: false
+    shell: /bin/rm -rf /var/lib/kubelet/*  # noqa 302
 
   - name: Clear etcd data cache
-    shell: /bin/rm -rf /opt/etcd/{{ software_version }}/controller.etcd/*
-    args:
-      warn: false
+    shell: /bin/rm -rf /opt/etcd/{{ software_version }}/controller.etcd/*  # noqa 302
 
   - block:
     - name: Stop etcd

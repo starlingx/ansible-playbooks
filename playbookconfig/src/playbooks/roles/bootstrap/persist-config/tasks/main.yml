@@ -595,8 +595,6 @@
 
   - name: Look for extra dir in backup archive
     shell: "tar -tf {{ restore_data_file }} | grep '{{ archive_extra_permdir }}'"
-    args:
-      warn: false
     failed_when: false
     register: search_result
 
@@ -604,8 +602,6 @@
     command: >-
       tar -C {{ extra_permdir }} -xpf {{ restore_data_file }} --strip-components=3
       '{{ archive_extra_permdir }}'
-    args:
-      warn: false
     when: search_result.rc == 0
 
   when: mode == 'restore'
@@ -624,8 +620,6 @@
 - name: Bind mount on {{ target_device_image_bind_dir }}
   # Due to deficiency of mount module, resort to command for now
   command: mount -o bind -t ext4 {{ source_device_image_bind_dir }} {{ target_device_image_bind_dir }}
-  args:
-    warn: false
 
 # When the mode is restore, the ceph data directory needs
 # to be mounted before the Kubernetes services bring up

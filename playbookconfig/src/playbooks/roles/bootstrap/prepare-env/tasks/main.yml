@@ -27,8 +27,6 @@
 # Check for unmistakenly StarlingX packages
 - name: "Look for unmistakenly {{ image_brand }} packages"
   command: "{{ pkg_lookup_cmd }} sysinv cgts-client"
-  args:
-    warn: false
   failed_when: false
   register: packages_installed
 
@@ -285,8 +283,6 @@
       command: >-
           zgrep -aE '^INSERT INTO .*kube_cmd_versions VALUES'
           {{ restore_data_file }}
-      args:
-        warn: false
       failed_when: false
       register: kube_cmd_search
 
@@ -479,9 +475,7 @@
 # StarlingX managed interfaces. This will start a "rogue" dhclient after unlock
 # (controllers use static addressing from DB).
 - name: Clean up interface config files in /etc/network/interfaces.d/
-  shell: rm -rf /etc/network/interfaces.d/*
-  args:
-    warn: false
+  shell: rm -rf /etc/network/interfaces.d/*  # noqa 302
   become: yes
 
 - block:

@@ -1,8 +1,6 @@
 - name: Check if /etc/profile.d/cli_env.sh is present in the backup
   command:
     cmd: tar --use-compress-program=pigz -tf '{{ platform_backup_fqpn }}' etc/profile.d/cli_env.sh
-  args:
-    warn: false
   register: cli_env_backup_found
   failed_when: false
   changed_when: false

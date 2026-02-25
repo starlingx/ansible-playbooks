@@ -175,8 +175,6 @@
       shell: >-
         tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |
         grep 'etc/platform/.node_rook_configured'
-      args:
-        warn: false
       failed_when: false
       register: rook_backend
 
@@ -193,8 +191,6 @@
           command: >-
             tar --use-compress-program=pigz -C /tmp --transform='s,.*/,,'
             -xpf {{ platform_backup_fqpn }} {{ rook_ceph_images_backup_path_tgz.stdout_lines[0] }}
-          args:
-            warn: false
 
         - name: Read rook-ceph-images.yaml file
           shell: cat /tmp/rook-ceph-images.yaml

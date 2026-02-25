@@ -63,16 +63,12 @@
     command: >-
       tar -C {{ hieradata_workdir }} -xpf {{ restore_data_file }} --wildcards
       --transform='s,.*/,,' '{{ archive_puppet_permdir }}/*.yaml'
-    args:
-      warn: false
 
   - name: Migrate static hieradata to new version
     command: >
       sed -i
       '/{{ item }}/ s/{{ upgrade_metadata.from_release }}/{{ upgrade_metadata.to_release }}/g'
       {{ hieradata_workdir }}/static.yaml
-    args:
-      warn: false
     loop:
       - "platform::client::credentials::params::keyring_directory: "
       - "platform::client::credentials::params::keyring_file: "
@@ -81,8 +77,6 @@
 
   - name: Restore etcd certificates.
     shell: tar -C / --overwrite -xpf {{ restore_data_file }} {{ item }}
-    args:
-      warn: false
     loop:
       - "{{ '/etc/etcd' | regex_replace('^\\/', '') }}"
     become_user: root
@@ -97,15 +91,11 @@
 
   - name: Check if apiserver-keys are present in the backup tarball
     shell: "tar -tf {{ restore_data_file }} | grep 'etc/kubernetes/pki/apiserver-etcd-client.*'"
-    args:
-      warn: false
     failed_when: false
     register: apiserver_etcd_certs_find_output
 
   - name: Extract apiserver-keys from /etc/kubernetes/pki
     shell: tar -C /etc/etcd/ --overwrite -xpf {{ restore_data_file }} {{ item }} --strip-components 3
-    args:
-      warn: false
     loop:
       - "{{ kubeadm_pki_dir | regex_replace('^\\/', '') }}/apiserver-etcd-client.crt"
       - "{{ kubeadm_pki_dir | regex_replace('^\\/', '') }}/apiserver-etcd-client.key"
@@ -114,8 +104,6 @@
 
   - name: Look for ssh_config dir in the backup tarball
     shell: "tar -tf {{ restore_data_file }} | grep 'opt/platform/config/.*/ssh_config'"
-    args:
-      warn: false
     failed_when: false
     register: search_ssh_config
 
@@ -132,8 +120,6 @@
       command: >-
         tar -C {{ temp_ssh_config_dir }} -xpf {{ restore_data_file }} --transform='s,.*/,,'
         {{ archive_ssh_config_permdir }}
-      args:
-        warn: false
 
     - name: Remove the unwanted directory
       file:

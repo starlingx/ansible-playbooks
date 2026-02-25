@@ -169,11 +169,6 @@
       until: api_response.stdout == "200"
       delegate_to: localhost
       failed_when: false
-      args:
-        # Disable warning that suggests using the get_url and uri module:
-        # - get_url is unnecessary as we're not actually downloading.
-        # - uri module doesn't seem to work for our cert update check
-        warn: false
 
     - name: Check and retry certificate renewal upon timeout
       block:
@@ -183,8 +178,6 @@
         register: insecure_api_response
         delegate_to: localhost
         failed_when: false
-        args:
-          warn: false
 
       - name: Abort on failed insecure sysinv endpoint request
         fail:
@@ -269,7 +262,5 @@
         delay: 20
         until: api_response.stdout == "200"
         delegate_to: localhost
-        args:
-          warn: false
       when:
         - api_response.rc != 0 or api_response.stdout != "200"

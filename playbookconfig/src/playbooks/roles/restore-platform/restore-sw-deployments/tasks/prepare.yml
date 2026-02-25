@@ -18,8 +18,6 @@
     {%+ endfor %}
     -xpvf {{ restore_data_file | quote }}
     {{ ' '.join(sw_deployments_restore_items | map('quote')) }}
-  args:
-    warn: false
 
 - name: Strip previously deployed patch contents from metadata
   script: "strip_patch_contents.py {{ current_path | quote }}"

@@ -83,8 +83,6 @@
         | tar --use-compress-program=pigz -xO etc/platform/platform.conf
         | grep 'subfunction='
       stdin: "{{ backup_encryption_passphrase }}"
-    args:
-      warn: false
     failed_when: false
     register: backup_subfunc
 
@@ -136,8 +134,6 @@
         | tar --use-compress-program=pigz -xO etc/platform/openrc
         | grep 'OS_REGION_NAME='
       stdin: "{{ backup_encryption_passphrase }}"
-    args:
-      warn: false
     failed_when: false
     register: os_region_name_search
 
@@ -163,8 +159,6 @@
           | tar --use-compress-program=pigz -t
           | grep '_override_backup.yml'
       stdin: "{{ backup_encryption_passphrase }}"
-    args:
-      warn: false
     failed_when: false
     register: search_result
 
@@ -191,8 +185,6 @@
         {{ extract_command_method }}
         | tar --use-compress-program=pigz -xO --wildcards '*etcd-binary-version'
       stdin: "{{ backup_encryption_passphrase }}"
-    args:
-      warn: false
     failed_when: false
     register: etcd_version_ex
 
@@ -209,8 +201,6 @@
         {{ extract_command_method }}
         | zgrep -aE '^INSERT INTO .*kube_cmd_versions VALUES'
       stdin: "{{ backup_encryption_passphrase }}"
-    args:
-      warn: false
     failed_when: false
     register: kube_cmd_search
 
@@ -270,8 +260,6 @@
       {{ search_result.stdout_lines[0] }}
     register: extract_result
     failed_when: false
-    args:
-      warn: false
 
   - name: Fail if host override file cannot be extracted from the backup tar file
     fail:

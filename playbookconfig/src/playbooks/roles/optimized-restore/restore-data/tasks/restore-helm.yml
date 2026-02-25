@@ -33,13 +33,9 @@
 - name: Bind mount on {{ target_helm_bind_dir }}
   # Due to deficiency of mount module, resort to command for now
   command: mount -o bind -t ext4 {{ source_helm_bind_dir }} {{ target_helm_bind_dir }}
-  args:
-    warn: false
 
 - name: Restore Helm charts
   command: tar --use-compress-program=pigz -C / --overwrite -xpf {{ platform_backup_fqpn }} {{ item }}
-  args:
-    warn: false
   loop:
     - "{{ source_helm_bind_dir | regex_replace('^\\/', '') }}"
 

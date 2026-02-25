@@ -16,8 +16,6 @@
     tar --use-compress-program={{ compress_program }}
     -Oxf '{{ tmp_platform_backup_dir }}/{{ tmp_platform_backup_filename }}'
     etc/platform/platform.conf
-  args:
-    warn: false
   vars:
     compress_program: "{{ 'pigz' if software_version is version('22.12', '>=') else 'gzip' }}"
   register: backup_platform_conf_values
