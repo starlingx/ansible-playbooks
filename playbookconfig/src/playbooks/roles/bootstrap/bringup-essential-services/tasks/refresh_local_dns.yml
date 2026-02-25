@@ -22,6 +22,8 @@
           {{ localhost_name_ip_mapping }}
           {{ derived_network_params.controller_0_address }}    controller-0
           {{ derived_network_params.controller_1_address }}    controller-1
+          {% if is_trixie %}{{ controller_floating_address }}    controller
+          {% endif %}
       register: etc_hosts
 
     - block:
@@ -31,7 +33,9 @@
           line: "{{ item }}"
           create: yes
         loop:
-          - "{{ controller_floating_address }}\tcontroller controller-platform-nfs"
+          - "{{ controller_floating_address }}\t{{
+            'controller controller-platform-nfs' if is_bullseye
+            else 'controller-platform-nfs' }}"
           - "{{ cluster_floating_address }}\tcontroller-cluster-host"
           - "{{ controller_pxeboot_floating_address }}\tpxecontroller"
           - "{{ network_params.external_oam_floating_address_primary }}\toamcontroller"
