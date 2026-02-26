@@ -99,19 +99,39 @@
 
   - name: Update keystone.conf
     template:
-      src: keystone/keystone.conf.j2
+      src: keystone/keystone.conf-bullseye.j2
       dest: /etc/keystone/keystone.conf
       owner: root
       group: keystone
       mode: 0640
+    when: ansible_distribution_major_version == debian_version_bullseye
+
+  - name: Update keystone.conf
+    template:
+      src: keystone/keystone.conf-trixie.j2
+      dest: /etc/keystone/keystone.conf
+      owner: root
+      group: keystone
+      mode: 0640
+    when: ansible_distribution_major_version == debian_version_trixie
 
   - name: Update logging.conf
     template:
-      src: keystone/logging.conf.j2
+      src: keystone/logging.conf-bullseye.j2
       dest: /etc/keystone/logging.conf
       owner: root
       group: root
       mode: 0644
+    when: ansible_distribution_major_version == debian_version_bullseye
+
+  - name: Update logging.conf
+    template:
+      src: keystone/logging.conf-trixie.j2
+      dest: /etc/keystone/logging.conf
+      owner: root
+      group: root
+      mode: 0644
+    when: ansible_distribution_major_version == debian_version_trixie
 
   - name: Configure keystone directory
     file:

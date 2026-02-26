@@ -1,0 +1,54 @@
+[loggers]
+keys=root
+
+[handlers]
+keys=production,file,devel
+
+[formatters]
+keys=minimal,normal,debug
+
+
+###########
+# Loggers #
+###########
+
+[logger_root]
+level=INFO
+handlers=file
+
+
+################
+# Log Handlers #
+################
+
+[handler_production]
+class=handlers.SysLogHandler
+level=ERROR
+formatter=normal
+args=(('localhost', handlers.SYSLOG_UDP_PORT), handlers.SysLogHandler.LOG_USER)
+
+[handler_file]
+class=FileHandler
+level=DEBUG
+formatter=normal
+args=('/var/log/keystone/keystone.log', 'a')
+
+[handler_devel]
+class=StreamHandler
+level=NOTSET
+formatter=debug
+args=(sys.stdout,)
+
+
+##################
+# Log Formatters #
+##################
+
+[formatter_minimal]
+format=%(message)s
+
+[formatter_normal]
+format=(%(name)s): %(asctime)s %(levelname)s %(message)s
+
+[formatter_debug]
+format=(%(name)s): %(asctime)s %(levelname)s %(module)s %(funcName)s %(message)s
