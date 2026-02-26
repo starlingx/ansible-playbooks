@@ -17,7 +17,9 @@
         | unique
         | list
       }}
-  when: bad_hosts_in_sync | length > 0
+  when:
+    - bad_hosts_in_sync | length > 0
+    - not allow_out_of_sync | bool
 
 - name: All hosts are in-sync and reconciled
   debug:

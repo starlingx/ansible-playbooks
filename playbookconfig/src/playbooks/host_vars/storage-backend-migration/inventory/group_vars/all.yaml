@@ -48,3 +48,5 @@ backups_max_safety_margin_percent: 5
 erase_snapshots: false # for export-import only
 
 block_openstack_app: true
+
+allow_out_of_sync: false

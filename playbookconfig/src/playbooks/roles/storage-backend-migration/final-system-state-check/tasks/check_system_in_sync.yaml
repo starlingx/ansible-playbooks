@@ -17,7 +17,9 @@
         | unique
         | list
       }}
-  when: bad_system_in_sync | length > 0
+  when:
+    - bad_system_in_sync | length > 0
+    - not allow_out_of_sync | bool
 
 - name: System in-sync and reconciled
   debug:
