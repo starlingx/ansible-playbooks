@@ -46,11 +46,21 @@
 
 - name: Generate barbican.conf
   template:
-    src: barbican.conf.j2
+    src: barbican.conf-bullseye.j2
     dest: /etc/barbican/barbican.conf
     owner: barbican
     group: barbican
     mode: 0600
+  when: ansible_distribution_major_version == debian_version_bullseye
+
+- name: Generate barbican.conf
+  template:
+    src: barbican.conf-trixie.j2
+    dest: /etc/barbican/barbican.conf
+    owner: barbican
+    group: barbican
+    mode: 0600
+  when: ansible_distribution_major_version == debian_version_trixie
 
 - name: Create barbican endpoints
   script: >-
