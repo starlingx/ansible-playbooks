@@ -145,6 +145,7 @@
   roles:
     - role: prepare-recover-data
       checkpoint_name: prepare-recover-data-pacific
+      rook_base_host: "{{ rook_base_host_pacific }}"
 
 - name: Import OSD keyrings for Pacific
   hosts: with_osds
@@ -222,6 +223,7 @@
   roles:
     - role: prepare-recover-data
       checkpoint_name: prepare-recover-data-reef
+      rook_base_host: "{{ rook_base_host_reef }}"
 
 - name: Import OSD keyrings for Reef
   hosts: with_osds

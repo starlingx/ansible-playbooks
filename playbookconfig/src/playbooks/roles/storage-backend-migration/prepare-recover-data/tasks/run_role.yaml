@@ -9,6 +9,31 @@
     path: "{{ tmp_workspace }}"
     state: directory
 
+- name: List OSDs for FSID
+  find:
+    paths: "{{ rook_base_host }}"
+    patterns: "*{{ hostvars[system.active_controller]['ceph_fsid'] }}*"
+    file_type: directory
+  register: osds_find
+
+- name: Set osds fact
+  set_fact:
+    osds: "{{ osds_find.files | map(attribute='path') | list }}"
+
+- name: Ensure OSDs were actually found
+  fail:
+    msg: "No OSD directories found for the given FSID!"
+  when: osds | length == 0
+
+- name: Wait for OSD metadata files to be present
+  wait_for:
+    path: "{{ item.0 }}/{{ item.1 }}"
+    state: present
+    timeout: 300
+  loop: "{{ osds | product(['keyring', 'whoami']) | list }}"
+  loop_control:
+    label: "Waiting for {{ item.1 }} in {{ item.0 | basename }}"
+
 - name: Scale desired deployments to replica 0
   run_once: true
   include_tasks: "{{ role_path_common }}/tasks/kubernetes/scale_resources.yaml"
