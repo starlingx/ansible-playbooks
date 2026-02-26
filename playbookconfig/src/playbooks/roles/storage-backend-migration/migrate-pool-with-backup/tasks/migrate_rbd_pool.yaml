@@ -25,7 +25,17 @@
       BKP_FILE_HOST="${POOL_BKP_DIR}/${obj_name}.bkp.gz"
 
       rbd export --export-format 2 "${ORIGINAL_POOL}/${obj_name}" - \
-        | pigz > "${BKP_FILE_HOST}" || { echo "ERROR: tar/gzip failed, possibly out of space"; exit 1; }
+        | pigz > "${BKP_FILE_HOST}"
+
+      if [[ $? -ne 0 ]]; then
+          echo "Retrying: trying export format 1 for ${ORIGINAL_POOL}/${obj_name}"
+          rm -f "${BKP_FILE_HOST}"
+          rbd export --export-format 1 "${ORIGINAL_POOL}/${obj_name}" - \
+          | pigz > "${BKP_FILE_HOST}" || { echo "ERROR: export/pigz failed, possibly out of space"; exit 1; }
+      fi
+
+      echo "Verifying: ${ORIGINAL_POOL}/${obj_name} image backup integrity..."
+      gzip -t "${BKP_FILE_HOST}" || { echo "ERROR: gzip integrity check failed for ${BKP_FILE_HOST}"; exit 1; }
 
       echo "Image ${ORIGINAL_POOL}/${obj_name} exported to ${BKP_FILE_HOST}"
     done
@@ -85,6 +95,13 @@
 
       gunzip -c "$backup_file" | rbd import --export-format 2 - "${NEW_POOL}/${obj_name}"
 
+      if [[ $? -ne 0 ]]; then
+        echo "Retrying: trying import format 1 for ${NEW_POOL}/${obj_name}"
+        rbd rm "${NEW_POOL}/${obj_name}" 2>/dev/null || true
+        gunzip -c "$backup_file" | rbd import --export-format 1 - "${NEW_POOL}/${obj_name}" \
+        || { echo "ERROR: import/gunzip failed"; exit 1; }
+      fi
+
       echo "Image ${ORIGINAL_POOL}/${obj_name} imported to ${NEW_POOL}"
     done
 
@@ -99,3 +116,36 @@
   file:
     path: "{{ backups_rbd_path }}/{{ original_pool }}"
     state: absent
+
+- name: Get kube-rbd pool details from live system
+  command: timeout 30 ceph osd pool ls detail --format json
+  register: kube_rbd_pool_raw
+  changed_when: false
+  when: all_pools_list | selectattr('name', 'equalto', 'kube-rbd') | list | length == 0
+
+- name: Extract kube-rbd pool configuration
+  set_fact:
+    kube_rbd_pool_config: "{{ kube_rbd_pool_raw.stdout | from_json | selectattr('pool_name', 'equalto', 'kube-rbd') | first }}"
+  when: all_pools_list | selectattr('name', 'equalto', 'kube-rbd') | list | length == 0
+
+- name: Remove kube-rbdkube-system from all_pools_list and add kube-rbd if not present
+  set_fact:
+    all_pools_list: |
+      {{ (all_pools_list | rejectattr('name', 'equalto', 'kube-rbdkube-system') | list) + 
+         ([] if (all_pools_list | selectattr('name', 'equalto', 'kube-rbd') | list | length > 0) else [{
+           'name': kube_rbd_pool_config.pool_name,
+           'id': kube_rbd_pool_config.pool_id,
+           'pg_num': kube_rbd_pool_config.pg_num,
+           'pgp_num': kube_rbd_pool_config.pg_placement_num,
+           'crush_rule': kube_rbd_pool_config.crush_rule,
+           'crush_rule_name': 'replicated_rule',
+           'size': kube_rbd_pool_config.size,
+           'min_size': kube_rbd_pool_config.min_size,
+           'application': kube_rbd_pool_config.application_metadata | list | first | default('')
+         }]) }}
+    cacheable: true
+
+- name: Debug new all_pools_list without old rbd pool
+  debug:
+    var: all_pools_list
+

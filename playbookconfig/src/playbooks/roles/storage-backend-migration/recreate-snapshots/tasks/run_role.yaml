@@ -9,26 +9,35 @@
     path: "{{ tmp_workspace }}"
     state: directory
 
-- name: Get the list of all VSCs names
-  command: "kubectl get VolumeSnapshotContent -o jsonpath='{.items[*].metadata.name}'"
-  environment:
-    KUBECONFIG: "{{ kubeconfig }}"
-  register: contents_list_result
-  changed_when: false
-  when: snapshot_contents_list is not defined
+- name: Copy files to workspace
+  copy:
+    src: "{{ roles_dir_path }}/{{ role_name }}/files/{{ item }}"
+    dest: "{{ tmp_workspace }}/{{ item }}"
+    mode: "0755"
+  loop: "{{ script_files }}"
 
-- name: "Set snapshot_contents_list fact"
-  set_fact:
-    snapshot_contents_list: "{{ contents_list_result.stdout }}"
-    cacheable: true
-  when: snapshot_contents_list is not defined
+- name: Rename CephFs subvolume snapshots
+  shell: "{{ tmp_workspace }}/rename_cephfs_subvolume_snaps.sh"
+  register: rename_result
+
+- name: Show rename result
+  debug:
+    var: rename_result.stdout_lines
+  when: rename_result is defined
+
+- name: "Include tasks to iterate over each Volume Snapshot"
+  include_tasks: recreate_snapshot.yaml
+  loop: "{{ vsc_to_vs_map | dict2items }}"
+  loop_control:
+    loop_var: snapshot_content_name
+  when: vsc_to_vs_map | length > 0
 
 - name: "Include tasks to iterate over each Volume Snapshot content"
   include_tasks: recreate_snapshot_contents.yaml
-  loop: "{{ snapshot_contents_list.split() }}"
+  loop: "{{ vsc_to_vs_map | dict2items }}"
   loop_control:
-    loop_var: snapshot_contents_name
-  when: snapshot_contents_list | length > 0
+    loop_var: snapshot_content_name
+  when: vsc_to_vs_map | length > 0
 
 # Clean only if all tasks was completed, to avoid errors when reexecuting.
 - name: "Cleanup {{ tmp_workspace }}"

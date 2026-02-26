@@ -4,5 +4,5 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: Wait for Rook-Ceph auto reapply
+- name: Wait for Rook-Ceph reapply
   include_tasks: wait_rook_ceph.yaml

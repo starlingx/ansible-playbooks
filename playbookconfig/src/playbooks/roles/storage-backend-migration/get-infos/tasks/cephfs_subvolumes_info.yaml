@@ -27,18 +27,12 @@
 
   - name: Create a fact with all volume sizes
     set_fact:
-      ceph_subvolume_sizes_result: "{{ dict(subvolume_info_results.results | map(attribute='item') |
+      ceph_subvolume_sizes: "{{ dict(subvolume_info_results.results | map(attribute='item') |
                                      zip(subvolume_info_results.results |
                                          map(attribute='stdout') |
                                          map('from_json') |
-                                         map(attribute='bytes_quota'))) }}"
-
-  - name: Include 21.12 PVs in ceph_subvolume_sizes_result fact
-    include_tasks: old_pvs_info.yaml
-
-  - name: Create a consolidated fact with all volume sizes
-    set_fact:
-      ceph_subvolume_sizes: "{{ ceph_subvolume_sizes_result }}"
+                                         map(attribute='bytes_quota') |
+                                         map('default', 0))) }}"
       cacheable: true
 
   when: ceph_subvolume_sizes is undefined

@@ -37,14 +37,6 @@
     - role: init-system
       tags: pull-images
 
-- name: Get infos
-  hosts: active_controller
-  gather_facts: false
-  become: true
-
-  roles:
-    - role: get-infos
-
 - hosts: all
   gather_facts: false
   tasks:
@@ -65,3 +57,12 @@
         cacheable: true
       when: role_path_common is undefined
       tags: pull-images
+
+- name: Get infos
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: get-infos
+

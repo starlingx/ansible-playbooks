@@ -6,7 +6,7 @@
 
 import yaml
 
-filename="{{ tmp_workspace }}/{{ snapshot_contents_name }}.yaml"
+filename="{{ tmp_workspace }}/{{ snapshot_content_name.key }}.yaml"
 
 with open(filename, 'r') as f:
     data = yaml.safe_load(f)
@@ -21,9 +21,13 @@ if rbd_or_cephfs == "cephfs":
     handle_id = "{{ fscid }}"
 
 normalized_volumeId = "-".join(data['spec']['source']['volumeHandle'].split("-")[-5:])
+normalized_snapId = "-".join(data['status']['snapshotHandle'].split("-")[-5:])
 
 data['spec']['driver'] = f"rook-ceph.{rbd_or_cephfs}.csi.ceph.com"
-data['spec']['source']['volumeHandle'] = f"0001-0009-rook-ceph-000000000000000{handle_id}-{normalized_volumeId}"
+del data['spec']['source']['volumeHandle']
+data['spec']['source']['snapshotHandle'] = f"0001-0009-rook-ceph-000000000000000{handle_id}-{normalized_volumeId}-{normalized_snapId}"
+data['spec']['volumeSnapshotRef']['resourceVersion'] = "{{ vs_resource_version }}"
+data['spec']['volumeSnapshotRef']['uid'] = "{{ vs_uid }}"
 
 with open(filename, 'w') as f:
   yaml.dump(

@@ -6,16 +6,15 @@
 
 import yaml
 
-filename="{{ tmp_workspace }}/{{ pv_name }}.yaml"
+filename="{{ tmp_workspace }}/{{ snapshot_content_name.value.vs_name }}.yaml"
 
 with open(filename, 'r') as f:
     data = yaml.safe_load(f)
 
-if '-old' not in data['metadata']['name']:
-    data['metadata']['name'] += "-old"
 
-if 'claimRef' in data['spec']:
-    del data['spec']['claimRef']
+del data['spec']['source']['persistentVolumeClaimName']
+data['spec']['source']['volumeSnapshotContentName'] = "{{ snapshot_content_name.key }}"
+
 
 with open(filename, 'w') as f:
   yaml.dump(

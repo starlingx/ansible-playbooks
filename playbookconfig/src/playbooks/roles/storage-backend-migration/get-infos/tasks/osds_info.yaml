@@ -89,6 +89,20 @@
     var: host_with_mon_and_osd
   when: host_with_mon_and_osd is defined
 
+- name: Add main host group single host with mon and OSD
+  add_host:
+    name: "{{ host_with_mon_and_osd }}"
+    groups: single_host_with_mon_and_osd
+    ansible_become_pass: "{{ ansible_become_pass }}"
+    ansible_password: "{{ ansible_password }}"
+    system: "{{ system }}"
+  when: host_with_mon_and_osd is defined
+
+- name: Debug single_host_with_mon_and_osd group
+  debug:
+    var: groups.single_host_with_mon_and_osd
+  when: groups.single_host_with_mon_and_osd is defined
+
 - name: Set disks_by_host if undefined
   include_tasks: osd_format_info.yaml
   when:

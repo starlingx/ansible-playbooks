@@ -25,7 +25,7 @@
 # - backups_path: <path/to/backups> (for export-import migration type or in-service if using kube-rbdkube-system pool)
 # - backups_min_safety_margin_bytes: int
 # - backups_max_safety_margin_percent: 0 <= int <= 100
-# - erase_rbd_snapshots: bool
+# - erase_snapshots: bool
 
 - import_playbook: storage-backend-migration-init.yaml
   vars:
@@ -85,17 +85,10 @@
   roles:
     - role: recreate-pools
     - role: recreate-pvs
-    - role: manage-snapshotter
-      snap_action: disable
-      checkpoint_name: manage-snapshotter-disable
     - role: import
     - role: manage-lv
       lv_action: remove
       checkpoint_name: manage-lv-remove
       when: create_migration_lv
-    - role: recreate-snapshots
-    - role: manage-snapshotter
-      snap_action: enable
-      checkpoint_name: manage-snapshotter-enable
 
 - import_playbook: storage-backend-migration-post-migration.yaml
