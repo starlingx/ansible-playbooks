@@ -42,6 +42,7 @@
 # - backups_min_safety_margin_bytes: int
 # - backups_max_safety_margin_percent: 0 <= int <= 100
 # - erase_snapshots: bool
+# - allow_out_of_sync: bool
 #
 
 - hosts: localhost
@@ -134,6 +135,13 @@
         fail_msg: "erase_snapshots must be a bool"
       when: erase_snapshots is defined
 
+    - name: Validate allow_out_of_sync
+      assert:
+        that:
+          - allow_out_of_sync == "true" or allow_out_of_sync == "false"
+        fail_msg: "allow_out_of_sync must be a bool"
+      when: allow_out_of_sync is defined
+
     - name: Get all online subclouds in the system
       block:
         - name: Get online subclouds from dcmanager
@@ -191,6 +199,9 @@
           {%- endif -%}
           {%- if erase_snapshots is defined -%}
             {%- set _ = vars_list.append('erase_snapshots=' + erase_snapshots) -%}
+          {%- endif -%}
+          {%- if allow_out_of_sync is defined -%}
+            {%- set _ = vars_list.append('allow_out_of_sync=' + allow_out_of_sync) -%}
           {%- endif -%}
           {{ '--extra-vars "' ~ (vars_list | join(' ')) ~ '"'
             if vars_list | length > 0 else '' }}

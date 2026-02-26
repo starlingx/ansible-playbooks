@@ -20,7 +20,9 @@
   vars:
     storage_backend: "{{ hostvars[system.active_controller].storage_backend }}"
     final_dm_file_path:  "{{ hostvars[system.active_controller].final_dm_full_file_path }}"
-  when: bad_hosts_in_sync | length > 0 or bad_system_in_sync | length > 0
+  when:
+    - bad_hosts_in_sync | length > 0 or bad_system_in_sync | length > 0
+    - not allow_out_of_sync | bool
 
 - name: Clear not-in-sync migration alarm if hosts and system are in-sync and reconciled
   script: "{{ role_path_common }}/files/fm_alarm.py --entity-uuid {{ storage_backend.uuid }} --clear not_in_sync --file-name {{ final_dm_file_path }}"

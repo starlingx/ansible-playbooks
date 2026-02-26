@@ -9,15 +9,20 @@
 
 - name: Check if system is in-sync and reconciled
   fail:
-    msg: >
-      System is NOT in-sync and reconciled:
+    msg: |-
+      System is NOT in-sync or reconciled:
       {{
         bad_system_in_sync
         | map(attribute='metadata.name')
         | unique
         | list
       }}
-  when: bad_system_in_sync | length > 0
+      In case the in-sync or reconciled false state is not important,
+      this pre-check can be skipped by using the flag '-e allow_out_of_sync=true'.
+      The final system state check will also allow the system to not be insync or reconciled.
+  when:
+    - bad_system_in_sync | length > 0
+    - not allow_out_of_sync | bool
 
 - name: System in-sync and reconciled
   debug:

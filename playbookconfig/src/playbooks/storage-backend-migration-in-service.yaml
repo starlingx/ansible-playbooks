@@ -25,6 +25,7 @@
 # - backups_path: <path/to/backups> (for export-import migration type or in-service if using kube-rbdkube-system pool)
 # - backups_min_safety_margin_bytes: int
 # - backups_max_safety_margin_percent: 0 <= int <= 100
+# - allow_out_of_sync: bool
 #
 
 - import_playbook: storage-backend-migration-init.yaml

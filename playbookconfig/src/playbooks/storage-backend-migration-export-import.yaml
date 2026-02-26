@@ -26,6 +26,8 @@
 # - backups_min_safety_margin_bytes: int
 # - backups_max_safety_margin_percent: 0 <= int <= 100
 # - erase_snapshots: bool
+# - allow_out_of_sync: bool
+#
 
 - import_playbook: storage-backend-migration-init.yaml
   vars:
