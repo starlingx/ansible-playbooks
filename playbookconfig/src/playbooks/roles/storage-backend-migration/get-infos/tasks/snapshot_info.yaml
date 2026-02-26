@@ -1,8 +1,8 @@
-- name: Cache erase_rbd_snapshots
+- name: Cache erase_snapshots
   set_fact:
-    erase_rbd_snapshots_cache: "{{ erase_rbd_snapshots }}"
+    erase_snapshots_cache: "{{ erase_snapshots }}"
     cacheable: true
-  when: erase_rbd_snapshots_cache is undefined
+  when: erase_snapshots_cache is undefined
 
 - name: Get VolumeSnapshotContent for RBD and set var
   block:
@@ -113,3 +113,41 @@
   debug:
     var: cephfs_vs_by_namespace
   when: cephfs_vs_by_namespace is defined
+
+- name: Build VSC to VS mapping for all drivers
+  block:
+    - name: Get all VSC to VS mapping
+      shell: >
+        kubectl get volumesnapshotcontents
+        -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.volumeSnapshotRef.namespace}{" "}{.spec.volumeSnapshotRef.name}{"\n"}{end}'
+      register: vsc_vs_mapping_output
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Initialize vsc_to_vs dict
+      set_fact:
+        vsc_to_vs: {}
+
+    - name: Build vsc_to_vs dict
+      set_fact:
+        vsc_to_vs: >
+          {{
+          vsc_to_vs
+          | combine({
+              item.split()[0]: {
+                'namespace': item.split()[1],
+                'vs_name': item.split()[2]
+              }
+            })
+          }}
+      loop: "{{ vsc_vs_mapping_output.stdout_lines }}"
+
+    - name: Cache vsc_to_vs dict
+      set_fact:
+        vsc_to_vs_map: "{{ vsc_to_vs }}"
+        cacheable: true
+  when: vsc_to_vs_map is undefined
+
+- name: Display VSC to VS mapping
+  debug:
+    var: vsc_to_vs_map

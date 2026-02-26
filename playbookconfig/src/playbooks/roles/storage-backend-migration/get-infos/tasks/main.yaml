@@ -4,30 +4,58 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: "Get Ceph information"
-  include_tasks: ceph_info.yaml
+- name: Main execution block
+  block:
+    - name: "Get storage-backend information"
+      include_tasks: storage_backend_info.yaml
 
-- name: "Get OSDs information"
-  include_tasks: osds_info.yaml
+    - name: "Get Ceph information"
+      include_tasks: ceph_info.yaml
 
-- name: "Get CephFS subvolumes information"
-  include_tasks: cephfs_subvolumes_info.yaml
+    - name: "Get OSDs information"
+      include_tasks: osds_info.yaml
 
-- name: "Get Ceph Pools information"
-  include_tasks: ceph_pools_info.yaml
+    - name: "Get CephFS subvolumes information"
+      include_tasks: cephfs_subvolumes_info.yaml
 
-- name: "Get PVCs information"
-  include_tasks: pvcs_info.yaml
+    - name: "Get Ceph Pools information"
+      include_tasks: ceph_pools_info.yaml
 
-- name: "Get storage-backend information"
-  include_tasks: storage_backend_info.yaml
+    - name: "Get PVCs information"
+      include_tasks: pvcs_info.yaml
 
-- name: Get backups info and behavior
-  include_tasks: backups_info.yaml
-  when: migration_type == "export_import" or old_pool_exist and migration_type != "redeploy"
+    - name: Get backups info and behavior
+      include_tasks: backups_info.yaml
+      when: migration_type == "export_import" or old_pool_exist and migration_type != "redeploy"
 
-- name: Get network info
-  include_tasks: network_info.yaml
+    - name: Get network info
+      include_tasks: network_info.yaml
 
-- name: Get snapshots info
-  include_tasks: "snapshot_info.yaml"
+    - name: Get snapshots info
+      include_tasks: "snapshot_info.yaml"
+
+  rescue:
+    - name: Clear Facts Cache (Ansible Cache)
+      meta: clear_facts
+
+    - name: Clear Facts Cache (Ansible Cache) for localhost in dynamic place
+      file:
+        path: "~/.storage-backend-migration-ansible-cache/localhost"
+        state: absent
+      delegate_to: localhost
+      become: false
+      ignore_errors: true
+
+    - name: Clear Facts Cache (Ansible Cache) for localhost in a fixed place
+      file:
+        path: "/home/sysadmin/.storage-backend-migration-ansible-cache/localhost"
+        state: absent
+      delegate_to: localhost
+      become: false
+      ignore_errors: true
+
+    - name: Show that cleanup is complete
+      debug:
+        msg: "The checkpoint tasks failed and the Ansible facts cache has been cleared."
+
+    - include_tasks: "{{ role_path_common }}/tasks/fail_playbook.yaml"

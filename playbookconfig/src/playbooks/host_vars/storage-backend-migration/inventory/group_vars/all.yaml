@@ -45,6 +45,6 @@ osd_usage_safety_margin_percent: 25 # for SX in-service check
 backups_min_safety_margin_bytes: 1073741824 # 1024 MiB
 backups_max_safety_margin_percent: 5
 
-erase_rbd_snapshots: false
+erase_snapshots: false # for export-import only
 
 block_openstack_app: true

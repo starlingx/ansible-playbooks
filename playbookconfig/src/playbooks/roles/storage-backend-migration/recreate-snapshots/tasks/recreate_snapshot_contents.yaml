@@ -4,30 +4,64 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: "Check if Volume Snapshot contents {{ snapshot_contents_name }} exists"
-  shell: "kubectl get VolumeSnapshotContent {{ snapshot_contents_name }}"
+- name: "Check if Volume Snapshot {{ snapshot_content_name.value.vs_name }} exists"
+  shell: "kubectl get VolumeSnapshot -n {{ snapshot_content_name.value.namespace }} {{ snapshot_content_name.value.vs_name }}"
   environment:
     KUBECONFIG: "{{ kubeconfig }}"
   register: snapshot_check
   failed_when: false
   changed_when: false
 
-- name: "Save Volume Snapshot contents {{ snapshot_contents_name }} to {{ tmp_workspace }}/{{ snapshot_contents_name }}.yaml file"
-  shell: "kubectl get VolumeSnapshotContent {{ snapshot_contents_name }} -o yaml > {{ tmp_workspace }}/{{ snapshot_contents_name }}.yaml"
+- name: "Get {{ snapshot_content_name.value.vs_name }} uid and resourceVersion"
+  shell: >
+    kubectl get VolumeSnapshot -n {{ snapshot_content_name.value.namespace }} {{ snapshot_content_name.value.vs_name }} -o jsonpath='{.metadata.uid}{" "}{.metadata.resourceVersion}{"\n"}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: vs_metadata_output
+  when: snapshot_check.rc == 0
+
+- name: "Parse UID and resourceVersion for {{ snapshot_content_name.value.vs_name }}"
+  set_fact:
+    vs_uid: "{{ vs_metadata_output.stdout.split()[0] }}"
+    vs_resource_version: "{{ vs_metadata_output.stdout.split()[1] }}"
+  when:
+    - vs_metadata_output.stdout is defined
+    - vs_metadata_output.stdout | length > 0
+
+- name: Debug vs_uid
+  debug:
+    var: vs_uid
+  when: vs_uid is defined
+
+- name: Debug vs_resource_version
+  debug:
+    var: vs_resource_version
+  when: vs_resource_version is defined
+
+- name: "Check if Volume Snapshot contents {{ snapshot_content_name.key }} exists"
+  shell: "kubectl get VolumeSnapshotContent {{ snapshot_content_name.key }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: snapshot_check
+  failed_when: false
+  changed_when: false
+
+- name: "Save Volume Snapshot contents {{ snapshot_content_name.key }} to {{ tmp_workspace }}/{{ snapshot_content_name.key }}.yaml file"
+  shell: "kubectl get VolumeSnapshotContent {{ snapshot_content_name.key }} -o yaml > {{ tmp_workspace }}/{{ snapshot_content_name.key }}.yaml"
   environment:
     KUBECONFIG: "{{ kubeconfig }}"
   when: snapshot_check.rc == 0
 
-- name: "Read Volume Snapshot contents {{ snapshot_contents_name }} YAML file"
+- name: "Read Volume Snapshot contents {{ snapshot_content_name.key }} YAML file"
   slurp:
-    src: "{{ tmp_workspace }}/{{ snapshot_contents_name }}.yaml"
+    src: "{{ tmp_workspace }}/{{ snapshot_content_name.key }}.yaml"
   register: snapshot_contents_data_file
 
-- name: "Parse the VSC {{ snapshot_contents_name }} YAML content"
+- name: "Parse the VSC {{ snapshot_content_name.key }} YAML content"
   set_fact:
     snapshot_contents_data: "{{ snapshot_contents_data_file.content | b64decode | from_yaml }}"
 
-- name: "Set contents {{ snapshot_contents_name }} type"
+- name: "Set contents {{ snapshot_content_name.key }} type"
   set_fact:
     contents_type: >-
       {{
@@ -35,15 +69,15 @@
         else 'rbd'
       }}
 
-- name: "Show VSC {{ snapshot_contents_name }} type"
+- name: "Show VSC {{ snapshot_content_name.key }} type"
   debug:
-    msg: "The VSC {{ snapshot_contents_name }} type is {{ contents_type }}"
+    msg: "The VSC {{ snapshot_content_name.key }} type is {{ contents_type }}"
 
-- name: "Delete VSC {{ snapshot_contents_name }}"
+- name: "Delete VSC {{ snapshot_content_name.key }}"
   include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
   vars:
     kind: VolumeSnapshotContent
-    name: "{{ snapshot_contents_name }}"
+    name: "{{ snapshot_content_name.key }}"
 
 - name: Render recreate_script.py using template
   template:
@@ -53,20 +87,21 @@
   register: python_script_creation
   failed_when: python_script_creation.failed
 
-- name: "Execute recreate VSC script for {{ snapshot_contents_name }}"
+- name: "Execute recreate VSC script for {{ snapshot_content_name.key }}"
   command: "python {{ tmp_workspace }}/recreate_script.py"
 
-- name: "Delete recreate VSC script for {{ snapshot_contents_name }}"
+- name: "Delete recreate VSC script for {{ snapshot_content_name.key }}"
   command: "rm -rf {{ tmp_workspace }}/recreate_script.py"
   args:
     warn: false
 
-- name: "Apply new VSC {{ snapshot_contents_name }} file"
-  command: "kubectl apply -f {{ tmp_workspace }}/{{ snapshot_contents_name }}.yaml"
+- name: "Apply new VSC {{ snapshot_content_name.key }} file"
+  command: "kubectl apply -f {{ tmp_workspace }}/{{ snapshot_content_name.key }}.yaml"
   environment:
     KUBECONFIG: "{{ kubeconfig }}"
 
-- name: "Delete new VSC {{ snapshot_contents_name }} file"
-  command: "rm -rf {{ tmp_workspace }}/{{ snapshot_contents_name }}.yaml"
+- name: "Delete new VSC {{ snapshot_content_name.key }} file"
+  command: "rm -rf {{ tmp_workspace }}/{{ snapshot_content_name.key }}.yaml"
   args:
     warn: false
+

@@ -1,22 +1,19 @@
-- name: Delete CephFs Snapshots
-  block:
-    - name: Delete CephFs VS
-      include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
-      vars:
-        kind: VolumeSnapshot
-        k8s_namespace: "{{ item.0.key }}"
-        name: "{{ item.1.name }}"
-      loop: "{{ cephfs_vs_by_namespace | dict2items | subelements('value') }}"
-      when: cephfs_vs_by_namespace | default({}) | length > 0
+- name: Delete CephFs VS
+  include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+  vars:
+    kind: VolumeSnapshot
+    k8s_namespace: "{{ item.0.key }}"
+    name: "{{ item.1.name }}"
+  loop: "{{ cephfs_vs_by_namespace | dict2items | subelements('value') }}"
+  when: cephfs_vs_by_namespace | default({}) | length > 0
 
-    - name: Delete CephFs VSC
-      include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
-      vars:
-        kind: VolumeSnapshotContents
-        name: "{{ item }}"
-      loop: "{{ cephfs_vsc }}"
-      when: cephfs_vsc | length > 0
-  when: migration_type == "redeploy"
+- name: Delete CephFs VSC
+  include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+  vars:
+    kind: VolumeSnapshotContents
+    name: "{{ item }}"
+  loop: "{{ cephfs_vsc }}"
+  when: cephfs_vsc | length > 0
 
 - name: Delete RBD VS
   include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"

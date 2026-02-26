@@ -41,7 +41,7 @@
 # - backups_path: <path/to/backups> (for export-import migration type or in-service if using kube-rbdkube-system pool)
 # - backups_min_safety_margin_bytes: int
 # - backups_max_safety_margin_percent: 0 <= int <= 100
-# - erase_rbd_snapshots: bool
+# - erase_snapshots: bool
 #
 
 - hosts: localhost
@@ -127,12 +127,12 @@
         fail_msg: "backups_path must be a non-empty string"
       when: backups_path is defined
 
-    - name: Validate erase_rbd_snapshots
+    - name: Validate erase_snapshots
       assert:
         that:
-          - erase_rbd_snapshots == "true" or erase_rbd_snapshots == "false"
-        fail_msg: "erase_rbd_snapshots must be a bool"
-      when: erase_rbd_snapshots is defined
+          - erase_snapshots == "true" or erase_snapshots == "false"
+        fail_msg: "erase_snapshots must be a bool"
+      when: erase_snapshots is defined
 
     - name: Get all online subclouds in the system
       block:
@@ -189,8 +189,8 @@
           {%- if osd_usage_safety_margin_percent is defined -%}
             {%- set _ = vars_list.append('osd_usage_safety_margin_percent=' + osd_usage_safety_margin_percent | string) -%}
           {%- endif -%}
-          {%- if erase_rbd_snapshots is defined -%}
-            {%- set _ = vars_list.append('erase_rbd_snapshots=' + erase_rbd_snapshots) -%}
+          {%- if erase_snapshots is defined -%}
+            {%- set _ = vars_list.append('erase_snapshots=' + erase_snapshots) -%}
           {%- endif -%}
           {{ '--extra-vars "' ~ (vars_list | join(' ')) ~ '"'
             if vars_list | length > 0 else '' }}

@@ -50,18 +50,19 @@
     - role: pull-images
       tags: pull-images
 
-- name: Migrate 21.12 PVs
+- name: Migrate incorrect RBD pool
   hosts: active_controller
   gather_facts: false
   become: true
 
   roles:
-    - role: recreate-old-pvs
 
     - role: manage-lv
       lv_action: create
       checkpoint_name: manage-lv-create
-      when: create_migration_lv | default(false)
+      when:
+        - create_migration_lv | default(false)
+        - old_pool_exist
 
     - role: migrate-pool-with-backup
       original_pool: kube-rbdkube-system
@@ -71,7 +72,9 @@
     - role: manage-lv
       lv_action: remove
       checkpoint_name: manage-lv-remove
-      when: create_migration_lv | default(false)
+      when:
+        - create_migration_lv | default(false)
+        - old_pool_exist
 
 - name: Migrate OSDs from Filestore to Bluestore
   hosts: with_osds
@@ -135,7 +138,7 @@
 
 - name: Prepare Recover Pacific data
   # We need to run on active controller first
-  hosts: active_controller, with_osds, host_with_mon_and_osd
+  hosts: active_controller, with_osds, single_host_with_mon_and_osd
   gather_facts: false
   become: true
 
@@ -163,7 +166,7 @@
       checkpoint_name: get-monitor-info-pacific
 
 - name: Recover Pacific data
-  hosts: host_with_mon_and_osd, with_osds
+  hosts: single_host_with_mon_and_osd, with_osds
   gather_facts: false
   become: true
 
@@ -212,7 +215,7 @@
 
 - name: Prepare Recover Reef data
   # We need to run on active controller first
-  hosts: active_controller, with_osds, host_with_mon_and_osd
+  hosts: active_controller, with_osds, single_host_with_mon_and_osd
   gather_facts: false
   become: true
 
@@ -240,7 +243,7 @@
       checkpoint_name: get-monitor-info-reef
 
 - name: Recover Reef data
-  hosts: host_with_mon_and_osd, with_osds
+  hosts: single_host_with_mon_and_osd, with_osds
   gather_facts: false
   become: true
 

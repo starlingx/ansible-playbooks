@@ -1,0 +1,54 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Check if Volume Snapshot {{ snapshot_content_name.value.vs_name }} exists"
+  shell: "kubectl get VolumeSnapshot -n {{ snapshot_content_name.value.namespace }} {{ snapshot_content_name.value.vs_name }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: snapshot_check
+  failed_when: false
+  changed_when: false
+
+- name: "Save Volume Snapshot {{ snapshot_content_name.value.vs_name }} to {{ tmp_workspace }}/{{ snapshot_content_name.value.vs_name }}.yaml file"
+  shell: >
+    kubectl get VolumeSnapshot -n {{ snapshot_content_name.value.namespace }} {{ snapshot_content_name.value.vs_name }} -o yaml > {{ tmp_workspace }}/{{ snapshot_content_name.value.vs_name  }}.yaml
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: vs_metadata_output
+  when: snapshot_check.rc == 0
+
+- name: "Delete VS {{ snapshot_content_name.value.vs_name }}"
+  include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+  vars:
+    kind: VolumeSnapshot
+    name: "{{ snapshot_content_name.value.vs_name }}"
+    k8s_namespace: "{{ snapshot_content_name.value.namespace }}"
+
+- name: Render recreate_vs_script.py using template
+  template:
+    src: recreate_vs_script.py.j2
+    dest: "{{ tmp_workspace }}/recreate_vs_script.py"
+    mode: 0644
+  register: python_script_creation
+  failed_when: python_script_creation.failed
+
+- name: "Execute recreate VS script for {{ snapshot_content_name.value.vs_name }}"
+  command: "python {{ tmp_workspace }}/recreate_vs_script.py"
+
+- name: "Delete recreate VS script for {{ snapshot_content_name.value.vs_name }}"
+  command: "rm -rf {{ tmp_workspace }}/recreate_vs_script.py"
+  args:
+    warn: false
+
+- name: "Apply new VS {{ snapshot_content_name.value.vs_name }} file"
+  command: "kubectl apply -f {{ tmp_workspace }}/{{ snapshot_content_name.value.vs_name }}.yaml"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+
+- name: "Delete new VS {{ snapshot_content_name.value.vs_name }} file"
+  command: "rm -rf {{ tmp_workspace }}/{{ snapshot_content_name.value.vs_name }}.yaml"
+  args:
+    warn: false
