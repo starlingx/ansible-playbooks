@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2021-2024 Wind River Systems, Inc.
+# Copyright (c) 2021-2024,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -35,17 +35,17 @@ ${CEPH_BIN} fs ls | grep ${FS_NAME}
 if [ $? -ne 0 ]; then
     # Use existing metadata/data pools to recover cephfs
     ${CEPH_BIN} fs new ${FS_NAME} ${METADATA_POOL_NAME} ${DATA_POOL_NAME} --force
-
-    # Recover MDS state from filesystem
-    ${CEPH_BIN} fs reset ${FS_NAME} --yes-i-really-mean-it
-
-    # Try to recover from some common errors
-    cephfs-journal-tool --rank=${FS_NAME}:0 event recover_dentries summary
-    cephfs-journal-tool --rank=${FS_NAME}:0 journal reset
-    cephfs-table-tool ${FS_NAME}:0 reset session
-    cephfs-table-tool ${FS_NAME}:0 reset snap
-    cephfs-table-tool ${FS_NAME}:0 reset inode
 fi
+
+# Recover MDS state from filesystem
+${CEPH_BIN} fs reset ${FS_NAME} --yes-i-really-mean-it
+
+# Try to recover from some common errors
+cephfs-journal-tool --rank=${FS_NAME}:0 event recover_dentries summary
+cephfs-journal-tool --rank=${FS_NAME}:0 journal reset
+cephfs-table-tool ${FS_NAME}:0 reset session
+cephfs-table-tool ${FS_NAME}:0 reset snap
+cephfs-table-tool ${FS_NAME}:0 reset inode
 
 # Start the Ceph MDS
 /etc/init.d/ceph start mds
