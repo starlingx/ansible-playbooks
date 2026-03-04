@@ -130,6 +130,12 @@
     name: kubelet
     enabled: yes
 
+- name: Check if encryption provider config exists
+  stat:
+    path: "{{ encryption_provider_config }}"
+    follow: yes
+  register: encryption_file
+
 - name: Create kube api server encryption provider config file
   vars:
     aescbc_keys:
@@ -141,7 +147,7 @@
     mode: 0600
   when:
     - mode == 'bootstrap'
-    - not replayed
+    - not encryption_file.stat.exists
 
 - name: Create default audit policy config
   copy:
