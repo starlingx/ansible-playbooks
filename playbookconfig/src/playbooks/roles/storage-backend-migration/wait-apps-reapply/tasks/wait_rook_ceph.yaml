@@ -4,6 +4,19 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+- name: Check storage backend has_long_running_operations
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -c
+    "SELECT capabilities::json->>'has_long_running_operations'
+    FROM storage_backend;"
+  register: has_long_running_operations
+  until: has_long_running_operations.stdout_lines | length == 0
+  retries: 120
+  delay: 10
+  changed_when: false
+
 - name: Re-apply Rook-Ceph application
   environment: "{{ system_env }}"
   command: system application-apply rook-ceph

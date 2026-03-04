@@ -13,7 +13,7 @@ echo "Collecting cluster information for mounting..."
 # Get admin key automatically
 SECRET=$(ceph auth get-key client.admin)
 # Get monitor IPs automatically (format ip1:port,ip2:port,ip3:port)
-MONS=$(ceph mon dump 2>/dev/null | grep -oP 'v1:\K[0-9.]+:[0-9]+' | paste -sd "," -)
+MONS=$(ceph mon dump 2>/dev/null | grep -oP 'v1:\K(\[[^\]]+\]:[0-9]+|[0-9.]+:[0-9]+)' | paste -sd "," -)
 
 if [ -z "$SECRET" ] || [ -z "$MONS" ]; then
     echo "Error: Could not obtain Ceph credentials or monitor IPs."
