@@ -227,7 +227,11 @@ connection={{ real_connection }}
 # Deprecated group/name - [DATABASE]/sql_idle_timeout
 # Deprecated group/name - [sql]/idle_timeout
 #connection_recycle_time = 3600
+{% if ansible_distribution_major_version == debian_version_bullseye %}
 connection_recycle_time={{ fm_var_dict['fm::database_idle_timeout'] }}
+{% else %}
+connection_recycle_time={{ fm_var_dict['fm::connection_recycle_time'] }}
+{% endif %}
 
 # Maximum number of SQL connections to keep open in a pool. Setting a value of
 # 0 indicates no limit. (integer value)

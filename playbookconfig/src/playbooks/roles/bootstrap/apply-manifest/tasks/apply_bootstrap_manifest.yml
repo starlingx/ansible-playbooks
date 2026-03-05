@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2024,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -382,6 +382,12 @@
          before attempting to bootstrap it again. See /var/log/puppet/latest/puppet.log
          for details.
   when: bootstrap_manifest.rc != 0
+
+- name: Gather distribution facts to access debian major version
+  setup:
+    gather_subset:
+      - distribution
+  when: ansible_facts['ansible_distribution_major_version'] is not defined
 
 - name: Import keystone bootstrap tasks
   import_tasks: keystone_bootstrap.yml
