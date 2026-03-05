@@ -57,6 +57,8 @@
       ansible-playbook /usr/share/ansible/stx-ansible/playbooks/restore_platform.yml -e
       "@{{ subcloud_overrides }}"
     register: platform_restore_output
+    async: "{{ restore_timeout | default(5400) | int }}"
+    poll: 10
 
   - name: Print the output of platform restore playbook
     debug:
