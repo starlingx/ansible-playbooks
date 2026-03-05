@@ -47,14 +47,14 @@ for NAMESPACE in ${PVCS_NAMESPACE_LIST}; do
                 -p '{"metadata":{"finalizers":null}}' --type=merge
 
         # Delete the PV
-        kubectl -n "${NAMESPACE}" delete "${PV}" --wait=false
-        kubectl -n "${NAMESPACE}" patch "${PV}" \
+        kubectl delete "${PV}" --wait=false
+        kubectl patch "${PV}" \
                 -p '{"metadata":{"finalizers":null}}' --type=merge
 
         # Check if it has been deleted
         for RETRY in {1..15}; do
             if ! kubectl -n "${NAMESPACE}" get "${PVC}" 1>/dev/null 2>&1; then
-                if ! kubectl -n "${NAMESPACE}" get "${PV}" 1>/dev/null 2>&1; then
+                if ! kubectl get "${PV}" 1>/dev/null 2>&1; then
                     break
                 fi
             fi
@@ -65,8 +65,15 @@ for NAMESPACE in ${PVCS_NAMESPACE_LIST}; do
         fi
 
         # If the PVC is from a volume snapshot, it should only be deleted, not recreated.
-        if grep -E "snapshot.storage.k8s.io" ${PVC_RECOVER_YAML} 1>/dev/null 2>&1; then
+        if grep -iE "snapshot.storage.k8s.io" ${PVC_RECOVER_YAML} 1>/dev/null 2>&1; then
             echo "  Discarding ${PVC}: VolumeSnapshot"
+            rm -f "${PVC_RECOVER_YAML}"
+            continue
+        fi
+
+        # If the PVC is from a DataVolume, it should only be deleted, not recreated.
+        if grep -iE "cdi.kubevirt.io|DataVolume" ${PVC_RECOVER_YAML} 1>/dev/null 2>&1; then
+            echo "  Discarding ${PVC}: CDI/DataVolume"
             rm -f "${PVC_RECOVER_YAML}"
             continue
         fi
