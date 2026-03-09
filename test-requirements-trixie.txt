@@ -1,0 +1,7 @@
+ansible-lint <= 25.6.1
+bandit;python_version>="3.0"
+bashate >= 2.1
+flake8 >= 7.1.1 # MIT
+PyYAML >= 6.0.2
+rich >= 13.9.4
+yamllint >= 1.37.1
