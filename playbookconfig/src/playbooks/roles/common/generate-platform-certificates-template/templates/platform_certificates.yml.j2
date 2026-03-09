@@ -176,5 +176,52 @@ items:
 {% include 'subject_snippet.j2' %}
   status: {}
 {% endif %}
+{% if install_system_openbao_certificate | bool %}
+{% set short_certificate_name = 'system-openbao' %}
+- apiVersion: "{{ cert_manager_api_version.stdout | default(default.cert_manager_version, true) }}"
+  kind: Certificate
+  metadata:
+    creationTimestamp: null
+    name: system-openbao-local-certificate
+    namespace: deployment
+  spec:
+    dnsNames:
+    - "{{ clean_region_name }}.{{ system_platform_certificate.dns_domain | default(default.dns_domain, true) }}"
+    - controller
+    - controller-0
+    - controller-1
+    duration: "{{ system_platform_certificate.duration | default(default.duration, true) }}"
+    ipAddresses:
+    # openbao listens on loopback and each controller's own mgmt IP
+    # AIO-SX listens to "management_floating_ip_primary"
+    - "{{ management_floating_ip_primary }}"
+    - "127.0.0.1"
+    - "::1"
+{% if management_c0_ip_primary is truthy %}
+    - "{{ management_c0_ip_primary }}"
+{% endif %}
+{% if management_c1_ip_primary is truthy %}
+    - "{{ management_c1_ip_primary }}"
+{% endif %}
+{% if management_floating_ip_secondary is truthy %}
+    - "{{ management_floating_ip_secondary }}"
+{% endif %}
+{% if management_c0_ip_secondary is truthy %}
+    - "{{ management_c0_ip_secondary }}"
+{% endif %}
+{% if management_c1_ip_secondary is truthy %}
+    - "{{ management_c1_ip_secondary }}"
+{% endif %}
+    issuerRef:
+      kind: ClusterIssuer
+      name: system-local-ca
+    renewBefore: "{{ system_platform_certificate.renewBefore | default(default.renewBefore, true) }}"
+    secretName: system-openbao-local-certificate
+    privateKey:
+      algorithm: "{{ system_platform_certificate.algorithm | default(default.algorithm, true) }}"
+      size: {{ system_platform_certificate.key_size | default(default.key_size, true) }}
+{% include 'subject_snippet.j2' %}
+  status: {}
+{% endif %}
 kind: List
 metadata: {}

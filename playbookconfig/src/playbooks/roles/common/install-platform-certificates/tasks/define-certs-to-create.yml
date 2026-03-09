@@ -20,6 +20,7 @@
     install_system_registry_local_certificate: true
     install_system_restapi_gui_certificate: true
     install_oidc_auth_apps_certificate: "{{ distributed_cloud_role != 'subcloud' }}"
+    install_system_openbao_certificate: true
   when: mode == 'bootstrap'
 
 - name: If upgrading, generate required certificates only if they don't exist
@@ -35,6 +36,7 @@
       - system-openldap-local-certificate
       - system-registry-local-certificate
       - system-restapi-gui-certificate
+      - system-openbao-local-certificate
     register: cert_exists
 
   - name: Mark the creation flags for the certificates that need to be issued
@@ -43,4 +45,5 @@
                                                 and distributed_cloud_role != 'subcloud' }}"
       install_system_registry_local_certificate: "{{ not (cert_exists.results[1].stdout | bool) }}"
       install_system_restapi_gui_certificate: "{{ not (cert_exists.results[2].stdout | bool) }}"
+      install_system_openbao_certificate: "{{ not (cert_exists.results[3].stdout | bool) }}"
   when: upgrade_in_progress
