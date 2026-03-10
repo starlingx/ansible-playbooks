@@ -91,17 +91,6 @@
 - name: Cleanup ceph files
   include_tasks: cleanup_ceph_files.yaml
 
-- name: Wait before running deprovision again
-  pause:
-    seconds: 15
-  run_once: true
-  delegate_to: "{{ system.active_controller }}"
-  changed_when: false
-
-- name: Deprovision Services
-  include_tasks: deprovision_services.yaml
-  when: inventory_hostname in groups.controllers
-
 - name: Remove SM crash prevention file
   file:
     path: /var/run/.sm_no_trap_conn_loss_exit
