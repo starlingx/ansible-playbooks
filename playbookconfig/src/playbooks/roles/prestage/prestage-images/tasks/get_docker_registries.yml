@@ -91,7 +91,7 @@
   when: proxy_lookup is undefined
 
 - name: Update docker registries credentials for type aws-ecr
-  include: update_registry_creds.yml
+  include_tasks: update_registry_creds.yml
   loop: "{{ input_registries|dict2items }}"
   loop_control:
     loop_var: registry

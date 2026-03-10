@@ -19,7 +19,9 @@
     add_docker_prefix: "{{ add_docker_prefix|default('no') }}"
 
 - name: Get docker registries if not in bootstap or restore mode
-  include: get_docker_registry.yml registry={{ item }}
+  include_tasks: get_docker_registry.yml
+  vars:
+    registry: "{{ item }}"
   loop:
     - { name: 'k8s_registry', value: { url: 'k8s.gcr.io' } }
     - { name: 'gcr_registry', value: { url: 'gcr.io' } }
@@ -45,7 +47,9 @@
 
 # Disable the log to not expose registry password
 - name: Get registry credentials if registry type is AWS ECR
-  include: get_aws_ecr_credentials.yml registry={{ item }}
+  include_tasks: get_aws_ecr_credentials.yml
+  vars:
+    registry: "{{ item }}"
   loop:
     - { name: "k8s_registry", value: "{{ k8s_registry }}" }
     - { name: "gcr_registry", value: "{{ gcr_registry }}" }
@@ -224,7 +228,9 @@
     register: virtual_type
 
   - name: Load images from archives if configured
-    include: load_images_from_archive.yml input_archive={{ item.path }}
+    include_tasks: load_images_from_archive.yml
+    vars:
+      input_archive: "{{ item.path }}"
     loop: "{{ images_archive_files }}"
     when: images_archive_exists
 
