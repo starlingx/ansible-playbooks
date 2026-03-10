@@ -121,9 +121,15 @@
       address_list: "{{ docker_no_proxy }}"
     when: docker_no_proxy|length > 0
 
-  - name: Add user defined no-proxy address list to default
+  - name: Add user defined no-proxy address list to default (Bullseye)
     set_fact:
       docker_no_proxy_combined: "{{ default_no_proxy | union(docker_no_proxy) | ipwrap | unique }}"
+    when: is_bullseye
+
+  - name: Add user defined no-proxy address list to default (Trixie)
+    set_fact:
+      docker_no_proxy_combined: "{{ default_no_proxy | union(docker_no_proxy) | ansible.utils.ipwrap | unique }}"
+    when: is_trixie
   when: use_docker_proxy
 
 - name: Set docker registry facts if not using default registries

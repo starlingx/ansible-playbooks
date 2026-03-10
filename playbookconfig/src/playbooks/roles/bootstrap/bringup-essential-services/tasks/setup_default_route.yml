@@ -8,9 +8,15 @@
 #   These tasks configure a default route to the oam gateway.
 #
 
-- name: Set the ip command based on primary IP address version
+- name: Set the ip command based on primary IP address version (Bullseye)
   set_fact:
     ip_command_primary: "{{ 'ip' if network_params.external_oam_subnet_primary|ipv6 == False else 'ip -6' }}"
+  when: is_bullseye
+
+- name: Set the ip command based on primary IP address version (Trixie)
+  set_fact:
+    ip_command_primary: "{{ 'ip' if network_params.external_oam_subnet_primary|ansible.utils.ipv6 == False else 'ip -6' }}"
+  when: is_trixie
 
 - name: Check if the default route exists
   shell: "{{ ip_command_primary }} route show | grep 'default via {{ network_params.external_oam_gateway_address_primary }}'"
@@ -44,7 +50,15 @@
   - set_fact:
       oam_interface: "{{ oam_interface_check.stdout }}"
       oam_network_mask_secondary: "{{ network_params.external_oam_subnet_secondary | regex_replace('.*/(.?.?)$','\\1') }}"
+
+  - set_fact:
       ip_command_secondary: "{{ 'ip' if network_params.external_oam_subnet_secondary|ipv6 == False else 'ip -6' }}"
+    when: is_bullseye
+
+  - set_fact:
+      ip_command_secondary: "{{ 'ip' if network_params.external_oam_subnet_secondary|
+                                 ansible.utils.ipv6 == False else 'ip -6' }}"
+    when: is_trixie
 
   - name: Set secondary OAM IP
     shell: "{{ ip_command_secondary }} addr add {{ network_params.external_oam_floating_address_secondary }}/{{

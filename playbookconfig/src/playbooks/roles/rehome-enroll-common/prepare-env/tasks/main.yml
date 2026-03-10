@@ -182,7 +182,7 @@
 
   # The provided subnets have passed validation, set the primary default addresses
   # based on the primary subnet values
-  - name: Set default start and end primary addresses based on provided primary subnets
+  - name: Set default start and end primary addresses based on provided primary subnets (Bullseye)
     set_fact:
       default_external_oam_start_address_primary: >-
         {{ (network_params.external_oam_subnet_primary | ipaddr(1)).split('/')[0] }}
@@ -202,10 +202,33 @@
         {{ (network_params.cluster_service_subnet_primary |
             ipaddr(-1 if (network_params.cluster_service_subnet_primary
             |ipv6) else -2)).split('/')[0] }}
+    when: is_bullseye
+
+  - name: Set default start and end primary addresses based on provided primary subnets (Trixie)
+    set_fact:
+      default_external_oam_start_address_primary: >-
+        {{ (network_params.external_oam_subnet_primary | ansible.utils.ipaddr(1)).split('/')[0] }}
+      default_external_oam_end_address_primary: >-
+        {{ (network_params.external_oam_subnet_primary |
+            ansible.utils.ipaddr(-1 if (network_params.external_oam_subnet_primary
+            |ansible.utils.ipv6) else -2)).split('/')[0] }}
+      default_management_start_address_primary: >-
+        {{ (network_params.management_subnet_primary | ansible.utils.ipaddr(1)).split('/')[0] }}
+      default_management_end_address_primary: >-
+        {{ (network_params.management_subnet_primary |
+            ansible.utils.ipaddr(-1 if (network_params.management_subnet_primary
+            |ansible.utils.ipv6) else -2)).split('/')[0] }}
+      default_cluster_service_start_address_primary: >-
+        {{ (network_params.cluster_service_subnet_primary | ansible.utils.ipaddr(1)).split('/')[0] }}
+      default_cluster_service_end_address_primary: >-
+        {{ (network_params.cluster_service_subnet_primary |
+            ansible.utils.ipaddr(-1 if (network_params.cluster_service_subnet_primary
+            |ansible.utils.ipv6) else -2)).split('/')[0] }}
+    when: is_trixie
 
   # The provided subnets have passed validation, set the secondary default addresses
   # based on the secondary subnet values, if present.
-  - name: Set default start and end secondary addresses based on provided secondary subnets
+  - name: Set default start and end secondary addresses based on provided secondary subnets (Bullseye)
     set_fact:
       default_external_oam_start_address_secondary: >-
         {{ False if (not network_params.external_oam_subnet_secondary)
@@ -221,8 +244,27 @@
       default_cluster_service_start_address_secondary: "{{ False if (not network_params.cluster_service_subnet_secondary)
                                                             else (network_params.cluster_service_subnet_secondary |
                                                                   ipaddr(1)).split('/')[0] }}"
+    when: is_bullseye
 
-  - name: Set default start and end admin network addresses based on provided subnets
+  - name: Set default start and end secondary addresses based on provided secondary subnets (Trixie)
+    set_fact:
+      default_external_oam_start_address_secondary: >-
+        {{ False if (not network_params.external_oam_subnet_secondary)
+                  else (network_params.external_oam_subnet_secondary | ansible.utils.ipaddr(1)).split('/')[0] }}
+      default_external_oam_end_address_secondary: >-
+        {{ False if (not network_params.external_oam_subnet_secondary)
+                  else (network_params.external_oam_subnet_secondary |
+                        ansible.utils.ipaddr(-1 if (network_params.external_oam_subnet_secondary
+                        |ansible.utils.ipv6) else -2)).split('/')[0] }}
+      default_management_start_address_secondary: "{{ False if (not network_params.management_subnet_secondary)
+                                                            else (network_params.management_subnet_secondary |
+                                                                  ansible.utils.ipaddr(1)).split('/')[0] }}"
+      default_cluster_service_start_address_secondary: "{{ False if (not network_params.cluster_service_subnet_secondary)
+                                                            else (network_params.cluster_service_subnet_secondary |
+                                                                  ansible.utils.ipaddr(1)).split('/')[0] }}"
+    when: is_trixie
+
+  - name: Set default start and end admin network addresses based on provided subnets (Bullseye)
     set_fact:
       default_admin_start_address_primary: "{{ (network_params.admin_subnet_primary | ipaddr(1)).split('/')[0] }}"
       default_admin_end_address_primary: "{{ (network_params.admin_subnet_primary |
@@ -235,7 +277,24 @@
                                                      else (network_params.admin_subnet_secondary |
                                                           ipaddr(-1 if (network_params.admin_subnet_secondary
                                                           |ipv6) else -2)).split('/')[0] }}"
-    when: admin_network is defined
+    when: admin_network is defined and is_bullseye
+
+  - name: Set default start and end admin network addresses based on provided subnets (Trixie)
+    set_fact:
+      default_admin_start_address_primary: >-
+        {{ (network_params.admin_subnet_primary |
+            ansible.utils.ipaddr(1)).split('/')[0] }}
+      default_admin_end_address_primary: "{{ (network_params.admin_subnet_primary |
+                                              ansible.utils.ipaddr(-1 if (network_params.admin_subnet_primary
+                                                            |ansible.utils.ipv6) else -2)).split('/')[0] }}"
+      default_admin_start_address_secondary: "{{ False if (not network_params.admin_subnet_secondary)
+                                                       else (network_params.admin_subnet_secondary | ansible.utils.ipaddr(1))
+                                                            .split('/')[0] }}"
+      default_admin_end_address_secondary: "{{ False if (not network_params.admin_subnet_secondary)
+                                                     else (network_params.admin_subnet_secondary |
+                                                          ansible.utils.ipaddr(-1 if (network_params.admin_subnet_secondary
+                                                          |ansible.utils.ipv6) else -2)).split('/')[0] }}"
+    when: admin_network is defined and is_trixie
 
 - name: Set default values for docker proxies if not defined
   set_fact:
@@ -266,7 +325,7 @@
     admin_gateway_address_primary: "{{ network_params.admin_gateway_address_primary }}"
   when: admin_network is defined
 
-- name: Set derived facts for subsequent tasks/roles
+- name: Set derived facts for subsequent tasks/roles (Bullseye)
   set_fact:
     derived_network_params:
       'controller_0_address': "{{ controller_floating_address|ipmath(1) }}"
@@ -277,6 +336,20 @@
       'oam_node_1_address': "{{ network_params.external_oam_node_1_address_primary
                            if external_oam_node_1_address != 'derived'
                            else network_params.external_oam_floating_address_primary | ipmath(2) }}"
+  when: is_bullseye
+
+- name: Set derived facts for subsequent tasks/roles (Trixie)
+  set_fact:
+    derived_network_params:
+      'controller_0_address': "{{ controller_floating_address|ansible.utils.ipmath(1) }}"
+      'controller_1_address': "{{ controller_floating_address|ansible.utils.ipmath(2) }}"
+      'oam_node_0_address': "{{ network_params.external_oam_node_0_address_primary
+                           if external_oam_node_0_address != 'derived'
+                           else network_params.external_oam_floating_address_primary | ansible.utils.ipmath(1) }}"
+      'oam_node_1_address': "{{ network_params.external_oam_node_1_address_primary
+                           if external_oam_node_1_address != 'derived'
+                           else network_params.external_oam_floating_address_primary | ansible.utils.ipmath(2) }}"
+  when: is_trixie
 
 # Add secondary network addresses when defined
 - block:
@@ -295,25 +368,43 @@
       admin_gateway_address_secondary: "{{ network_params.admin_gateway_address_secondary }}"
     when: admin_network is defined and network_params.admin_subnet_secondary
 
-  - name: Set secondary controller address in derived facts for subsequent tasks/roles
+  - name: Set secondary controller address in derived facts for subsequent tasks/roles (Bullseye)
     set_fact:
       derived_network_params: >-
         {{ derived_network_params | combine({
         "controller_0_address_secondary": controller_floating_address_secondary|ipmath(1),
         "controller_1_address_secondary": controller_floating_address_secondary|ipmath(2)
         }) }}
-    when: controller_floating_address_secondary is defined
+    when: controller_floating_address_secondary is defined and is_bullseye
 
-  - name: Set secondary admin address in derived facts for subsequent tasks/roles
+  - name: Set secondary controller address in derived facts for subsequent tasks/roles (Trixie)
+    set_fact:
+      derived_network_params: >-
+        {{ derived_network_params | combine({
+        "controller_0_address_secondary": controller_floating_address_secondary|ansible.utils.ipmath(1),
+        "controller_1_address_secondary": controller_floating_address_secondary|ansible.utils.ipmath(2)
+        }) }}
+    when: controller_floating_address_secondary is defined and is_trixie
+
+  - name: Set secondary admin address in derived facts for subsequent tasks/roles (Bullseye)
     set_fact:
       derived_network_params: >-
         {{ derived_network_params | combine({
         "controller_0_admin_address_secondary": admin_floating_address_secondary|ipmath(1),
         "controller_1_admin_address_secondary": admin_floating_address_secondary|ipmath(2)
         }) }}
-    when: admin_floating_address_secondary is defined
+    when: admin_floating_address_secondary is defined and is_bullseye
 
-  - name: Set secondary oam node address in derived facts for subsequent tasks/roles
+  - name: Set secondary admin address in derived facts for subsequent tasks/roles (Trixie)
+    set_fact:
+      derived_network_params: >-
+        {{ derived_network_params | combine({
+        "controller_0_admin_address_secondary": admin_floating_address_secondary|ansible.utils.ipmath(1),
+        "controller_1_admin_address_secondary": admin_floating_address_secondary|ansible.utils.ipmath(2)
+        }) }}
+    when: admin_floating_address_secondary is defined and is_trixie
+
+  - name: Set secondary oam node address in derived facts for subsequent tasks/roles (Bullseye)
     set_fact:
       derived_network_params: >-
         {{ derived_network_params | combine({
@@ -324,7 +415,21 @@
                                         if external_oam_node_1_address != 'derived'
                                         else network_params.external_oam_floating_address_secondary | ipmath(2)
         }) }}
-    when: network_params.external_oam_subnet_secondary
+    when: network_params.external_oam_subnet_secondary and is_bullseye
+
+  - name: Set secondary oam node address in derived facts for subsequent tasks/roles (Trixie)
+    set_fact:
+      derived_network_params: >-
+        {{ derived_network_params | combine({
+        "oam_node_0_address_secondary": network_params.external_oam_node_0_address_secondary
+                                        if external_oam_node_0_address != 'derived'
+                                        else network_params.external_oam_floating_address_secondary |
+             ansible.utils.ipmath(1),
+        "oam_node_1_address_secondary": network_params.external_oam_node_1_address_secondary
+                                        if external_oam_node_1_address != 'derived'
+                                        else network_params.external_oam_floating_address_secondary | ansible.utils.ipmath(2)
+        }) }}
+    when: network_params.external_oam_subnet_secondary and is_trixie
 
 - name: Set subcloud floating address
   set_fact:
@@ -400,9 +505,15 @@
     default_no_proxy: "{{ default_no_proxy + non_sx_proxy_addons }}"
   when: system_mode != 'simplex'
 
-- name: Add user defined no-proxy address list to subcloud no proxy list
+- name: Add user defined no-proxy address list to subcloud no proxy list (Bullseye)
   set_fact:
     docker_no_proxy_combined: "{{ default_no_proxy | union(docker_no_proxy) | ipwrap | unique }}"
+  when: is_bullseye
+
+- name: Add user defined no-proxy address list to subcloud no proxy list (Trixie)
+  set_fact:
+    docker_no_proxy_combined: "{{ default_no_proxy | union(docker_no_proxy) | ansible.utils.ipwrap | unique }}"
+  when: is_trixie
 
 - name: Get interface network list of controller-0
   shell: |

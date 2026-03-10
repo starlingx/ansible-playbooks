@@ -13,11 +13,19 @@
 #     the controller-0 status from offline to online.
 #
 - block:
-  - name: Update barbican bind host with management floating IP
+  - name: Update barbican bind host with management floating IP (Bullseye)
     replace:
       path: /etc/barbican/barbican.conf
       regexp: "bind_host=.*$"
       replace: "bind_host={{ controller_floating_address | ipwrap }}"
+    when: is_bullseye
+
+  - name: Update barbican bind host with management floating IP (Trixie)
+    replace:
+      path: /etc/barbican/barbican.conf
+      regexp: "bind_host=.*$"
+      replace: "bind_host={{ controller_floating_address | ansible.utils.ipwrap }}"
+    when: is_trixie
 
   - name: Restart barbican
     systemd:

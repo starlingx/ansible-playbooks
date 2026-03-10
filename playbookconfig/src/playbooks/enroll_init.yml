@@ -159,6 +159,12 @@
     - set_fact:
         sysinv_check_endpoint: >-
           {{ protocol }}://{{ enroll_reconfigured_oam | ipwrap }}:{{ sysinv_port }}/v1/isystems/region_id
+      when: is_bullseye
+
+    - set_fact:
+        sysinv_check_endpoint: >-
+          {{ protocol }}://{{ enroll_reconfigured_oam | ansible.utils.ipwrap }}:{{ sysinv_port }}/v1/isystems/region_id
+      when: is_trixie
 
     - name: Wait for the sysinv API to be ready and for certs to be updated for the reconfigured OAM endpoint
       shell: |

@@ -34,9 +34,15 @@
       "{{ default_prev_management_start_address_primary
       if prev_management_start_address == 'derived' else prev_network_params.prev_management_start_address_primary }}"
 
-- name: Get previous controller_0 address
+- name: Get previous controller_0 address (Bullseye)
   set_fact:
     prev_controller_0_address: "{{ prev_controller_floating_address|ipmath(1) }}"
+  when: is_bullseye
+
+- name: Get previous controller_0 address (Trixie)
+  set_fact:
+    prev_controller_0_address: "{{ prev_controller_floating_address|ansible.utils.ipmath(1) }}"
+  when: is_trixie
 
 - name: Applying puppet for enabling etcd security
   command: >

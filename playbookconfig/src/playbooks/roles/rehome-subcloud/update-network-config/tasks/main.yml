@@ -21,12 +21,21 @@
   register: previous_system_controller_subnet_addr
 
 - block:
-  - name: Get previous system controller host route uuid
+  - name: Get previous system controller host route uuid (Bullseye)
     shell: >-
       source /etc/platform/openrc; system host-route-list controller-0
       | grep {{ (previous_system_controller_subnet_addr.stdout | ipaddr(0)).split('/')[0] }}
       | awk '{ print $2 }'
     register: previous_route_uuid_controller_0
+    when: is_bullseye
+
+  - name: Get previous system controller host route uuid (Trixie)
+    shell: >-
+      source /etc/platform/openrc; system host-route-list controller-0
+      | grep {{ (previous_system_controller_subnet_addr.stdout | ansible.utils.ipaddr(0)).split('/')[0] }}
+      | awk '{ print $2 }'
+    register: previous_route_uuid_controller_0
+    when: is_trixie
 
   - name: Delete previous system controller network
     shell: >-
@@ -37,7 +46,7 @@
     when: previous_route_uuid_controller_0.stdout_lines | length > 0
   when: system_controller_subnet != previous_system_controller_subnet_addr.stdout
 
-- name: Check existing host route in controller-0
+- name: Check existing host route in controller-0 (Bullseye)
   # Checking if the static route to the new system controller subnet
   # is already configured. If it is already configured, e.g. recovery
   # from a disaster that the system controllers are reinstalled, the
@@ -46,6 +55,14 @@
     source /etc/platform/openrc; system host-route-list controller-0 |
     awk '/{{ (system_controller_subnet | ipaddr(0)).split('/')[0] }}/'
   register: existing_route_controller_0
+  when: is_bullseye
+
+- name: Check existing host route in controller-0 (Trixie)
+  shell: >-
+    source /etc/platform/openrc; system host-route-list controller-0 |
+    awk '/{{ (system_controller_subnet | ansible.utils.ipaddr(0)).split('/')[0] }}/'
+  register: existing_route_controller_0
+  when: is_trixie
 
 - name: Set subcloud gateway address
   set_fact:
@@ -60,14 +77,23 @@
           if admin_network is defined
           else controller_0_management_interface_result.stdout_lines[0] }}"
 
-- name: Add static route from controller-0 to system controller
+- name: Add static route from controller-0 to system controller (Bullseye)
   shell: >-
     source /etc/platform/openrc; system host-route-add controller-0
     {{ sc_controller_0_route_interface }}
     {{ (system_controller_subnet | ipaddr(0)).split('/')[0] }}
     {{ system_controller_subnet | ipaddr('prefix') }}
     {{ sc_gateway_address }}
-  when: existing_route_controller_0.stdout | length == 0
+  when: existing_route_controller_0.stdout | length == 0 and is_bullseye
+
+- name: Add static route from controller-0 to system controller (Trixie)
+  shell: >-
+    source /etc/platform/openrc; system host-route-add controller-0
+    {{ sc_controller_0_route_interface }}
+    {{ (system_controller_subnet | ansible.utils.ipaddr(0)).split('/')[0] }}
+    {{ system_controller_subnet | ansible.utils.ipaddr('prefix') }}
+    {{ sc_gateway_address }}
+  when: existing_route_controller_0.stdout | length == 0 and is_trixie
 
 - block:
 
@@ -78,12 +104,21 @@
     register: previous_system_controller_subnet_addr
 
   - block:
-    - name: Get previous system controller host route uuid
+    - name: Get previous system controller host route uuid (Bullseye)
       shell: >-
         source /etc/platform/openrc; system host-route-list controller-1
         | grep {{ (previous_system_controller_subnet_addr.stdout | ipaddr(0)).split('/')[0] }}
         | awk '{ print $2 }'
       register: previous_route_uuid_controller_1
+      when: is_bullseye
+
+    - name: Get previous system controller host route uuid (Trixie)
+      shell: >-
+        source /etc/platform/openrc; system host-route-list controller-1
+        | grep {{ (previous_system_controller_subnet_addr.stdout | ansible.utils.ipaddr(0)).split('/')[0] }}
+        | awk '{ print $2 }'
+      register: previous_route_uuid_controller_1
+      when: is_trixie
 
     - name: Delete previous system controller network
       shell: >-
@@ -94,11 +129,19 @@
       when: previous_route_uuid_controller_1.stdout_lines | length > 0
     when: system_controller_subnet != previous_system_controller_subnet_addr.stdout
 
-  - name: Check existing host route in controller-1
+  - name: Check existing host route in controller-1 (Bullseye)
     shell: >-
       source /etc/platform/openrc; system host-route-list controller-1 |
       awk '/{{ (system_controller_subnet | ipaddr(0)).split('/')[0] }}/'
     register: existing_route_controller_1
+    when: is_bullseye
+
+  - name: Check existing host route in controller-1 (Trixie)
+    shell: >-
+      source /etc/platform/openrc; system host-route-list controller-1 |
+      awk '/{{ (system_controller_subnet | ansible.utils.ipaddr(0)).split('/')[0] }}/'
+    register: existing_route_controller_1
+    when: is_trixie
 
   - name: Set subcloud to systemcontroller route interface on controller-1
     set_fact:
@@ -107,14 +150,23 @@
             if admin_network is defined
             else controller_1_management_interface_result.stdout_lines[0] }}"
 
-  - name: Add static route from controller-1 to system controller
+  - name: Add static route from controller-1 to system controller (Bullseye)
     shell: >-
       source /etc/platform/openrc; system host-route-add controller-1
       {{ sc_controller_1_route_interface }}
       {{ (system_controller_subnet | ipaddr(0)).split('/')[0] }}
       {{ system_controller_subnet | ipaddr('prefix') }}
       {{ sc_gateway_address }}
-    when: existing_route_controller_1.stdout | length == 0
+    when: existing_route_controller_1.stdout | length == 0 and is_bullseye
+
+  - name: Add static route from controller-1 to system controller (Trixie)
+    shell: >-
+      source /etc/platform/openrc; system host-route-add controller-1
+      {{ sc_controller_1_route_interface }}
+      {{ (system_controller_subnet | ansible.utils.ipaddr(0)).split('/')[0] }}
+      {{ system_controller_subnet | ansible.utils.ipaddr('prefix') }}
+      {{ sc_gateway_address }}
+    when: existing_route_controller_1.stdout | length == 0 and is_trixie
 
   when: system_mode != 'simplex'
 

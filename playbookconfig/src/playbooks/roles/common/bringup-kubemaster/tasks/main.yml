@@ -25,6 +25,16 @@
 #   - Reload systemd
 #
 
+- name: Set etcd endpoint (Bullseye)
+  set_fact:
+    etcd_endpoint: "https://{{ cluster_floating_address | ipwrap }}:2379"
+  when: is_bullseye
+
+- name: Set etcd endpoint (Trixie)
+  set_fact:
+    etcd_endpoint: "https://{{ cluster_floating_address | ansible.utils.ipwrap }}:2379"
+  when: is_trixie
+
 - name: Setup iptables for Kubernetes
   lineinfile:
     path: /etc/sysctl.d/80-k8s.conf
@@ -286,7 +296,7 @@
 # This is being called from both bootstrap and optimized-restore, not to break
 # when called from optimized-restore, lets not use network_params.cluster_pod_subnet_primary and
 # network_params.cluster_pod_subnet_secondary, instead lets split by comma from cluster_pod_subnet.
-- name: Set Calico cluster configuration
+- name: Set Calico cluster configuration (Bullseye)
   set_fact:
     cluster_network_ipv4: "{{ cluster_pod_subnet.split(',')[0] | ipv4
                             if cluster_pod_subnet.split(',')[0] | ipv4
@@ -296,6 +306,39 @@
                             if cluster_pod_subnet.split(',')[0] | ipv6
                             else  cluster_pod_subnet.split(',')[-1] | ipv6
                           }}"
+  when: is_bullseye
+
+- name: Set Calico cluster configuration (Trixie)
+  set_fact:
+    cluster_network_ipv4: "{{ cluster_pod_subnet.split(',')[0] | ansible.utils.ipv4
+                            if cluster_pod_subnet.split(',')[0] | ansible.utils.ipv4
+                            else  cluster_pod_subnet.split(',')[-1] | ansible.utils.ipv4
+                          }}"
+    cluster_network_ipv6: "{{ cluster_pod_subnet.split(',')[0] | ansible.utils.ipv6
+                            if cluster_pod_subnet.split(',')[0] | ansible.utils.ipv6
+                            else  cluster_pod_subnet.split(',')[-1] | ansible.utils.ipv6
+                          }}"
+  when: is_trixie
+
+- name: Set Calico IP autodetection targets (Bullseye)
+  set_fact:
+    calico_ip4_autodetect_host: "{{ controller_0_cluster_host
+                                    if controller_0_cluster_host|ipv4
+                                    else controller_0_cluster_host_secondary | default(controller_0_cluster_host) }}"
+    calico_ip6_autodetect_host: "{{ controller_0_cluster_host
+                                    if controller_0_cluster_host|ipv6
+                                    else controller_0_cluster_host_secondary | default(controller_0_cluster_host) }}"
+  when: is_bullseye
+
+- name: Set Calico IP autodetection targets (Trixie)
+  set_fact:
+    calico_ip4_autodetect_host: "{{ controller_0_cluster_host
+                                    if controller_0_cluster_host|ansible.utils.ipv4
+                                    else controller_0_cluster_host_secondary | default(controller_0_cluster_host) }}"
+    calico_ip6_autodetect_host: "{{ controller_0_cluster_host
+                                    if controller_0_cluster_host|ansible.utils.ipv6
+                                    else controller_0_cluster_host_secondary | default(controller_0_cluster_host) }}"
+  when: is_trixie
 
 - name: Create Calico config file
   template:

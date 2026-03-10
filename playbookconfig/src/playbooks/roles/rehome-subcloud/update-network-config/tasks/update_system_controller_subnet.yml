@@ -22,13 +22,23 @@
     {{ cli_confirmation | default('--yes') }}
   when: system_controller_oam_subnet_uuid.stdout | length > 0
 
-- name: Add system controller OAM subnet
+- name: Add system controller OAM subnet (Bullseye)
   shell: >-
     source /etc/platform/openrc; system addrpool-add system-controller-oam-subnet
     {{ (system_controller_oam_subnet | ipaddr(0)).split('/')[0]  }}
     {{ system_controller_oam_subnet | ipaddr('prefix') }}
     --floating-address {{ system_controller_oam_floating_address }} | awk '/uuid/{ print$4 }'
   register: add_system_controller_oam_subnet_uuid
+  when: is_bullseye
+
+- name: Add system controller OAM subnet (Trixie)
+  shell: >-
+    source /etc/platform/openrc; system addrpool-add system-controller-oam-subnet
+    {{ (system_controller_oam_subnet | ansible.utils.ipaddr(0)).split('/')[0]  }}
+    {{ system_controller_oam_subnet | ansible.utils.ipaddr('prefix') }}
+    --floating-address {{ system_controller_oam_floating_address }} | awk '/uuid/{ print$4 }'
+  register: add_system_controller_oam_subnet_uuid
+  when: is_trixie
 
 - name: Add new system-controller OAM network
   shell: >-
@@ -62,7 +72,7 @@
     {{ cli_confirmation | default('--yes') }}
   when: system_controller_subnet_uuid.stdout | length > 0
 
-- name: Add system controller subnet
+- name: Add system controller subnet (Bullseye)
   shell: >-
     source /etc/platform/openrc;
     system addrpool-add system-controller-subnet
@@ -70,6 +80,17 @@
     {{ system_controller_subnet | ipaddr('prefix') }}
     --floating-address {{ system_controller_floating_address }} | awk '/uuid/{ print$4 }'
   register: add_system_controller_subnet_uuid
+  when: is_bullseye
+
+- name: Add system controller subnet (Trixie)
+  shell: >-
+    source /etc/platform/openrc;
+    system addrpool-add system-controller-subnet
+    {{ (system_controller_subnet | ansible.utils.ipaddr(0)).split('/')[0]  }}
+    {{ system_controller_subnet | ansible.utils.ipaddr('prefix') }}
+    --floating-address {{ system_controller_floating_address }} | awk '/uuid/{ print$4 }'
+  register: add_system_controller_subnet_uuid
+  when: is_trixie
 
 - name: Add new system-controller network
   shell: >-

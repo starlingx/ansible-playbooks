@@ -154,18 +154,51 @@
     loop: "{{ registry_dns_uuids }}"
     when: registry_dns_uuids | length > 0
 
-  - name: Create DNS host record for registry central
+  - name: Create DNS host record for registry central (Bullseye)
     shell: >-
         source /etc/platform/openrc;
         system service-parameter-add dns host-record
         registry.central=registry.central,{{ registry_central_address }};
-        {% if system_controller_floating_address|ipaddr() and
-        virtual_system is defined and virtual_system|bool %}
-        system service-parameter-add dns host-record
-        registry.local=registry.local,{{ controller_floating_address }};
-        {% endif %}
     register: dns_host_record_add
     failed_when: dns_host_record_add.rc != 0
+    when:
+      - is_bullseye
+      - system_controller_floating_address | ipaddr
+
+  - name: Create DNS host record for registry central (Trixie)
+    shell: >-
+        source /etc/platform/openrc;
+        system service-parameter-add dns host-record
+        registry.central=registry.central,{{ registry_central_address }};
+    register: dns_host_record_add
+    failed_when: dns_host_record_add.rc != 0
+    when:
+      - is_trixie
+      - system_controller_floating_address | ansible.utils.ipaddr
+
+  - name: Create DNS host record for registry local (Bullseye)
+    shell: >-
+        source /etc/platform/openrc;
+        system service-parameter-add dns host-record
+        registry.local=registry.local,{{ controller_floating_address }};
+    register: dns_host_record_local_add
+    failed_when: dns_host_record_local_add.rc != 0
+    when:
+      - is_bullseye
+      - virtual_system is defined and virtual_system|bool
+      - system_controller_floating_address | ipaddr
+
+  - name: Create DNS host record for registry local (Trixie)
+    shell: >-
+        source /etc/platform/openrc;
+        system service-parameter-add dns host-record
+        registry.local=registry.local,{{ controller_floating_address }};
+    register: dns_host_record_local_add
+    failed_when: dns_host_record_local_add.rc != 0
+    when:
+      - is_trixie
+      - virtual_system is defined and virtual_system|bool
+      - system_controller_floating_address | ansible.utils.ipaddr
 
   - block:
     - name: Get existing DNS local domain for registry.central if exists
@@ -194,17 +227,19 @@
 
     when: software_version is version('26.03', '>=')
 
-  - name: Apply dns host record update
+  - name: Apply dns host record update (Bullseye)
     shell: source /etc/platform/openrc; system service-parameter-apply dns
+    when:
+      - is_bullseye
+      - (system_controller_floating_address | ipaddr and virtual_system is defined and virtual_system|bool) or
+        (system_controller_oam_floating_address | ipaddr and virtual_system is not defined)
 
-  when: >
-    (
-      system_controller_floating_address|ipaddr() and
-      virtual_system is defined and virtual_system|bool
-    ) or (
-      system_controller_oam_floating_address|ipaddr() and
-      virtual_system is not defined
-    )
+  - name: Apply dns host record update (Trixie)
+    shell: source /etc/platform/openrc; system service-parameter-apply dns
+    when:
+      - is_trixie
+      - (system_controller_floating_address | ansible.utils.ipaddr and virtual_system is defined and virtual_system|bool) or
+        (system_controller_oam_floating_address | ansible.utils.ipaddr and virtual_system is not defined)
 
 - name: Fail if populate config script throws an exception
   fail:

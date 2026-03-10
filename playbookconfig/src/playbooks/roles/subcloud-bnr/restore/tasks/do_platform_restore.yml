@@ -17,9 +17,15 @@
       register: sc_oam_ip
       connection: local
 
-    - name: Set system controller oam ip fact
+    - name: Set system controller oam ip fact (Bullseye)
       set_fact:
         sc_oam_ip: "{{ sc_oam_ip.stdout | ipwrap }}"
+      when: is_bullseye
+
+    - name: Set system controller oam ip fact (Trixie)
+      set_fact:
+        sc_oam_ip: "{{ sc_oam_ip.stdout | ansible.utils.ipwrap }}"
+      when: is_trixie
 
     # It's necessary to create the staging dir with 775 permission
     # so the system controller can push the backup files to the subcloud,
