@@ -455,10 +455,12 @@
 
     - name: Generate postgres update commands for Helm overrides
       set_fact:
-        updates_list: >
+        updates_list: >-
           {{ updates_list | default('') }}update helm_overrides set
-          system_overrides={% if item.system_overrides %}'{{ item.system_overrides }}'{% else %}NULL{% endif %},
-          user_overrides={% if item.user_overrides %}'{{ item.user_overrides }}'{% else %}NULL{% endif %}
+          system_overrides={{ item.system_overrides
+          | ternary("'" ~ (item.system_overrides | replace("'", "''")) ~ "'", "NULL") }},
+          user_overrides={{ item.user_overrides
+          | ternary("'" ~ (item.user_overrides | replace("'", "''")) ~ "'", "NULL") }}
           where name='{{ item.name }}' and namespace='openstack';
       with_items: "{{ helm_overrides_list.stdout_lines | map('from_json') | list }}"
 
