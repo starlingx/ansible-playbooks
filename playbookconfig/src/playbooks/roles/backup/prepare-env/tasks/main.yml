@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2024, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -153,6 +153,29 @@
   - name: Display health status
     debug:
       var: final_health_status
+
+  # TODO(sshathee) Check if alarm should be raised when application is in removing
+  # or recovering state
+  - name: Check for applications in removing or recovering status
+    shell: |
+      source /etc/platform/openrc
+      system application-list --nowrap | grep -E 'removing|recovering'
+    register: application_status_check
+    failed_when: false
+    changed_when: false
+
+  - name: Display application status check result
+    debug:
+      var: application_status_check
+
+  - name: Fail if applications are in invalid state
+    fail:
+      msg: |
+        Backup cannot proceed. The following application(s) are in removing or recovering state:
+        {{ application_status_check.stdout }}
+
+        Wait for these operations to complete before starting backup.
+    when: not ignore_health|bool and application_status_check.rc == 0
 
   - name: Create backup in progress flag file
     file:
