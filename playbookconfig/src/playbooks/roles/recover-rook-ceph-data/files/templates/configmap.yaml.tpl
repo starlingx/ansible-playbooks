@@ -357,8 +357,8 @@ data:
     kubectl_scale_deployment operator=rook app=rook-ceph-operator 1
     exec_ceph_cmd ceph -s
 
-    echo "rook-ceph recovery completed successfully."
-    update_status "recovery-completed"
+    echo "rook-ceph recovery operator completed successfully."
+    update_status "operator-completed"
     exit 0
 
   monstore_rebuild.sh: |-
@@ -743,7 +743,7 @@ data:
     LOG_FILE="/var/log/ceph/restore.log"
     source /tmp/mount/common.sh
 
-    wait_for_status "recovery-completed recovery-failed"
+    wait_for_status "operator-completed recovery-failed"
 
     # Wait for all jobs to complete.
     exec_k8s_cmd kubectl -n rook-ceph wait --for=condition=complete job -l app.kubernetes.io/part-of=rook-ceph-recovery --timeout=${TIME_WAIT_JOB_COMPLETE}
@@ -760,8 +760,8 @@ data:
       fi
     done
 
-    # If the recovery is complete, there is no need to keep the jobs.
-    if check_status "recovery-completed"; then
+    # If the recovery operator is complete, there is no need to keep the jobs.
+    if check_status "operator-completed"; then
       exec_k8s_cmd kubectl -n rook-ceph delete jobs -l app.kubernetes.io/part-of=rook-ceph-recovery
       exec_k8s_cmd kubectl -n rook-ceph wait --for=delete job -l app.kubernetes.io/part-of=rook-ceph-recovery --timeout=60s
       if [ $? -ne 0 ]; then
@@ -775,6 +775,8 @@ data:
     set +x
     echo -e "\n##############################\nrook-ceph-recovery-log-collector\n##############################" >> ${LOG_FILE}
     exec_k8s_cmd kubectl -n rook-ceph logs -l app=rook-ceph-recovery-log-collector --tail=-1 >> ${LOG_FILE}
+
+    update_status "recovery-completed"
     exit 0
 
   status: "recovery-pending"
