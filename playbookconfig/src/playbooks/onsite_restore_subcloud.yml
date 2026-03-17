@@ -1,0 +1,140 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This playbook is designed to be used by dcmanager for the on-site restore
+# workflow, where the restore is initiated locally by the subcloud itself.
+#
+# It optionally transfers the backup archive from central storage to the
+# subcloud (when backup_source_path is provided), then monitors the subcloud
+# until the restore completes by waiting for the auto-restore completion flag.
+#
+# Override variables:
+#   backup_source_path: (optional) Path to the backup archive on the system
+#                       controller. When defined, the file is transferred to
+#                       staging_dir on the subcloud before monitoring begins.
+#   staging_dir:        (required when backup_source_path is set) Directory on
+#                       the subcloud where the backup will be staged.
+#   restore_timeout:    (optional) Total timeout in seconds for the restore
+#                       operation.
+#
+#   Example command:
+#   ansible-playbook /usr/share/ansible/stx-ansible/playbooks/onsite_restore_subcloud.yml \
+#   -i <inventory-file> --limit <subcloudname> -e 'restore_timeout=<restore_timeout>'
+#   -e 'backup_source_path=<backup-source-path>' -e 'staging_dir=<staging-dir>'
+#
+- hosts: all
+  gather_facts: no
+  vars:
+    restore_timeout: 5400
+    transfer_complete_flag: /var/run/.backup_transfer_complete
+    restore_complete_flag: /var/run/.auto_restore_complete
+
+  tasks:
+    - name: Main restore workflow
+      block:
+        - name: Transfer backup from central storage to subcloud
+          block:
+            - name: Create staging directory on subcloud
+              become: yes
+              file:
+                path: "{{ staging_dir }}"
+                state: directory
+                mode: '0775'
+
+            - name: Transfer backup archive to subcloud
+              synchronize:
+                mode: push
+                src: "{{ backup_source_path }}"
+                dest: "{{ staging_dir }}/"
+                rsync_opts: "--omit-dir-times,--no-perms"
+              register: backup_transfer
+              until: backup_transfer.rc == 0
+              retries: 3
+              delay: 2
+              become: false
+
+            - name: Signal transfer complete to subcloud
+              file:
+                path: "{{ transfer_complete_flag }}"
+                state: touch
+                mode: '0644'
+          when: backup_source_path is defined
+
+        - name: Record restore start time
+          set_fact:
+            restore_start: "{{ now(fmt='%s') }}"
+
+        - name: Wait for subcloud to go offline (restore initiated)
+          wait_for:
+            host: "{{ ansible_host }}"
+            port: 22
+            state: stopped
+            timeout: 300
+            sleep: 30
+          delegate_to: localhost
+
+        - name: Wait for on-site restore completion
+          block:
+            - name: Wait for subcloud to become reachable
+              wait_for_connection:
+                delay: 30
+                timeout: "{{ restore_timeout }}"
+                sleep: 30
+
+            - name: Calculate remaining timeout
+              set_fact:
+                remaining_timeout: >-
+                  {{ [restore_timeout | int - (now(fmt='%s') | int - restore_start | int), 60] | max }}
+
+            - name: Wait for restore completion flag
+              wait_for:
+                path: "{{ restore_complete_flag }}"
+                timeout: "{{ remaining_timeout }}"
+                sleep: 30
+                msg: "Timeout waiting for on-site restore completion"
+              register: flag_wait
+              ignore_unreachable: true
+
+            - name: Fail to trigger rescue if subcloud became unreachable
+              fail:
+                msg: "Subcloud became unreachable while waiting for restore completion flag"
+              when: flag_wait.unreachable | default(false)
+
+          rescue:
+            # The subcloud may disconnect during the flag check (e.g. unlock reboot).
+            # Reconnect with the remaining timeout and retry the flag check once.
+            - name: Calculate remaining timeout after disconnection
+              set_fact:
+                remaining_timeout: >-
+                  {{ [restore_timeout | int - (now(fmt='%s') | int - restore_start | int), 60] | max }}
+
+            - name: Wait for subcloud to come back after reboot
+              wait_for_connection:
+                delay: 30
+                timeout: "{{ remaining_timeout }}"
+                sleep: 30
+
+            - name: Calculate remaining timeout after reconnect
+              set_fact:
+                remaining_timeout: >-
+                  {{ [restore_timeout | int - (now(fmt='%s') | int - restore_start | int), 60] | max }}
+
+            - name: Wait for restore completion flag after reboot
+              wait_for:
+                path: "{{ restore_complete_flag }}"
+                timeout: "{{ remaining_timeout }}"
+                sleep: 30
+                msg: "Timeout waiting for on-site restore completion after reboot"
+
+      always:
+        - name: Remove restore and transfer flags
+          become: yes
+          file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - "{{ restore_complete_flag }}"
+            - "{{ transfer_complete_flag }}"
