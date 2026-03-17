@@ -881,14 +881,32 @@
       - name: Result of removing Ceph Volume Snapshots
         debug: var=remove_ceph_snapshots_output.stdout_lines
 
-      - name: Remove KubeVirt DVs when OSDs are wiped
-        script: remove_kubevirt_dvs.sh
-        register: remove_kubevirt_dvs_output
+      - name: Check if DataVolumes exist
+        command: kubectl get dv -A --no-headers
+        register: dv_list
+        failed_when: false
         environment:
           KUBECONFIG: /etc/kubernetes/admin.conf
 
-      - name: Result of removing KubeVirt DVs
-        debug: var=remove_kubevirt_dvs_output.stdout_lines
+      - block:
+        - name: Wait for CDI API server to be ready
+          command: >
+            kubectl wait --for=condition=Available deployment/cdi-apiserver
+            -n cdi --timeout=120s
+          ignore_errors: true
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+        - name: Recover KubeVirt DVs when OSDs are wiped
+          script: roles/restore-platform/restore-more-data/files/recover_kubevirt_dvs.sh
+          register: recover_kubevirt_dvs_output
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+        - name: Result of recovering KubeVirt DVs
+          debug: var=recover_kubevirt_dvs_output.stdout_lines
+
+        when: dv_list.stdout_lines | length > 0
 
       when: wipe_ceph_osds|bool
 

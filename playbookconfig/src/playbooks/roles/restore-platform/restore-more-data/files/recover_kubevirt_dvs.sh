@@ -5,6 +5,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+# Temporary file for manipulation
+DV_RECOVER_YAML="/tmp/dv-recover.yaml"
+
 # Get all namespaces to search for DVs
 DVS_NAMESPACE_LIST=$(kubectl get namespaces -o name | sed 's/^namespace\///')
 
@@ -20,7 +23,13 @@ for NAMESPACE in ${DVS_NAMESPACE_LIST}; do
     fi
 
     for DV in ${DVS_NAME_LIST}; do
-        echo "  Deleting ${DV}..."
+        echo "  Processing ${DV}..."
+
+        # Export DataVolume manifest
+        kubectl -n "${NAMESPACE}" get "${DV}" -o yaml > ${DV_RECOVER_YAML}
+
+        # Remove bind information
+        python3 roles/restore-platform/restore-more-data/files/clean_kubevirt_dv.py "${DV_RECOVER_YAML}"
 
         # Delete the DataVolume
         kubectl -n "${NAMESPACE}" delete "${DV}" --wait=false
@@ -39,6 +48,23 @@ for NAMESPACE in ${DVS_NAMESPACE_LIST}; do
             echo "  Could not delete ${PVC}"
         fi
 
-        echo "  ${DV} deleted. VirtualMachine will create it."
+        # Recreate the clean DataVolume with retries to handle CDI Webhook instability
+        MAX_RETRIES=12
+
+        echo "  Applying ${DV_RECOVER_YAML}..."
+
+        for RETRY_COUNT in $(seq 1 $MAX_RETRIES); do
+            kubectl apply -f "${DV_RECOVER_YAML}" && break
+            echo "  Warning: CDI Webhook connection refused. Retrying in 10s ($RETRY_COUNT/$MAX_RETRIES)..."
+            if [ "$RETRY_COUNT" -eq "$MAX_RETRIES" ]; then
+                echo "  Error: Failed to recreate ${DV} after $MAX_RETRIES attempts. CDI API might be down."
+                exit 1
+            fi
+            sleep 10
+        done
+
+        echo "  ${DV} recreated successfully. CDI will start provisioning."
+
+        rm -f "${DV_RECOVER_YAML}"
     done
 done
