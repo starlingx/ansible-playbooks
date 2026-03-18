@@ -52,7 +52,9 @@ def unwrap(val):
     if not val or val.strip() == "NULL":
         return None
     val = val.strip()
-    if val.startswith("'") and val.endswith("'"):
+    if val.upper().startswith("E'") and val.endswith("'"):
+        val = val[2:-1].replace("''", "'").replace("\\\\", "\\")
+    elif val.startswith("'") and val.endswith("'"):
         val = val[1:-1].replace("''", "'")
     return val
 
@@ -65,10 +67,14 @@ def parse_sql_updates(sql):
     Args:
         sql: SQL string containing update statements.
     """
+    # quote_literal() uses E'...' when the value contains backslashes.
+    # The bellow regex handles both plain ('...') and E-quoted (E'...') strings.
+    # Ref: https://www.postgresql.org/docs/14/sql-syntax-lexical.html#SQL-SYNTAX-STRINGS-ESCAPE
+    quoted = r"(?:E)?'(?:''|\\.|[^'])*'(?!')"
     pattern = re.compile(
         r"update\s+helm_overrides\s+set\s+"
-        r"system_overrides=(NULL|'(?:''|[^'])*'),\s*"
-        r"user_overrides=(NULL|'(?:''|[^'])*')\s*"
+        r"system_overrides=(NULL|" + quoted + r"),\s*"
+        r"user_overrides=(NULL|" + quoted + r")\s*"
         r"where\s+name='([^']+)'",
         re.IGNORECASE | re.DOTALL,
     )
@@ -93,8 +99,10 @@ def main():
     output = []
 
     for name, inc in incoming.items():
+        cur = current.get(name, {})
+
         inc_user = parse_yaml(inc.get("user_overrides"))
-        cur_user = parse_yaml(current.get(name, {}).get("user_overrides"))
+        cur_user = parse_yaml(cur.get("user_overrides"))
 
         merged = deep_merge(inc_user, cur_user)
 
@@ -109,7 +117,7 @@ def main():
             if merged else "NULL"
         )
 
-        sys_val = inc.get("system_overrides")
+        sys_val = cur.get("system_overrides") or inc.get("system_overrides")
         system_sql = "'" + escape_sql(sys_val) + "'" if sys_val else "NULL"
 
         output.append(
