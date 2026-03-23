@@ -1,5 +1,5 @@
 ---
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2023,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -64,10 +64,10 @@
       in_user_role: "{{ user_role if user_role is defined else 'admin'}}"
 
   - set_fact:
-      in_password_change_period: "{{ password_change_period if password_change_period is defined else 90}}"
+      in_password_change_period: "{{ password_change_period | string if password_change_period is defined else '90'}}"
 
   - set_fact:
-      in_password_warning_period: "{{ password_warning_period if password_warning_period is defined else 2}}"
+      in_password_warning_period: "{{ password_warning_period | string if password_warning_period is defined else '2'}}"
 
   - set_fact:
       in_sys_protected: "{{ sys_protected if sys_protected is defined else false}}"
@@ -84,8 +84,8 @@
 
   - name: Validate sudo_permission
     fail:
-      msg: "The sudo_permission must be 'yes' or 'no'."
-    when: "in_sudo_permission not in [true, false]"
+      msg: "The sudo_permission must be 'yes'/'true'/'1' or 'no'/'false'/'0'."
+    when: "in_sudo_permission | string | lower not in ['true', 'false', 'yes', 'no', '1', '0']"
 
   - name: Validate user_role
     fail:
@@ -98,17 +98,17 @@
   - name: Validate password_change_period
     fail:
       msg: "The password change period must be a non-negative number"
-    when: "in_password_change_period is not string or in_password_change_period is not regex('^[0-9]+$')"
+    when: "in_password_change_period is not regex('^[0-9]+$')"
 
   - name: Validate password_warning_period
     fail:
       msg: "The password warning period must be a non-negative number"
-    when: "in_password_warning_period is not string or in_password_warning_period is not regex('^[0-9]+$')"
+    when: "in_password_warning_period is not regex('^[0-9]+$')"
 
   - name: Validate sys_protected
     fail:
-      msg: "The sys_protected must be 'yes' or 'no'."
-    when: "in_sys_protected not in [true, false]"
+      msg: "The sys_protected must be 'yes'/'true'/'1' or 'no'/'false'/'0'."
+    when: "in_sys_protected | string | lower not in ['true', 'false', 'yes', 'no', '1', '0']"
 
   - name: Get distributed cloud role
     import_role:
