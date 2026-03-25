@@ -58,11 +58,24 @@
       "@{{ subcloud_overrides }}"
     register: platform_restore_output
     async: "{{ restore_timeout | default(5400) | int }}"
-    poll: 10
+    poll: 0
+    vars:
+      ansible_async_dir: /tmp/.ansible_async_{{ inventory_hostname }}
+
+  - name: Wait for platform restore playbook to complete
+    async_status:
+      jid: "{{ platform_restore_output.ansible_job_id }}"
+    register: job_result
+    until: job_result.finished
+    retries: "{{ ((restore_timeout | default(5400) | int) / 10) | int }}"
+    delay: 10
+    become: false
+    vars:
+      ansible_async_dir: /tmp/.ansible_async_{{ inventory_hostname }}
 
   - name: Print the output of platform restore playbook
     debug:
-      msg: "{{ platform_restore_output.stdout }}"
+      msg: "{{ job_result.stdout }}"
 
   - name: Reconfigure OAM network post factory restore
     block:
@@ -120,6 +133,26 @@
       etype: group
       permissions: r
       state: present
+
+  rescue:
+    - name: Fail with error message for password-related failures
+      fail:
+        msg: >-
+          A task failed on {{ inventory_hostname }} during platform restore.
+          The sysadmin password may have been reset during restore. Ensure
+          that the sysadmin password matches the post-restore sysadmin password.
+          Original error:
+          {{ ansible_failed_result.module_stdout | default('') }}
+          {{ ansible_failed_result.module_stderr | default('') }}
+          {{ ansible_failed_result.msg | default('') }}
+      when: "'incorrect password' in (ansible_failed_result.module_stdout | default(''))"
+
+    - name: Re-raise original error if not password-related
+      fail:
+        msg: >-
+          {{ ansible_failed_result.module_stdout | default('') }}
+          {{ ansible_failed_result.module_stderr | default('') }}
+          {{ ansible_failed_result.msg | default('unknown') }}
 
   always:
     - name: Remove subcloud overrides file on {{ inventory_hostname }}
