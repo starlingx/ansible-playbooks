@@ -1,5 +1,5 @@
 ---
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2023,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -10,11 +10,11 @@
   block:
   - name: Set sudo_param if external variable sudo_permission is true
     set_fact:
-      sudo_param: "{{ '--sudo' if in_sudo_permission else '' }}"
+      sudo_param: "{{ '--sudo' if in_sudo_permission | bool else '' }}"
 
   - name: Set sys_protected_param if external variable sys_protected is true
     set_fact:
-      sys_protected_param: "{{ '--secondgroup sys_protected' if in_sys_protected else '' }}"
+      sys_protected_param: "{{ '--secondgroup sys_protected' if in_sys_protected | bool else '' }}"
 
   - name: Create LDAP user {{ in_user_id }}
     shell: >-
