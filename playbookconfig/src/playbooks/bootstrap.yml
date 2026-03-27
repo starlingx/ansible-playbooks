@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2024,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -10,8 +10,8 @@
   gather_facts: no
 
   vars_files:
-    - vars/bootstrap/main.yml
     - vars/common/main.yml
+    - vars/bootstrap/main.yml
     - host_vars/bootstrap/default.yml
 
   # Main play
