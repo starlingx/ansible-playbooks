@@ -1,0 +1,18 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# TASKS DESCRIPTION:
+#   - Call update-ipsec-certs-on-hosts.yml to restart ipsec-server service and trigger
+#     IPsec cert renewal on all subcloud hosts
+#
+
+- name: Trigger ipsec cert renewal on all hosts
+  command: >-
+    ansible-playbook /usr/share/ansible/stx-ansible/playbooks/update-ipsec-certs-on-hosts.yml
+    -e "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
+    ansible_become_pass={{ ansible_become_pass }}"
+  when: system_mode != "simplex"
+  no_log: true
