@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (c) 2024-2025 Wind River Systems, Inc.
+# Copyright (c) 2024-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -39,7 +39,13 @@ USM_USERNAME = "usm"
 MTCE_USERNAME = "mtce"
 
 SERVICES_TO_RESTART_SM = {
-    SYSINV_USERNAME: ["sysinv-inv", "sysinv-conductor", "cert-alarm", "cert-mon"],
+    SYSINV_USERNAME: [
+        "sysinv-inv",
+        "sysinv-conductor",
+        "cert-alarm",
+        "cert-mon",
+        "ceph-manager",
+    ],
     BARBICAN_USERNAME: [
         "barbican-api",
         "barbican-worker",
@@ -354,6 +360,11 @@ def restart_mtce_service():
         )
         subprocess.run(
             ["pkill", "-HUP", "hbsAgent"],
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            ["pkill", "-HUP", "hwmon"],
             capture_output=True,
             text=True,
         )
