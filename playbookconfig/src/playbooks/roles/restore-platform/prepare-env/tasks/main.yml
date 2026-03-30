@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2025 Wind River Systems, Inc.
+# Copyright (c) 2019-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -243,7 +243,7 @@
   - name: Fail if the host has been unlocked
     fail:
       msg: "Host {{ ansible_host }} has been unlocked. Cannot perform restore."
-    when: initial_config_done.stat.exists
+    when: initial_config_done.stat.exists and not factory_restore
 
   - name: Set restore file parameter
     set_fact:
