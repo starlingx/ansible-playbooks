@@ -111,6 +111,104 @@
     platform_backup_fqpn: "{{ restore_data_file }}"
   when: upgrade_in_progress
 
+- name: Validate factory compatibility
+  block:
+    - name: Gather factory hardware facts
+      setup:
+        gather_subset:
+          - hardware
+
+    - name: Set postgres staging directory path
+      set_fact:
+        postgres_staging_dir: "{{ staging_dir }}/postgres"
+
+    - name: Create postgres staging directory for factory restore
+      file:
+        path: "{{ postgres_staging_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: 0755
+      become: yes
+
+    - name: Extract postgres dump to staging directory
+      command: >-
+        tar --use-compress-program=pigz -C {{ postgres_staging_dir }}
+        -xpf {{ initial_backup_dir }}/{{ backup_filename }}
+        --wildcards --transform='s,.*/,,' '*/*\.postgreSql\.*'
+      become: yes
+
+    - name: Check backup is from simplex system
+      shell: >-
+        grep 'INSERT INTO public.i_system VALUES'
+        {{ postgres_staging_dir }}/sysinv.postgreSql.data
+        | grep -q "'simplex'"
+      register: backup_simplex_check
+      failed_when: false
+
+    - name: Fail if backup is not from simplex
+      fail:
+        msg: "Factory restore only supports simplex backups."
+      when: backup_simplex_check.rc != 0
+
+    - name: Get backup CPU topology
+      script: check_backup_factory_data.py cpu {{ postgres_staging_dir }}/sysinv.postgreSql.data
+      register: backup_cpu_info
+
+    - name: Set factory CPU topology
+      set_fact:
+        factory_cpu_info: >-
+          {{ ansible_processor_vcpus }},{{ ansible_processor_count }},{{
+          ansible_processor_cores * ansible_processor_count }},{{
+          ansible_processor_threads_per_core }}
+
+    - name: Fail if factory has insufficient CPU capacity
+      fail:
+        msg: >-
+          Factory CPU capacity insufficient.
+          Backup: {{ backup_cpu_info.stdout }} (cpus,sockets,cores,threads).
+          Factory: {{ factory_cpu_info }} (cpus,sockets,cores,threads).
+      vars:
+        backup_cpus: "{{ backup_cpu_info.stdout.split(',') }}"
+        factory_cpus: "{{ factory_cpu_info.split(',') }}"
+      when: >-
+        backup_cpus[0] | int > factory_cpus[0] | int or
+        backup_cpus[1] | int > factory_cpus[1] | int or
+        backup_cpus[2] | int > factory_cpus[2] | int or
+        backup_cpus[3] | int > factory_cpus[3] | int
+
+    - name: Get backup PCI device IDs
+      script: check_backup_factory_data.py pci {{ postgres_staging_dir }}/sysinv.postgreSql.data
+      register: backup_pci_ids
+
+    - name: Get factory PCI vendor:device IDs
+      shell: >-
+        lspci -n | awk '{print $3}' | sort -u
+      register: factory_pci_ids
+
+    - name: Fail if backup has PCI devices not present on factory
+      fail:
+        msg: >-
+          PCI device mismatch. Backup has devices not found on factory system.
+          Missing: {{ backup_pci_ids.stdout_lines | difference(factory_pci_ids.stdout_lines) }}
+      when: (backup_pci_ids.stdout_lines | difference(factory_pci_ids.stdout_lines)) | length > 0
+
+    # Per-LV validation: reject if any factory LV is smaller than backup
+    - name: Compare individual filesystem sizes
+      script: check_backup_factory_data.py fs {{ postgres_staging_dir }}/sysinv.postgreSql.data
+      register: lv_per_check
+      failed_when: lv_per_check.rc == 2
+      become: yes
+
+    - name: Fail if factory filesystems are smaller than backup
+      fail:
+        msg: >-
+          Factory filesystems smaller than backup.
+          {{ lv_per_check.stdout }}
+      when: lv_per_check.rc == 1
+
+  when: factory_restore
+
 - name: Set image backup filename
   block:
     - name: Copy backup_filename

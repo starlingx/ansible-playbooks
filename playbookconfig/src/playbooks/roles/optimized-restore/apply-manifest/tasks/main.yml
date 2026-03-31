@@ -1,17 +1,12 @@
 ---
 #
 # Copyright (c) 2022-2023 Intel, Inc.
+# Copyright (c) 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # ROLE DESCRIPTION:
 #   This role is to apply the puppet manifest specific to optimized restore.
-
-- name: Setup flags to control puppet manifest apply
-  file:
-    # Flag is used for simplex and duplex
-    path: /etc/platform/simplex
-    state: touch
 
 - name: Create hieradata workdir
   file:
@@ -54,111 +49,120 @@
     c0_address_key: "platform::network::mgmt::params::controller0_address"
     c0_cluster_host_key: "platform::network::cluster_host::params::controller_address"
 
-- name: Create puppet hieradata runtime configuration
-  copy:
-    dest: "{{ hieradata_workdir }}/runtime.yaml"
-    content: |
-      platform::network::mgmt::params::subnet_version: 4
-      platform::network::mgmt::params::controller0_address: 127.0.0.1
-      platform::network::mgmt::params::controller1_address: 127.0.0.2
-    force: yes
+# Skip puppet manifest apply for factory restore.
+# Factory system is already configured with running services.
+- block:
+  - name: Setup flags to control puppet manifest apply
+    file:
+      path: /etc/platform/simplex
+      state: touch
 
-- name: Add original lv_sizes to runtime configuration
-  shell: >
-    grep -E '{{ pattern }}' '{{ controller0_hieradata.stat.path }}'
-    | tee -a '{{ hieradata_workdir }}/runtime.yaml'
-  vars:
-    pattern: "::lv_size:\\s"
-  when: controller0_hieradata.stat.isreg|default(false)
+  - name: Create puppet hieradata runtime configuration
+    copy:
+      dest: "{{ hieradata_workdir }}/runtime.yaml"
+      content: |
+        platform::network::mgmt::params::subnet_version: 4
+        platform::network::mgmt::params::controller0_address: 127.0.0.1
+        platform::network::mgmt::params::controller1_address: 127.0.0.2
+      force: yes
 
-- name: Add missing static values to hieradata during upgrade
-  block:
-    - name: Create hieradata upgrade workdir
-      file:
-        path: "{{ hieradata_upgrade_workdir }}"
-        state: directory
+  - name: Add original lv_sizes to runtime configuration
+    shell: >
+      grep -E '{{ pattern }}' '{{ controller0_hieradata.stat.path }}'
+      | tee -a '{{ hieradata_workdir }}/runtime.yaml'
+    vars:
+      pattern: "::lv_size:\\s"
+    when: controller0_hieradata.stat.isreg|default(false)
 
-    - name: Generating static config data for upgrade
-      command: "/usr/bin/sysinv-puppet create-static-config {{ hieradata_upgrade_workdir }}"
-      failed_when: false
-      register: static_config_result
+  - name: Add missing static values to hieradata during upgrade
+    block:
+      - name: Create hieradata upgrade workdir
+        file:
+          path: "{{ hieradata_upgrade_workdir }}"
+          state: directory
 
-    - name: Fail if upgrade static hieradata cannot be generated
-      fail:
-        msg: "Failed to create upgrade puppet hiera static config."
-      when: static_config_result.rc != 0
+      - name: Generating static config data for upgrade
+        command: "/usr/bin/sysinv-puppet create-static-config {{ hieradata_upgrade_workdir }}"
+        failed_when: false
+        register: static_config_result
 
-    - name: Prepare to merge static values
-      set_fact:
-        _kinds:
-          static.yaml: { }
-          secure_static.yaml: { }
+      - name: Fail if upgrade static hieradata cannot be generated
+        fail:
+          msg: "Failed to create upgrade puppet hiera static config."
+        when: static_config_result.rc != 0
 
-    - name: Get content of static files
-      ansible.builtin.slurp:
-        src: "{{ item }}"
-      register: _static_files
-      loop:
-        # Read upgrade static values first
-        - "{{ hieradata_upgrade_workdir }}/static.yaml"
-        - "{{ hieradata_upgrade_workdir }}/secure_static.yaml"
-        # Then read original static values
-        - "{{ hieradata_workdir }}/static.yaml"
-        - "{{ hieradata_workdir }}/secure_static.yaml"
-      no_log: true
+      - name: Prepare to merge static values
+        set_fact:
+          _kinds:
+            static.yaml: { }
+            secure_static.yaml: { }
 
-    - name: Merge original static values with upgrade values
-      set_fact:
-        _kinds: >
-          {{ _kinds | combine({item.item | basename: item.content | b64decode | from_yaml}, recursive=true) }}
-      loop: "{{ _static_files.results }}"
-      no_log: true
+      - name: Get content of static files
+        ansible.builtin.slurp:
+          src: "{{ item }}"
+        register: _static_files
+        loop:
+          # Read upgrade static values first
+          - "{{ hieradata_upgrade_workdir }}/static.yaml"
+          - "{{ hieradata_upgrade_workdir }}/secure_static.yaml"
+          # Then read original static values
+          - "{{ hieradata_workdir }}/static.yaml"
+          - "{{ hieradata_workdir }}/secure_static.yaml"
+        no_log: true
 
-    - name: Update static values in hieradata directory
-      copy:
-        dest: "{{ hieradata_workdir }}/{{ item[0] }}"
-        content: "{{ item[1] | to_nice_yaml }}"
-        force: yes
-      loop: "{{ _kinds.items() }}"
-      no_log: true
+      - name: Merge original static values with upgrade values
+        set_fact:
+          _kinds: >
+            {{ _kinds | combine({item.item | basename: item.content | b64decode | from_yaml}, recursive=true) }}
+        loop: "{{ _static_files.results }}"
+        no_log: true
 
-  when:
-    - upgrade_in_progress
-    - previous_software_version is version('22.12', '>=')
+      - name: Update static values in hieradata directory
+        copy:
+          dest: "{{ hieradata_workdir }}/{{ item[0] }}"
+          content: "{{ item[1] | to_nice_yaml }}"
+          force: yes
+        loop: "{{ _kinds.items() }}"
+        no_log: true
 
-- name: Create SSL CA cert directory
-  file:
-    path: "{{  ca_cert_dir }}"
-    state: directory
-    owner: root
-    group: root
-    mode: 0755
-    recurse: yes
-  when: os_release == 'debian'
+    when:
+      - upgrade_in_progress
+      - previous_software_version is version('22.12', '>=')
 
-- name: Migrate static hieradata to new version
-  command: >
-    sed -i
-    '/{{ item }}/ s/{{ upgrade_metadata.from_release }}/{{ upgrade_metadata.to_release }}/g'
-    {{ hieradata_workdir }}/static.yaml
-  loop:
-    - "platform::client::credentials::params::keyring_script_directory: "
-    - "platform::client::credentials::params::keyring_script_file: "
-    - "platform::params::software_version: "
-  when: upgrade_in_progress|default(false)|bool
+  - name: Create SSL CA cert directory
+    file:
+      path: "{{  ca_cert_dir }}"
+      state: directory
+      owner: root
+      group: root
+      mode: 0755
+      recurse: yes
+    when: os_release == 'debian'
+
+  - name: Migrate static hieradata to new version
+    command: >
+      sed -i
+      '/{{ item }}/ s/{{ upgrade_metadata.from_release }}/{{ upgrade_metadata.to_release }}/g'
+      {{ hieradata_workdir }}/static.yaml
+    loop:
+      - "platform::client::credentials::params::keyring_script_directory: "
+      - "platform::client::credentials::params::keyring_script_file: "
+      - "platform::params::software_version: "
+    when: upgrade_in_progress|default(false)|bool
 
 
-- name: Applying puppet restore manifest
-  command: >-
-    /usr/local/bin/puppet-manifest-apply.sh
-    {{ hieradata_workdir }}
-    controller-0
-    controller
-    restore
-    {{ hieradata_workdir }}/runtime.yaml
-  environment:
-    INITIAL_CONFIG_PRIMARY: "true"
-    LC_ALL: "en_US.UTF-8"
+  - name: Applying puppet restore manifest
+    command: >-
+      /usr/local/bin/puppet-manifest-apply.sh
+      {{ hieradata_workdir }}
+      controller-0
+      controller
+      restore
+      {{ hieradata_workdir }}/runtime.yaml
+    environment:
+      INITIAL_CONFIG_PRIMARY: "true"
+      LC_ALL: "en_US.UTF-8"
+  when: not factory_restore
 
 # TODO(outbrito): puppet sets permission to 750, not sure why...
 - name: Set /opt/backups to 755 so postgres can read it
@@ -167,48 +171,51 @@
     state: directory
     mode: 0755
 
-# Stop and disable slapd here, it produces many errors in logs.
-# It will be re-enabled and started after unlocking is completed.
-- name: Disable slapd
-  systemd:
-    name: slapd
-    state: stopped
-    enabled: false
+- block:
+  # Stop and disable slapd here, it produces many errors in logs.
+  # It will be re-enabled and started after unlocking is completed.
+  - name: Disable slapd
+    systemd:
+      name: slapd
+      state: stopped
+      enabled: false
 
-- name: Persist hieradata during upgrades
-  block:
-    - name: Ensure Puppet directory exists
-      file:
-        path: "{{ upgrade_puppet_permdir }}"
-        state: directory
-        recurse: yes
-        owner: root
-        group: root
-        mode: 0700
+  - name: Persist hieradata during upgrades
+    block:
+      - name: Ensure Puppet directory exists
+        file:
+          path: "{{ upgrade_puppet_permdir }}"
+          state: directory
+          recurse: yes
+          owner: root
+          group: root
+          mode: 0700
 
-    - name: Persist puppet working files
-      copy:
-        src: "{{ (hieradata_workdir, item) | path_join }}"
-        dest: "{{ upgrade_puppet_permdir }}"
-        remote_src: true
-        owner: root
-        group: root
-        mode: 0700
-      loop: "{{ _kinds.keys() }}"
+      - name: Persist puppet working files
+        copy:
+          src: "{{ (hieradata_workdir, item) | path_join }}"
+          dest: "{{ upgrade_puppet_permdir }}"
+          remote_src: true
+          owner: root
+          group: root
+          mode: 0700
+        loop: "{{ _kinds.keys() }}"
 
-  always:
-    - name: Cleanup temp directory
-      file:
-        path: "{{ hieradata_upgrade_workdir }}"
-        state: absent
+    always:
+      - name: Cleanup temp directory
+        file:
+          path: "{{ hieradata_upgrade_workdir }}"
+          state: absent
 
-  vars:
-    upgrade_puppet_permdir: >-
-      {{
-        (puppet_permdir.replace(software_version, previous_software_version), 'hieradata')
-        | path_join
-      }}
+    vars:
+      upgrade_puppet_permdir: >-
+        {{
+          (puppet_permdir.replace(software_version, previous_software_version), 'hieradata')
+          | path_join
+        }}
 
-  when:
-    - upgrade_in_progress
-    - previous_software_version is version('22.12', '>=')
+    when:
+      - upgrade_in_progress
+      - previous_software_version is version('22.12', '>=')
+
+  when: not factory_restore
