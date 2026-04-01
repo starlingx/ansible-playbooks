@@ -23,7 +23,7 @@
 
   - name: Unset show_multiple_locations override
     shell: >-
-      source /etc/platform/openrc; system helm-override-update
+      source /etc/platform/openrc; system helm-override-update --reuse-values
       --set conf.glance.DEFAULT.show_multiple_locations=False {{ openstack_app_name }} glance openstack
 
   - name: Continue to bring up the remaining OpenStack services
@@ -149,7 +149,7 @@
   # This override is required by the tidy_storage helper script when we do a full restore.
   - name: Set show_multiple_locations override
     shell: >-
-      source /etc/platform/openrc; system helm-override-update
+      source /etc/platform/openrc; system helm-override-update --reuse-values
       --set conf.glance.DEFAULT.show_multiple_locations=True {{ openstack_app_name }} glance openstack
 
   - name: Bring up MariaDB and its prerequisite services
