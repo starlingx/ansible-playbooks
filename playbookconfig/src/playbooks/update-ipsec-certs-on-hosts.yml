@@ -1,0 +1,53 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# TASKS DESCRIPTION:
+#   - Restart ipsec server on both controllers
+#   - Run ipsec cert renewal on all hosts
+#
+
+- name: Update IPSec certs
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: true
+  tasks:
+
+    - name: Restart ipsec-server on current controller
+      command: pmon-restart ipsec-server
+
+    - name: Get current hostname
+      command: cat /etc/hostname
+      register: current_hostname
+      changed_when: false
+
+    - name: Determine the inactive controller based on current hostname
+      set_fact:
+        inactive_controller: >-
+          {% if current_hostname.stdout | trim == 'controller-0' %}controller-1{% else %}controller-0{% endif %}
+
+    - name: Restart ipsec-server on the inactive controller
+      command: pmon-restart ipsec-server
+      delegate_to: "{{ inactive_controller }}"
+
+    - name: Get hostnames list
+      script: /usr/share/ansible/stx-ansible/playbooks/roles/configure-ipsec/files/get_all_hostnames.py
+      register: all_hosts
+      become_user: postgres
+
+    - name: Add available hosts to a dynamic in-memory group
+      add_host:
+        name: "{{ item }}"
+        groups: available_hosts
+      loop: "{{ all_hosts.stdout }}"
+
+- name: Trigger ipsec cert renewal on all hosts
+  hosts: available_hosts
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Run ipsec-client against pxecontroller
+      command: ipsec-client -d -o 2 pxecontroller

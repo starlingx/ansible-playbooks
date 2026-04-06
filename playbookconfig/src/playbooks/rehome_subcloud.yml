@@ -26,6 +26,7 @@
     - rehome-subcloud/update-network-config
     - role: rehome-enroll-common/update-keystone-data
       become: yes
+    - rehome-subcloud/update-ipsec-certs
     - rehome-subcloud/validate-after-rehome
 
   vars:
