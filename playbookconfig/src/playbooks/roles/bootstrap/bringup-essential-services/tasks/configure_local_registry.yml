@@ -34,6 +34,12 @@
     - "sed -i -e 's|<%= @docker_registry_host %>|'$DOCKER_REGISTRY_HOST'|g' {{ registry_readonly_config_file }}"
     - "sed -i -e 's|<%= @docker_realm_host %>|'{{ local_registry_host }}'|g' {{ registry_runtime_config_file }}"
     - "sed -i -e 's|<%= @docker_realm_host %>|'{{ local_registry_host }}'|g' {{ registry_readonly_config_file }}"
+    - "sed -i -e 's|<%= @tls_min_version %>|tls1.2|g' {{ registry_runtime_config_file }}"
+    - "sed -i -e 's|<%= @tls_min_version %>|tls1.2|g' {{ registry_readonly_config_file }}"
+    - "sed -i '/<%/d' {{ registry_runtime_config_file }}"
+    - "sed -i '/<%/d' {{ registry_readonly_config_file }}"
+    - "sed -i '/^    ciphersuites:$/d' {{ registry_runtime_config_file }}"
+    - "sed -i '/^    ciphersuites:$/d' {{ registry_readonly_config_file }}"
   environment:
     DOCKER_REGISTRY_HOST: "{{ controller_floating_address_url }}"
 
