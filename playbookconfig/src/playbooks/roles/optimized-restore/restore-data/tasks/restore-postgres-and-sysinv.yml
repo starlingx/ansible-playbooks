@@ -228,6 +228,20 @@
   become_user: postgres
   when: wipe_ceph_osds|bool
 
+# For factory restore, update db where current system's LV size is
+# greater than backup's.
+- name: Update factory LV sizes in restored db during factory restore
+  shell: >-
+    psql -c "UPDATE {{ item.db_table }} SET size={{ item.current_size }}
+    WHERE name='{{ item.fs_name }}'" sysinv
+  become_user: postgres
+  loop: "{{ lvs_to_update_after_db_restore }}"
+  loop_control:
+    label: "{{ item.db_table }}.{{ item.fs_name }} → {{ item.current_size }}G"
+  when:
+    - factory_restore | default(false)
+    - lvs_to_update_after_db_restore | default([]) | length > 0
+
 # Ensure hostwd sees the node as locked during optimized restore.
 # Normally mtcClient creates those flags, but it's stopped here.
 # Without those flags, hostwd may trigger a crashdump on quorum failure.

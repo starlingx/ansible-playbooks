@@ -49,6 +49,22 @@
     c0_address_key: "platform::network::mgmt::params::controller0_address"
     c0_cluster_host_key: "platform::network::cluster_host::params::controller_address"
 
+- name: Compare with backup LV sizes for db update during factory restore
+  block:
+    - name: Compare logical volume sizes
+      script: compare_backup_lvs.py {{ postgres_staging_dir | quote }}
+      register: lv_comparison_result
+
+    - name: Set LV adjustment facts
+      set_fact:
+        lvs_to_update_after_db_restore: >-
+          {{ (lv_comparison_result.stdout | from_json).lvs_to_update_after_db_restore }}
+
+    - name: Display LV comparison results
+      debug:
+        msg: "LVs to update after db restore: {{ lvs_to_update_after_db_restore }}"
+  when: factory_restore | default(false)
+
 # Skip puppet manifest apply for factory restore.
 # Factory system is already configured with running services.
 - block:
