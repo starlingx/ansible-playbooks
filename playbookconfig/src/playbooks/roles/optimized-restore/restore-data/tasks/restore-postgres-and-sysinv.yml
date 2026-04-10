@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2024 Wind River Systems, Inc.
+# Copyright (c) 2022-2024, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -9,26 +9,62 @@
 #   in postgres, so that is restored first.  After flock services
 #   are restarted to pick up changes.
 
-- name: Shutdown mtcAgent
-  command: /usr/lib/ocf/resource.d/platform/mtcAgent stop
-  environment:
-    OCF_ROOT: "/usr/lib/ocf"
-    OCF_RESKEY_state: "active"
+- name: Stop flock, postgres and SM services during factory restore
+  block:
+    - name: Get postgres bin directory
+      command: pg_config --bindir
+      register: pg_bindir
 
-- name: Stop flock services
-  systemd:
-    name: "{{ item }}"
-    state: stopped
-  loop:
-    - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
-    - fminit
-    - fm-api
-    - sysinv-conductor
-    - sysinv-agent
-    - sysinv-api
-    - mtcClient
-    - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
-    - sm-api
+    # Use sm-stop to gracefully stop services while SM
+    # is still running. Stop flock services first (they are
+    # connected to postgres), then stop postgres and SM.
+    - name: Stop flock services via SM
+      command: "sm-stop service {{ item }}"
+      loop:
+        - mtc-agent
+        - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
+        - sysinv-conductor
+        - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
+
+    - name: Stop pmon-managed flock services
+      command: "pmon-stop {{ item }}"
+      loop:
+        - fm-api
+        - sysinv-agent
+        - mtcClient
+
+    - name: Stop postgres via SM
+      command: sm-stop service postgres
+
+    - name: Stop SM service
+      command: pmon-stop sm
+
+  when: factory_restore | default(false)
+
+- name: Shutdown mtcAgent and flock services
+  block:
+    - name: Shutdown mtcAgent
+      command: /usr/lib/ocf/resource.d/platform/mtcAgent stop
+      environment:
+        OCF_ROOT: "/usr/lib/ocf"
+        OCF_RESKEY_state: "active"
+
+    - name: Stop flock services
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop:
+        - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
+        - fminit
+        - fm-api
+        - sysinv-conductor
+        - sysinv-agent
+        - sysinv-api
+        - mtcClient
+        - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
+        - sm-api
+
+  when: not (factory_restore | default(false))
 
 - name: Restore Postgres
   import_role:
@@ -118,23 +154,54 @@
     - /var/run/.node_locked
     - /var/persist/mtc/.node_locked
 
-- name: Bringup flock services
-  systemd:
-    name: "{{ item }}"
-    state: restarted
-  loop:
-    - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
-    - fminit
-    - fm-api
-    - sysinv-conductor
-    - sysinv-agent
-    - sysinv-api
-    - mtcClient
-    - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
-    - sm-api
+- name: Bringup flock services and mtcAgent
+  block:
+    - name: Bringup flock services
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+      loop:
+        - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
+        - fminit
+        - fm-api
+        - sysinv-conductor
+        - sysinv-agent
+        - sysinv-api
+        - mtcClient
+        - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
+        - sm-api
 
-- name: Bringup mtcAgent
-  command: "/usr/lib/ocf/resource.d/platform/mtcAgent start"
-  environment:
-    OCF_ROOT: "/usr/lib/ocf"
-    OCF_RESKEY_state: "active"
+    - name: Bringup mtcAgent
+      command: "/usr/lib/ocf/resource.d/platform/mtcAgent start"
+      environment:
+        OCF_ROOT: "/usr/lib/ocf"
+        OCF_RESKEY_state: "active"
+
+  when: not (factory_restore | default(false))
+
+# Start SM, then use sm-start to bring up
+# flock services, during factory restore
+- name: Start up SM and flock services during factory restore
+  block:
+    - name: Start SM services
+      command: pmon-start sm
+
+    - name: Start/ manage postgres via SM
+      command: sm-start service postgres
+
+    - name: Start flock services via SM
+      command: "sm-start service {{ item }}"
+      loop:
+        - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
+        - sysinv-conductor
+        - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
+        - mtc-agent
+
+    - name: Start pmon-managed flock services
+      command: "pmon-start {{ item }}"
+      loop:
+        - fm-api
+        - sysinv-agent
+        - mtcClient
+
+  when: factory_restore | default(false)

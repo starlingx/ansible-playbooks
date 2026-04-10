@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2023, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -51,4 +51,9 @@
 - name: Start dnsmasq for internal FQDN
   command: dnsmasq
   become: yes
-  when: previous_software_version is version('22.12', '>')
+  when: not (factory_restore | default(false))
+
+- name: Restart dnsmasq for internal FQDN during factory restore
+  command: sm-restart-safe service dnsmasq
+  become: yes
+  when: factory_restore | default(false)
