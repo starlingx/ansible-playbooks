@@ -59,9 +59,13 @@
     no_log: true
   when: mode == 'restore'
 
+- name: Set database connection key name
+  set_fact:
+    db_connection_key: "keystone::{{ 'db::' if is_trixie else '' }}database_connection"
+
 - name: Create database connection string
   set_fact:
-    database_connection: "{{ keystone_var_dict['keystone::database_connection'] |
+    database_connection: "{{ keystone_var_dict[db_connection_key] |
       regex_replace('^postgresql:', 'postgresql+psycopg2:') }}"
     OS_USERNAME: "{{ keystone_var_dict['platform::client::params::admin_username'] }}"
     OS_PASSWORD: "{{ keystone_var_dict['platform::client::params::admin_password'] }}"
