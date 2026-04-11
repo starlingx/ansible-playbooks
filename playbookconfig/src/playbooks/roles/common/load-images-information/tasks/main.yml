@@ -237,24 +237,42 @@
           (not restore_registry_filesystem|default(false) or
           restore_mode|default(none) != "optimized")
 
-  - name: Append additional storage images if rook-ceph backend is configured
+  - name: Append additional storage images if rook-ceph backend is configured (Bullseye)
     set_fact:
       storage_images: "{{ storage_images }} + [ '{{ item | replace('registry.local:9001/', '') }}' ] "
-    loop: "{{ additional_storage_images_list }} "
-    when: additional_storage_images_list is defined
+    with_items: "{{ additional_storage_images_list }} "
+    when: additional_storage_images_list is defined and is_bullseye
 
-  - name: Append additional static images if provisioned
+  - name: Append additional storage images if rook-ceph backend is configured (Trixie)
+    set_fact:
+      storage_images: "{{ storage_images + [ item | replace('registry.local:9001/', '') ] }}"
+    with_items: "{{ additional_storage_images_list }}"
+    when: additional_storage_images_list is defined and is_trixie
+
+  - name: Append additional static images if provisioned (Bullseye)
     set_fact:
       static_images: "{{ static_images }} + [ '{{item.value}}' ]"
-    loop: "{{ additional_static_images_list | default({})| dict2items }}"
-    when: additional_static_images_list is defined
+    with_items: "{{ additional_static_images_list | default({})| dict2items }}"
+    when: additional_static_images_list is defined and is_bullseye
+
+  - name: Append additional static images if provisioned (Trixie)
+    set_fact:
+      static_images: "{{ static_images + [ item.value ] }}"
+    with_items: "{{ additional_static_images_list | default({})| dict2items }}"
+    when: additional_static_images_list is defined and is_trixie
 
   - block:
-    - name: Append additional static images for a DC system controller if provisioned
+    - name: Append additional static images for a DC system controller if provisioned (Bullseye)
       set_fact:
         static_images: "{{ static_images }} + [ '{{item.value}}' ]"
-      loop: "{{ additional_system_controller_static_images_list | default({})| dict2items }}"
-      when: additional_system_controller_static_images_list is defined
+      with_items: "{{ additional_system_controller_static_images_list | default({})| dict2items }}"
+      when: additional_system_controller_static_images_list is defined and is_bullseye
+
+    - name: Append additional static images for a DC system controller if provisioned (Trixie)
+      set_fact:
+        static_images: "{{ static_images + [ item.value ] }}"
+      with_items: "{{ additional_system_controller_static_images_list | default({})| dict2items }}"
+      when: additional_system_controller_static_images_list is defined and is_trixie
 
     when: (distributed_cloud_role is defined and
            distributed_cloud_role == 'systemcontroller') or
