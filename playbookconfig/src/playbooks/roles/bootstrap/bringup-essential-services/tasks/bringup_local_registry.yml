@@ -119,11 +119,21 @@
     state: restarted
 
 # the restored /etc/hosts file already contains registry.local
-- name: Update /etc/hosts with local registry host
-  command: >-
-    sed -i -e 's|'$CONTROLLER_ADDRESS'\t'$CONTROLLER'|'$CONTROLLER_ADDRESS'\t'$CONTROLLER'\t'$LOCAL_REGISTRY'|g' /etc/hosts
-  environment:
-    CONTROLLER_ADDRESS: "{{ controller_floating_address }}"
-    CONTROLLER: "controller"
-    LOCAL_REGISTRY: "registry.local"
+- block:
+  - name: Update /etc/hosts with local registry host (Bullseye)
+    command: >-
+      sed -i -e 's|'$CONTROLLER_ADDRESS'\t'$CONTROLLER'|'$CONTROLLER_ADDRESS'\t'$CONTROLLER'\t'$LOCAL_REGISTRY'|g' /etc/hosts
+    environment:
+      CONTROLLER_ADDRESS: "{{ controller_floating_address }}"
+      CONTROLLER: "controller"
+      LOCAL_REGISTRY: "registry.local"
+    when: is_bullseye
+
+  - name: Update /etc/hosts with local registry host (Trixie)
+    lineinfile:
+      path: /etc/hosts
+      line: "{{ controller_floating_address }}\tregistry.local"
+      insertafter: EOF
+    when: is_trixie
+
   when: mode != 'restore'
