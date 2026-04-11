@@ -163,9 +163,15 @@
 
     - debug: msg="IP address is {{ result.stdout }}"
 
-    - name: Determine if IPv6 encapsulation is needed
+    - name: Determine if IPv6 encapsulation is needed (Bullseye)
       set_fact:
         ipv6_encap: "{{ result.stdout | ipv6 }}"
+      when: is_bullseye
+
+    - name: Determine if IPv6 encapsulation is needed (Trixie)
+      set_fact:
+        ipv6_encap: "{{ result.stdout | ansible.utils.ipv6 }}"
+      when: is_trixie
 
     - debug: msg="IPv6 addressing is {{ ipv6_encap }}"
 
@@ -237,9 +243,15 @@
       register: result
 
     # Using ipwrap filter to “wrap” in square brackets ipv6 addresses
-    - name: Set monitor IP to variable mon_ip
+    - name: Set monitor IP to variable mon_ip (Bullseye)
       set_fact:
         mon_ip: "{{ result.stdout | ipwrap }}"
+      when: is_bullseye
+
+    - name: Set monitor IP to variable mon_ip (Trixie)
+      set_fact:
+        mon_ip: "{{ result.stdout | ansible.utils.ipwrap }}"
+      when: is_trixie
 
     # On a partial restore ceph-osds are not wiped.
     # 'ceph-disk list' command returns the list of ceph osds

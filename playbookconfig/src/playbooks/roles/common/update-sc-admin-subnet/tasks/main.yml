@@ -20,7 +20,7 @@
     {{ admin_address_pool_uuid.stdout }}
   when: admin_address_pool_uuid.stdout | length > 0
 
-- name: Add subcloud admin network primary address pool
+- name: Add subcloud admin network primary address pool (Bullseye)
   shell: >-
     source /etc/platform/openrc; system addrpool-add admin-{{
     'ipv4' if network_params.admin_subnet_primary | ipv4 else 'ipv6' }}
@@ -30,6 +30,19 @@
     --gateway-address {{ network_params.admin_gateway_address_primary }}  |
     awk '/uuid/{ print$4 }'
   register: add_subcloud_admin_primary_pool_uuid
+  when: is_bullseye
+
+- name: Add subcloud admin network primary address pool (Trixie)
+  shell: >-
+    source /etc/platform/openrc; system addrpool-add admin-{{
+    'ipv4' if network_params.admin_subnet_primary | ansible.utils.ipv4 else 'ipv6' }}
+    {{ (network_params.admin_subnet_primary | ansible.utils.ipaddr(0)).split('/')[0]  }}
+    {{ network_params.admin_subnet_primary | ansible.utils.ipaddr('prefix') }}
+    --ranges {{ admin_floating_address }}-{{ admin_floating_address | ansible.utils.ipmath(2) }}
+    --gateway-address {{ network_params.admin_gateway_address_primary }}  |
+    awk '/uuid/{ print$4 }'
+  register: add_subcloud_admin_primary_pool_uuid
+  when: is_trixie
 
 - name: Add new subcloud admin network
   shell: >-
@@ -41,7 +54,7 @@
 
 # Add subcloud admin network secondary address pool
 - block:
-  - name: Add subcloud admin network secondary address pool
+  - name: Add subcloud admin network secondary address pool (Bullseye)
     shell: >-
       source /etc/platform/openrc; system addrpool-add admin-{{
       'ipv4' if network_params.admin_subnet_secondary | ipv4 else 'ipv6' }}
@@ -51,6 +64,19 @@
       --gateway-address {{ network_params.admin_gateway_address_secondary }}  |
       awk '/uuid/{ print$4 }'
     register: add_subcloud_admin_secondary_pool_uuid
+    when: is_bullseye
+
+  - name: Add subcloud admin network secondary address pool (Trixie)
+    shell: >-
+      source /etc/platform/openrc; system addrpool-add admin-{{
+      'ipv4' if network_params.admin_subnet_secondary | ansible.utils.ipv4 else 'ipv6' }}
+      {{ (network_params.admin_subnet_secondary | ansible.utils.ipaddr(0)).split('/')[0]  }}
+      {{ network_params.admin_subnet_secondary | ansible.utils.ipaddr('prefix') }}
+      --ranges {{ admin_floating_address_secondary }}-{{ admin_floating_address_secondary | ansible.utils.ipmath(2) }}
+      --gateway-address {{ network_params.admin_gateway_address_secondary }}  |
+      awk '/uuid/{ print$4 }'
+    register: add_subcloud_admin_secondary_pool_uuid
+    when: is_trixie
 
   - name: Assign secondary address pool to subcloud admin network
     shell: >-

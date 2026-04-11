@@ -110,7 +110,7 @@
 
 
 - block:  # Revert configuration to loopback interface
-  - name: Set facts derived from previous network configurations
+  - name: Set facts derived from previous network configurations (Bullseye)
     set_fact:
       prev_management_subnet_prefix: "{{ prev_network_params.prev_management_subnet_primary | ipaddr('prefix') }}"
       prev_controller_floating_address:
@@ -124,10 +124,29 @@
         "{{ (prev_pxeboot_subnet | ipaddr(1)).split('/')[0]
         if prev_pxeboot_start_address == 'derived' else prev_pxeboot_start_address }}"
       prev_pxe_subnet_prefix: "{{ prev_pxeboot_subnet | ipaddr('prefix') }}"
+    when: is_bullseye
+
+  - name: Set facts derived from previous network configurations (Trixie)
+    set_fact:
+      prev_management_subnet_prefix: "{{ prev_network_params.prev_management_subnet_primary |
+                                         ansible.utils.ipaddr('prefix') }}"
+      prev_controller_floating_address:
+        "{{ default_prev_management_start_address_primary
+        if prev_management_start_address == 'derived' else prev_network_params.prev_management_start_address_primary }}"
+      prev_cluster_floating_address:
+        "{{ default_prev_cluster_host_start_address_primary
+        if prev_cluster_host_start_address == 'derived' else prev_network_params.prev_cluster_host_start_address_primary }}"
+      prev_cluster_subnet_prefix: "{{ prev_network_params.prev_cluster_host_subnet_primary |
+                                      ansible.utils.ipaddr('prefix') }}"
+      prev_controller_pxeboot_floating_address:
+        "{{ (prev_pxeboot_subnet | ansible.utils.ipaddr(1)).split('/')[0]
+        if prev_pxeboot_start_address == 'derived' else prev_pxeboot_start_address }}"
+      prev_pxe_subnet_prefix: "{{ prev_pxeboot_subnet | ansible.utils.ipaddr('prefix') }}"
+    when: is_trixie
 
   # set facts for secondary if defined/exists
   - block:
-    - name: Set secondary management facts derived from previous network configurations
+    - name: Set secondary management facts derived from previous network configurations (Bullseye)
       set_fact:
         prev_management_subnet_prefix_secondary: "{{ prev_network_params.prev_management_subnet_secondary |
                                                      ipaddr('prefix') }}"
@@ -135,9 +154,20 @@
           "{{ default_prev_management_start_address_secondary
           if prev_management_start_address == 'derived' else prev_network_params.prev_management_start_address_secondary }}"
         prev_mgmt_broadcast_secondary: "{{ prev_network_params.prev_management_subnet_secondary | ipaddr('broadcast') }}"
-      when: prev_network_params.prev_management_subnet_secondary
+      when: prev_network_params.prev_management_subnet_secondary and is_bullseye
 
-    - name: Set secondary cluster-host facts derived from previous network configurations
+    - name: Set secondary management facts derived from previous network configurations (Trixie)
+      set_fact:
+        prev_management_subnet_prefix_secondary: "{{ prev_network_params.prev_management_subnet_secondary |
+                                                     ansible.utils.ipaddr('prefix') }}"
+        prev_controller_floating_address_secondary:
+          "{{ default_prev_management_start_address_secondary
+          if prev_management_start_address == 'derived' else prev_network_params.prev_management_start_address_secondary }}"
+        prev_mgmt_broadcast_secondary: "{{ prev_network_params.prev_management_subnet_secondary |
+                                           ansible.utils.ipaddr('broadcast') }}"
+      when: prev_network_params.prev_management_subnet_secondary and is_trixie
+
+    - name: Set secondary cluster-host facts derived from previous network configurations (Bullseye)
       set_fact:
         prev_cluster_floating_address_secondary:
           "{{ default_prev_cluster_host_start_address_secondary
@@ -145,16 +175,35 @@
           else prev_network_params.prev_cluster_host_start_address_secondary }}"
         prev_cluster_subnet_prefix_secondary: "{{ prev_network_params.prev_cluster_host_subnet_secondary |
                                                   ipaddr('prefix') }}"
-      when: prev_network_params.prev_cluster_host_subnet_secondary
+      when: prev_network_params.prev_cluster_host_subnet_secondary and is_bullseye
 
-  - name: Set facts derived from previous admin network configuration
+    - name: Set secondary cluster-host facts derived from previous network configurations (Trixie)
+      set_fact:
+        prev_cluster_floating_address_secondary:
+          "{{ default_prev_cluster_host_start_address_secondary
+          if prev_cluster_host_start_address == 'derived'
+          else prev_network_params.prev_cluster_host_start_address_secondary }}"
+        prev_cluster_subnet_prefix_secondary: "{{ prev_network_params.prev_cluster_host_subnet_secondary |
+                                                  ansible.utils.ipaddr('prefix') }}"
+      when: prev_network_params.prev_cluster_host_subnet_secondary and is_trixie
+
+  - name: Set facts derived from previous admin network configuration (Bullseye)
     set_fact:
       prev_admin_subnet_prefix: "{{ prev_network_params.prev_admin_subnet_primary | ipaddr('prefix') }}"
       prev_admin_floating_address:
         "{{ default_prev_admin_floating_address_primary
         if prev_admin_floating_address == 'derived' else prev_network_params.prev_admin_floating_address_primary }}"
       prev_admin_broadcast: "{{ prev_network_params.prev_admin_subnet_primary | ipaddr('broadcast') }}"
-    when: (prev_admin_network|bool == true)
+    when: (prev_admin_network|bool == true) and is_bullseye
+
+  - name: Set facts derived from previous admin network configuration (Trixie)
+    set_fact:
+      prev_admin_subnet_prefix: "{{ prev_network_params.prev_admin_subnet_primary | ansible.utils.ipaddr('prefix') }}"
+      prev_admin_floating_address:
+        "{{ default_prev_admin_floating_address_primary
+        if prev_admin_floating_address == 'derived' else prev_network_params.prev_admin_floating_address_primary }}"
+      prev_admin_broadcast: "{{ prev_network_params.prev_admin_subnet_primary | ansible.utils.ipaddr('broadcast') }}"
+    when: (prev_admin_network|bool == true) and is_trixie
 
   - name: Set CIDR fact derived from previous admin network configuration
     set_fact:
@@ -163,7 +212,7 @@
 
   # set facts for secondary if defined/exists
   - block:
-    - name: Set facts derived from previous secondary admin network configuration
+    - name: Set facts derived from previous secondary admin network configuration (Bullseye)
       set_fact:
         prev_admin_subnet_prefix_secondary: "{{ prev_network_params.prev_admin_subnet_secondary | ipaddr('prefix') }}"
         prev_controller_admin_floating_address_secondary:
@@ -171,7 +220,19 @@
           if prev_admin_floating_address == 'derived' else prev_network_params.prev_admin_floating_address_secondary }}"
         prev_admin_broadcast_secondary: "{{ prev_network_params.prev_admin_subnet_secondary | ipaddr('broadcast') }}"
       when: ((prev_admin_network|bool == true) and
-             prev_network_params.prev_admin_subnet_secondary)
+             prev_network_params.prev_admin_subnet_secondary) and is_bullseye
+
+    - name: Set facts derived from previous secondary admin network configuration (Trixie)
+      set_fact:
+        prev_admin_subnet_prefix_secondary: "{{ prev_network_params.prev_admin_subnet_secondary |
+                                                ansible.utils.ipaddr('prefix') }}"
+        prev_controller_admin_floating_address_secondary:
+          "{{ default_prev_admin_floating_address_secondary
+          if prev_admin_floating_address == 'derived' else prev_network_params.prev_admin_floating_address_secondary }}"
+        prev_admin_broadcast_secondary: "{{ prev_network_params.prev_admin_subnet_secondary |
+                                            ansible.utils.ipaddr('broadcast') }}"
+      when: ((prev_admin_network|bool == true) and
+             prev_network_params.prev_admin_subnet_secondary) and is_trixie
 
     - name: Set CIDR fact derived from previous secondary admin network configuration
       set_fact:
@@ -180,10 +241,17 @@
       when: ((prev_admin_network|bool == true) and
              prev_network_params.prev_admin_subnet_secondary)
 
-  - name: Set facts derived from previous floating addresses
+  - name: Set facts derived from previous floating addresses (Bullseye)
     set_fact:
       prev_controller_0_address: "{{ prev_controller_floating_address|ipmath(1) }}"
       prev_controller_0_cluster_host: "{{ prev_cluster_floating_address|ipmath(1) }}"
+    when: is_bullseye
+
+  - name: Set facts derived from previous floating addresses (trixie)
+    set_fact:
+      prev_controller_0_address: "{{ prev_controller_floating_address|ansible.utils.ipmath(1) }}"
+      prev_controller_0_cluster_host: "{{ prev_cluster_floating_address|ansible.utils.ipmath(1) }}"
+    when: is_trixie
 
   - name: Set facts for the removal of addresses assigned to loopback interface
     set_fact:
@@ -195,16 +263,25 @@
 
   # set facts for secondary if defined
   - block:
-    - name: Set facts derived from previous secondary floating address
+    - name: Set facts derived from previous secondary floating address (Bullseye)
       set_fact:
         prev_controller_0_address_secondary: "{{ prev_controller_floating_address_secondary|ipmath(1) }}"
-      when: prev_controller_floating_address_secondary is defined
+      when: prev_controller_floating_address_secondary is defined and is_bullseye
 
-    - name: Set facts derived from previous secondary cluster-host floating address
+    - name: Set facts derived from previous secondary floating address (Trixie)
+      set_fact:
+        prev_controller_0_address_secondary: "{{ prev_controller_floating_address_secondary|ansible.utils.ipmath(1) }}"
+      when: prev_controller_floating_address_secondary is defined and is_trixie
+
+    - name: Set facts derived from previous secondary cluster-host floating address (Bullseye)
       set_fact:
         prev_controller_0_cluster_host_secondary: "{{ prev_cluster_floating_address_secondary|ipmath(1) }}"
-      when: prev_cluster_floating_address_secondary is defined
+      when: prev_cluster_floating_address_secondary is defined and is_bullseye
 
+    - name: Set facts derived from previous secondary cluster-host floating address (trixie)
+      set_fact:
+        prev_controller_0_cluster_host_secondary: "{{ prev_cluster_floating_address_secondary|ansible.utils.ipmath(1) }}"
+      when: prev_cluster_floating_address_secondary is defined and is_trixie
     # Set facts for the removal of secondary addresses assigned to loopback interface
     - block:
       - name: Set facts for the removal of secondary mgmt floating assigned to loopback interface

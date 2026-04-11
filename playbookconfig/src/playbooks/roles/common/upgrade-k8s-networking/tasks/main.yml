@@ -59,7 +59,7 @@
 # and cluster_network_ipv6
 # cluster_host_floating_address and cluster_host_node_0_address are also
 # comma separated dual-stack read from sysinv
-- name: Set networking facts
+- name: Set networking facts (Bullseye)
   set_fact:
     kubelet_cni_bin_dir: "/var/opt/cni/bin"
     kubelet_vol_plugin_dir: "/var/opt/libexec/kubernetes/kubelet-plugins/volume/exec/"
@@ -73,6 +73,23 @@
                           }}"
     cluster_floating_address: "{{ cluster_host_floating_address.split(',')[0] }}"
     controller_0_cluster_host: "{{ cluster_host_node_0_address.split(',')[0] }}"
+  when: is_bullseye
+
+- name: Set networking facts (Trixie)
+  set_fact:
+    kubelet_cni_bin_dir: "/var/opt/cni/bin"
+    kubelet_vol_plugin_dir: "/var/opt/libexec/kubernetes/kubelet-plugins/volume/exec/"
+    cluster_network_ipv4: "{{ cluster_pod_subnet.split(',')[0] | ansible.utils.ipv4
+                            if cluster_pod_subnet.split(',')[0] | ansible.utils.ipv4
+                            else  cluster_pod_subnet.split(',')[-1] | ansible.utils.ipv4
+                          }}"
+    cluster_network_ipv6: "{{ cluster_pod_subnet.split(',')[0] | ansible.utils.ipv6
+                            if cluster_pod_subnet.split(',')[0] | ansible.utils.ipv6
+                            else  cluster_pod_subnet.split(',')[-1] | ansible.utils.ipv6
+                          }}"
+    cluster_floating_address: "{{ cluster_host_floating_address.split(',')[0] }}"
+    controller_0_cluster_host: "{{ cluster_host_node_0_address.split(',')[0] }}"
+  when: is_trixie
 
 - name: Set secondary cluster_floating_address
   set_fact:

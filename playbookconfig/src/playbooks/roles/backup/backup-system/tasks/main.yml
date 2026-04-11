@@ -781,9 +781,15 @@
         set_fact:
           etcd_endpoint: "{{ addresses.floating_address }}"
 
-    - name: Wrap etcd_endpoint in [] brackets if it's an ipv6 address
+    - name: Wrap etcd_endpoint in [] brackets if it's an ipv6 address (Bullseye)
       set_fact:
         etcd_endpoint_parsed: "{{ etcd_endpoint | ipwrap }}"
+      when: is_bullseye
+
+    - name: Wrap etcd_endpoint in [] brackets if it's an ipv6 address (Trixie)
+      set_fact:
+        etcd_endpoint_parsed: "{{ etcd_endpoint | ansible.utils.ipwrap }}"
+      when: is_trixie
 
     - name: Create etcd snapshot
       command: "etcdctl --endpoints https://{{ etcd_endpoint_parsed }}:2379 --cert=/etc/etcd/etcd-client.crt

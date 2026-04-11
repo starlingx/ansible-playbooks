@@ -14,10 +14,19 @@
       set_fact:
         ansible_port: "{{ ansible_port | default(22) }}"
 
-    - name: Format the ansible host if it is an IP address
+    - name: Format the ansible host if it is an IP address (Bullseye)
       set_fact:
         ansible_host: "{{ ansible_host | ipaddr }}"
-      when: ansible_host | ipaddr
+      when:
+        - is_bullseye | default(false)
+        - ansible_host | ipaddr
+
+    - name: Format the ansible host if it is an IP address (Trixie)
+      set_fact:
+        ansible_host: "{{ ansible_host | ansible.utils.ipaddr }}"
+      when:
+        - is_trixie | default(false)
+        - ansible_host | ansible.utils.ipaddr
 
     - name: Check connectivity
       local_action:

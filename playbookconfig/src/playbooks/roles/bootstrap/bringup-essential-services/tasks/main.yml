@@ -9,6 +9,16 @@
 #   for initial controller unlock.
 #
 
+- name: Set etcd endpoint (Bullseye)
+  set_fact:
+    etcd_endpoint: "https://{{ cluster_floating_address | ipwrap }}:2379"
+  when: is_bullseye
+
+- name: Set etcd endpoint (Trixie)
+  set_fact:
+    etcd_endpoint: "https://{{ cluster_floating_address | ansible.utils.ipwrap }}:2379"
+  when: is_trixie
+
 - block:
   - name: Prepare for adding loopback interface
     set_fact:

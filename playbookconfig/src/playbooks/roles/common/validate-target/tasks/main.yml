@@ -77,6 +77,12 @@
   - set_fact:
       ipv4_addressing: "{{ bootstrap_address | ipv4 }}"
       ipv6_addressing: "{{ bootstrap_address | ipv6 }}"
+    when: is_bullseye
+
+  - set_fact:
+      ipv4_addressing: "{{ bootstrap_address | ansible.utils.ipv4 }}"
+      ipv6_addressing: "{{ bootstrap_address | ansible.utils.ipv6 }}"
+    when: is_trixie
 
   - name: Fail if the boot address does not exist in this host (IPv4)
     fail:

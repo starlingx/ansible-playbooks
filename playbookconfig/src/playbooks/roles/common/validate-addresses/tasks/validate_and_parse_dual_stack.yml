@@ -18,11 +18,19 @@
   when: network_param.value | length == 0
 
 - block:
-  - name: Validate comma separated dual-stack subnets or addresses
+  - name: Validate comma separated dual-stack subnets or addresses (Bullseye)
     debug:
       msg: "{{ network_param.key }}:{{ network_param.value }} Validating:{{ item }}"
     failed_when: item|ipaddr == False
     loop: '{{ network_param.value.split(",") }}'
+    when: is_bullseye
+
+  - name: Validate comma separated dual-stack subnets or addresses (Trixie)
+    debug:
+      msg: "{{ network_param.key }}:{{ network_param.value }} Validating:{{ item }}"
+    failed_when: item|ansible.utils.ipaddr == False
+    loop: '{{ network_param.value.split(",") }}'
+    when: is_trixie
 
   - set_fact:
       network_param_lines: ""

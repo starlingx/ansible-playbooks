@@ -16,10 +16,17 @@
     system_mode: "{{ item.value['system_mode'] | default(omit) }}"
 
 - block:
-  - name: Validate {{ network }} start and end address format
+  - name: Validate {{ network }} start and end address format (Bullseye)
     debug:
       msg: "{{ network }}: {{ start_addr }} {{ end_addr }}"
     failed_when: (start_addr | ipaddr == False) or (end_addr | ipaddr == False)
+    when: is_bullseye
+
+  - name: Validate {{ network }} start and end address format (Trixie)
+    debug:
+      msg: "{{ network }}: {{ start_addr }} {{ end_addr }}"
+    failed_when: (start_addr | ansible.utils.ipaddr == False) or (end_addr | ansible.utils.ipaddr == False)
+    when: is_trixie
 
   - block:
     - name: Validate {{ network }} start and end range

@@ -7243,9 +7243,7 @@ spec:
             - name: IP
               value: "autodetect"
             - name: IP_AUTODETECTION_METHOD
-              value: "can-reach={{ controller_0_cluster_host
-                                if controller_0_cluster_host|ipv4
-                                else controller_0_cluster_host_secondary }}"
+              value: "can-reach={{ calico_ip4_autodetect_host }}"
             {% else -%}
             # Disable IPv4
             - name: IP
@@ -7255,9 +7253,7 @@ spec:
             - name: IP6
               value: "autodetect"
             - name: IP6_AUTODETECTION_METHOD
-              value: "can-reach={{ controller_0_cluster_host
-                                if controller_0_cluster_host|ipv6
-                                else controller_0_cluster_host_secondary }}"
+              value: "can-reach={{ calico_ip6_autodetect_host }}"
             {% else -%}
             # Disable IPv6
             - name: IP6

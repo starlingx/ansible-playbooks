@@ -138,9 +138,15 @@
         storage_addrpool_name: "{{ storage_addrpool_name }}"
       when: storage_node_0_address is defined and storage_node_1_address is defined
 
-    - name: Check primary pool address type
+    - name: Check primary pool address type (Bullseye)
       set_fact:
         is_primary_ipv6: "{{ dual_stack_network_params.external_oam_node_0_address_primary|ipv6 }}"
+      when: is_bullseye
+
+    - name: Check primary pool address type (Trixie)
+      set_fact:
+        is_primary_ipv6: "{{ dual_stack_network_params.external_oam_node_0_address_primary|ansible.utils.ipv6 }}"
+      when: is_trixie
 
     - name: Query current address-pool list
       shell: |
