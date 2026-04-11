@@ -90,7 +90,7 @@
 # Postgres, PXE, Branding, Grub config tasks and filesystem resizing are
 # moved to a separate file as they don't need to be executed again once the
 # controller-0 host has been created.
-- include: one_time_config_tasks.yml
+- include_tasks: one_time_config_tasks.yml
   when: not initial_db_populated
 
 - name: Find etcd certs files
@@ -174,7 +174,7 @@
 # Shut down services if there are services impacting config changes in
 # this replay or previous bootstrap did not complete for whatever reason.
 - name: Shuting down services for reconfiguration as required
-  include: shutdown_services.yml
+  include_tasks: shutdown_services.yml
   when: restart_services
 
 - block:
@@ -380,7 +380,7 @@
       src: bootstrap_config.j2
       dest: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
 
-  - include: update_sysinv_database.yml
+  - include_tasks: update_sysinv_database.yml
   when: save_config_to_db
 
 # Update docker and containerd config files and restart docker and containerd
