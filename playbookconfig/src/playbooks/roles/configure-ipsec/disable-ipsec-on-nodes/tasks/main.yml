@@ -18,7 +18,7 @@
     register: ip_addrs_list
 
   - set_fact:
-      pxeboot_addrs: "{{ ip_addrs_list.stdout }}"
+      pxeboot_addrs: "{{ ip_addrs_list.stdout | from_yaml }}"
 
   - name: Deprovision ipsec-config service
     command: >-
@@ -39,7 +39,7 @@
     become_user: postgres
 
   - set_fact:
-      all_hosts: "{{ all_hosts.stdout }}"
+      all_hosts: "{{ all_hosts.stdout | from_yaml }}"
 
   # Wait a maximum time of 3 minutes until hosts are reachable via mgmt network
   - name: Wait until hosts are online and reachable

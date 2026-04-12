@@ -16,7 +16,7 @@
 - block:
   - name: Enable and start strongswan IPsec service
     command: >-
-      ansible all -i "{{ item }}," -m command -a "systemctl enable ipsec.service --now"
+      ansible all -i "{{ item }}," -m command -a "systemctl enable {{ ipsec_service }}.service --now"
       -b -e "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
       ansible_become_pass={{ ansible_become_pass }}"
     loop:

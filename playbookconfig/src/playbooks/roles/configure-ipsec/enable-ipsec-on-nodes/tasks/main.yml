@@ -26,8 +26,8 @@
   - set_fact:
       retry_count: 0
       failures_list: []
-      pending_hosts: "{{ pending_hosts.stdout }}"
-      pxeboot_addrs: "{{ ip_addrs_list.stdout }}"
+      pending_hosts: "{{ pending_hosts.stdout | from_yaml }}"
+      pxeboot_addrs: "{{ ip_addrs_list.stdout | from_yaml }}"
 
   # It is found that when enabling IPsec, if the active controller is enabled before
   # worker node, worker node will no longer have the shared FS (/opt/platform) mounted,
@@ -59,8 +59,8 @@
     become_user: postgres
 
   - set_fact:
-      all_hosts: "{{ all_hosts.stdout }}"
-      all_mgmt_ips: "{{ all_mgmt_ips.stdout }}"
+      all_hosts: "{{ all_hosts.stdout | from_yaml }}"
+      all_mgmt_ips: "{{ all_mgmt_ips.stdout | from_yaml }}"
 
   # Wait until IPsec SAs are established and hosts are reachable.
   - name: Wait until hosts are reachable

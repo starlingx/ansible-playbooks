@@ -41,7 +41,7 @@
     become_user: postgres
 
   - set_fact:
-      pending_hosts: "{{ pending_hosts.stdout }}"
+      pending_hosts: "{{ pending_hosts.stdout | from_yaml }}"
 
   - name: Fail if there are remaining hosts to configure
     fail:
@@ -51,7 +51,7 @@
 
   - name: Enable strongswan service on nodes
     command: >-
-      ansible all -i "{{ item }}," -m command -a "systemctl enable strongswan-starter.service
+      ansible all -i "{{ item }}," -m command -a "systemctl enable {{ strongswan_service }}.service
       --now" -b -e "ansible_ssh_user={{ ansible_ssh_user }}
       ansible_ssh_pass={{ ansible_ssh_pass }} ansible_become_pass={{ ansible_become_pass }}"
     loop: "{{ pxeboot_addrs }}"
@@ -62,7 +62,7 @@
   - name: Fail if strongswan remains inactive
     command: >-
       ansible all -i "{{ item }}," -m command -a "systemctl is-active
-      strongswan-starter.service" -b -e "ansible_ssh_user={{ ansible_ssh_user }}
+      {{ strongswan_service }}.service" -b -e "ansible_ssh_user={{ ansible_ssh_user }}
       ansible_ssh_pass={{ ansible_ssh_pass }} ansible_become_pass={{ ansible_become_pass }}"
     register: check_strongswan_service
     loop: "{{ pxeboot_addrs }}"

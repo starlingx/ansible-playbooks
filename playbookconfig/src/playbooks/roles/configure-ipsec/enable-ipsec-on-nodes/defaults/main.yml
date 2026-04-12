@@ -1,0 +1,6 @@
+---
+is_trixie: "{{ lookup('file', '/etc/os-release') is search('trixie') }}"
+is_bullseye: "{{ lookup('file', '/etc/os-release') is search('bullseye') }}"
+strongswan_service: "{{ 'strongswan' if is_trixie else 'strongswan-starter' }}"
+strongswan_process: "{{ 'charon-systemd' if is_trixie else 'charon' }}"
+ipsec_service: "{{ 'strongswan' if is_trixie else 'ipsec' }}"

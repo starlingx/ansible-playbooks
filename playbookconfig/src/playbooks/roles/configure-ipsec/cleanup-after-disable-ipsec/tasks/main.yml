@@ -23,7 +23,7 @@
     register: ip_addrs_list
 
   - set_fact:
-      pxeboot_addrs: "{{ ip_addrs_list.stdout }}"
+      pxeboot_addrs: "{{ ip_addrs_list.stdout | from_yaml }}"
 
   - name: Disable IPsec cert renewal cronjob
     command: >-

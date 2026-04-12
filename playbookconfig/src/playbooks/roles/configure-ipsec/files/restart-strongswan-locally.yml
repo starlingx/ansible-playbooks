@@ -12,11 +12,11 @@
 
 - block:
   - name: Stop charon with pmon request
-    command: pmon-stop charon
+    command: pmon-stop {{ strongswan_process }}
 
-  - name: Disable strongswan-starter service
+  - name: Disable strongswan service
     systemd:
-      name: strongswan-starter
+      name: "{{ strongswan_service }}"
       enabled: no
       state: stopped
 
@@ -26,8 +26,8 @@
   - name: Flush state
     command: ip xfrm state flush
 
-  - name: Enable strongswan-starter service
+  - name: Enable strongswan service
     systemd:
-      name: strongswan-starter
+      name: "{{ strongswan_service }}"
       enabled: yes
       state: started

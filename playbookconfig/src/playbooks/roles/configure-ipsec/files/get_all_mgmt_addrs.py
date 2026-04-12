@@ -4,7 +4,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-import ipaddr
+try:
+    from ipaddress import ip_address
+except ImportError:
+    from ipaddr import IPAddress as ip_address
 import psycopg2
 
 from psycopg2.extras import RealDictCursor
@@ -20,9 +23,9 @@ def get_hostnames_list():
             if ret is None or len(ret) == 0:
                 return ip_addr_list
 
-            if ipaddr.IPAddress(ret[0]['network']).version == 4:
+            if ip_address(ret[0]['network']).version == 4:
                 network = ret[0]['network'].rstrip('0')
-            elif ipaddr.IPAddress(ret[0]['network']).version == 6:
+            elif ip_address(ret[0]['network']).version == 6:
                 network = ret[0]['network']
 
             cur.execute("select address from addresses;")
