@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2025 Wind River Systems, Inc.
+# Copyright (c) 2022-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -24,6 +24,22 @@
       The specified software major release {{ software_version }} is not supported.
       Minimum supported release versions for prestage: {{ minimum_supported_release_version }}
   when: software_version is version(minimum_supported_release_version, "<")
+
+- name: Gather software list on the subcloud
+  shell: >-
+          source /etc/platform/openrc;
+          software list
+  register: subcloud_software_list
+
+# If any software is in a transient state on the subcloud,
+# prestaging must be blocked to avoid conflicts.
+- name: Fail if any software release is in a transient state on the subcloud
+  fail:
+    msg: |
+      A release is in a transient state (deploying/removing) on the subcloud.
+      Cannot prestage while a software operation is in progress.
+      {{ subcloud_software_list.stdout }}
+  when: subcloud_software_list.stdout is regex('deploying|removing')
 
 - name: Set prestage software version and cleanup directores fact
   set_fact:
