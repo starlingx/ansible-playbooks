@@ -1468,11 +1468,47 @@ def populate_platform_drbd(client):
     print("Service parameter system platform drbd completed.")
 
 
+def populate_platform_tls_config(client):
+    """Populate platform TLS configuration with defaults on fresh install."""
+
+    # Clean up any TLS parameters from a previous failed run
+    parameters = client.sysinv.service_parameter.list()
+    for parameter in parameters:
+        if (parameter.service == sysinv_constants.SERVICE_TYPE_PLATFORM and
+                parameter.section ==
+                sysinv_constants.SERVICE_PARAM_SECTION_PLATFORM_CONFIG and
+                parameter.name in [
+                    sysinv_constants.SERVICE_PARAM_NAME_PLATFORM_TLS_MIN_VERSION,
+                    sysinv_constants.SERVICE_PARAM_NAME_PLATFORM_TLS_CIPHER_SUITE]):
+            client.sysinv.service_parameter.delete(parameter.uuid)
+
+    parameters = {
+        sysinv_constants.SERVICE_PARAM_NAME_PLATFORM_TLS_MIN_VERSION:
+            sysinv_constants.SERVICE_PARAM_PLATFORM_TLS_MIN_VERSION_DEFAULT,
+        sysinv_constants.SERVICE_PARAM_NAME_PLATFORM_TLS_CIPHER_SUITE:
+            sysinv_constants.SERVICE_PARAM_PLATFORM_TLS_CIPHER_SUITE_DEFAULT,
+    }
+
+    values = {
+        'service': sysinv_constants.SERVICE_TYPE_PLATFORM,
+        'section':
+            sysinv_constants.SERVICE_PARAM_SECTION_PLATFORM_CONFIG,
+        'personality': None,
+        'resource': None,
+        'parameters': parameters
+    }
+
+    print("Populating/Updating platform TLS config...")
+    client.sysinv.service_parameter.create(**values)
+    print("Platform TLS config completed.")
+
+
 def populate_service_parameter_config(client):
     if not INITIAL_POPULATION and not RECONFIGURE_SERVICE:
         return
     populate_platform_config(client)
     populate_platform_drbd(client)
+    populate_platform_tls_config(client)
     populate_docker_kube_config(client)
     if CONF.has_section("USER_DNS_HOST_RECORDS"):
         populate_user_dns_host_records(client)
