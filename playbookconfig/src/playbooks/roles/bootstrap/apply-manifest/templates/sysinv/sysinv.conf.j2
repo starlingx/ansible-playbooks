@@ -9,7 +9,7 @@ api_paste_config=/etc/sysinv/api-paste.ini
 syslog_log_facility=local6
 sysinv_api_port=6385
 MTC_INV_LABEL=/v1/hosts/
-logging_context_format_string: "sysinv %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(request_id)s %(user)s %({{ 'project' if is_trixie else 'tenant' }})s] %(instance)s%(message)s"
+logging_context_format_string=sysinv %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [%(request_id)s %(user)s %({{ 'project' if is_trixie else 'tenant' }})s] %(instance)s%(message)s
 logging_default_format_string=sysinv %(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s [-] %(instance)s%(message)s
 sysinv_api_bind_ip=::
 auth_strategy=keystone
