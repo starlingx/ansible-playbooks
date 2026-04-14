@@ -242,7 +242,7 @@
     - name: Generate backup_in_progress alarm
       script: fm_alarm.py "--set" "--backup"
       register: alarm_result
-      failed_when: false
+      ignore_errors: true
 
     # Extracting all output lines from the script execution that
     # contain the keyword 'Exception'.
@@ -1104,7 +1104,7 @@
     - name: Clear backup_in_progress alarm
       script: fm_alarm.py "--clear" "--backup"
       register: alarm_result
-      failed_when: false
+      ignore_errors: true
 
     - name: Fail if alarm script throws an exception
       fail:

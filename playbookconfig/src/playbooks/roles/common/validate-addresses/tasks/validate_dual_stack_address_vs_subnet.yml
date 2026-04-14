@@ -15,7 +15,7 @@
   script: roles/common/validate-addresses/files/validate_dual_stack_address_vs_subnet.py "{{ item.key }}" "{{
           item.value.address }}" "{{ item.value.subnet.name }}" "{{ item.value.subnet.value }}"
   register: result
-  failed_when: false
+  ignore_errors: true
 
 - name: Fail if script validate_dual_stack_address_vs_subnet.py failed or error occurred
   fail:

@@ -1478,7 +1478,7 @@
   - name: Validate and create entries for /etc/hosts from user dns host records
     script: parse_user_dns_host_record.py "{{ user_dns_host_records }}"
     register: result
-    failed_when: false
+    ignore_errors: true
 
   - name: Fail if script parse_user_dns_host_record.py failed or error occurred
     fail:

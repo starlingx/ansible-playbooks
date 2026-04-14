@@ -841,7 +841,7 @@
 - name: Check size of root disk
   script: check_root_disk_size.py {{ standard_root_disk_size }}
   register: disk_size_check_result
-  failed_when: false
+  ignore_errors: true
   become: yes
 
 # If StarlingX in OpenStack Nova VM(QEMU/KVM environment),

@@ -110,7 +110,7 @@
 - name: Saving config in sysinv database
   script: populate_initial_config.py {{ script_input }}
   register: populate_result
-  failed_when: false
+  ignore_errors: true
 
 - debug: var=populate_result
 

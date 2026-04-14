@@ -30,7 +30,7 @@
   script: roles/common/get_network_addresses_from_sysinv/files/get_network_addresses_from_sysinv.py '{{
           net_list | to_json }}'
   register: result
-  failed_when: false
+  ignore_errors: true
 
 - name: Fail if get addresses script throws an exception
   fail:
