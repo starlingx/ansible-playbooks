@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2024-2025 Wind River Systems, Inc.
+# Copyright (c) 2024-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -168,12 +168,12 @@ def recover():
 
     # If the recovery target host is controller-0, it means the playbook is running, so we need to wait for the process to complete.
     if recovery_target_host == "controller-0":
-        # When it is SINGLE_HOST, the operator job needs to be completed.
-        job_label = "rook-ceph-recovery-operator"
+        # When it is SINGLE_HOST, the log-collector job needs to be completed.
+        job_label = "rook-ceph-recovery-log-collector"
         # When it is OSD_AND_MON or OSD_ONLY, wait for the monstore to rebuild, which is the job to be done in this first step.
         if recovery_type != "SINGLE_HOST":
             job_label = "rook-ceph-recovery-monstore-rebuild"
-        result = subprocess.run(["kubectl", "wait", "--for=condition=complete", "job", "--all=true",
+        result = subprocess.run(["kubectl", "wait", "--for=condition=complete", "job",
                                  "-n", "rook-ceph", "-l", f"app={job_label}", "--timeout=30m"])
         # Check if there were any failures during the recovery process.
         check_failure()
@@ -200,6 +200,8 @@ def check_failure():
 
 
 def apply_k8s_resource(resource):
+    # Ensures that the resource does not already exist
+    subprocess.run(["kubectl", "delete", "-f", resource, "--ignore-not-found"])
     result = subprocess.run(["kubectl", "apply", "-f", resource])
     if result.returncode != 0:
         print("Unexpected error while applying k8s resources.", file=sys.stderr)
