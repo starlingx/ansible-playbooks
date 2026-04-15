@@ -155,6 +155,15 @@ for f in /dev/disk/by-path/*; do
         continue
     fi
 
+    # Skip no-medium devices (e.g. empty USB card readers).
+    # Debian 13 (Trixie): util-linux 2.40+ lsblk reads sysfs, reports TYPE="disk" with no medium.
+    DEBIAN_VERSION=$(cat /etc/debian_version 2>/dev/null | cut -d. -f1)
+    if [ "${DEBIAN_VERSION}" = "13" ]; then
+        if ! dd if="$dev" of=/dev/null bs=512 count=1 2>/dev/null; then
+            continue
+        fi
+    fi
+
     set -e
 
     wipe_if_ceph_disk \
