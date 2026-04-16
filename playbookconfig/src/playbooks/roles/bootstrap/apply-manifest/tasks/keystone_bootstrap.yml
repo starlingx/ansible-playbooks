@@ -192,7 +192,7 @@
     script: configure_keystone.py '{{ OS_USERNAME }}' '{{ OS_PASSWORD }}'
     no_log: true
     register: keystone_configuration
-    failed_when: false
+    ignore_errors: true
 
   - name: Fail if configure keystone returns an error
     fail:

@@ -240,7 +240,7 @@
   - name: Clear alarm if exists
     script: fm_alarm_set_clear.py "--clear"
     register: alarm_result
-    failed_when: false
+    ignore_errors: true
 
   - name: Remove imported images from download_images_list
     set_fact:
@@ -259,7 +259,7 @@
   - name: Raise alarm with push_docker failed
     script: fm_alarm_set_clear.py "--set"
     register: alarm_result
-    failed_when: false
+    ignore_errors: true
 
   - name: Force fail when error occurs
     fail:

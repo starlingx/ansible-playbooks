@@ -39,7 +39,7 @@
     script: roles/common/validate-addresses/files/parse_dual_stack.py "{{
             network_param.key }}" "{{ network_param.value }}"
     register: result
-    failed_when: false
+    ignore_errors: true
 
   - name: Fail if script parse_dual_stack.py failed or error occurred
     fail:
