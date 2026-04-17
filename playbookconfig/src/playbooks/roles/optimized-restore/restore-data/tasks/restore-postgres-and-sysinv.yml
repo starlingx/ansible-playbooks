@@ -9,7 +9,10 @@
 #   in postgres, so that is restored first.  After flock services
 #   are restarted to pick up changes.
 
-- name: Stop flock, postgres and SM services during factory restore
+- name: >
+    Stop flock, postgres and SM services, initialize
+    postgres db and restart postgres service during
+    factory restore
   block:
     - name: Get postgres bin directory
       command: pg_config --bindir
@@ -39,6 +42,35 @@
     - name: Stop SM service
       command: pmon-stop sm
 
+    # pg_dumpall backup includes credentials,
+    # so initdb + psql -f restores everything cleanly.
+    - name: Remove existing postgres data
+      file:
+        path: "{{ pg_datadir }}"
+        state: absent
+
+    - name: Recreate postgres data directory
+      file:
+        path: "{{ pg_datadir }}"
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: '0700'
+
+    - name: Re-initialize postgres DB
+      command: >-
+        {{ pg_bindir.stdout | trim }}/initdb -D {{ pg_datadir }}
+      become_user: postgres
+
+    - name: Start postgres via OCF script
+      command: /usr/lib/ocf/resource.d/heartbeat/pgsql start
+      environment:
+        OCF_ROOT: /usr/lib/ocf
+        OCF_RESKEY_pgctl: "{{ pg_bindir.stdout | trim }}/pg_ctl"
+        OCF_RESKEY_pgdata: "{{ pg_datadir }}"
+
+  vars:
+    pg_datadir: "/var/lib/postgresql/{{ software_version }}"
   when: factory_restore | default(false)
 
 - name: Shutdown mtcAgent and flock services
