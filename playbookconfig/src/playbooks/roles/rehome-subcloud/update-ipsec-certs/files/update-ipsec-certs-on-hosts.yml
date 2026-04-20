@@ -33,6 +33,7 @@
       command: pmon-restart ipsec-server
       delegate_to: "{{ inactive_controller }}"
 
+    # get_all_hostnames.py was introduced in the load started to support ipsec
     - name: Get hostnames list
       script: /usr/share/ansible/stx-ansible/playbooks/roles/configure-ipsec/files/get_all_hostnames.py
       register: all_hosts

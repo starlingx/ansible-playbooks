@@ -5,14 +5,45 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # TASKS DESCRIPTION:
+#   - Copy update-ipsec-certs-on-hosts.yml to a temp dir on the subcloud,
+#     run the playbook there, and clean up afterwards.
 #   - Call update-ipsec-certs-on-hosts.yml to restart ipsec-server service and trigger
 #     IPsec cert renewal on all subcloud hosts
 #
 
-- name: Trigger ipsec cert renewal on all hosts
-  command: >-
-    ansible-playbook /usr/share/ansible/stx-ansible/playbooks/update-ipsec-certs-on-hosts.yml
-    -e "ansible_ssh_user={{ ansible_ssh_user }} ansible_ssh_pass={{ ansible_ssh_pass }}
-    ansible_become_pass={{ ansible_become_pass }}"
+- block:
+    - name: Create temp dir for ipsec playbook
+      tempfile:
+        state: directory
+        prefix: update_ipsec_
+      register: ipsec_tmp_dir
+
+    - name: Copy update-ipsec-certs-on-hosts.yml to subcloud
+      copy:
+        src: update-ipsec-certs-on-hosts.yml
+        dest: "{{ ipsec_tmp_dir.path }}/update-ipsec-certs-on-hosts.yml"
+        mode: '0600'
+
+    - name: Write credentials to temp file
+      copy:
+        content: |
+          ansible_ssh_user: "{{ ansible_ssh_user }}"
+          ansible_ssh_pass: "{{ ansible_ssh_pass }}"
+          ansible_become_pass: "{{ ansible_become_pass }}"
+        dest: "{{ ipsec_tmp_dir.path }}/vars.yml"
+        mode: '0600'
+      no_log: true
+
+    - name: Trigger ipsec cert renewal on all hosts
+      command: >-
+        ansible-playbook {{ ipsec_tmp_dir.path }}/update-ipsec-certs-on-hosts.yml
+        -e @{{ ipsec_tmp_dir.path }}/vars.yml
+      no_log: true
+
+  always:
+    - name: Clean up temp dir
+      file:
+        path: "{{ ipsec_tmp_dir.path }}"
+        state: absent
+
   when: system_mode != "simplex"
-  no_log: true
