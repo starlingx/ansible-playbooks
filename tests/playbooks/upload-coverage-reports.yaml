@@ -1,0 +1,22 @@
+- hosts: all
+  tasks:
+    - name: Check UTCoverage directory exists
+      stat:
+        path: "{{ zuul.project.src_dir }}/UTCoverage/"
+      register: utcoverage_stat
+
+    - name: Upload coverage reports
+      synchronize:
+        src: "{{ zuul.project.src_dir }}/UTCoverage/"
+        dest: "{{ zuul.executor.log_root }}/coverage/"
+        mode: pull
+      when: utcoverage_stat.stat.exists
+
+    - name: Return coverage report URL
+      zuul_return:
+        data:
+          zuul:
+            artifacts:
+              - name: "Coverage Report"
+                url: "coverage/index.html"
+      when: utcoverage_stat.stat.exists

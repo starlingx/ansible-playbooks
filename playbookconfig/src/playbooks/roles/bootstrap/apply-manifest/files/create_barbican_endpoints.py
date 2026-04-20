@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -24,7 +24,7 @@ from sysinv.common import openstack_config_endpoints
 BARBICAN_USER_TO_CREATE = [
     {
         "name": "barbican",
-        "password": "",
+        "password": "",  # nosec B105
         "email": "barbican@localhost",
     }
 ]

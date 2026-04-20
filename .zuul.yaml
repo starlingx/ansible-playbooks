@@ -4,11 +4,21 @@
         - ansible-playbooks-tox-linters
         - ansible-playbooks-tox-pep8
         - ansible-playbooks-tox-bandit
+        - ansible-playbooks-tox-coverage
+        - ansible-playbooks-tox-coverage-trixie
+        - ansible-playbooks-tox-bandit-trixie
+        - ansible-playbooks-tox-linters-trixie
+        - ansible-playbooks-tox-pep8-trixie
     gate:
       jobs:
         - ansible-playbooks-tox-linters
         - ansible-playbooks-tox-pep8
         - ansible-playbooks-tox-bandit
+        - ansible-playbooks-tox-coverage
+        - ansible-playbooks-tox-coverage-trixie
+        - ansible-playbooks-tox-bandit-trixie
+        - ansible-playbooks-tox-linters-trixie
+        - ansible-playbooks-tox-pep8-trixie
     post:
       jobs:
         - stx-ansible-playbooks-upload-git-mirror
@@ -19,6 +29,8 @@
     description: |
       Run linters
     nodeset: debian-bullseye
+    vars:
+      tox_inline_comments: false
 
 - job:
     name: ansible-playbooks-tox-pep8
@@ -33,8 +45,6 @@
     description: |
       Run bandit test for ansible-playbooks
     nodeset: debian-bullseye
-    files:
-      - ./*
     vars:
       tox_envlist: bandit
       tox_extra_args: -c ./tox.ini
@@ -51,6 +61,59 @@
       - name: git_mirror_credentials
         secret: stx-ansible-playbooks-github-secret3
         pass-to-parent: true
+
+- job:
+    name: ansible-playbooks-tox-coverage
+    parent: tox
+    description: |
+      Run all tests with coverage analysis
+    nodeset: debian-bullseye
+    vars:
+      tox_envlist: coverage
+      tox_extra_args: -c ./tox.ini
+    post-run: tests/playbooks/upload-coverage-reports.yaml
+
+- job:
+    name: ansible-playbooks-tox-coverage-trixie
+    parent: openstack-tox-py313
+    description: |
+      Run all tests with coverage analysis (Trixie)
+    nodeset: debian-trixie-8GB
+    vars:
+      tox_envlist: coverage-trixie
+      tox_extra_args: -c ./tox.ini
+    post-run: tests/playbooks/upload-coverage-reports.yaml
+
+- job:
+    name: ansible-playbooks-tox-bandit-trixie
+    parent: openstack-tox-py313
+    description: |
+      Run bandit test for ansible-playbooks (Trixie)
+    nodeset: debian-trixie-8GB
+    vars:
+      tox_envlist: bandit-trixie
+      tox_extra_args: -c ./tox.ini
+
+- job:
+    name: ansible-playbooks-tox-linters-trixie
+    parent: openstack-tox-py313
+    description: |
+      Run linters (Trixie)
+    nodeset: debian-trixie-8GB
+    vars:
+      tox_envlist: linters-trixie
+      tox_extra_args: -c ./tox.ini
+      tox_inline_comments: false
+
+- job:
+    name: ansible-playbooks-tox-pep8-trixie
+    parent: openstack-tox-py313
+    description: |
+      Run style checks (Trixie)
+    nodeset: debian-trixie-8GB
+    vars:
+      tox_envlist: pep8-trixie
+      tox_extra_args: -c ./tox.ini
 
 - secret:
     name: stx-ansible-playbooks-github-secret3
