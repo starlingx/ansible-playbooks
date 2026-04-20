@@ -1,10 +1,10 @@
-# SRIOV device CNI plugin Version v3.9.0
+# SRIOV device CNI plugin Version v3.11.0
 # Based on:
-# https://raw.githubusercontent.com/k8snetworkplumbingwg/sriov-network-device-plugin/v3.9.0/
+# https://raw.githubusercontent.com/k8snetworkplumbingwg/sriov-network-device-plugin/v3.11.0/
 #                deployments/sriovdp-daemonset.yaml
 #
 # This file is licensed under Apache 2.0.  You can obtain a copy of the license at:
-# https://github.com/k8snetworkplumbingwg/sriov-network-device-plugin/blob/v3.9.0/LICENSE
+# https://github.com/k8snetworkplumbingwg/sriov-network-device-plugin/blob/v3.11.0/LICENSE
 #
 # The following modifications have been made:
 #
@@ -23,7 +23,7 @@
 # - Set memory request to zero, otherwise it interferes with the ability of application pods
 #   to reserve the full amount of memory that K8s says is available.
 #
-# Copyright (c) 2025 Wind River Systems, Inc.
+# Copyright (c) 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -110,3 +110,4 @@ spec:
           hostPath:
             path: /etc/pcidp/config.json
             type: File
+
