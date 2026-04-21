@@ -69,7 +69,7 @@
       loop_control:
         loop_var: inner_item
 
-    when: running_registry
+    when: running_registry | length > 0
 
   - set_fact:
       "{{ registry.name }}": "{{ registry.value if not registry_filtered else registry_filtered }}"
