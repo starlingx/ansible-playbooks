@@ -63,12 +63,13 @@
 
 - name: Restore etcd database from snapshot file to temp folder
   command: >-
-    etcdctl snapshot restore etcd-snapshot.db --endpoints=controller:2379
+    {{ 'etcdctl snapshot restore etcd-snapshot.db --endpoints=controller:2379'
+       if etcd_version is version('3.6', '<') else
+       'etcdutl snapshot restore etcd-snapshot.db' }}
     --data-dir /opt/etcd/db/controller.etcd
   args:
     chdir: "{{ etcd_tmp_dir }}"
-  environment:
-    ETCDCTL_API: 3
+  environment: "{{ {'ETCDCTL_API': '3'} if etcd_version is version('3.6', '<') else {} }}"
 
 - name: Enable etcd
   systemd:
