@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -27,7 +27,8 @@
   pause:
     seconds: 30
   when: bkp_has_luks_config.rc is defined and
-        bkp_has_luks_config.rc == 0
+        bkp_has_luks_config.rc == 0 and
+        not (factory_restore | default(false))
 
 - name: Restore luks filesystem content
   command: >-

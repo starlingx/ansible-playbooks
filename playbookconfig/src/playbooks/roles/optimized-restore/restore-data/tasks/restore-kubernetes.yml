@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2024 Wind River Systems, Inc.
+# Copyright (c) 2022-2024, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -109,13 +109,15 @@
 
   when: >
     restore_original_images|bool and
-    not upgrade_in_progress
+    not upgrade_in_progress and
+    not (factory_restore | default(false))
 
 # Running push-docker-images and bringup-kubemaster increases playbook time,
 # but it decreases unlock time by around the same amount.
 - name: Populate local image registry
   import_role:
     name: common/push-docker-images
+  when: not (factory_restore | default(false))
 
 - name: Restore path
   block:
