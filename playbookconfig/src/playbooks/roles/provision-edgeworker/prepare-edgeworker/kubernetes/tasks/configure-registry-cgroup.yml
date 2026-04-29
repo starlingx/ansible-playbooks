@@ -57,10 +57,10 @@
     group: root
     mode: 0700
 
-- name: Add k8s-infra cgroup
+- name: Add k8sinfra cgroup
   command: /usr/bin/kubelet-cgroup-setup.sh
 
-- name: Add k8s-infra cgroup creation in kubelet service
+- name: Add k8sinfra cgroup creation in kubelet service
   lineinfile:
     path: "/etc/systemd/system/kubelet.service.d/10-kubeadm.conf"
     state: present

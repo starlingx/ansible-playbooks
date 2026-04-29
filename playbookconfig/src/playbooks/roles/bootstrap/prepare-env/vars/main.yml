@@ -26,7 +26,7 @@ encryption_provider_config: /etc/kubernetes/encryption-provider.yaml
 audit_log_root: /var/log/kubernetes/audit/
 audit_log_filename: audit.log
 default_audit_policy_config: /etc/kubernetes/default-audit-policy.yaml
-kubelet_cgroup_root: "/k8s-infra"
+kubelet_cgroup_root: "/k8sinfra"
 luks_fs_dir: /var/luks/stx/luks_fs/
 
 # Networking
