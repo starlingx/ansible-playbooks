@@ -34,25 +34,24 @@
 - block:
   # These hieradata were generated after persist-config role was run. They
   # will be re-generated when sysinv is restarted after postgres db is restored
-  - name: Remove newly generated hieradata data (Bullseye)
-    file:
-      path: "{{ item }}"
-      state: absent
-    loop:
-      - "{{ puppet_permdir }}/hieradata/{{ controller_floating_address|ipmath(1) }}.yaml"
-      - "{{ puppet_permdir }}/hieradata/system.yaml"
-      - "{{ puppet_permdir }}/hieradata/secure_system.yaml"
+  - name: Set controller-0 hieradata filename (Bullseye)
+    set_fact:
+      controller_0_hieradata: "{{ puppet_permdir }}/hieradata/{{ controller_floating_address|ipmath(1) }}.yaml"
     when: is_bullseye
 
-  - name: Remove newly generated hieradata data (Trixie)
+  - name: Set controller-0 hieradata filename (Trixie)
+    set_fact:
+      controller_0_hieradata: "{{ puppet_permdir }}/hieradata/{{ controller_floating_address|ansible.utils.ipmath(1) }}.yaml"
+    when: is_trixie
+
+  - name: Remove newly generated hieradata data
     file:
       path: "{{ item }}"
       state: absent
     loop:
-      - "{{ puppet_permdir }}/hieradata/{{ controller_floating_address|ansible.utils.ipmath(1) }}.yaml"
+      - "{{ controller_0_hieradata }}"
       - "{{ puppet_permdir }}/hieradata/system.yaml"
       - "{{ puppet_permdir }}/hieradata/secure_system.yaml"
-    when: is_trixie
 
   - name: Extract platform.conf from the backup tarball
     command: >-
