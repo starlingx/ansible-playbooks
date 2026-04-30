@@ -16,12 +16,25 @@
       path: "{{ keyring_workdir }}"
     register: tmp_keyring
 
-  - block:
-    - name: Persist keyring data (overwrite if exists)
-      command: "cp -r {{ keyring_workdir }} {{ keyring_permdir }}"
+# Enhanced keyring security - Move to LUKS filesystem
+  - name: Migrate keyring to LUKS filesystem
+    block:
+    - name: Ensure keyring directory path exists on the LUKS FS
+      file:
+        path: "{{ luks_fs_dir }}controller/.keyring/{{ software_version }}"
+        state: directory
+        mode: 0755
+        owner: root
+        group: sys_protected
 
-    - name: Change group ownership to entire {{ platform_path }}/.keyring/
-      command: "chgrp -R sys_protected {{ platform_path  }}/.keyring/"
+    - name: Copy keyring files to LUKS FS from workdir
+      copy:
+        src: "{{ keyring_workdir }}/"
+        dest: "{{ luks_fs_dir }}controller/.keyring/{{ software_version }}/python_keyring/"
+        owner: root
+        group: sys_protected
+        mode: preserve
+        remote_src: yes
 
     - name: Delete the temporary keyring work dir
       file:

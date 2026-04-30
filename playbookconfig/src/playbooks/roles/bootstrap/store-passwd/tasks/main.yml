@@ -92,6 +92,39 @@
       msg: "{{ password_regex_desc }}, excluding ' (single quote) and \" (double quote)"
     when: password_validation_result.rc != 0
 
+  # Create keyring secret directly on LUKS encrypted filesystem which is required
+  # by the keyring library during the task "Store admin password"
+  - name: Create LUKS keyring secret for bootstrap
+    block:
+      - name: Check if keyring secret already exists
+        stat:
+          path: "{{ luks_fs_dir }}controller/.keyring/{{ software_version }}/python_keyring/.keyring_secret"
+        register: keyring_secret_exists
+
+      - name: Create keyring secret on LUKS filesystem
+        block:
+          - name: Create keyring directory path on the LUKS FS
+            file:
+              path: "{{ luks_fs_dir }}controller/.keyring/{{ software_version }}/python_keyring"
+              state: directory
+              mode: 0755
+              owner: root
+              group: sys_protected
+
+          - name: Generate random keyring secret
+            shell: openssl rand -base64 32
+            register: keyring_secret
+
+          - name: Store keyring secret on LUKS filesystem
+            copy:
+              content: "{{ keyring_secret.stdout }}"
+              dest: "{{ luks_fs_dir }}controller/.keyring/{{ software_version }}/python_keyring/.keyring_secret"
+              mode: 0640
+              owner: root
+              group: sys_protected
+        when: not keyring_secret_exists.stat.exists
+    become: true
+
   - name: Store admin password
     vars:
       script_content: |

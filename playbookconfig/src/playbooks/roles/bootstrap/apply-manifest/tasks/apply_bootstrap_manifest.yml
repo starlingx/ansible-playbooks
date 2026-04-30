@@ -70,8 +70,8 @@
       '/{{ item }}/ s/{{ upgrade_metadata.from_release }}/{{ upgrade_metadata.to_release }}/g'
       {{ hieradata_workdir }}/static.yaml
     loop:
-      - "platform::client::credentials::params::keyring_directory: "
-      - "platform::client::credentials::params::keyring_file: "
+      - "platform::client::credentials::params::keyring_script_directory: "
+      - "platform::client::credentials::params::keyring_script_file: "
       - "platform::params::software_version: "
     when: upgrade_in_progress|default(false)|bool
 
