@@ -65,6 +65,9 @@
   command: "{{ item }}"
   loop:
     - "sed -i -e 's|<%= @http_port %>|'$PORT_NUM'|g' /etc/lighttpd/lighttpd.conf"
+    - "sed -i -e 's|<%= @https_port %>|8443|g' /etc/lighttpd/lighttpd.conf"
+    - "sed -i '/@tls_cipher_list/,/<% end/d' /etc/lighttpd/lighttpd.conf"
+    - "sed -i '/@tls_min_version/,/<% end/d' /etc/lighttpd/lighttpd.conf"
     - "sed -i '/@enable_https/,/% else/d' /etc/lighttpd/lighttpd.conf"
     - "sed -i '/@tmp_object/,/%- end/d' /etc/lighttpd/lighttpd.conf"
     - "sed -i '/<% end/d' /etc/lighttpd/lighttpd.conf"
