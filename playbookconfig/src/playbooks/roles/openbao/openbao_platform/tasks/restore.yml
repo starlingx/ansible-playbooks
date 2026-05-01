@@ -1,0 +1,63 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# Run tasks from prepare_env.yml
+- name: Run preparation tasks
+  include_tasks:
+    file: prepare_env.yml
+
+- name: Find the snapshot file
+  stat:
+    path: "{{ openbao_backup_path }}"
+  register: backup_snapshot_file
+  become: true
+
+- name: Fail if snapshot file was not found
+  fail:
+    msg: "Backup snapshot was not found in {{ openbao_backup_path }}"
+  when: not backup_snapshot_file.stat.exists
+
+# The snapshot is secret-bearing (sealed) data; keep it owner-restricted.
+- name: Restrict snapshot file permissions
+  file:
+    path: "{{ openbao_backup_path }}"
+    mode: "0600"
+  become: true
+
+- name: Check if Openbao platform service is active
+  shell: >-
+    systemctl is-active openbao.service
+  register: openbao_service_status
+  failed_when: false
+  become: true
+
+- name: Fail if Openbao service is not active
+  fail:
+    msg: "Openbao service is not active"
+  when: openbao_service_status.stdout != 'active'
+
+- name: Restore platform snapshot
+  block:
+  - name: Run script with no encryption
+    script: >-
+      openbao_platform_snapshot.sh restore
+      "{{ openbao_backup_path }}" false "{{ admin_password_path }}"
+    when: not openbao_encrypt
+    register: openbao_snapshot_script
+    failed_when: openbao_snapshot_script.rc != 0
+
+  - name: Run script with encryption
+    script: >-
+      openbao_platform_snapshot.sh restore
+      "{{ openbao_backup_path }}" true "{{ admin_password_path }}" pp_str
+    when: openbao_encrypt
+    register: openbao_snapshot_script
+    failed_when: openbao_snapshot_script.rc != 0
+
+  become: true
+  environment:
+    pp_str: "{{ encrypt_openbao_secret }}"

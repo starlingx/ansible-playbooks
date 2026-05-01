@@ -32,6 +32,12 @@
     group: root
     mode: 0755
 
+- name: Restore openbao platform
+  import_role:
+    name: backup-restore/restore-openbao-platform
+  vars:
+    platform_backup_fqpn: "{{ restore_data_file }}"
+
 - block:
   # These hieradata were generated after persist-config role was run. They
   # will be re-generated when sysinv is restarted after postgres db is restored

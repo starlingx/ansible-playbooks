@@ -1,0 +1,65 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Create temp dir for Openbao platform
+  set_fact:
+    openbao_tmp_dir: "{{ staging_dir }}/openbao_tmp_dir"
+
+- block:
+  - name: Check if temporary openbao platform folder exists
+    stat:
+      path: '{{ openbao_tmp_dir }}'
+    register: dir_to_delete
+
+  - name: Remove temporary openbao platform folder if present
+    file:
+      path: "{{ openbao_tmp_dir }}"
+      state: absent
+    when: dir_to_delete.stat.exists
+
+  - name: Create temporary openbao platform folder
+    file:
+      path: "{{ openbao_tmp_dir }}"
+      state: directory
+      mode: 0755
+  become_user: root
+
+- name: Read openbao snapshot path from the platform backup tarball
+  shell: "tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep -E 'openbao-platform-snapshot.tar'"
+  failed_when: false
+  register: openbao_snapshot_check
+
+- name: Determine the number of leading directories to strip
+  set_fact:
+    openbao_snapshot_dir_count: "{{ openbao_snapshot_check.stdout.split('/') | select('string') | list | length - 1 }}"
+  when: openbao_snapshot_check.rc == 0
+
+# Only try running Openbao platform restore if the platform backup
+# contains the openbao platform snapshot
+- name: Extract openbao platform snapshot from the platform backup tarball
+  shell: >
+    tar --use-compress-program=pigz -xvf {{ platform_backup_fqpn }}
+    -C {{ openbao_tmp_dir }}
+    --strip-components={{ openbao_snapshot_dir_count }}
+    {{ openbao_snapshot_check.stdout }}
+  when: openbao_snapshot_check.rc == 0
+
+- name: Restore Openbao platform
+  import_role:
+    name: openbao/openbao_platform
+    tasks_from: restore.yml
+  when: openbao_snapshot_check.rc == 0
+  vars:
+    openbao_backup_path: "{{ openbao_tmp_dir }}/openbao-platform-snapshot.tar"
+    openbao_encrypt: "{{ backup_encryption_enabled|bool }}"
+    encrypt_openbao_secret: "{{ backup_encryption_passphrase | default('') }}"
+
+- name: Delete temporary openbao platform folder
+  file:
+    path: "{{ openbao_tmp_dir }}"
+    state: absent
+  become_user: root

@@ -1,0 +1,37 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# Run tasks from prepare_env.yml
+- name: Run preparation tasks
+  include_tasks:
+    file: prepare_env.yml
+
+- name: Create path for openbao snapshot tar file
+  set_fact:
+    openbao_snapshot_tar: "{{ openbao_backup_dir }}/{{ snapshot_name }}"
+
+- name: Create platform snapshot
+  block:
+  - name: Run script with no encryption
+    script: >-
+      openbao_platform_snapshot.sh create
+      "{{ openbao_snapshot_tar }}" false "{{ admin_password_path }}"
+    when: not openbao_encrypt
+    register: openbao_snapshot_script
+    failed_when: openbao_snapshot_script.rc != 0
+
+  - name: Run script with encryption
+    script: >-
+      openbao_platform_snapshot.sh create
+      "{{ openbao_snapshot_tar }}" true "{{ admin_password_path }}" pp_str
+    when: openbao_encrypt
+    register: openbao_snapshot_script
+    failed_when: openbao_snapshot_script.rc != 0
+
+  become: true
+  environment:
+    pp_str: "{{ encrypt_openbao_secret }}"

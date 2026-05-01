@@ -1,0 +1,14 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# Admin userpass password file on the LUKS filesystem. Passed to the snapshot
+# script as a PATH; bao reads it directly (never slurped into an ansible fact).
+#
+admin_password_path: "/var/luks/stx/luks_fs/controller/.openbao/users/admin/pw"
+
+# Snapshot tar file name inside the backup/restore staging dir.
+snapshot_name: "openbao-platform-snapshot.tar"

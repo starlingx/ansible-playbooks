@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022, 2024-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -25,6 +25,16 @@
 
 - name: Restore luks
   import_role: name=backup-restore/restore-luks
+
+# Apply the openbao restore manifest after restore-luks (which brings
+# back the LUKS unseal key, admin password and server cert).
+- name: Bring up openbao after restoring luks
+  include_role:
+    name: common/bringup-openbao
+  vars:
+    openbao_manifest_class: restore
+    openbao_service_enabled: true
+  when: bootstrap_configure_openbao | default(true) | bool
 
 - name: Restore cli environment file
   import_tasks: restore-cli-env.yml

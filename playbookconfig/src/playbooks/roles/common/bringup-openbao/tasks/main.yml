@@ -1,0 +1,84 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   Apply the openbao bao-first puppet manifest (bootstrap or restore)
+#   before the rest of the platform, so openbao is running before the
+#   platform services that depend on it.
+#
+#   Shared by the bootstrap apply-manifest path and the optimized
+#   restore-configuration path. The caller must ensure the LUKS
+#   filesystem is already populated (bootstrap: luks-fs-mgr seeds it;
+#   restore: backup-restore/restore-luks has run).
+#
+# PARAMETERS (see defaults/main.yml):
+#   openbao_manifest_class   bootstrap | restore
+#   openbao_luks_mount       LUKS mount point (trailing slash tolerated)
+#   openbao_service_enabled  enable/start the service on apply
+
+# Avoid writing secrets to an unencrypted disk.
+- name: Verify LUKS filesystem is mounted before openbao apply
+  command: /usr/bin/mountpoint -q {{ openbao_luks_mount }}
+  changed_when: false
+
+- name: Set openbao puppet log dir
+  set_fact:
+    openbao_puppet_log_dir: "/var/log/puppet/{{ now(fmt='%Y-%m-%d-%H-%M-%S') }}_{{ openbao_manifest_class }}_openbao"
+
+- name: Create openbao puppet dir with permissions
+  ansible.builtin.file:
+    path: "{{ openbao_puppet_log_dir }}"
+    state: directory
+    mode: '0700'
+    owner: root
+    group: root
+
+- name: Create openbao puppet log with permissions
+  ansible.builtin.file:
+    path: "{{ openbao_puppet_log_dir }}/puppet.log"
+    state: touch
+    mode: '0600'
+    owner: root
+    group: root
+    modification_time: preserve
+    access_time: preserve
+
+- name: Apply openbao manifest
+  shell: |
+    set -o pipefail
+    cd /tmp
+    puppet apply --trace --detailed-exitcodes \
+      --modulepath /usr/share/puppet/modules:/usr/share/openstack-puppet/modules \
+      -e "class { '::platform::openbao::params':
+            service_enabled => {{ openbao_service_enabled | bool | lower }},
+            luks_fs_mount   => '{{ openbao_luks_mount | regex_replace('/$', '') }}' }
+          include ::platform::openbao::{{ openbao_manifest_class }}" \
+      < /dev/null 2>&1 \
+      | awk '{ system("date -u +%FT%T.%3N | tr \"\n\" \" \""); print $0; fflush(); }' \
+      > {{ openbao_puppet_log_dir }}/puppet.log
+  args:
+    executable: /bin/bash
+  register: openbao_manifest_apply
+  environment:
+    LC_ALL: "en_US.UTF-8"
+  failed_when: false
+
+# puppet apply --detailed-exitcodes:
+#   0 = unchanged (success),
+#   2 = changes applied (success),
+#   4 = failures,
+#   6 = changes + failures.
+# 'set -o pipefail' makes the registered rc puppet's exit code, not
+# awk's, so a real puppet failure is caught here rather than masked by
+# the pipe.
+- name: Fail if openbao manifest apply returns an error
+  fail:
+    msg: >-
+      Failed to apply openbao {{ openbao_manifest_class }} manifest before the
+      platform apply. See {{ openbao_puppet_log_dir }}/puppet.log for details.
+  when:
+    - openbao_manifest_apply.rc is defined
+    - openbao_manifest_apply.rc not in [0, 2]

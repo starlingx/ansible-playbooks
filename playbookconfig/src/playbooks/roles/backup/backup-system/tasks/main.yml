@@ -52,6 +52,11 @@
     set_fact:
       openbao_tarball_encrypted: true
     when: '"openbao" in backup_encyption_include'
+
+  - name: Set Openbao platform tar encryption enabled
+    set_fact:
+      openbao_platform_tarball_encrypted: true
+    when: '"openbao_platform" in backup_encyption_include'
   when: backup_encryption_enabled|bool
 
 - name: Do StarlingX backup
@@ -208,6 +213,19 @@
         when: openbao_system_health.rc != 0
       when: include_openbao | bool
 
+    - name: Check Openbao platform status
+      block:
+      - name: Check if Openbao service is active
+        shell: >-
+          systemctl is-active openbao.service
+        register: openbao_service_status
+        failed_when: false
+
+      - name: Fail if openbao platform service is inactive
+        fail:
+          msg: "Openbao systemd service status returned error"
+        when: openbao_service_status.rc != 0
+
     - name: Send application lifecycle notifications for pre-backup semantic check
       command: /usr/bin/sysinv-utils notify backup-semantic-check
       register: backup_semantic_check_notification_result
@@ -300,6 +318,12 @@
         state: directory
       register: openbao_dir
       when: include_openbao | bool
+
+    - name: Create openbao platform temp dir
+      file:
+        path: "{{ tempdir.path }}/openbao_platform_dir"
+        state: directory
+      register: openbao_platform_dir
 
     - name: Backup roles, table spaces and schemas for databases.
       shell: >-
@@ -658,6 +682,24 @@
 
       when: backup_registry_filesystem_required
 
+    # Account for the openbao platform snapshot, which is not included
+    # in backup_targets but output from bao command command.
+    # Snapshot size is always smaller than the bao database.
+    - name: Account for openbao platform snapshot size
+      block:
+        - name: Check the size (in KiB) of the openbao raft store
+          shell: >-
+            du -sh -k
+            /var/lib/openbao/data/vault.db
+            /var/lib/openbao/data/raft/raft.db
+            | awk '{ sum += $1 } END { print sum }'
+          register: size_output_openbao
+          become: true
+
+        - name: Add openbao platform snapshot estimate to the total
+          set_fact:
+            total_platform_size_estimation: "{{ total_platform_size_estimation|int + size_output_openbao.stdout|int }}"
+
     # For SystemController the dc-vault is part of platform but restored after controller-0 unlock
     # Create a separate archive for it
     - block:
@@ -864,6 +906,35 @@
             Incorrect number of files produced.
         when: openbao_backup_result.matched != 2
       when: include_openbao | bool
+
+    # Backup Openbao platform
+    - name: Run Openbao platform backup
+      block:
+      - name: Run Openbao platform backup tasks
+        include_role:
+          name: openbao/openbao_platform
+          tasks_from: backup.yml
+        vars:
+          openbao_backup_dir: "{{ openbao_platform_dir.path }}"
+          openbao_encrypt: "{{ openbao_platform_tarball_encrypted|bool }}"
+          encrypt_openbao_secret: "{{ backup_encryption_passphrase }}"
+
+      - name: Find result files
+        find:
+          paths: "{{ openbao_platform_dir.path }}"
+          patterns: "openbao-platform-snapshot.tar*"
+        register: openbao_platform_backup_result
+
+      - name: Fail if incorrect number of file created from openbao backup
+        fail:
+          msg: >
+            There was an error with the openbao backup process.
+            Incorrect number of files produced.
+        when: openbao_platform_backup_result.matched != 1
+
+      - name: Set result openbao platform tar file path
+        set_fact:
+          openbao_platform_backup_file_path: "{{ openbao_platform_dir.path }}/openbao-platform-snapshot.tar"
 
     - name: Create etcd snapshot temp dir
       file:
@@ -1106,6 +1177,10 @@
         crushmap_file_: "{{ crushmap_file | default(\"\") }}"
         ceph_conf_ctrl_0_: "{{ ceph_conf_ctrl_0 | default(\"\") }}"
         ldap_db_backup_: "{{ ldap_db_backup | default(\"\") }}"
+
+    - name: Include openbao platform backup file to platform backup targets
+      set_fact:
+        final_backup_targets: "{{ final_backup_targets + [ openbao_platform_backup_file_path ] }}"
 
     # This is nasty to understand, but check the -vvv output to see what is going on
     # When we update the community.general collection from 1.3.6 to >=5.2.0, we can use "archive"

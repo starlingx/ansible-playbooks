@@ -8,6 +8,10 @@
 #   Restore data onto system.  Data restoration is the last
 #   step before restore can be completed.
 
+- name: Restore openbao platform
+  import_role: name=backup-restore/restore-openbao-platform
+  when: not (factory_restore | default(false))
+
 - name: Restore sysinv and flock services
   import_tasks: restore-postgres-and-sysinv.yml
 

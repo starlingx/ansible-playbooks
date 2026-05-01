@@ -1,0 +1,19 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Defaults for the bringup-openbao role. Callers override these.
+
+# Which openbao bao-first manifest class to apply: 'bootstrap' or
+# 'restore'. bootstrap generates secrets and seeds the raft; restore
+# reuses the LUKS-restored secrets and a self-signed leaf and does not
+# seed (the snapshot carries that state).
+openbao_manifest_class: bootstrap
+
+# LUKS filesystem mount point.
+openbao_luks_mount: "/var/luks/stx/luks_fs"
+
+# Whether the openbao systemd service is enabled/started by the apply.
+openbao_service_enabled: true

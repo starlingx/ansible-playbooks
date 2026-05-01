@@ -75,6 +75,7 @@ backup_encyption_include:
   - platform
   - hc_vault
   - openbao
+  - openbao_platform
 
 # Internal boolean variables for encryption to simplify logic.  These
 # will be adjusted later when the overriden parameters above are
@@ -82,6 +83,7 @@ backup_encyption_include:
 platform_tarball_encrypted: false
 hc_vault_tarball_encrypted: false
 openbao_tarball_encrypted: false
+openbao_platform_tarball_encrypted: false
 
 # The platform backup tarball will be named in this format:
 # <platform_backup_filename_prefix>_<timestamp>.tgz

@@ -1,0 +1,16 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Fail if passphrase is omitted
+  fail:
+    msg: >
+      A passphrase is required for encryption; set variable override
+      backup_encryption_passphrase.  To disable encryption set
+      override backup_encryption_enabled=false
+  when:
+  - openbao_encrypt|bool
+  - encrypt_openbao_secret | length == 0
