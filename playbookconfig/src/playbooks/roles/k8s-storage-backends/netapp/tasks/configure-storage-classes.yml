@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020,2023-2025 Wind River Systems, Inc.
+# Copyright (c) 2020,2023-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -18,8 +18,9 @@
   set_fact:
     sc_without_provisioner: >-
       {{
-        dict(storage_class | dict2items
-        | rejectattr('key', 'equalto', 'provisioner'))
+        storage_class | dict2items
+        | rejectattr('key', 'equalto', 'provisioner')
+        | items2dict
       }}
 
 - name: Set StorageClass headers
