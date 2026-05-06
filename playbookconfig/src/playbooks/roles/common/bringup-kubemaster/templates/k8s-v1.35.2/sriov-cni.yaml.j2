@@ -1,10 +1,10 @@
-# SRIOV-CNI Version v2.9.0
+# SRIOV-CNI Version v2.10.0
 # Based on:
-# https://raw.githubusercontent.com/k8snetworkplumbingwg/sriov-cni/v2.9.0/images/
+# https://raw.githubusercontent.com/k8snetworkplumbingwg/sriov-cni/v2.10.0/images/
 #              sriov-cni-daemonset.yaml
 #
 # This file is licensed under Apache 2.0.  You can obtain a copy of the license at:
-# https://github.com/k8snetworkplumbingwg/sriov-cni/blob/v2.9.0/LICENSE
+# https://github.com/k8snetworkplumbingwg/sriov-cni/blob/v2.10.0/LICENSE
 #
 # The following modifications have been made:
 #
@@ -19,7 +19,7 @@
 # - Set memory request to zero, otherwise it interferes with the ability of application pods
 #   to reserve the full amount of memory that K8s says is available.
 #
-# Copyright (c) 2025 Wind River Systems, Inc.
+# Copyright (c) 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -70,3 +70,4 @@ spec:
         - name: cnibin
           hostPath:
             path: {{ kubelet_cni_bin_dir }}
+

@@ -1,11 +1,19 @@
+# Note:
+#   This deployment file is designed for 'quickstart' of multus, easy installation to test it,
+#   hence this deployment yaml does not care about following things intentionally.
+#     - various configuration options
+#     - minor deployment scenario
+#     - upgrade/update/uninstall scenario
+#   Multus team understand users deployment scenarios are diverse, hence we do not cover
+#   comprehensive deployment scenario. We expect that it is covered by each platform deployment.
 ---
-# Multus Version v4.2.0
+# Multus Version v4.2.4
 # Based on:
-# https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v4.2.0/deployments/
+# https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v4.2.4/deployments/
 #             multus-daemonset.yml
 #
 # This file is licensed under Apache 2.0.  You can obtain a copy of the license at:
-# https://github.com/k8snetworkplumbingwg/multus-cni/blob/v4.2.0/LICENSE
+# https://github.com/k8snetworkplumbingwg/multus-cni/blob/v4.2.4/LICENSE
 #
 # The following modifications have been made:
 #
@@ -29,7 +37,7 @@
 # - Multus conf file permission is set to 600 to comply with CIS Benchmark Standards
 # - Use "-debug" image to allow shell command execution in the Multus pod
 #
-# Copyright (c) 2025 Wind River Systems, Inc.
+# Copyright (c) 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -229,6 +237,11 @@ data:
             chmod 600 "$MULTUS_TEMP_KUBECONFIG"
             SERVICEACCOUNT_TOKEN=$(cat "$SERVICE_ACCOUNT_PATH/token")
             TLS_CFG="certificate-authority-data: $(cat $SERVICE_ACCOUNT_PATH/ca.crt | base64 | tr -d '\n')"
+            if [[ "${KUBERNETES_SERVICE_HOST}" == *:* ]]; then
+                APISERVER="${KUBERNETES_SERVICE_PROTOCOL:-https}://[${KUBERNETES_SERVICE_HOST}]:${KUBERNETES_SERVICE_PORT}"
+            else
+                APISERVER="${KUBERNETES_SERVICE_PROTOCOL:-https}://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}"
+            fi
             cat > "$MULTUS_TEMP_KUBECONFIG" <<EOF
     # Kubeconfig file for Multus CNI plugin.
     apiVersion: v1
@@ -236,7 +249,7 @@ data:
     clusters:
     - name: local
       cluster:
-        server: ${KUBERNETES_SERVICE_PROTOCOL:-https}://[${KUBERNETES_SERVICE_HOST}]:${KUBERNETES_SERVICE_PORT}
+        server: ${APISERVER}
         ${TLS_CFG}
     users:
     - name: multus
@@ -374,3 +387,4 @@ spec:
             items:
             - key: watcher-script.sh
               path: watcher-script.sh
+
