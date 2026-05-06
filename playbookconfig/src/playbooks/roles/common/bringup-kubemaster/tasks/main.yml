@@ -85,13 +85,23 @@
   when: mode != 'restore'
 
 - block:
-  - name: Generate private key for kubernetes-ca
+  - name: Generate private key for kubernetes-ca (Bullseye)
     openssl_privatekey:
       path: "{{ kubeadm_pki_dir }}/ca.key"
       type: RSA
       size: 4096
       state: present
       force: true
+    when: is_bullseye
+
+  - name: Generate private key for kubernetes-ca (Trixie)
+    openssl_privatekey:
+      path: "{{ kubeadm_pki_dir }}/ca.key"
+      type: ECC
+      curve: secp384r1
+      state: present
+      force: true
+    when: is_trixie
 
   - name: Generate CSR for kubernetes-ca
     openssl_csr:

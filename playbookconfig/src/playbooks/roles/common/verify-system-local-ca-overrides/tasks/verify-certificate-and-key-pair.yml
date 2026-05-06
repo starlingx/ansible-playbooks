@@ -1,11 +1,11 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Task to identify certificate and key pair type and verifies if the certificate
-# and key match.
+# Tasks to identify certificate and key pair types, validate that the key meets the
+# required strength, and verify that the certificate and key match.
 #
 - name: Get the certificate key type
   community.crypto.x509_certificate_info:
@@ -17,40 +17,43 @@
     path: "{{ local_ca_key_file.path }}"
   register: key_info
 
-# TODO: Remove this checking once ECC cert/key is supported.
-- name: Fail if the provided system-local-ca key is ECC based
+- name: Fail if the provided system-local-ca key is not RSA (Bullseye)
   fail:
-    msg: |
-      The provided system-local-ca cert/key is ECC based which is not supported.
-      Please replace with RSA based cert/key.
-  when: key_info.type == "ECC"
+    msg: >-
+      The provided system-local-ca cert/key type is {{ key_info.type }}, which is not supported.
+      Please replace it with an RSA-based cert/key.
+  when: is_bullseye and key_info.type != "RSA"
 
-# TODO: replace this shell call once we upversion community.crypto module
-- name: Verify if the certificate matches the RSA key
-  block:
-    - name: Verify if system_local_ca_cert and system_local_ca_key match
-      shell: >-
-        diff <(echo "{{ system_local_ca_cert | b64decode }}" | openssl x509 -noout -modulus)
-        <(echo "{{ system_local_ca_key | b64decode }}" | openssl rsa -noout -modulus)
-      register: diff_return
-      failed_when: false
-      no_log: true
+- name: Fail if the provided system-local-ca key type is not supported
+  fail:
+    msg: >-
+      The provided system-local-ca cert/key type is {{ key_info.type }}, which is not supported.
+      Please replace it with an RSA-based or ECC-based cert/key.
+  when: key_info.type not in ["RSA", "ECC"]
 
-    - name: Check if the public keys match
-      assert:
-        that:
-          - diff_return.stdout == ""
-          - diff_return.stderr == ""
-        fail_msg: "The certificate does not match the RSA key"
-        success_msg: "The certificate matches the RSA key"
+- name: Validate RSA key strength
+  assert:
+    that:
+      - key_info.public_data.size >= 4096
+    fail_msg: >-
+      The provided {{ key_info.public_data.size }}-bit RSA key is not supported.
+      Please provide an RSA key of at least 4096 bits.
+    success_msg: "The {{ key_info.public_data.size }}-bit RSA key meets the required strength."
   when: key_info.type == "RSA"
 
-- name: Verify if the certificate matches the ECC key
-  block:
-    - name: Check if the public keys match
-      assert:
-        that:
-          - cert_info.public_key == key_info.public_key
-        fail_msg: "The certificate does not match the ECC key"
-        success_msg: "The certificate matches the ECC key"
+- name: Validate ECC key curve
+  assert:
+    that:
+      - key_info.public_data.curve in ["secp384r1", "secp521r1"]
+    fail_msg: >-
+      The provided ECC curve '{{ key_info.public_data.curve }}' is not supported.
+      Please provide a key with the secp384r1 (P-384) or stronger curve.
+    success_msg: "The ECC key curve '{{ key_info.public_data.curve }}' is valid."
   when: key_info.type == "ECC"
+
+- name: Verify that the certificate matches the key
+  assert:
+    that:
+      - cert_info.public_key == key_info.public_key
+    fail_msg: "The certificate does not match the key."
+    success_msg: "The certificate matches the key."
