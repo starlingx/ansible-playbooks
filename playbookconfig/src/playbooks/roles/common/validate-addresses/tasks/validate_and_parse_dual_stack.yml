@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024 Wind River Systems, Inc.
+# Copyright (c) 2024, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -23,14 +23,14 @@
       msg: "{{ network_param.key }}:{{ network_param.value }} Validating:{{ item }}"
     failed_when: item|ipaddr == False
     loop: '{{ network_param.value.split(",") }}'
-    when: is_bullseye
+    when: is_bullseye | bool
 
   - name: Validate comma separated dual-stack subnets or addresses (Trixie)
     debug:
       msg: "{{ network_param.key }}:{{ network_param.value }} Validating:{{ item }}"
     failed_when: item|ansible.utils.ipaddr == False
     loop: '{{ network_param.value.split(",") }}'
-    when: is_trixie
+    when: is_trixie | bool
 
   - set_fact:
       network_param_lines: ""

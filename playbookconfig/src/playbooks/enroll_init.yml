@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024-2025 Wind River Systems, Inc.
+# Copyright (c) 2024-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -156,6 +156,16 @@
     # Although the endpoints are reconfigured by now, the API and certs may not
     # be fully updated. A simple curl request can be used to verify both, specifically
     # checking the region_id API, which will be needed shortly after this playbook completes.
+    - name: Get Debian codename
+      command: lsb_release -cs
+      register: codename
+      delegate_to: localhost
+
+    - name: Set codename facts
+      set_fact:
+        is_bullseye: "{{ codename.stdout == 'bullseye' }}"
+        is_trixie: "{{ codename.stdout == 'trixie' }}"
+
     - set_fact:
         sysinv_check_endpoint: >-
           {{ protocol }}://{{ enroll_reconfigured_oam | ipwrap }}:{{ sysinv_port }}/v1/isystems/region_id
@@ -235,8 +245,7 @@
                 local_ca_key, and root_ca_cert) are installed on both
                 the system controller and the subcloud."
         when: (item.0.stdout != item.1.stdout )
-        loop:
-          - "{{ system_controller_data_cert.results | zip(subcloud_data_cert.results) | list }}"
+        loop: "{{ system_controller_data_cert.results | zip(subcloud_data_cert.results) | list }}"
 
       - name: Check the existence of the k8s Certificate
         command: kubectl get certificate -n deployment system-restapi-gui-certificate
