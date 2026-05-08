@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2025 Wind River Systems, Inc.
+# Copyright (c) 2021-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -105,17 +105,103 @@
   import_role:
     name: common/push-docker-images
 
-- name: Create Calico config file
-  template:
-    src: "roles/common/bringup-kubemaster/templates/k8s-{{ kubernetes_long_version }}/calico-cni.yaml.j2"
-    dest: /etc/kubernetes/update_calico.yaml
+- block:
+  - name: Create Calico config file
+    template:
+      src: "roles/common/bringup-kubemaster/templates/k8s-{{ kubernetes_long_version }}/calico-cni.yaml.j2"
+      dest: /etc/kubernetes/update_calico.yaml
 
-- name: Update Calico Networking
-  command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_calico.yaml"
-  retries: 5
-  delay: 3
-  register: result
-  until: result.rc == 0
+  - name: Update Calico Networking
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_calico.yaml"
+    retries: 5
+    delay: 3
+    register: result
+    until: result.rc == 0
+
+  when: kubernetes_long_version is version('v1.35.2', '<')
+
+- block:
+  - name: Create calico-system namespace
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace calico-system"
+    failed_when: false
+
+  - name: Create tigera-operator namespace
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace tigera-operator"
+    failed_when: false
+
+  - name: Label calico-system namespace as platform component
+    command: kubectl --kubeconfig=/etc/kubernetes/admin.conf label namespace calico-system
+            app.starlingx.io/component=platform --overwrite
+
+  - name: Label tigera-operator namespace as platform component
+    command: kubectl --kubeconfig=/etc/kubernetes/admin.conf label namespace tigera-operator
+            app.starlingx.io/component=platform --overwrite
+
+  - name: Copy registry secret to calico-system namespace
+    shell: >
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret registry-local-secret
+      -n kube-system -o yaml |
+      sed 's/namespace: kube-system/namespace: calico-system/' |
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
+    register: copy_secret_calico
+    failed_when: copy_secret_calico.rc != 0
+
+  - name: Copy registry secret to tigera-operator namespace
+    shell: >
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret registry-local-secret
+      -n kube-system -o yaml |
+      sed 's/namespace: kube-system/namespace: tigera-operator/' |
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
+    register: copy_secret_tigera
+    failed_when: copy_secret_tigera.rc != 0
+
+  - name: Create Calico Operator config file
+    template:
+      src: "roles/common/bringup-kubemaster/templates/k8s-{{ kubernetes_long_version }}/calico-operator.yaml.j2"
+      dest: /etc/kubernetes/update_calico-operator.yaml
+
+  - name: Update Calico Operator
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_calico-operator.yaml"
+    retries: 5
+    delay: 3
+    register: result
+    until: result.rc == 0
+
+  - name: Wait for Calico Operator to be ready
+    command: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --namespace=tigera-operator
+      --for=condition=Ready pods --selector=name=tigera-operator --timeout=120s
+    retries: 3
+    delay: 10
+    register: tigera_ready
+    until: tigera_ready.rc == 0
+
+  - name: Create Calico FelixConfiguration file
+    template:
+      src: "roles/common/bringup-kubemaster/templates/k8s-{{ kubernetes_long_version }}/calico-felix-config.yaml.j2"
+      dest: /etc/kubernetes/calico-felix-config.yaml
+
+  - name: Apply Calico FelixConfiguration
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/calico-felix-config.yaml"
+    retries: 3
+    delay: 5
+    register: result
+    until: result.rc == 0
+
+  - name: Create Calico custom resources config file
+    template:
+      src: "roles/common/bringup-kubemaster/templates/\
+        k8s-{{ kubernetes_long_version }}/calico-custom-resources-update.yaml.j2"
+      dest: /etc/kubernetes/update_calico-custom-resources.yaml
+
+  - name: Update Calico custom resources
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_calico-custom-resources.yaml"
+    retries: 5
+    delay: 3
+    register: result
+    until: result.rc == 0
+
+  when: kubernetes_long_version is version('v1.35.2', '>=')
 
 - name: Create Multus config file
   template:
