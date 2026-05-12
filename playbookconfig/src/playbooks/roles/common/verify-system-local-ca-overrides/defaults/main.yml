@@ -1,0 +1,3 @@
+---
+is_trixie: "{{ lookup('file', '/etc/os-release') is search('trixie') }}"
+is_bullseye: "{{ lookup('file', '/etc/os-release') is search('bullseye') }}"
