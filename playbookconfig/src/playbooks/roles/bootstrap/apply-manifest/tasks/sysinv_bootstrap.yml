@@ -103,16 +103,20 @@
     # it's necessary to remove it, update the tables and recreate the constraint.
     - name: Update keystone sysinv user id to match system controller
       command: >-
-        psql -d keystone
-        -c "alter table public.user_option drop constraint user_option_user_id_fkey"
-        -c "update public.user_option set user_id='{{ dc_sysinv_user_id }}' from
-        public.local_user where public.local_user.user_id=public.user_option.user_id
-        and public.local_user.name='sysinv'"
-        -c "update public.user set id='{{ dc_sysinv_user_id }}'
-        from public.local_user where public.user.id=public.local_user.user_id and
-        public.local_user.name='sysinv'"
-        -c "alter table public.user_option add constraint user_option_user_id_fkey
-        foreign key (user_id) references public."user"(id) on delete cascade"
+        psql -d keystone -c "
+        BEGIN;
+        ALTER TABLE public.user_option DROP CONSTRAINT user_option_user_id_fkey;
+        UPDATE public.user_option SET user_id='{{ dc_sysinv_user_id }}'
+        FROM public.local_user
+        WHERE public.local_user.user_id=public.user_option.user_id
+        AND public.local_user.name='sysinv';
+        UPDATE public.user SET id='{{ dc_sysinv_user_id }}'
+        FROM public.local_user
+        WHERE public.user.id=public.local_user.user_id
+        AND public.local_user.name='sysinv';
+        ALTER TABLE public.user_option ADD CONSTRAINT user_option_user_id_fkey
+        FOREIGN KEY (user_id) REFERENCES public.\"user\"(id) ON DELETE CASCADE;
+        COMMIT;"
       become_user: postgres
   when: distributed_cloud_role == "subcloud"
 
