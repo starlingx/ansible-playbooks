@@ -57,7 +57,10 @@ ENDPOINTS_TO_CREATE = [
 USERS_TO_UPDATE = [
     {
         "name": "sysinv",
-        "options": {"ignore_lockout_failure_attempts": True}
+        "options": {
+            "ignore_lockout_failure_attempts": True,
+            "ignore_password_expiry": True,
+        }
     },
     {
         "name": "admin",

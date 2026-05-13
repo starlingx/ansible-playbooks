@@ -254,10 +254,21 @@
            and public.local_user.name='dcmanager'"
 
   - name: Update keystone dcmanager user id to match system controller
-    command: psql -d keystone -c "update public.user set
-           id='{{ system_controller_keystone_dcmanager_user_id }}' from public.local_user where
-           public.user.id=public.local_user.user_id and
-           public.local_user.name='dcmanager'"
+    command: >-
+      psql -d keystone -c "
+      BEGIN;
+      ALTER TABLE public.user_option DROP CONSTRAINT user_option_user_id_fkey;
+      UPDATE public.user_option SET user_id='{{ system_controller_keystone_dcmanager_user_id }}'
+      FROM public.local_user
+      WHERE public.local_user.user_id=public.user_option.user_id
+      AND public.local_user.name='dcmanager';
+      UPDATE public.user SET id='{{ system_controller_keystone_dcmanager_user_id }}'
+      FROM public.local_user
+      WHERE public.user.id=public.local_user.user_id
+      AND public.local_user.name='dcmanager';
+      ALTER TABLE public.user_option ADD CONSTRAINT user_option_user_id_fkey
+      FOREIGN KEY (user_id) REFERENCES public.\"user\"(id) ON DELETE CASCADE;
+      COMMIT;"
   become_user: postgres
   when: distributed_cloud_role == 'subcloud' and mode == 'bootstrap'
 

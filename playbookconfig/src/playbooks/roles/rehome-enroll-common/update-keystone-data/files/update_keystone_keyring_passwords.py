@@ -251,29 +251,6 @@ class OpenStackClient:
             self.keystone.roles.grant(role=admin_role, user=user, project=admin_project)
             LOG.info(f"Admin role granted to '{username}' in 'admin' project.")
 
-    def disable_users_lockout(self, user_data):
-        """Disable lockout for a list of users."""
-        users_with_lockout_disabled = []
-        for user_info in user_data:
-            username = user_info.get("username")
-            user = self.users.get(username)
-            if user and not user.options.get("ignore_lockout_failure_attempts"):
-                self.keystone.users.update(
-                    user.id, options={"ignore_lockout_failure_attempts": True}
-                )
-                users_with_lockout_disabled.append(username)
-        return users_with_lockout_disabled
-
-    def enable_users_lockout(self, usernames):
-        """Re-enable lockout for a list of usernames."""
-        for username in usernames:
-            user = self.users.get(username)
-            if user:
-                LOG.info(f"Re-enabling lockout for user {username}.")
-                self.keystone.users.update(
-                    user.id, options={"ignore_lockout_failure_attempts": False}
-                )
-
 
 def store_password_in_keyring(username, password, service_name="services"):
     """Store the password in the keyring."""
@@ -592,7 +569,6 @@ def main():
 
     try:
         osclient = OpenStackClient(verify_certs)
-        users_with_lockout_disabled = osclient.disable_users_lockout(user_data)
         for user in user_data:
             username = user.get("username")
             password = user.get("password")
@@ -621,7 +597,6 @@ def main():
         # other steps of the playbook. Other services we can check at the end if
         # they're enabled/active
         verify_sm_services(SERVICES_TO_RESTART_SM[SYSINV_USERNAME])
-        osclient.enable_users_lockout(users_with_lockout_disabled)
 
         LOG.info("Script completed successfully.")
 
