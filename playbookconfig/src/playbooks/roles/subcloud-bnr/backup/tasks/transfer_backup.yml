@@ -1,14 +1,14 @@
 ---
 #
-# Copyright (c) 2022-2023 Wind River Systems, Inc.
+# Copyright (c) 2022-2023, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # TASKS DESCRIPTION:
-#   Transfer subcloud backup to the system controller. Restore the previous
+#   Transfer subcloud backup files to the system controller. Restore the previous
 #   backup if exists in case of transfer failure.
 #
-- name: Transfer subcloud platform backup file to the system controller
+- name: Transfer subcloud backup files to the system controller
   block:
   - name: Create backup storage directory for {{ inventory_hostname }} on system controller
     file:
@@ -23,28 +23,45 @@
   - name: Get files in {{ backup_dir }} on {{ inventory_host_name }}
     find:
       paths: "{{ backup_dir }}"
-      patterns: "{{ platform_backup_filename_prefix }}*"
+      patterns: '*backup_*.tgz,*backup_*.tgz.gpg'
     register: backup_files
 
-  - name: Get latest backup file
+  - name: Filter backup files created by this run
     set_fact:
-      local_backup_file: "{{ (backup_files.files | sort(attribute='mtime') | last).path }}"
+      backup_files_to_transfer: >-
+        {{
+          backup_files.files
+          | rejectattr('path', 'in', existing_backup_file_paths)
+          | sort(attribute='mtime')
+          | map(attribute='path')
+          | list
+        }}
+    vars:
+      existing_backup_file_paths: "{{ existing_files_before_backup.files | map(attribute='path') | list }}"
+
+  - name: Fail if there are no backup files to transfer
+    fail:
+      msg: "No backup files were found in {{ backup_dir }} to transfer to the system controller."
+    when: backup_files_to_transfer | length == 0
 
   # This task only works without privilege escalation. Setting become to true
   # makes the rsync on the remote host to be run with sudo, and since it's not
   # possible to provide a password (limitation from rsync itself), the file transfer fails.
   # Since the whole restore playbook is being run by root, the central_backup_dir
   # can be accessed to save the file without setting become to true.
-  - name: Transfer platform backup of {{ inventory_hostname }} to the system controller
+  - name: Transfer backup files of {{ inventory_hostname }} to the system controller
     synchronize:
       mode: pull
-      src: "{{ local_backup_file }}"
-      dest: "{{ central_backup_dir }}"
+      src: "{{ item }}"
+      dest: "{{ central_backup_dir }}/"
     register: backup_transfer
     until: backup_transfer.rc == 0
     retries: 3
     delay: 2
     become: false
+    loop: "{{ backup_files_to_transfer }}"
+    loop_control:
+      label: "{{ item | basename }}"
 
   - name: Remove previous backup upon successful subcloud backup (central storage)
     file:
@@ -68,9 +85,18 @@
     - name: Set failure message for transfer task failure
       set_fact:
         failure_msg: >
-          {{ backup_transfer.stdout | default('') }}.
-          rc: {{ backup_transfer.rc }}
-      when: backup_transfer.rc != 0
+          {{ failed_backup_transfer.msg | default(ansible_failed_result.msg | default('unknown')) }}.
+          rc: {{ failed_backup_transfer.rc | default(ansible_failed_result.rc | default('unknown')) }}
+      vars:
+        failed_backup_transfer: >-
+          {{
+            (backup_transfer | default({})).results
+            | default([])
+            | selectattr('failed', 'defined')
+            | selectattr('failed')
+            | first
+            | default({})
+          }}
 
     - name: Force fail post rescue of transfer task failure
       fail:
@@ -83,6 +109,4 @@
       file:
         path: "{{ item }}"
         state: absent
-      loop:
-        - "{{ local_backup_file }}"
-        - "{{ default_local_staging_dir }}"
+      loop: "{{ (backup_files_to_transfer | default([])) + [default_local_staging_dir] }}"
