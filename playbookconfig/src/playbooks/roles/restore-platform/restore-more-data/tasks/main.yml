@@ -563,12 +563,23 @@
 
   # admin-keystone is always the very last to be ready,
   # So we just wait and check for admin-keystone to come up.
-  - name: Make sure admin-keystone is ready
+  # On Trixie (Postgres 17), the process title no longer shows 'admin-keystone'.
+  # Keystone runs as uwsgi with keystone-uwsgi.ini config.
+  - name: Make sure admin-keystone is ready (Bullseye)
     shell: "ps -ef | grep admin-keystone | grep -v grep"
     register: result
     until: result.stdout.find("keystone") != -1
     retries: 6
     delay: 10
+    when: is_bullseye
+
+  - name: Make sure keystone is ready (Trixie)
+    shell: "ps -ef | grep keystone-uwsgi | grep -v grep"
+    register: result
+    until: result.stdout.find("keystone") != -1
+    retries: 6
+    delay: 10
+    when: is_trixie
 
   - name: Add missing registries during stx7 upgrade
     import_role:
