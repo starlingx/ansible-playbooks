@@ -1,0 +1,74 @@
+---
+#
+# Copyright (c) 2023,2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Validate platform certificate fields
+#
+
+- name: Validate platform cert fields
+  block:
+  - name: Check provided values for unknown certificate fields.
+    fail:
+      msg: |
+        "Usupported certificate field: {{ item }}.
+        Acceptable fields are {{ valid_platform_cert_fields|join(', ') }}."
+    when: not item in valid_platform_cert_fields
+    loop: "{{ system_platform_certificate.keys() | list }}"
+
+  - name: Check provided values for none and set as string
+    set_fact:
+      system_platform_certificate:
+        "{{ system_platform_certificate | combine({ item: '' }, recursive=true) }}"
+    loop:
+      "{{ system_platform_certificate.keys() | list }}"
+    when: system_platform_certificate[item] is none
+
+  - name: Validate subject_C (Country Name)
+    fail:
+      msg: "[ERROR]: subject_C should use an ISO-3166 two-letter code if defined."
+    when: system_platform_certificate.subject_C is defined and
+          system_platform_certificate.subject_C | length != 2
+
+  - name: Fail if only one of algorithm/key_size is provided
+    fail:
+      msg: >-
+        Both 'algorithm' and 'key_size' are required when configuring
+        platform certificate key type. Omit both to use defaults.
+    when: >-
+      (system_platform_certificate.algorithm is defined) !=
+      (system_platform_certificate.key_size is defined)
+
+  - name: Validate algorithm
+    assert:
+      that:
+        - system_platform_certificate.algorithm in ['RSA', 'ECDSA']
+      fail_msg: >-
+        The algorithm '{{ system_platform_certificate.algorithm }}' is not supported.
+        Valid values are: RSA, ECDSA.
+    when: system_platform_certificate.algorithm is defined
+
+  - name: Validate RSA key size
+    assert:
+      that:
+        - system_platform_certificate.key_size | int >= 3072
+      fail_msg: >-
+        The RSA size '{{ system_platform_certificate.key_size }}' is not supported.
+        Minimum is 3072 bits.
+    when: >-
+      system_platform_certificate.algorithm is defined and
+      system_platform_certificate.algorithm == 'RSA'
+
+  - name: Validate ECDSA key size
+    assert:
+      that:
+        - system_platform_certificate.key_size | int in [256, 384, 521]
+      fail_msg: >-
+        The ECDSA size '{{ system_platform_certificate.key_size }}' is not supported.
+        Valid values are: 256, 384, 521.
+    when: >-
+      system_platform_certificate.algorithm is defined and
+      system_platform_certificate.algorithm == 'ECDSA'
+
+  when: system_platform_certificate is defined

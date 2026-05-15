@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -46,9 +46,14 @@
     delay: 5
     no_log: true
 
-  - name: Get the key also in PKCS1 format
+  - name: Get the key also in PKCS1 or SEC1 format
     shell: >-
-      echo "{{ registry_key_pkcs8_b64.stdout | b64decode }}" | openssl rsa {{ '-traditional' if is_trixie else '' }}
+      echo "{{ registry_key_pkcs8_b64.stdout | b64decode }}" |
+      {% if (system_platform_certificate.algorithm | default('ECDSA')) == 'RSA' %}
+      openssl rsa {{ '-traditional' if is_trixie else '' }}
+      {% else %}
+      openssl ec
+      {% endif %}
     register: registry_key_pkcs1_b64
     no_log: true
 
