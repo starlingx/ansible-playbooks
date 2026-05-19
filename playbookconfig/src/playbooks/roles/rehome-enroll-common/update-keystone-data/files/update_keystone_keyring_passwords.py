@@ -278,15 +278,54 @@ def run_local_registry_secrets_audit_rpc():
     rpcapi.run_local_registry_secrets_audit(context)
 
 
-def restart_services_sm(service_list: List[str]):
+def get_sm_managed_services() -> set:
+    """
+    Get the set of service names currently managed by SM (Service Manager).
+
+    Runs 'sm-dump' once and parses the Services section to extract
+    service names (first column of each service line).
+    """
+    result = subprocess.run(
+        ["sm-dump"],
+        capture_output=True,
+        text=True,
+    )
+    services = set()
+    in_services_section = False
+    for line in result.stdout.splitlines():
+        if line.startswith("-Services-") or line.strip() == "Services":
+            in_services_section = True
+            continue
+        if not in_services_section:
+            continue
+        # Skip separator lines (dashes only)
+        stripped = line.strip()
+        if not stripped or stripped.startswith("-"):
+            continue
+        # First column is the service name
+        service_name = stripped.split()[0]
+        services.add(service_name)
+    return services
+
+
+def restart_services_sm(service_list: List[str], sm_services: set):
     """
     Restarts a given list of services using the 'sm-restart-safe' command.
 
+    Services that do not appear in sm-dump output are skipped.
+
     Args:
         service_list: A list of strings, where each string is a service name.
+        sm_services: Set of service names managed by SM.
     """
     LOG.info(f"Preparing to restart services: {', '.join(service_list)}")
     for service in service_list:
+        if service not in sm_services:
+            LOG.info(
+                f"Service '{service}' is not managed by SM on this system. "
+                "Skipping restart."
+            )
+            continue
         LOG.info(f"Issuing restart command for service: {service}")
         try:
             subprocess.run(
@@ -362,18 +401,29 @@ def restart_mtce_service():
 
 
 def verify_sm_services(
-    service_list: List[str], max_retries: int = 30, delay_seconds: int = 4
+    service_list: List[str], sm_services: set,
+    max_retries: int = 30, delay_seconds: int = 4
 ):
     """
     Verifies a list of services are 'enabled-active' with a retry mechanism.
 
+    Services that do not appear in sm-dump output are skipped gracefully.
+
     Args:
         service_list: A list of strings, where each string is a service name.
+        sm_services: Set of service names managed by SM.
         max_retries: The maximum number of times to check a service's status.
         delay_seconds: The number of seconds to wait between retries.
     """
     LOG.info(f"Preparing to verify services: {', '.join(service_list)}")
     for service in service_list:
+        if service not in sm_services:
+            LOG.info(
+                f"Service '{service}' is not managed by SM on this system. "
+                f"Skipping verification."
+            )
+            continue
+
         LOG.info(f"Verifying status of service: '{service}'...")
         for attempt in range(1, max_retries + 1):
             try:
@@ -569,6 +619,8 @@ def main():
 
     try:
         osclient = OpenStackClient(verify_certs)
+        sm_services = get_sm_managed_services()
+
         for user in user_data:
             username = user.get("username")
             password = user.get("password")
@@ -582,7 +634,9 @@ def main():
                 run_local_registry_secrets_audit_rpc()
 
             if username in SERVICES_TO_RESTART_SM:
-                restart_services_sm(SERVICES_TO_RESTART_SM[username])
+                restart_services_sm(
+                    SERVICES_TO_RESTART_SM[username], sm_services
+                )
             if username in SERVICES_TO_RESTART_SYSTEMD:
                 restart_services_systemd(SERVICES_TO_RESTART_SYSTEMD[username])
             if username in SERVICES_TO_RESTART_FUNCTION:
@@ -596,7 +650,7 @@ def main():
         # We only need to wait for sysinv to be active as it will be necessary for
         # other steps of the playbook. Other services we can check at the end if
         # they're enabled/active
-        verify_sm_services(SERVICES_TO_RESTART_SM[SYSINV_USERNAME])
+        verify_sm_services(SERVICES_TO_RESTART_SM[SYSINV_USERNAME], sm_services)
 
         LOG.info("Script completed successfully.")
 
