@@ -182,3 +182,10 @@ replacement_mgmt_mac: null
 
 # failure message which will be used to raise the error to the upper playbooks.
 failure_msg: ""
+
+# By default, factory restore is disabled. When enabled, the restore
+# procedure is adapted for a factory-installed system (skipping bootstrap
+# checks, using SM for service management, etc.).
+# This flag is auto-set to true if /var/lib/factory-install/complete
+# is detected. It can also be manually set via extra vars.
+factory_restore: false
