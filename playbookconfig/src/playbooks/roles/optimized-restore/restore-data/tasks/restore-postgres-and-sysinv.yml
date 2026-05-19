@@ -14,6 +14,16 @@
     postgres db and restart postgres service during
     factory restore
   block:
+    # Capture factory boot/rootfs device before DB is overwritten.
+    # These values are not re-discovered by sysinv-agent on unlock.
+    - name: Capture factory boot and rootfs device
+      shell: >-
+        psql -t -A -F',' -c
+        "SELECT boot_device, rootfs_device FROM i_host
+        WHERE hostname='controller-0';" sysinv
+      register: factory_host_devices
+      become_user: postgres
+
     - name: Get postgres bin directory
       command: pg_config --bindir
       register: pg_bindir
@@ -101,6 +111,49 @@
 - name: Restore Postgres
   import_role:
     name: backup-restore/restore-postgres
+
+# Update boot/rootfs device if factory system differs from backup.
+# Same hardware model may have different disk SAS addresses.
+- name: Update boot and rootfs device for factory restore
+  block:
+    - name: Get backup boot and rootfs device from restored DB
+      shell: >-
+        psql -t -A -F',' -c
+        "SELECT boot_device, rootfs_device FROM i_host
+         WHERE hostname='controller-0';" sysinv
+      register: backup_host_devices
+
+    - name: Parse factory devices
+      set_fact:
+        factory_boot: "{{ factory_host_devices.stdout.split(',')[0] }}"
+        factory_rootfs: "{{ factory_host_devices.stdout.split(',')[1] }}"
+
+    - name: Parse backup devices
+      set_fact:
+        backup_boot: "{{ backup_host_devices.stdout.split(',')[0] }}"
+        backup_rootfs: "{{ backup_host_devices.stdout.split(',')[1] }}"
+
+    - name: Log boot/rootfs device comparison
+      debug:
+        msg:
+          - "Factory: {{ factory_boot }},{{ factory_rootfs }}"
+          - "Backup: {{ backup_boot }},{{ backup_rootfs }}"
+
+    - name: Update boot_device if different
+      shell: >-
+        psql -c "UPDATE i_host
+        SET boot_device='{{ factory_boot }}'
+        WHERE hostname='controller-0';" sysinv
+      when: factory_boot != backup_boot
+
+    - name: Update rootfs_device if different
+      shell: >-
+        psql -c "UPDATE i_host
+        SET rootfs_device='{{ factory_rootfs }}'
+        WHERE hostname='controller-0';" sysinv
+      when: factory_rootfs != backup_rootfs
+  become_user: postgres
+  when: factory_restore
 
 - name: Upgrade path
   block:
