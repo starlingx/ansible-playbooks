@@ -16,6 +16,7 @@
   loop:
     - pmon.service
     - sm.service
+  when: not (factory_restore | default(false))
 
 - set_fact:
     _remove_items:
