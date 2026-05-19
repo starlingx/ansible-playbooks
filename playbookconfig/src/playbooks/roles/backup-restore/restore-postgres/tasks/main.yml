@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2024 Wind River Systems, Inc.
+# Copyright (c) 2022-2024, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -10,6 +10,7 @@
 - block:
   - set_fact:
       postgres_staging_dir: "{{ staging_dir }}/postgres"
+    when: not factory_restore
 
   - name: Create staging directory for postgres data
     file:
@@ -19,11 +20,13 @@
       owner: root
       group: root
       mode: 0755
+    when: not factory_restore
 
   - name: Extract postgres db to staging directory
     command: >-
       tar --use-compress-program=pigz -C {{ staging_dir }}/postgres -xpf {{ platform_backup_fqpn }}
       --wildcards --transform='s,.*/,,' '*/*\.postgreSql\.*'
+    when: not factory_restore
 
   - name: Copy database table to csv
     block:
