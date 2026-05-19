@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2024 Wind River Systems, Inc.
+# Copyright (c) 2022-2024, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -22,7 +22,8 @@
     - restore_mode|default(none) == 'optimized'
 
 - name: Restore docker and docker-registry
-  import_tasks: restore-docker.yml
+  include_tasks: restore-docker.yml
+  when: not (factory_restore | default(false))
 
 - name: Mount ceph data directory to rook-ceph
   import_role: name=common/mount-ceph-data
