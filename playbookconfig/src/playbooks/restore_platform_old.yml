@@ -20,7 +20,9 @@
     - { role: backup-restore/restore-luks, become: yes }
 
 - name: Run bootstrap playbook with restore mode
-  import_playbook: bootstrap.yml mode='restore'
+  import_playbook: bootstrap.yml
+  vars:
+    mode: 'restore'
 
 - hosts: all
   gather_facts: no

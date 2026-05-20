@@ -345,23 +345,41 @@
       - { namespace: kube-system, deployment: coredns }
     register: wait_for_deployments
 
-  - name: Get wait tasks results
+  - name: Get Kubernetes component pod wait task results
     async_status:
       jid: "{{ item.ansible_job_id }}"
-    register: wait_job_result
-    until: wait_job_result.finished
+    register: kube_pod_wait_result
+    until: kube_pod_wait_result.finished | bool
     # The retry length should be x2 the length of the async_timeout
     # eg async_retries = async_timeout * 2 / delay
     retries: "{{ async_retries }}"
     delay: 6
     failed_when: false
-    loop: "{{ wait_for_kube_system_pods.results + wait_for_deployments.results }}"
+    loop: "{{ wait_for_kube_system_pods.results }}"
 
-  - name: Fail if any of the Kubernetes component or Networking pod are not ready by this time
+  - name: Get deployment wait task results
+    async_status:
+      jid: "{{ item.ansible_job_id }}"
+    register: deployment_wait_result
+    until: deployment_wait_result.finished | bool
+    # The retry length should be x2 the length of the async_timeout
+    # eg async_retries = async_timeout * 2 / delay
+    retries: "{{ async_retries }}"
+    delay: 6
+    failed_when: false
+    loop: "{{ wait_for_deployments.results }}"
+
+  - name: Fail if any Kubernetes component or Networking pod is not ready
     fail:
-      msg: "Pod {{ item.item.item }} is still not ready."
+      msg: "Pod wait failed for selector {{ item.item.item }}"
     when: item.stdout is not search(" condition met")
-    loop: "{{ wait_job_result.results }}"
+    loop: "{{ kube_pod_wait_result.results }}"
+
+  - name: Fail if any deployment is not available
+    fail:
+      msg: "Deployment wait failed for {{ item.item.item }}"
+    when: item.stdout is not search(" condition met")
+    loop: "{{ deployment_wait_result.results }}"
 
   - name: Bring up FluxCD helm and source controllers
     import_role:
