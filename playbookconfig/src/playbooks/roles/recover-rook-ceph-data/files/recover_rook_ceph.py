@@ -6,7 +6,6 @@
 #
 
 import os
-import ast
 import sys
 import json
 import base64
@@ -58,7 +57,9 @@ def recover():
         print("Unable to scale rook-ceph-operator.", file=sys.stderr)
         sys.exit(result.returncode)
 
-    hosts_data = ast.literal_eval(sys.argv[1])
+    hosts_data = json.loads(sys.argv[1])
+    if isinstance(hosts_data, str):
+        hosts_data = json.loads(hosts_data)
     recovery_target_host = hosts_data["recovery_target_host"]
     recovery_type = hosts_data["recovery_type"]
     hosts_with_osd = hosts_data["hosts_with_osd"].split(" ")
@@ -70,12 +71,12 @@ def recover():
 
     # Gets monitor data via the rook-ceph-mon-endpoint configmap
     cmd = ["kubectl", "-n", "rook-ceph", "get", "configmap",
-           "rook-ceph-mon-endpoints", "-o", "jsonpath=\'{.data.mapping}\'"]
+           "rook-ceph-mon-endpoints", "-o", "jsonpath={.data.mapping}"]
     cmd_output = subprocess.check_output(cmd).decode("UTF-8")
 
     # It takes the monitors and their respective hosts to be cleaned, in addition to
     # identifying the existence of the floating monitor.
-    mons = json.loads(ast.literal_eval(cmd_output))
+    mons = json.loads(cmd_output)
     for mon_name, data in mons["node"].items():
         hostname = data["Hostname"]
         if mon_name == "float":
@@ -182,7 +183,7 @@ def recover():
 
 def get_rook_ceph_recovery_data(name):
     cmd = ["kubectl", "-n", "rook-ceph", "get", "configmap", "rook-ceph-recovery",
-           "-o", f"jsonpath='{{.data.{name}}}'", "--request-timeout=30s"]
+           "-o", f"jsonpath={{.data.{name}}}", "--request-timeout=30s"]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         print("Unexpected error while getting data from rook-ceph-recovery configmap.", file=sys.stderr)

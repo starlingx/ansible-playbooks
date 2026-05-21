@@ -49,7 +49,7 @@
 
     # Will configure all the pods required for rook-ceph recovery.
     - name: Recover rook-ceph
-      script: recover_rook_ceph.py "{{ hosts_data }}"
+      script: "recover_rook_ceph.py '{{ hosts_data | to_json }}'"
       register: recover_rook_ceph_out
 
     - name: Display rook-ceph recovery script stdout output
