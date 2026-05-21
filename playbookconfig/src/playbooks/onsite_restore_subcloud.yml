@@ -7,62 +7,26 @@
 # This playbook is designed to be used by dcmanager for the on-site restore
 # workflow, where the restore is initiated locally by the subcloud itself.
 #
-# It optionally transfers the backup archive from central storage to the
-# subcloud (when backup_source_path is provided), then monitors the subcloud
-# until the restore completes by waiting for the auto-restore completion flag.
+# It monitors the subcloud until the restore completes by waiting for the
+# auto-restore completion flag.
 #
 # Override variables:
-#   backup_source_path: (optional) Path to the backup archive on the system
-#                       controller. When defined, the file is transferred to
-#                       staging_dir on the subcloud before monitoring begins.
-#   staging_dir:        (required when backup_source_path is set) Directory on
-#                       the subcloud where the backup will be staged.
 #   restore_timeout:    (optional) Total timeout in seconds for the restore
 #                       operation.
 #
 #   Example command:
 #   ansible-playbook /usr/share/ansible/stx-ansible/playbooks/onsite_restore_subcloud.yml \
 #   -i <inventory-file> --limit <subcloudname> -e 'restore_timeout=<restore_timeout>'
-#   -e 'backup_source_path=<backup-source-path>' -e 'staging_dir=<staging-dir>'
 #
 - hosts: all
   gather_facts: no
   vars:
     restore_timeout: 5400
-    transfer_complete_flag: /var/run/.backup_transfer_complete
     restore_complete_flag: /var/run/.auto_restore_complete
 
   tasks:
     - name: Main restore workflow
       block:
-        - name: Transfer backup from central storage to subcloud
-          block:
-            - name: Create staging directory on subcloud
-              become: yes
-              file:
-                path: "{{ staging_dir }}"
-                state: directory
-                mode: '0775'
-
-            - name: Transfer backup archive to subcloud
-              synchronize:
-                mode: push
-                src: "{{ backup_source_path }}"
-                dest: "{{ staging_dir }}/"
-                rsync_opts: "--omit-dir-times,--no-perms"
-              register: backup_transfer
-              until: backup_transfer.rc == 0
-              retries: 3
-              delay: 2
-              become: false
-
-            - name: Signal transfer complete to subcloud
-              file:
-                path: "{{ transfer_complete_flag }}"
-                state: touch
-                mode: '0644'
-          when: backup_source_path is defined
-
         - name: Record restore start time
           set_fact:
             restore_start: "{{ now(fmt='%s') }}"
@@ -130,11 +94,8 @@
                 msg: "Timeout waiting for on-site restore completion after reboot"
 
       always:
-        - name: Remove restore and transfer flags
+        - name: Remove restore flag
           become: yes
           file:
-            path: "{{ item }}"
+            path: "{{ restore_complete_flag }}"
             state: absent
-          loop:
-            - "{{ restore_complete_flag }}"
-            - "{{ transfer_complete_flag }}"

@@ -75,6 +75,8 @@ backup:
     - "{{ homedir }}/*/.cache"
     - "{{ homedir }}/*/.kube/**"
     - "{{ homedir }}/*/.kube"
+    - "{{ rootdir }}/ansible.log"
+    - "{{ rootdir }}/install.log"
     - "{{ rootdir }}/*/ansible.log"
     - "{{ rootdir }}/*/.ansibl**"
     - "{{ rootdir }}/*/.cache/**"
