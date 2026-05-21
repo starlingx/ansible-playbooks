@@ -19,6 +19,11 @@
 
   when: upgrade_in_progress
 
+- name: Add factory restore extra items
+  set_fact:
+    restore_extra_items: "{{ restore_extra_items + factory_restore_extra_items }}"
+  when: factory_restore
+
 - name: Add extra items to restore
   set_fact:
     full_restore_items: "{{ restore_items + restore_extra_items }}"

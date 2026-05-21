@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2025 Wind River Systems, Inc.
+# Copyright (c) 2022-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -144,3 +144,13 @@
     when: rook_backend.rc == 0
 
   when: wipe_ceph_osds|bool and (ceph_backend.rc == 0 or rook_backend.rc == 0)
+
+# Restart USM services to pick up restored /etc/software/software.conf
+# which contains the correct region_name and credentials.
+- name: Restart USM daemons after software metadata restore
+  command: "pmon-restart {{ item }}"
+  loop:
+    - software-controller-daemon
+    - software-agent
+  become: yes
+  when: factory_restore | default(false)

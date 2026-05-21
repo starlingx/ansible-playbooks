@@ -98,3 +98,7 @@ network_address_keys:
   - platform::network::oam::params::controller_address
   - platform::network::pxeboot::params::controller_address
   - platform::network::pxeboot::params::controller0_address
+
+# Additional items to restore for factory restore (no reinstall)
+factory_restore_extra_items:
+  - etc/software
