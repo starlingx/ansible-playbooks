@@ -18,6 +18,23 @@
     - sm.service
   when: not (factory_restore | default(false))
 
+# On factory restore, RabbitMQ's Mnesia database retains the factory
+# password while the restored keyring has the backup's password.
+# Update RabbitMQ to match the backup's credentials.
+- name: Update RabbitMQ password from keyring during factory restore
+  block:
+    - name: Get RabbitMQ password from keyring
+      shell: keyring get amqp rabbit
+      register: amqp_password
+      changed_when: false
+
+    - name: Update RabbitMQ password in Mnesia
+      shell: >-
+        HOME=/var/lib/rabbitmq/{{ software_version }}
+        rabbitmqctl change_password guest {{ amqp_password.stdout }}
+  no_log: true
+  when: factory_restore | default(false)
+
 - set_fact:
     _remove_items:
       - "{{ ansible_remote_tmp|default('') }}"
