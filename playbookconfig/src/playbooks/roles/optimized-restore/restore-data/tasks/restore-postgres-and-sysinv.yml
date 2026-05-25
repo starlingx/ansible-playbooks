@@ -78,6 +78,7 @@
         OCF_ROOT: /usr/lib/ocf
         OCF_RESKEY_pgctl: "{{ pg_bindir.stdout | trim }}/pg_ctl"
         OCF_RESKEY_pgdata: "{{ pg_datadir }}"
+      timeout: 30
 
   vars:
     pg_datadir: "/var/lib/postgresql/{{ software_version }}"
