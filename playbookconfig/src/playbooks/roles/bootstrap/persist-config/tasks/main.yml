@@ -492,8 +492,7 @@
 
   - name: Delete existing ssl_ca certificates
     shell: source /etc/platform/openrc; system ca-certificate-uninstall {{ item }} --yes
-    loop:
-    - "{{ existing_ssl_ca_certificates_uuid.stdout_lines }}"
+    loop: "{{ existing_ssl_ca_certificates_uuid.stdout_lines }}"
     when: existing_ssl_ca_certificates_uuid.stdout_lines | length > 0
 
   when: replayed
