@@ -21,11 +21,6 @@
          to restore OpenStack application."
     when: not check_restore_openstack_continue.stat.exists
 
-  - name: Unset show_multiple_locations override
-    shell: >-
-      source /etc/platform/openrc; system helm-override-update --reuse-values
-      --set conf.glance.DEFAULT.show_multiple_locations=False {{ openstack_app_name }} glance openstack
-
   - name: Continue to bring up the remaining OpenStack services
     shell: source /etc/platform/openrc; system application-apply --mode normal {{ openstack_app_name }}
 
@@ -139,12 +134,6 @@
     file:
       path: "{{ helm_overrides_sqldump_dir.path }}"
       state: absent
-
-  # This override is required by the tidy_storage helper script when we do a full restore.
-  - name: Set show_multiple_locations override
-    shell: >-
-      source /etc/platform/openrc; system helm-override-update --reuse-values
-      --set conf.glance.DEFAULT.show_multiple_locations=True {{ openstack_app_name }} glance openstack
 
   - name: Bring up MariaDB and its prerequisite services
     shell: >-
