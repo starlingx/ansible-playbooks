@@ -29,15 +29,16 @@
       register: pg_bindir
 
     # Use sm-stop to gracefully stop services while SM
-    # is still running. Stop flock services first (they are
-    # connected to postgres), then stop postgres and SM.
-    - name: Stop flock services via SM
+    # is still running.
+    - name: Stop services via SM
       command: "sm-stop service {{ item }}"
       loop:
         - mtc-agent
+        - haproxy
+        - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
         - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
         - sysinv-conductor
-        - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
+        - rabbit
 
     - name: Stop pmon-managed flock services
       command: "pmon-stop {{ item }}"
@@ -66,6 +67,13 @@
         owner: postgres
         group: postgres
         mode: '0700'
+
+    # Restore SM runtime db from etc
+    - name: Restore SM runtime DB for factory restore
+      copy:
+        src: "/etc/sm/{{ software_version }}/sm.db"
+        dest: /var/run/sm/sm.db
+        remote_src: yes
 
     - name: Re-initialize postgres DB
       command: >-
@@ -280,8 +288,8 @@
   when: not (factory_restore | default(false))
 
 # Start SM, then use sm-start to bring up
-# flock services, during factory restore
-- name: Start up SM and flock services during factory restore
+# services, during factory restore
+- name: Start up SM and services during factory restore
   block:
     - name: Start SM services
       command: pmon-start sm
@@ -289,12 +297,14 @@
     - name: Start/ manage postgres via SM
       command: sm-start service postgres
 
-    - name: Start flock services via SM
+    - name: Start services via SM
       command: "sm-start service {{ item }}"
       loop:
-        - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
+        - rabbit
         - sysinv-conductor
+        - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
         - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
+        - haproxy
         - mtc-agent
 
     - name: Start pmon-managed flock services
