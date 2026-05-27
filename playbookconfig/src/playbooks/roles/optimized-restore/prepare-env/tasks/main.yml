@@ -48,6 +48,18 @@
           wipe_ceph_osds is not supported with factory restore.
       when: wipe_ceph_osds | default(false) | bool
 
+    - name: Check if bare-metal Ceph is configured
+      stat:
+        path: /etc/platform/.node_ceph_configured
+      register: factory_ceph_baremetal_flag
+
+    - name: Fail if bare-metal Ceph is detected on factory system
+      fail:
+        msg: >-
+          Factory restore does not support bare-metal Ceph backend.
+          /etc/platform/.node_ceph_configured was found on this system.
+      when: factory_ceph_baremetal_flag.stat.exists
+
     - name: Auto-detect management MAC for factory restore
       block:
         - name: Get management interface MAC from factory system
@@ -69,6 +81,46 @@
         target_host: controller-0
 
   when: factory_restore
+
+- name: Detect factory storage backend
+  block:
+    - name: Look for the flag indicating that LVM CSI is configured
+      stat:
+        path: /etc/platform/.node_lvm_csi_configured
+      register: factory_lvm_flag
+
+    - name: Look for the flag indicating that Rook is configured
+      stat:
+        path: /etc/platform/.node_rook_configured
+      register: factory_rook_flag
+
+    - name: Set factory_storage_backend to lvm
+      set_fact:
+        factory_storage_backend: "lvm"
+      when: factory_lvm_flag.stat.exists
+
+    - name: Set factory_storage_backend to rook-ceph
+      set_fact:
+        factory_storage_backend: "rook-ceph"
+      when:
+        - not factory_lvm_flag.stat.exists
+        - factory_rook_flag.stat.exists
+
+    - name: Fail if no supported storage backend is detected
+      fail:
+        msg: >-
+          Unsupported storage backend for factory restore.
+          Neither /etc/platform/.node_lvm_csi_configured nor
+          /etc/platform/.node_rook_configured were found on this system.
+      when:
+        - not factory_lvm_flag.stat.exists
+        - not factory_rook_flag.stat.exists
+
+    - name: Log detected factory storage backend
+      debug:
+        msg: "Factory storage backend detected: {{ factory_storage_backend }}"
+
+  when: factory_restore | default(false)
 
 - name: Set config path facts
   set_fact:
