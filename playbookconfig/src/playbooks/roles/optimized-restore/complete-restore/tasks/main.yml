@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2026 Wind River Systems, Inc.
+# Copyright (c) 2022-2025 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -144,14 +144,3 @@
     when: rook_backend.rc == 0
 
   when: wipe_ceph_osds|bool and (ceph_backend.rc == 0 or rook_backend.rc == 0)
-
-# Clear factory install state after restore.
-# The system is no longer a factory-installed system after
-# restore has completed. Remove factory install flags to
-# prevent factory_restore from being detected on subsequent
-# restore attempts.
-- name: Clear factory install state after restore
-  file:
-    path: /var/lib/factory-install/complete
-    state: absent
-  when: factory_restore | default(false)
