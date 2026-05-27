@@ -21,6 +21,25 @@
         tar --use-compress-program=pigz -C / --overwrite
         -xpf {{ platform_backup_fqpn | quote }} {{ network_scripts.lstrip('/') | quote }}
 
+    - name: Validate OAM IP is not assigned to a wrong interface
+      script: roles/optimized-restore/restore-configuration/files/validate_oam_interface.py {{ network_scripts }}
+      args:
+        executable: /usr/bin/python3
+      register: oam_validation_result
+      failed_when: false
+
+    - name: Set OAM validation failed flag
+      set_fact:
+        oam_validation_failed: "{{ oam_validation_result.stdout is defined and
+                                   oam_validation_result.stdout.strip() == 'False' }}"
+
+    - name: Warn if OAM IP address is on a wrong interface
+      debug:
+        msg: >-
+          WARNING: OAM interface validation detected a potential conflict.
+          Details: {{ oam_validation_result.stderr | default('') }}
+      when: oam_validation_failed | bool
+
     - name: Bring up original networking
       shell:
         cmd: |
