@@ -151,6 +151,11 @@
       service:
         name: etcd
         state: stopped
+      when: not (factory_restore | default(false))
+
+    - name: Stop etcd using sm during factory restore
+      command: sm-stop service etcd
+      when: factory_restore | default(false)
 
     - name: Restore etcd database
       include_role:
@@ -161,30 +166,38 @@
         name: etcd
         state: started
         enabled: false
+      when: not (factory_restore | default(false))
 
-    - name: Set up k8s environment variable
-      copy:
-        src: /usr/share/puppet/modules/platform/files/kubeconfig.sh
-        dest: /etc/profile.d/kubeconfig.sh
-        remote_src: yes
+    - name: Start etcd using sm during factory restore
+      command: sm-start service etcd
+      when: factory_restore | default(false)
 
-    - name: Add kubelet service override
-      copy:
-        src: "{{ kubelet_override_template }}"
-        dest: /etc/systemd/system/kubelet.service.d/kube-stx-override.conf
-        mode: preserve
-        remote_src: yes
+    - name: Skip kubelet configuration during factory restore
+      block:
+        - name: Set up k8s environment variable
+          copy:
+            src: /usr/share/puppet/modules/platform/files/kubeconfig.sh
+            dest: /etc/profile.d/kubeconfig.sh
+            remote_src: yes
 
-    - name: Register kubelet with pmond
-      copy:
-        src: "{{ kubelet_pmond_template }}"
-        dest: /etc/pmon.d/kubelet.conf
-        mode: preserve
-        remote_src: yes
+        - name: Add kubelet service override
+          copy:
+            src: "{{ kubelet_override_template }}"
+            dest: /etc/systemd/system/kubelet.service.d/kube-stx-override.conf
+            mode: preserve
+            remote_src: yes
 
-    - name: Do a systemd daemon-reload
-      systemd:
-        daemon_reload: true
+        - name: Register kubelet with pmond
+          copy:
+            src: "{{ kubelet_pmond_template }}"
+            dest: /etc/pmon.d/kubelet.conf
+            mode: preserve
+            remote_src: yes
+
+        - name: Do a systemd daemon-reload
+          systemd:
+            daemon_reload: true
+      when: not (factory_restore | default(false))
 
     - name: Start kubelet
       systemd:
