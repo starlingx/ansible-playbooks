@@ -1,7 +1,7 @@
 ---
 # System images that are pre-pulled and pushed to local registry
 n3000_opae_img: docker.io/starlingx/n3000-opae:stx.8.0-v1.0.2
-kubernetes_entrypoint_img: quay.io/stackanetes/kubernetes-entrypoint:v0.3.1
+kubernetes_entrypoint_img: quay.io/airshipit/kubernetes-entrypoint:9ff5d2e488ad18187bccc48e9595f197d27110c4-ubuntu_jammy
 calico_cni_img: quay.io/calico/cni:v3.31.2
 calico_node_img: quay.io/calico/node:v3.31.2
 calico_kube_controllers_img: quay.io/calico/kube-controllers:v3.31.2
