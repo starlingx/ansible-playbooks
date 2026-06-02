@@ -303,7 +303,7 @@
           content: "{{ merged_overrides }}"
           dest: "{{ target_backup_dir }}/{{ override_filename }}"
 
-    when: restore_overrides
+    when: restore_overrides | default(false, true)
 
   - name: Load override data (local execution)
     include_vars: "{{ target_backup_dir }}/{{ override_filename }}"
