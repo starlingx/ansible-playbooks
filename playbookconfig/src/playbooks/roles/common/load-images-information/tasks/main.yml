@@ -100,13 +100,26 @@
       networking_images: >-
         {{
           [
+            calico_apiserver_img,
             calico_cni_img,
-            calico_node_img,
-            calico_kube_controllers_img,
+            calico_csi_img,
+            calico_ctl_img,
+            calico_dikastes_img,
+            calico_envoy_gateway_img,
+            calico_envoy_proxy_img,
             calico_flexvol_img,
+            calico_goldmane_img,
+            calico_kube_controllers_img,
+            calico_node_driver_registrar_img,
+            calico_node_img,
+            calico_pod2daemon_flexvol_img,
+            calico_typha_img,
+            calico_whisker_backend_img,
+            calico_whisker_img,
             multus_img,
             sriov_cni_img,
-            sriov_network_device_img
+            sriov_network_device_img,
+            tigera_operator_img
           ] | select('defined') | list
         }}
       static_images: >-
