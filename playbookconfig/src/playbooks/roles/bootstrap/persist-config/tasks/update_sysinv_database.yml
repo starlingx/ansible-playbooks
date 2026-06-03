@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2025 Wind River Systems, Inc.
+# Copyright (c) 2019-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -227,19 +227,10 @@
 
     when: software_version is version('26.03', '>=')
 
-  - name: Apply dns host record update (Bullseye)
+  - name: Apply dns host record update
     shell: source /etc/platform/openrc; system service-parameter-apply dns
-    when:
-      - is_bullseye
-      - (system_controller_floating_address | ipaddr and virtual_system is defined and virtual_system|bool) or
-        (system_controller_oam_floating_address | ipaddr and virtual_system is not defined)
 
-  - name: Apply dns host record update (Trixie)
-    shell: source /etc/platform/openrc; system service-parameter-apply dns
-    when:
-      - is_trixie
-      - (system_controller_floating_address | ansible.utils.ipaddr and virtual_system is defined and virtual_system|bool) or
-        (system_controller_oam_floating_address | ansible.utils.ipaddr and virtual_system is not defined)
+  when: distributed_cloud_role == 'subcloud'
 
 - name: Fail if populate config script throws an exception
   fail:
