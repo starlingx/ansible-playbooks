@@ -259,6 +259,83 @@
           {{ lv_per_check.stdout }}
       when: lv_per_check.rc == 1
 
+    # Validate factory rook-ceph cluster health before restore.
+    # If Ceph is unhealthy, there is no point proceeding as the
+    # storage backend cannot be adopted.
+    - name: Validate factory rook-ceph health
+      block:
+        - name: Get Ceph cluster status
+          command: ceph -s --format json
+          register: ceph_status_raw
+          timeout: 30
+
+        - name: Get backup OSD count
+          shell: >-
+            grep "INSERT INTO public.i_istor VALUES"
+            {{ postgres_staging_dir }}/sysinv.postgreSql.data
+            | grep -c "'osd'"
+          register: backup_osd_count
+
+        - name: Check CSI RBD pods running
+          shell: >-
+            kubectl get pods -n rook-ceph
+            --field-selector=status.phase=Running -o name | grep -c "rbd.*csi\|csi.*rbd"
+          register: csi_count
+
+        - name: Check StorageClass available
+          shell: >-
+            kubectl get sc -o name | wc -l
+          register: sc_count
+
+        - name: Parse rook-ceph validation results
+          set_fact:
+            ceph_status: "{{ (ceph_status_raw.stdout | from_json).health.status }}"
+            factory_osds: "{{ (ceph_status_raw.stdout | from_json).osdmap.num_osds }}"
+
+        - name: Log rook-ceph validation results
+          debug:
+            msg:
+              - "Ceph health: {{ ceph_status }}"
+              - "Factory OSDs: {{ factory_osds }}"
+              - "Backup OSDs: {{ backup_osd_count.stdout }}"
+              - "CSI RBD pods: {{ csi_count.stdout }}"
+              - "StorageClasses: {{ sc_count.stdout }}"
+
+        - name: Log full Ceph cluster status
+          debug:
+            msg: "{{ ceph_status_raw.stdout | from_json }}"
+
+        - name: Fail if Ceph is not HEALTH_OK
+          fail:
+            msg: >-
+              Factory rook-ceph cluster is {{ ceph_status }}.
+              Only HEALTH_OK is acceptable for factory restore.
+          when: ceph_status != 'HEALTH_OK'
+
+        - name: Fail if OSD count mismatch
+          fail:
+            msg: >-
+              OSD count mismatch. Factory has {{ factory_osds }} OSDs
+              but backup has {{ backup_osd_count.stdout }} OSDs.
+              Both must be identical.
+          when: factory_osds | int != backup_osd_count.stdout | int
+
+        - name: Fail if no CSI RBD pods running
+          fail:
+            msg: >-
+              No CSI RBD pods running in rook-ceph namespace.
+          when: csi_count.stdout | int == 0
+
+        - name: Fail if no StorageClass available
+          fail:
+            msg: >-
+              No StorageClass available for rook-ceph storage.
+          when: sc_count.stdout | int == 0
+
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      when: factory_storage_backend | default('') == 'rook-ceph'
+
   when: factory_restore
 
 - name: Detect storage metadata in backup
