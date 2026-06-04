@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020-2025 Wind River Systems, Inc.
+# Copyright (c) 2020-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -29,8 +29,9 @@
            --kubernetes-version {{ kubernetes_long_version }}"
     register: kubernetes_images_output
 
+  # Exclude etcd container images since etcd runs as a bare metal service
   - set_fact:
-      kubernetes_images: "{{ kubernetes_images_output.stdout_lines }}"
+      kubernetes_images: "{{ kubernetes_images_output.stdout_lines | reject('search', '/etcd:') | list }}"
 
   - name: Read in system images list
     include_vars:
