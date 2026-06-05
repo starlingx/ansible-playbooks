@@ -65,5 +65,6 @@
 - name: Pull k8s gcr images from controller registry to {{ inventory_hostname }}
   shell: >-
     kubeadm config images list --kubernetes-version {{ k8s_version }} --image-repository {{ local_registry }}/k8s.gcr.io |
+    grep -v '/etcd:' |
     xargs -i sudo crictl pull --creds
     {{ local_registry_credentials['username'] }}:{{ local_registry_credentials['password'] }} {}
