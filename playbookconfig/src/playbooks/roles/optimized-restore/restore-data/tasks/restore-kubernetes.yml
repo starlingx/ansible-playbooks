@@ -103,9 +103,10 @@
     - name: Save the crictl cache images to a list
       set_fact:
         crictl_image_cache_list:
-          "{{ (k8s_cp_images_output.stdout_lines)
+          "{{ (k8s_cp_images_output.stdout_lines | reject('search', '/etcd:') | list)
           if (crictl_image_cache.rc != 0)
-          else ((k8s_cp_images_output.stdout_lines + crictl_image_cache.stdout_lines) | unique) }}"
+          else ((k8s_cp_images_output.stdout_lines | reject('search', '/etcd:') | list) +
+          crictl_image_cache.stdout_lines) | unique }}"
 
   when: >
     restore_original_images|bool and
