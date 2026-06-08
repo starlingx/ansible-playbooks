@@ -144,6 +144,92 @@
       (distributed_cloud_role == 'systemcontroller' and
        system_type == 'All-in-one')
 
+  - name: Validate calico_encapsulation if provided
+    fail:
+      msg: "Invalid calico_encapsulation '{{ calico_encapsulation }}'.
+        Valid values: None, VXLAN, VXLANCrossSubnet, IPIP, IPIPCrossSubnet."
+    when:
+      - calico_encapsulation is defined
+      - calico_encapsulation not in ['None', 'VXLAN', 'VXLANCrossSubnet', 'IPIP', 'IPIPCrossSubnet']
+
+  - name: Validate calico_chain_insert_mode if provided
+    fail:
+      msg: "Invalid calico_chain_insert_mode '{{ calico_chain_insert_mode }}'. Valid values are: Insert, Append."
+    when:
+      - calico_chain_insert_mode is defined
+      - calico_chain_insert_mode not in ['Insert', 'Append']
+
+  - name: Validate calico_iptables_backend if provided
+    fail:
+      msg: "Invalid calico_iptables_backend '{{ calico_iptables_backend }}'. Valid values are: NFT, Legacy, Auto."
+    when:
+      - calico_iptables_backend is defined
+      - calico_iptables_backend not in ['NFT', 'Legacy', 'Auto']
+
+  - name: Validate calico_linux_dataplane if provided
+    fail:
+      msg: "Invalid calico_linux_dataplane '{{ calico_linux_dataplane }}'.
+        Valid values are: Iptables, Nftables, BPF, VPP."
+    when:
+      - calico_linux_dataplane is defined
+      - calico_linux_dataplane not in ['Iptables', 'Nftables', 'BPF', 'VPP']
+
+  - name: Validate calico_mtu if provided
+    fail:
+      msg: "Invalid calico_mtu '{{ calico_mtu }}'. Must be an integer between 576 and 9216."
+    when:
+      - calico_mtu is defined
+      - calico_mtu | int < 576 or calico_mtu | int > 9216
+
+  - name: Validate calico_ippool_block_size_v4 if provided
+    fail:
+      msg: "Invalid calico_ippool_block_size_v4 '{{ calico_ippool_block_size_v4 }}'. Must be an integer between 20 and 32."
+    when:
+      - calico_ippool_block_size_v4 is defined
+      - calico_ippool_block_size_v4 | int < 20 or calico_ippool_block_size_v4 | int > 32
+
+  - name: Validate calico_ippool_block_size_v6 if provided
+    fail:
+      msg: "Invalid calico_ippool_block_size_v6 '{{ calico_ippool_block_size_v6 }}'. Must be an integer between 116 and 128."
+    when:
+      - calico_ippool_block_size_v6 is defined
+      - calico_ippool_block_size_v6 | int < 116 or calico_ippool_block_size_v6 | int > 128
+
+  - name: Validate calico_bgp if provided
+    fail:
+      msg: "Invalid calico_bgp '{{ calico_bgp }}'. Valid values are: Enabled, Disabled."
+    when:
+      - calico_bgp is defined
+      - calico_bgp not in ['Enabled', 'Disabled']
+
+  - name: Validate calico_host_ports if provided
+    fail:
+      msg: "Invalid calico_host_ports '{{ calico_host_ports }}'. Valid values are: Enabled, Disabled."
+    when:
+      - calico_host_ports is defined
+      - calico_host_ports not in ['Enabled', 'Disabled']
+
+  - name: Validate calico_multi_interface_mode if provided
+    fail:
+      msg: "Invalid calico_multi_interface_mode '{{ calico_multi_interface_mode }}'. Valid values are: None, Multus."
+    when:
+      - calico_multi_interface_mode is defined
+      - calico_multi_interface_mode not in ['None', 'Multus']
+
+  - name: Validate calico_windows_dataplane if provided
+    fail:
+      msg: "Invalid calico_windows_dataplane '{{ calico_windows_dataplane }}'. Valid values are: HNS, Disabled."
+    when:
+      - calico_windows_dataplane is defined
+      - calico_windows_dataplane not in ['HNS', 'Disabled']
+
+  - name: Validate calico_kubelet_volume_plugin_path if provided
+    fail:
+      msg: "Invalid calico_kubelet_volume_plugin_path '{{ calico_kubelet_volume_plugin_path }}'. Must be an absolute path."
+    when:
+      - calico_kubelet_volume_plugin_path is defined
+      - not calico_kubelet_volume_plugin_path.startswith('/')
+
   - name: Checking registered timezones
     stat:
       path: "{{ '/usr/share/zoneinfo/' + timezone }}"

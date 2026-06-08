@@ -487,6 +487,57 @@ wipe_ceph_osds: false
 # for PVC snapshots.
 enable_volume_snapshot_support: true
 
+# CALICO NETWORK CONFIGURATION
+# =============================
+#
+# Calico IP pool encapsulation mode.
+# Valid values -> None, VXLAN, VXLANCrossSubnet, IPIP, IPIPCrossSubnet
+# calico_encapsulation: None
+
+# Calico Felix iptables chain insert mode.
+# Valid values -> Insert, Append
+# calico_chain_insert_mode: Append
+
+# Calico Felix iptables backend.
+# Valid values -> NFT, Legacy, Auto
+# calico_iptables_backend: NFT
+
+# Calico dataplane mode.
+# Valid values -> Iptables, Nftables, BPF, VPP
+# calico_linux_dataplane: Iptables
+
+# Calico network MTU. When using VXLAN or IPIP encapsulation, this should
+# be set lower than the physical MTU to account for overhead (e.g., 1450
+# for VXLAN). If not set, Calico auto-detects the MTU.
+# calico_mtu:
+
+# Calico IPv4 IP pool block size (CIDR prefix length per node).
+# Default 26 = 64 addresses per node block.
+# calico_ippool_block_size_v4: 26
+
+# Calico IPv6 IP pool block size (CIDR prefix length per node).
+# Default 122 = 64 addresses per node block.
+# calico_ippool_block_size_v6: 122
+
+# Calico BGP networking.
+# Valid values -> Enabled, Disabled
+# calico_bgp: Enabled
+
+# Calico host ports support.
+# Valid values -> Enabled, Disabled
+# calico_host_ports: Enabled
+
+# Calico multi-interface mode.
+# Valid values -> None, Multus
+# calico_multi_interface_mode: None
+
+# Calico Windows dataplane.
+# Valid values -> HNS, Disabled
+# calico_windows_dataplane: Disabled
+
+# Calico kubelet volume plugin path.
+# calico_kubelet_volume_plugin_path: /var/lib/kubelet
+
 # K8S_PLUGINS
 # ===========
 #

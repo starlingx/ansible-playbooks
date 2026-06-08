@@ -6,7 +6,7 @@ kind: Installation
 metadata:
   name: default
 spec:
-  kubeletVolumePluginPath: /var/lib/kubelet
+  kubeletVolumePluginPath: {{ calico_kubelet_volume_plugin_path | default('/var/lib/kubelet') }}
   flexVolumePath: {{ k8s_vol_plugin_dir | default('/var/opt/libexec/kubernetes/kubelet-plugins/volume/exec/') }}
   registry: {{ local_registry }}/quay.io
   imagePullSecrets:
@@ -21,11 +21,18 @@ spec:
     binDir: {{ kubelet_cni_bin_dir | default('/var/opt/cni/bin') }}
     confDir: /etc/cni/net.d
   calicoNetwork:
-    linuxDataplane: Iptables
+    bgp: {{ calico_bgp | default('Enabled') }}
+    hostPorts: {{ calico_host_ports | default('Enabled') }}
+    multiInterfaceMode: {{ calico_multi_interface_mode | default('None') }}
+    linuxDataplane: {{ calico_linux_dataplane | default('Iptables') }}
+    windowsDataplane: {{ calico_windows_dataplane | default('Disabled') }}
+{% if calico_mtu is defined %}
+    mtu: {{ calico_mtu }}
+{% endif %}
     ipPools:
 {% if cluster_network_ipv4 %}
       - name: default-ipv4-ippool
-        blockSize: 26
+        blockSize: {{ calico_ippool_block_size_v4 | default(26) }}
         cidr: {{ cluster_network_ipv4 }}
         encapsulation: {{ calico_encapsulation | default('None') }}
         natOutgoing: Enabled
@@ -33,7 +40,7 @@ spec:
 {% endif %}
 {% if cluster_network_ipv6 %}
       - name: default-ipv6-ippool
-        blockSize: 122
+        blockSize: {{ calico_ippool_block_size_v6 | default(122) }}
         cidr: {{ cluster_network_ipv6 }}
         encapsulation: {{ calico_encapsulation | default('None') }}
         natOutgoing: Enabled
