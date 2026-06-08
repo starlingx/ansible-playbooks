@@ -17,10 +17,8 @@
 
   tasks:
     # The reboot operation is not needed for the enroll-init stage.
-    # So we set the wait_for_timeout to 420 seconds to allow for
-    # the system to complete the enroll-init stage without rebooting
-    # to give the system enough time to reconfigure the OAM network
-    # and monitor the Sysinv endpoint for the new address.
+    # So we set the wait_for_timeout allow for the system to complete
+    # the enroll-init stage without rebooting.
     - set_fact:
         ipmi_monitor_enabled: "{{ ipmi_sel_event_monitoring | default(true) }}"
 
@@ -29,7 +27,7 @@
         cloud_init_wait_time: "{{ cloud_init_wait_time | default(
             0 if ipmi_monitor_enabled else 40
           ) }}"
-        wait_for_timeout: "{{ enroll_wait_for_timeout | default(420) }}"
+        wait_for_timeout: "{{ enroll_wait_for_timeout | default(570) }}"
         job_retry_delay: "{{ 120 | random }}"
         protocol: "{{ protocol | default('https') }}"
         operation_string: "enroll-init"
@@ -106,7 +104,7 @@
                   cc10ec: "Platform system-local-ca certificate is expired. Manual recovery is required"
 
               - name: "Platform cloud-init"
-                timeout: "{{ platform_cloudinit_timeout | default(300) }}"
+                timeout: "{{ platform_cloudinit_timeout | default(450) }}"
                 success_code: "cc10ed"
                 failure_codes:
                   cc10ee: "Platform cloud-init configuration failed during execution"
