@@ -99,7 +99,7 @@
         remote_tmp_dir: "{{ ansible_remote_tmp|default('/tmp') }}"
       delegate_to: '{{ inventory_hostname }}'
 
-    - name: Check the {{ remote_tmp_dir }} available space (in Kbytes) on the target
+    - name: Check the {{ remote_tmp_dir | default('') }} available space (in Kbytes) on the target
       shell: "df {{ remote_tmp_dir }} --output=avail | tail -1"
       register: tmp_dir_free_space_on_target
       delegate_to: '{{ inventory_hostname }}'
@@ -108,9 +108,9 @@
       shell: "du -hsk {{ backup_stat_result.stat.path }} | awk '{print $1}'"
       register: backup_file_size_local
 
-    - name: Fail if {{ remote_tmp_dir }} doesn't have enough space for backup file transfer
+    - name: Fail if {{ remote_tmp_dir | default('') }} doesn't have enough space for backup file transfer
       fail:
-        msg: "{{ remote_tmp_dir }} doesn't have enough space for backup file
+        msg: "{{ remote_tmp_dir | default('' ) }} doesn't have enough space for backup file
               {{ initial_backup_dir }}/{{ backup_filename }}.
               Use ansible_remote_tmp to choose another directory to stage the backup file."
       when: (tmp_dir_free_space_on_target.stdout | int) - (backup_file_size_local.stdout | int) <= 0

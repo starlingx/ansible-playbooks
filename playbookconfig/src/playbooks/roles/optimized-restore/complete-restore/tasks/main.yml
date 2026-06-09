@@ -130,7 +130,7 @@
   - set_fact:
       app_name: "{{ 'rook-ceph' if rook_backend.rc == 0 else 'platform-integ-apps' }}"
 
-  - name: Check if {{ app_name }} is in uploaded state
+  - name: Check if {{ app_name | default('' ) }} is in uploaded state
     shell: |
       source /etc/platform/openrc
       system application-show {{ app_name }} --column status --format value

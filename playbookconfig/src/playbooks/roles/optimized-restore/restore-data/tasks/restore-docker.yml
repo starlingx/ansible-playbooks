@@ -22,7 +22,7 @@
     tar --use-compress-program=pigz
         -xpf {{ registry_backup_fqpn }}
         -C / --overwrite var/lib/docker-distribution
-  when: restore_registry_filesystem
+  when: restore_registry_filesystem | bool
 
 # The following task is executed when the backup does not contain image registry filesystem archive
 # but the prestage directory (/opt/platform-backup/<sw-version>) does.
