@@ -370,7 +370,7 @@ def restart_mtce_service():
     LOG.info("Issuing restart command for mtce service")
     try:
         subprocess.run(
-            ["pkill", "-HUP", "mtcAgent"],
+            ["sm-restart-safe", "service", "mtc-agent"],
             capture_output=True,
             text=True,
         )
@@ -380,17 +380,7 @@ def restart_mtce_service():
             text=True,
         )
         subprocess.run(
-            ["pkill", "-HUP", "hwmon"],
-            capture_output=True,
-            text=True,
-        )
-        subprocess.run(
-            ["pmon-restart", "hbsClient"],
-            capture_output=True,
-            text=True,
-        )
-        subprocess.run(
-            ["pmon-restart", "mtcClient"],
+            ["sm-restart-safe", "service", "hw-mon"],
             capture_output=True,
             text=True,
         )
@@ -590,7 +580,14 @@ def main():
         help="Path to the JSON file containing user data ([{'username': 'u', 'password': 'p'}]).",
     )
     parser.add_argument(
-        "--no-verify", action="store_true", help="Disable SSL certificate verification."
+        "--mode",
+        choices=["rehoming", "enroll"],
+        default="rehoming",
+        help="Operation mode. In 'rehoming' mode (multi-node systems that can "
+        "swact) the script waits for each service to become enabled-active "
+        "before restarting the next one, and SSL certificates are verified. In "
+        "'enroll' mode (single-node systems that never swact) the wait is "
+        "skipped and SSL certificate verification is disabled.",
     )
 
     args = parser.parse_args()
@@ -613,7 +610,8 @@ def main():
         LOG.error(f"Error reading or parsing JSON file '{args.json_file}': {e}")
         sys.exit(1)
 
-    verify_certs = not args.no_verify
+    is_rehoming = args.mode == "rehoming"
+    verify_certs = is_rehoming
     if not verify_certs:
         LOG.warning("SSL certificate verification is disabled.")
 
@@ -637,6 +635,9 @@ def main():
                 restart_services_sm(
                     SERVICES_TO_RESTART_SM[username], sm_services
                 )
+                if is_rehoming:
+                    # Wait for services to be enabled-active during rehoming
+                    verify_sm_services(SERVICES_TO_RESTART_SM[username], sm_services)
             if username in SERVICES_TO_RESTART_SYSTEMD:
                 restart_services_systemd(SERVICES_TO_RESTART_SYSTEMD[username])
             if username in SERVICES_TO_RESTART_FUNCTION:
@@ -647,10 +648,11 @@ def main():
             if username == ADMIN_USERNAME:
                 osclient.check_if_keystone_is_active()
 
-        # We only need to wait for sysinv to be active as it will be necessary for
-        # other steps of the playbook. Other services we can check at the end if
-        # they're enabled/active
-        verify_sm_services(SERVICES_TO_RESTART_SM[SYSINV_USERNAME], sm_services)
+        if not is_rehoming:
+            # We only need to wait for sysinv to be active as it will be necessary for
+            # other steps of the playbook. Other services we can check at the end if
+            # they're enabled/active
+            verify_sm_services(SERVICES_TO_RESTART_SM[SYSINV_USERNAME], sm_services)
 
         LOG.info("Script completed successfully.")
 
