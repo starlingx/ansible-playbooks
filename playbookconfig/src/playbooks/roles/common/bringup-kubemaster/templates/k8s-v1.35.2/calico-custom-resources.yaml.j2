@@ -1,0 +1,78 @@
+---
+# This section includes base Calico installation configuration.
+# For more information, see: https://docs.tigera.io/calico/latest/reference/installation/api#operator.tigera.io/v1.Installation
+apiVersion: operator.tigera.io/v1
+kind: Installation
+metadata:
+  name: default
+spec:
+  kubeletVolumePluginPath: /var/lib/kubelet
+  flexVolumePath: {{ k8s_vol_plugin_dir | default('/var/opt/libexec/kubernetes/kubelet-plugins/volume/exec/') }}
+  registry: {{ local_registry }}/quay.io
+  imagePullSecrets:
+    - name: {{ registry_local_secret_name | default('registry-local-secret') }}
+  logging:
+    cni:
+      logSeverity: Warning
+  cni:
+    type: Calico
+    ipam:
+      type: Calico
+    binDir: {{ kubelet_cni_bin_dir | default('/var/opt/cni/bin') }}
+    confDir: /etc/cni/net.d
+  calicoNetwork:
+    linuxDataplane: Iptables
+    ipPools:
+{% if cluster_network_ipv4 %}
+      - name: default-ipv4-ippool
+        blockSize: 26
+        cidr: {{ cluster_network_ipv4 }}
+        encapsulation: {{ calico_encapsulation | default('None') }}
+        natOutgoing: Enabled
+        nodeSelector: all()
+{% endif %}
+{% if cluster_network_ipv6 %}
+      - name: default-ipv6-ippool
+        blockSize: 122
+        cidr: {{ cluster_network_ipv6 }}
+        encapsulation: {{ calico_encapsulation | default('None') }}
+        natOutgoing: Enabled
+        nodeSelector: all()
+{% endif %}
+{% if cluster_network_ipv4 %}
+    nodeAddressAutodetectionV4:
+      canReach: {{ calico_ip4_autodetect_host }}
+{% endif %}
+{% if cluster_network_ipv6 %}
+    nodeAddressAutodetectionV6:
+      canReach: {{ calico_ip6_autodetect_host }}
+{% endif %}
+  calicoNodeDaemonSet:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: calico-node
+              resources:
+                requests:
+                  cpu: "0"
+---
+# This section configures the Calico API server.
+# For more information, see: https://docs.tigera.io/calico/latest/reference/installation/api#operator.tigera.io/v1.APIServer
+apiVersion: operator.tigera.io/v1
+kind: APIServer
+metadata:
+  name: default
+spec: {}
+---
+# Configures the Calico Goldmane flow aggregator.
+apiVersion: operator.tigera.io/v1
+kind: Goldmane
+metadata:
+  name: default
+---
+# Configures the Calico Whisker observability UI.
+apiVersion: operator.tigera.io/v1
+kind: Whisker
+metadata:
+  name: default

@@ -1,0 +1,28 @@
+apiVersion: crd.projectcalico.org/v1
+kind: FelixConfiguration
+metadata:
+  name: default
+spec:
+  chainInsertMode: "{{ calico_chain_insert_mode | default('Append') }}"
+  defaultEndpointToHostAction: Accept
+  logSeverityScreen: Info
+  iptablesBackend: NFT
+  failsafeInboundHostPorts:
+    - protocol: TCP
+      port: 22
+    - protocol: UDP
+      port: 68
+    - protocol: TCP
+      port: 179
+    - protocol: TCP
+      port: 6443
+
+  failsafeOutboundHostPorts:
+    - protocol: UDP
+      port: 53
+    - protocol: UDP
+      port: 67
+    - protocol: TCP
+      port: 179
+    - protocol: TCP
+      port: 6443

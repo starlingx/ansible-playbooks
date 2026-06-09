@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -227,13 +227,20 @@
   - name: Set Kubernetes components list
     set_fact:
       kube_component_list:
-        - k8s-app=calico-node
         - k8s-app=kube-proxy
         - app=multus
         - app=sriov-cni
         - component=kube-apiserver
         - component=kube-controller-manager
         - component=kube-scheduler
+
+  - name: Add Calico node to wait list separately
+    set_fact:
+      calico_wait_needed: true
+
+  - name: Set Calico namespace
+    set_fact:
+      calico_namespace: "{{ 'calico-system' if kubernetes_long_version is version('v1.35.2', '>=') else 'kube-system' }}"
 
   - block:
     - name: Update Kubernetes components list
@@ -261,7 +268,7 @@
         kubectl --kubeconfig=/etc/kubernetes/admin.conf scale deployment
         -n {{ item.namespace }} {{ item.deployment }} --replicas=0
       loop:
-        - { namespace: kube-system, deployment: calico-kube-controllers }
+        - { namespace: "{{ calico_namespace }}", deployment: calico-kube-controllers }
         - { namespace: kube-system, deployment: coredns }
 
     - name: Scale calico-kube-controllers deployments back to 1
@@ -269,7 +276,7 @@
         kubectl --kubeconfig=/etc/kubernetes/admin.conf scale deployment
         -n {{ item.namespace }} {{ item.deployment }} --replicas=1
       loop:
-        - { namespace: kube-system, deployment: calico-kube-controllers }
+        - { namespace: "{{ calico_namespace }}", deployment: calico-kube-controllers }
 
     - name: Scale coredns deployment back to original size
       command: >-
@@ -341,9 +348,29 @@
     async: "{{ async_timeout }}"
     poll: 0
     loop:
-      - { namespace: kube-system, deployment: calico-kube-controllers }
+      - { namespace: "{{ calico_namespace }}", deployment: calico-kube-controllers }
       - { namespace: kube-system, deployment: coredns }
     register: wait_for_deployments
+
+  - name: Wait for Calico node pods on controller-0
+    command: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --namespace={{ calico_namespace }}
+      --for=condition=Ready pods --selector=k8s-app=calico-node
+      --field-selector spec.nodeName=controller-0 --timeout={{ async_timeout }}s
+    async: "{{ async_timeout }}"
+    poll: 0
+    register: wait_for_calico_node
+    when: calico_wait_needed is defined and calico_wait_needed
+
+  - name: Get Calico node wait result
+    async_status:
+      jid: "{{ wait_for_calico_node.ansible_job_id }}"
+    register: calico_wait_result
+    until: calico_wait_result.finished
+    retries: "{{ async_retries }}"
+    delay: 6
+    failed_when: false
+    when: calico_wait_needed is defined and calico_wait_needed
 
   - name: Get Kubernetes component pod wait task results
     async_status:
