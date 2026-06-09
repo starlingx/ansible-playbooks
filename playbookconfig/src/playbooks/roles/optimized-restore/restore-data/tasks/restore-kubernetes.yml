@@ -135,10 +135,12 @@
         # conflicts with the default 'none' policy and causes kubelet to error out
         # in the next step. Excluding state files here is safe as it gets regenerated
         # with intended values after subsequent unlock after the restore playbook.
+        # NOTE: --exclude must appear before the extraction path for GNU tar.
         cmd: "tar --use-compress-program=pigz -C / -xpf \
-             '{{ platform_backup_fqpn }}' var/lib/kubelet \
+             '{{ platform_backup_fqpn }}' \
              --exclude var/lib/kubelet/cpu_manager_state \
-             --exclude var/lib/kubelet/memory_manager_state"
+             --exclude var/lib/kubelet/memory_manager_state \
+             var/lib/kubelet"
       when: kubelet_backup_found.rc == 0
 
     - name: Create kubelet override config file
@@ -200,11 +202,50 @@
             daemon_reload: true
       when: not (factory_restore | default(false))
 
+    # During cross-system factory restore, the factory kubelet may have a
+    # different cpuManagerPolicy than the restored config. Remove stale state
+    # files so kubelet regenerates them with the correct policy on startup.
+    - name: Remove kubelet state files that may conflict with policy
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/kubelet/cpu_manager_state
+        - /var/lib/kubelet/memory_manager_state
+      when: factory_restore | default(false)
+
     - name: Start kubelet
       systemd:
         name: kubelet
         state: started
 
+    - name: Restore factory rook-ceph state after etcd restore
+      block:
+        - name: Wait for kube-apiserver to be ready
+          command: kubectl get nodes --request-timeout=10s
+          register: kubectl_ready
+          retries: 30
+          delay: 10
+          until: kubectl_ready.rc == 0
+
+        - name: Restore rook-ceph secrets, configmap, deployment and service
+          script: restore_rook_ceph_state.py
+          register: restore_rook_result
+          retries: 10
+          delay: 10
+          until: restore_rook_result.rc == 0
+
+        - name: Cleanup temp directory
+          file:
+            path: /tmp/factory_rook_ceph_restore
+            state: absent
+
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      become: yes
+      when:
+        - factory_restore | default(false)
+        - factory_storage_backend | default('') == 'rook-ceph'
   when: not upgrade_in_progress
 
 # During an upgrade, do a full bringup of Kubernetes to pick up changes. E.g. audit config.
