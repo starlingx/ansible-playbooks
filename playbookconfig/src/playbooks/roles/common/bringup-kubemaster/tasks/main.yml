@@ -519,11 +519,23 @@
 
     - name: Label calico-system namespace as platform component
       command: kubectl --kubeconfig=/etc/kubernetes/admin.conf label namespace calico-system
-              app.starlingx.io/component=platform --overwrite
+              app.starlingx.io/component=platform
+              pod-security.kubernetes.io/audit-version=latest
+              pod-security.kubernetes.io/enforce-version=latest
+              pod-security.kubernetes.io/warn-version=latest
+              pod-security.kubernetes.io/audit=privileged
+              pod-security.kubernetes.io/enforce=privileged
+              pod-security.kubernetes.io/warn=privileged --overwrite
 
     - name: Label tigera-operator namespace as platform component
       command: kubectl --kubeconfig=/etc/kubernetes/admin.conf label namespace tigera-operator
-              app.starlingx.io/component=platform --overwrite
+              app.starlingx.io/component=platform
+              pod-security.kubernetes.io/audit-version=latest
+              pod-security.kubernetes.io/enforce-version=latest
+              pod-security.kubernetes.io/warn-version=latest
+              pod-security.kubernetes.io/audit=privileged
+              pod-security.kubernetes.io/enforce=privileged
+              pod-security.kubernetes.io/warn=privileged --overwrite
 
     - name: Copy registry secret to calico-system namespace
       shell: >
@@ -588,6 +600,7 @@
       delay: 5
       register: result
       until: result.rc == 0
+
     when: kubernetes_long_version is version('v1.35.2', '>=')
 
   - name: Activate Multus Networking
