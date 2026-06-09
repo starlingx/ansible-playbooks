@@ -315,3 +315,69 @@
         - mtcClient
 
   when: factory_restore | default(false)
+
+# Verify rook-ceph user-overrides were preserved in the restored DB.
+# The postgres dump restores helm_overrides table in full. This check
+# confirms nothing was lost during the initdb + psql cycle by comparing
+# chart names and a content hash (user_overrides may be multi-line YAML).
+- name: Verify rook-ceph user-overrides in restored DB
+  block:
+    - name: Query rook-ceph user_overrides from restored DB
+      shell: >-
+        psql -t -A -c
+        "SELECT ho.name || '=' || md5(ho.user_overrides)
+         FROM helm_overrides ho
+         JOIN kube_app ka ON ho.app_id = ka.id
+         WHERE ka.name='rook-ceph'
+         AND ho.user_overrides IS NOT NULL
+         AND ho.user_overrides != ''" sysinv
+      become_user: postgres
+      register: restored_user_overrides_raw
+
+    - name: Parse restored user-overrides into chart=hash map
+      set_fact:
+        restored_overrides_map: >-
+          {{ dict(restored_user_overrides_raw.stdout_lines
+             | map('split', '=', 1)
+             | list) }}
+
+    - name: Log restored user-overrides comparison
+      debug:
+        msg:
+          - "Expected charts: {{ backup_rook_user_overrides_data.keys() | list }}"
+          - "Restored charts: {{ restored_overrides_map.keys() | list }}"
+
+    - name: Fail if user-overrides charts are missing after restore
+      fail:
+        msg: >-
+          Rook-ceph user-overrides charts missing after postgres restore.
+          Expected: {{ backup_rook_user_overrides_data.keys() | list }}.
+          Found: {{ restored_overrides_map.keys() | list }}.
+      when: >-
+        (backup_rook_user_overrides_data.keys() | list | sort) !=
+        (restored_overrides_map.keys() | list | sort)
+
+    - name: Verify user-overrides content integrity
+      shell: >-
+        psql -t -A -c
+        "SELECT ho.user_overrides FROM helm_overrides ho
+         JOIN kube_app ka ON ho.app_id = ka.id
+         WHERE ka.name='rook-ceph' AND ho.name='{{ item.key }}'" sysinv
+      become_user: postgres
+      register: db_override_content
+      loop: "{{ backup_rook_user_overrides_data | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Fail if user-overrides content differs after restore
+      fail:
+        msg: >-
+          Rook-ceph user-overrides content mismatch for chart
+          '{{ item.item.key }}'.
+      when: item.stdout != item.item.value
+      loop: "{{ db_override_content.results }}"
+      loop_control:
+        label: "{{ item.item.key }}"
+  when:
+    - factory_restore | default(false)
+    - backup_has_rook_user_overrides | default(false)

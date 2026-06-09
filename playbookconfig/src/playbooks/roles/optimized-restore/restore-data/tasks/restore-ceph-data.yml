@@ -170,23 +170,39 @@
               ceph_monmap_file: monmap.bin
               helm_overrides_dir: "/opt/platform/helm/{{ software_version }}/rook-ceph"
 
-          - name: Get {{ ceph_monmap_file | default('') }} file path
-            shell: tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep {{ ceph_monmap_file }}
-            register: ceph_monmap_backup_path_tgz
+          # Factory restore: skip monstore rebuild. The factory system has
+          # functional monitors and OSDs. The DB is updated via postgres
+          # restore; the operator will reconcile on next unlock.
+          - name: Restore monmap and rebuild monstore (non-factory)
+            block:
+            - name: Get {{ ceph_monmap_file | default('') }} file path
+              shell: tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} | grep {{ ceph_monmap_file }}
+              register: ceph_monmap_backup_path_tgz
 
-          - name: Restore {{ ceph_monmap_file | default('') }} file
-            command: >-
-              tar --use-compress-program=pigz -C {{ ceph_temp_dir }} --transform='s,.*/,,'
-              -xpf {{ platform_backup_fqpn }} {{ ceph_monmap_backup_path_tgz.stdout_lines[0] }}
+            - name: Restore {{ ceph_monmap_file | default('') }} file
+              command: >-
+                tar --use-compress-program=pigz -C {{ ceph_temp_dir }} --transform='s,.*/,,'
+                -xpf {{ platform_backup_fqpn }} {{ ceph_monmap_backup_path_tgz.stdout_lines[0] }}
 
-          - name: Start Ceph recovery
-            include_role:
-              name: recover-rook-ceph-data
-            when: node_personalities.stdout is not search('storage')
+            - name: Start Ceph recovery
+              include_role:
+                name: recover-rook-ceph-data
+              when: node_personalities.stdout is not search('storage')
+            when: not (factory_restore | default(false))
 
+          - name: Skip rook-ceph monstore rebuild for factory restore
+            debug:
+              msg: >-
+                Skipping monstore rebuild — factory system has functional
+                monitors and OSDs. DB updated via postgres restore.
+            when: factory_restore | default(false)
+
+          # Factory restore: skip override truncation. The app is already
+          # applied and the DB has correct user-overrides from the backup.
           - name: Get the rook-ceph app version
             shell: source /etc/platform/openrc; system application-show rook-ceph --format value --column app_version
             register: rook_ceph_app_version
+            when: not (factory_restore | default(false))
 
           - name: Truncate rook-ceph overrides to ensure auto-reapply is triggered
             copy:
@@ -199,6 +215,14 @@
                 helm_overrides_dir + '/' + rook_ceph_app_version.stdout + '/*.yaml',
                 wantlist=True
               ) }}
+            when: not (factory_restore | default(false))
+
+          - name: Log factory restore rook-ceph skip summary
+            debug:
+              msg:
+                - "Factory restore: skipped monstore rebuild, override truncation."
+                - "User-overrides preserved in DB: {{ backup_has_rook_user_overrides | default(false) }}"
+            when: factory_restore | default(false)
 
           when: not wipe_ceph_osds|bool and rook_backend.rc == 0
 
