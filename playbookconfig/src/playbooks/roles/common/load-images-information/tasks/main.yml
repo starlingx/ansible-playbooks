@@ -251,6 +251,45 @@
           (not restore_registry_filesystem|default(false) or
           restore_mode|default(none) != "optimized")
 
+  - block:
+    - name: Get kubevirt-app-images.yaml filepath from backup
+      shell: >-
+        tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |
+        grep 'kubevirt-app-images.yaml'
+      failed_when: false
+      register: kubevirt_images_backup_path_tgz
+
+    - block:
+      - name: Retrieve kubevirt-app-images.yaml
+        command: >-
+          tar --use-compress-program=pigz -C /tmp --transform='s,.*/,,'
+          -xpf {{ platform_backup_fqpn }} {{ kubevirt_images_backup_path_tgz.stdout_lines[0] }}
+
+      - name: Read kubevirt-app-images.yaml file
+        shell: cat /tmp/kubevirt-app-images.yaml
+        register: kubevirt_images_output
+
+      - name: Get images from kubevirt app
+        set_fact:
+          additional_kubevirt_images_list: "{{ (kubevirt_images_output.stdout | from_yaml).download_images }}"
+
+      when: kubevirt_images_backup_path_tgz.rc == 0
+
+    when: mode == "restore" and
+          wipe_ceph_osds|default(false)|bool
+
+  - name: Append additional kubevirt images if configured (Bullseye)
+    set_fact:
+      static_images: "{{ static_images }} + [ '{{ item | replace('registry.local:9001/', '') }}' ] "
+    with_items: "{{ additional_kubevirt_images_list }}"
+    when: additional_kubevirt_images_list is defined and is_bullseye
+
+  - name: Append additional kubevirt images if configured (Trixie)
+    set_fact:
+      static_images: "{{ static_images + [ item | replace('registry.local:9001/', '') ] }}"
+    with_items: "{{ additional_kubevirt_images_list }}"
+    when: additional_kubevirt_images_list is defined and is_trixie
+
   - name: Append additional storage images if rook-ceph backend is configured (Bullseye)
     set_fact:
       storage_images: "{{ storage_images }} + [ '{{ item | replace('registry.local:9001/', '') }}' ] "
