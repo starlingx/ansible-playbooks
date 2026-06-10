@@ -34,6 +34,31 @@
 
   when: route_check.rc != 0
 
+# Add primary OAM floating IP to the OAM interface
+- block:
+  - name: Find interface of primary OAM
+    shell: "{{ ip_command_primary }} route show | grep 'default via {{
+           network_params.external_oam_gateway_address_primary }}' | awk '{print $5}' "
+    failed_when: false
+    register: oam_interface_check
+
+  - name: Fail if no OAM interface found
+    fail:
+      msg: "{{ oam_interface_check.stderr_lines }}"
+    when: oam_interface_check.rc != 0 or oam_interface_check.stderr
+
+  - name: Set primary OAM interface and network mask facts
+    set_fact:
+      oam_interface: "{{ oam_interface_check.stdout }}"
+      oam_network_mask_primary: "{{ network_params.external_oam_subnet_primary | regex_replace('.*/(.?.?)$','\\1') }}"
+
+  - name: Set primary OAM floating IP
+    shell: "{{ ip_command_primary }} addr replace {{ network_params.external_oam_floating_address_primary }}/{{
+            oam_network_mask_primary }} dev {{ oam_interface }}"
+
+  when: network_params.external_oam_floating_address_primary is defined and
+        network_params.external_oam_floating_address_primary
+
 # ip and default route for secondary OAM
 - block:
   - name: Find interface of primary OAM
