@@ -6,7 +6,7 @@ spec:
   chainInsertMode: "{{ calico_chain_insert_mode | default('Append') }}"
   defaultEndpointToHostAction: Accept
   logSeverityScreen: Info
-  iptablesBackend: NFT
+  iptablesBackend: {{ calico_iptables_backend | default('NFT') }}
   failsafeInboundHostPorts:
     - protocol: TCP
       port: 22
