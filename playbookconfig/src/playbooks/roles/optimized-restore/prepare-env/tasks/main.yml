@@ -261,6 +261,30 @@
 
   when: factory_restore
 
+- name: Detect storage metadata in backup
+  block:
+    - name: Detect storage metadata from backup postgres dump
+      script: detect_backup_storage_metadata.py {{ postgres_staging_dir }}/sysinv.postgreSql.data
+      register: storage_metadata_raw
+
+    - name: Parse storage metadata detection result
+      set_fact:
+        backup_storage_metadata: "{{ storage_metadata_raw.stdout | from_json }}"
+
+    - name: Log detected storage metadata
+      debug:
+        msg:
+          - "Storage backend: {{ backup_storage_metadata.primary_backend | default('not detected') }}"
+          - "Rook-ceph user-overrides present: {{ backup_storage_metadata.rook_ceph_overrides.has_user_overrides }}"
+          - "Charts with user-overrides: {{ backup_storage_metadata.rook_ceph_overrides.charts_with_user_overrides }}"
+
+    - name: Set user-overrides facts for downstream
+      set_fact:
+        backup_has_rook_user_overrides: "{{ backup_storage_metadata.rook_ceph_overrides.has_user_overrides }}"
+        backup_rook_user_overrides_data: "{{ backup_storage_metadata.rook_ceph_overrides.user_overrides_data }}"
+
+  when: factory_restore
+
 - name: Set image backup filename
   block:
     - name: Copy backup_filename
