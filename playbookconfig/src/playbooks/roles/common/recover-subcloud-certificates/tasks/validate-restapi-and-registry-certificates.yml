@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023-2024 Wind River Systems, Inc.
+# Copyright (c) 2023-2024, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -128,7 +128,11 @@
         state: absent
       become: yes
       loop:
-        - "{{ tmp_system_local_ca_secret.path if tmp_system_local_ca_secret.path is defined }}"
+        - >-
+          {{ tmp_system_local_ca_secret.path
+          if (tmp_system_local_ca_secret is defined and tmp_system_local_ca_secret.path is defined)
+          else '' }}
+      when: item | length > 0
 
 - name: Fail when CA Issuer for cert-manager certificates is expired
   fail:

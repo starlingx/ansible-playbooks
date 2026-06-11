@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -223,6 +223,16 @@
         path: "{{ item }}"
         state: absent
       loop:
-        - "{{ tmp_subcloud_ica_crt.path if tmp_subcloud_ica_crt.path is defined }}"
-        - "{{ tmp_subcloud_ica_key.path if tmp_subcloud_ica_key.path is defined }}"
-        - "{{ tmp_subcloud_ica_subcloud.path if tmp_subcloud_ica_subcloud.path is defined }}"
+        - >-
+          {{ tmp_subcloud_ica_crt.path
+          if (tmp_subcloud_ica_crt is defined and tmp_subcloud_ica_crt.path is defined)
+          else '' }}
+        - >-
+          {{ tmp_subcloud_ica_key.path
+          if (tmp_subcloud_ica_key is defined and tmp_subcloud_ica_key.path is defined)
+          else '' }}
+        - >-
+          {{ tmp_subcloud_ica_subcloud.path
+          if (tmp_subcloud_ica_subcloud is defined and tmp_subcloud_ica_subcloud.path is defined)
+          else '' }}
+      when: item | length > 0

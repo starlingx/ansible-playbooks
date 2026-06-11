@@ -43,7 +43,7 @@
       add_host:
         name: "{{ item }}"
         groups: available_hosts
-      loop: "{{ all_hosts.stdout }}"
+      loop: "{{ all_hosts.stdout | from_yaml }}"
 
 - name: Trigger ipsec cert renewal on all hosts
   hosts: available_hosts

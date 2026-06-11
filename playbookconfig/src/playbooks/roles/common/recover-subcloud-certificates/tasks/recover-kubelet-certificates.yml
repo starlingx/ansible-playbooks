@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -148,7 +148,20 @@
         state: absent
       become: yes
       loop:
-        - "{{ tmp_kubelet_conf_csr.path if tmp_kubelet_conf_csr.path is defined }}"
-        - "{{ tmp_kubelet_csr.path if tmp_kubelet_csr.path is defined }}"
-        - "{{ tmp_kubelet_cert.path if tmp_kubelet_cert.path is defined }}"
-        - "{{ tmp_kubelet_key.path if tmp_kubelet_key.path is defined }}"
+        - >-
+          {{ tmp_kubelet_conf_csr.path
+          if (tmp_kubelet_conf_csr is defined and tmp_kubelet_conf_csr.path is defined)
+          else '' }}
+        - >-
+          {{ tmp_kubelet_csr.path
+          if (tmp_kubelet_csr is defined and tmp_kubelet_csr.path is defined)
+          else '' }}
+        - >-
+          {{ tmp_kubelet_cert.path
+          if (tmp_kubelet_cert is defined and tmp_kubelet_cert.path is defined)
+          else '' }}
+        - >-
+          {{ tmp_kubelet_key.path
+          if (tmp_kubelet_key is defined and tmp_kubelet_key.path is defined)
+          else '' }}
+      when: item | length > 0
