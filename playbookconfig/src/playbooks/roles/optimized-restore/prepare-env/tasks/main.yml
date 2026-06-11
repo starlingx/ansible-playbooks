@@ -403,6 +403,15 @@
         backup_has_rook_user_overrides: "{{ backup_storage_metadata.rook_ceph_overrides.has_user_overrides }}"
         backup_rook_user_overrides_data: "{{ backup_storage_metadata.rook_ceph_overrides.user_overrides_data }}"
 
+    - name: Fail if factory and backup storage backends do not match
+      fail:
+        msg: >-
+          Storage backend mismatch. Factory system has
+          '{{ factory_storage_backend }}' but backup expects
+          '{{ backup_storage_metadata.primary_backend }}'.
+          Cross-backend restore is not supported.
+      when: factory_storage_backend != backup_storage_metadata.primary_backend
+
   when: factory_restore
 
 - name: Set image backup filename
