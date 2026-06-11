@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -41,7 +41,7 @@
                WARNING: Number of archive files listed in {{ images_archive_md5_file }}
                does not match with the number of image archive files on disk. Fall
                back to downloading images...
-        when: file_count.stdout != num_of_archive_files_on_disk
+        when: file_count.stdout | int != num_of_archive_files_on_disk | int
 
       - block:
         - name: Verify container images archive file checksum
@@ -65,7 +65,7 @@
             images_archive_exists: true
             images_archive_files: "{{ images_archive_find_output.files }}"
           when: checksum_result.rc == 0
-        when: file_count.stdout == num_of_archive_files_on_disk
+        when: file_count.stdout | int == num_of_archive_files_on_disk | int
 
       when: images_archive_md5.stat.exists
 
