@@ -1,12 +1,36 @@
 ---
 #
-# Copyright (c) 2021,2025 Wind River Systems, Inc.
+# Copyright (c) 2021,2025-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # SUB-TASKS DESCRIPTION:
 #   These tasks are to update system controller's subnets
 #
+
+- name: Resolve ipaddr filter differences for subnet updates (Bullseye)
+  set_fact:
+    sc_oam_subnet_network: >-
+      {{ (system_controller_oam_subnet | ipaddr(0)).split('/')[0] }}
+    sc_oam_subnet_prefix: >-
+      {{ system_controller_oam_subnet | ipaddr('prefix') }}
+    sc_mgmt_subnet_network: >-
+      {{ (system_controller_subnet | ipaddr(0)).split('/')[0] }}
+    sc_mgmt_subnet_prefix: >-
+      {{ system_controller_subnet | ipaddr('prefix') }}
+  when: is_bullseye
+
+- name: Resolve ipaddr filter differences for subnet updates (Trixie)
+  set_fact:
+    sc_oam_subnet_network: >-
+      {{ (system_controller_oam_subnet | ansible.utils.ipaddr(0)).split('/')[0] }}
+    sc_oam_subnet_prefix: >-
+      {{ system_controller_oam_subnet | ansible.utils.ipaddr('prefix') }}
+    sc_mgmt_subnet_network: >-
+      {{ (system_controller_subnet | ansible.utils.ipaddr(0)).split('/')[0] }}
+    sc_mgmt_subnet_prefix: >-
+      {{ system_controller_subnet | ansible.utils.ipaddr('prefix') }}
+  when: is_trixie
 
 - name: Get previous system controller OAM network uuid
   shell: >-
@@ -22,23 +46,13 @@
     {{ cli_confirmation | default('--yes') }}
   when: system_controller_oam_subnet_uuid.stdout | length > 0
 
-- name: Add system controller OAM subnet (Bullseye)
+- name: Add system controller OAM subnet
   shell: >-
     source /etc/platform/openrc; system addrpool-add system-controller-oam-subnet
-    {{ (system_controller_oam_subnet | ipaddr(0)).split('/')[0]  }}
-    {{ system_controller_oam_subnet | ipaddr('prefix') }}
+    {{ sc_oam_subnet_network }}
+    {{ sc_oam_subnet_prefix }}
     --floating-address {{ system_controller_oam_floating_address }} | awk '/uuid/{ print$4 }'
   register: add_system_controller_oam_subnet_uuid
-  when: is_bullseye
-
-- name: Add system controller OAM subnet (Trixie)
-  shell: >-
-    source /etc/platform/openrc; system addrpool-add system-controller-oam-subnet
-    {{ (system_controller_oam_subnet | ansible.utils.ipaddr(0)).split('/')[0]  }}
-    {{ system_controller_oam_subnet | ansible.utils.ipaddr('prefix') }}
-    --floating-address {{ system_controller_oam_floating_address }} | awk '/uuid/{ print$4 }'
-  register: add_system_controller_oam_subnet_uuid
-  when: is_trixie
 
 - name: Add new system-controller OAM network
   shell: >-
@@ -72,25 +86,14 @@
     {{ cli_confirmation | default('--yes') }}
   when: system_controller_subnet_uuid.stdout | length > 0
 
-- name: Add system controller subnet (Bullseye)
+- name: Add system controller subnet
   shell: >-
     source /etc/platform/openrc;
     system addrpool-add system-controller-subnet
-    {{ (system_controller_subnet | ipaddr(0)).split('/')[0]  }}
-    {{ system_controller_subnet | ipaddr('prefix') }}
+    {{ sc_mgmt_subnet_network }}
+    {{ sc_mgmt_subnet_prefix }}
     --floating-address {{ system_controller_floating_address }} | awk '/uuid/{ print$4 }'
   register: add_system_controller_subnet_uuid
-  when: is_bullseye
-
-- name: Add system controller subnet (Trixie)
-  shell: >-
-    source /etc/platform/openrc;
-    system addrpool-add system-controller-subnet
-    {{ (system_controller_subnet | ansible.utils.ipaddr(0)).split('/')[0]  }}
-    {{ system_controller_subnet | ansible.utils.ipaddr('prefix') }}
-    --floating-address {{ system_controller_floating_address }} | awk '/uuid/{ print$4 }'
-  register: add_system_controller_subnet_uuid
-  when: is_trixie
 
 - name: Add new system-controller network
   shell: >-
