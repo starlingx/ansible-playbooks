@@ -1,0 +1,169 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Standalone EJBCA restore playbook.
+#
+# Usage:
+#   ansible-playbook /usr/share/ansible/stx-ansible/playbooks/ejbca_restore.yml \
+#     -e "initial_backup_dir=/opt/platform-backup" \
+#     -e "backup_filename=controller-0_ejbca_backup_20260611T143022.tgz"
+#
+# Optional:
+#   -e "backup_encryption_passphrase=<passphrase>"
+#
+# The restore places dump files in
+# /opt/platform/config/<sw_version>/ejbca. The actual DB import
+# happens automatically on the next `system application-apply ejbca`.
+
+- hosts: localhost
+  gather_facts: no
+  become: yes
+
+  vars:
+    backup_encryption_passphrase: ""
+    ejbca_ns: ejbca
+    kubeconfig: /etc/kubernetes/admin.conf
+
+  tasks:
+    - name: Retrieve software version
+      shell: source /etc/build.info; echo $SW_VERSION
+      register: sw_version_result
+
+    - name: Set EJBCA config directory
+      set_fact:
+        ejbca_config_dir: "/opt/platform/config/{{ sw_version_result.stdout }}/ejbca"
+
+    - name: Validate required variables
+      fail:
+        msg: "Both 'initial_backup_dir' and 'backup_filename' must be provided"
+      when: initial_backup_dir is not defined or backup_filename is not defined
+
+    - name: Check backup tarball exists
+      stat:
+        path: "{{ initial_backup_dir }}/{{ backup_filename }}"
+      register: tarball_stat
+
+    - name: Fail if tarball not found
+      fail:
+        msg: "Backup tarball not found: {{ initial_backup_dir }}/{{ backup_filename }}"
+      when: not tarball_stat.stat.exists
+
+    - name: Create temporary extraction directory
+      tempfile:
+        state: directory
+        prefix: ejbca_restore_
+      register: tmp_restore_dir
+
+    - name: Decrypt tarball if passphrase provided
+      block:
+        - name: Decrypt backup
+          shell: >
+            openssl enc -aes-256-cbc -pbkdf2 -d
+            -in {{ initial_backup_dir }}/{{ backup_filename }}
+            -out {{ tmp_restore_dir.path }}/backup.tgz
+            -pass pass:{{ backup_encryption_passphrase }}
+          no_log: true
+
+        - name: Extract decrypted tarball
+          unarchive:
+            src: "{{ tmp_restore_dir.path }}/backup.tgz"
+            dest: "{{ tmp_restore_dir.path }}"
+            remote_src: yes
+      when: backup_encryption_passphrase | length > 0
+
+    - name: Extract unencrypted tarball
+      unarchive:
+        src: "{{ initial_backup_dir }}/{{ backup_filename }}"
+        dest: "{{ tmp_restore_dir.path }}"
+        remote_src: yes
+      when: backup_encryption_passphrase | length == 0
+
+    - name: Verify dump file exists in extracted backup
+      stat:
+        path: "{{ tmp_restore_dir.path }}/ejbca_db.sql"
+      register: dump_stat
+
+    - name: Fail if dump file not found in backup
+      fail:
+        msg: "ejbca_db.sql not found in backup tarball"
+      when: not dump_stat.stat.exists
+
+    - name: Create EJBCA config directory
+      file:
+        path: "{{ ejbca_config_dir }}"
+        state: directory
+        mode: "0700"
+
+    - name: Copy backup files to config directory
+      copy:
+        src: "{{ tmp_restore_dir.path }}/{{ item }}"
+        dest: "{{ ejbca_config_dir }}/{{ item }}"
+        remote_src: yes
+      loop:
+        - ejbca_db.sql
+        - ejbca-superadmin-credentials.json
+      ignore_errors: yes
+
+    - name: Clean up temporary directory
+      file:
+        path: "{{ tmp_restore_dir.path }}"
+        state: absent
+
+    - name: Check if EJBCA app exists
+      shell: |
+        source /etc/platform/openrc
+        system application-show ejbca --format value --column status
+      register: app_status
+      ignore_errors: yes
+
+    - name: Remove EJBCA app to ensure clean restore
+      block:
+        - name: Remove EJBCA application
+          shell: |
+            source /etc/platform/openrc
+            system application-remove ejbca
+          when: app_status.stdout == "applied"
+
+        - name: Wait for remove to complete
+          shell: |
+            source /etc/platform/openrc
+            system application-show ejbca --format value --column status
+          register: remove_status
+          until: remove_status.stdout == "uploaded"
+          retries: 60
+          delay: 10
+          when: app_status.stdout == "applied"
+
+        - name: Delete ejbca namespace to force clean restore
+          shell: >
+            kubectl --kubeconfig=/etc/kubernetes/admin.conf
+            delete namespace ejbca --ignore-not-found --timeout=120s
+          when: app_status.stdout == "applied"
+
+        - name: Wait for namespace to be fully deleted
+          shell: >
+            kubectl --kubeconfig=/etc/kubernetes/admin.conf
+            get namespace ejbca
+          register: ns_check
+          until: ns_check.rc != 0
+          retries: 30
+          delay: 5
+          failed_when: false
+          when: app_status.stdout == "applied"
+      when: app_status.rc == 0
+
+    - name: Apply EJBCA to trigger restore
+      shell: |
+        source /etc/platform/openrc
+        system application-apply ejbca
+      when: app_status.rc == 0
+
+    - name: Display restore instructions
+      debug:
+        msg: >
+          Backup files placed in {{ ejbca_config_dir }}.
+          EJBCA re-apply triggered. The DB will be restored during apply.
+          Monitor with: system application-show ejbca

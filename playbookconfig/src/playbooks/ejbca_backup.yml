@@ -1,0 +1,148 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Standalone EJBCA backup playbook.
+#
+# Usage:
+#   ansible-playbook /usr/share/ansible/stx-ansible/playbooks/ejbca_backup.yml \
+#     -e "initial_backup_dir=/opt/platform-backup"
+#
+# Optional:
+#   -e "backup_encryption_enabled=true"
+#   -e "backup_encryption_passphrase=<passphrase>"
+
+- hosts: localhost
+  gather_facts: no
+  become: yes
+
+  vars:
+    initial_backup_dir: /opt/platform-backup
+    backup_encryption_enabled: false
+    backup_encryption_passphrase: ""
+    ejbca_ns: ejbca
+    ejbca_pg_cluster: ejbca-pg-cluster
+    ejbca_db_name: ejbca
+    kubeconfig: /etc/kubernetes/admin.conf
+
+  tasks:
+    - name: Validate initial_backup_dir exists
+      stat:
+        path: "{{ initial_backup_dir }}"
+      register: backup_dir_stat
+
+    - name: Fail if backup directory does not exist
+      fail:
+        msg: "Directory {{ initial_backup_dir }} does not exist"
+      when: not backup_dir_stat.stat.exists
+
+    - name: Check EJBCA application is applied
+      shell: |
+        source /etc/platform/openrc
+        system application-show ejbca --format value --column status
+      register: app_status
+
+    - name: Fail if EJBCA is not applied
+      fail:
+        msg: "EJBCA application is not applied (status: {{ app_status.stdout }})"
+      when: app_status.stdout != "applied"
+
+    - name: Get CNPG primary pod
+      shell: >
+        kubectl --kubeconfig={{ kubeconfig }}
+        get pods -n {{ ejbca_ns }}
+        -l cnpg.io/cluster={{ ejbca_pg_cluster }},role=primary
+        -o jsonpath='{.items[0].metadata.name}'
+      register: pg_pod
+
+    - name: Fail if no primary pod found
+      fail:
+        msg: "No primary CNPG pod found for cluster {{ ejbca_pg_cluster }}"
+      when: pg_pod.stdout | length == 0
+
+    - name: Get database credentials
+      shell: >
+        kubectl --kubeconfig={{ kubeconfig }}
+        get secret ejbca-postgresql-secret -n {{ ejbca_ns }}
+        -o jsonpath='{.data.password}' | base64 -d
+      register: db_password
+      no_log: true
+
+    - name: Create temporary backup directory
+      tempfile:
+        state: directory
+        prefix: ejbca_backup_
+      register: tmp_backup_dir
+
+    - name: Run pg_dump
+      shell: >
+        kubectl --kubeconfig={{ kubeconfig }}
+        exec {{ pg_pod.stdout }} -n {{ ejbca_ns }} -c postgres --
+        sh -c "PGPASSWORD='{{ db_password.stdout }}'
+        pg_dump --format=plain --inserts
+        -h {{ ejbca_pg_cluster }}-rw -U ejbca {{ ejbca_db_name }}"
+        > {{ tmp_backup_dir.path }}/ejbca_db.sql
+      no_log: true
+
+    - name: Validate dump file is not empty
+      stat:
+        path: "{{ tmp_backup_dir.path }}/ejbca_db.sql"
+      register: dump_stat
+
+    - name: Fail if dump is empty
+      fail:
+        msg: "pg_dump produced an empty file"
+      when: dump_stat.stat.size == 0
+
+    - name: Export superadmin credentials secret
+      shell: >
+        kubectl --kubeconfig={{ kubeconfig }}
+        get secret ejbca-superadmin-credentials -n {{ ejbca_ns }}
+        -o json > {{ tmp_backup_dir.path }}/ejbca-superadmin-credentials.json
+
+    - name: Set backup tarball filename
+      set_fact:
+        backup_filename: >-
+          {{ ansible_hostname | default('controller-0')
+          }}_ejbca_backup_{{
+          lookup('pipe', 'date +%Y%m%dT%H%M%S') }}.tgz
+
+    - name: Create backup tarball
+      archive:
+        path: "{{ tmp_backup_dir.path }}/"
+        dest: "{{ initial_backup_dir }}/{{ backup_filename }}"
+        format: gz
+      when: not backup_encryption_enabled | bool
+
+    - name: Create encrypted backup tarball
+      block:
+        - name: Fail if passphrase not provided
+          fail:
+            msg: "backup_encryption_passphrase is required when encryption is enabled"
+          when: backup_encryption_passphrase | length == 0
+
+        - name: Create unencrypted tarball
+          archive:
+            path: "{{ tmp_backup_dir.path }}/"
+            dest: "{{ tmp_backup_dir.path }}/backup.tgz"
+            format: gz
+
+        - name: Encrypt tarball
+          shell: >
+            openssl enc -aes-256-cbc -pbkdf2
+            -in {{ tmp_backup_dir.path }}/backup.tgz
+            -out {{ initial_backup_dir }}/{{ backup_filename }}
+            -pass pass:{{ backup_encryption_passphrase }}
+          no_log: true
+      when: backup_encryption_enabled | bool
+
+    - name: Clean up temporary directory
+      file:
+        path: "{{ tmp_backup_dir.path }}"
+        state: absent
+
+    - name: Display backup result
+      debug:
+        msg: "EJBCA backup saved to: {{ initial_backup_dir }}/{{ backup_filename }}"
