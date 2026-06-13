@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2025 Wind River Systems, Inc.
+# Copyright (c) 2025-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -19,10 +19,10 @@
     -xpvf {{ restore_data_file | quote }}
     {{ ' '.join(sw_deployments_restore_items | map('quote')) }}
 
-- name: Strip previously deployed patch contents from metadata
+- name: Strip previously deployed metapackage contents from metadata
   script: "strip_patch_contents.py {{ current_path | quote }}"
   loop_control:
     label: "{{ current_path }}"
-  loop: "{{ sw_deployments_info.metadata.deployed[1:] }}"
+  loop: "{{ sw_deployments_info.deployments_to_restore | map(attribute='paths') | flatten }}"
   vars:
-    current_path: "{{ ('/', item.replace('deployed', 'available')) | path_join }}"
+    current_path: "{{ ('/', item | replace('deployed', 'available')) | path_join }}"
