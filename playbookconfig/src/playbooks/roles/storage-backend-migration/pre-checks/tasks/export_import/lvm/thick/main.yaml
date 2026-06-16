@@ -1,0 +1,11 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# (TBD)
+# Check if the data fits in the amount of disks selected (used as osds before)
+
+- name: Check space for backups
+  include_tasks: "{{ role_path_common }}/tasks/check_space_for_backups.yaml"

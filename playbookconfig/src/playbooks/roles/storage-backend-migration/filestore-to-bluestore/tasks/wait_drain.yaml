@@ -1,0 +1,32 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Wait for OSD {{ osd_id }} to be fully drained (0 PGs)
+  command: >-
+    python3 {{ tmp_workspace }}/wait_ceph_drain.py
+    --osd-id {{ osd_id }}
+    --stall-timeout {{ filestore_bluestore_stall_timeout_seconds }}
+    --poll-interval {{ filestore_bluestore_poll_interval_seconds }}
+  changed_when: false
+  # 24h – the script tracks progress and aborts on stall;
+  # async/retries are set high so Ansible never times out before it.
+  async: 86400
+  poll: 0
+  register: wait_drain_job
+  delegate_to: "{{ system.active_controller }}"
+
+- name: Wait for drain job to finish
+  async_status:
+    jid: "{{ wait_drain_job.ansible_job_id }}"
+  register: wait_drain_result
+  until: wait_drain_result.finished | default(false)
+  retries: 1440  # 1440 × 60s = 24h
+  delay: 60
+  delegate_to: "{{ system.active_controller }}"
+
+- name: Display drain wait result
+  debug:
+    var: wait_drain_result

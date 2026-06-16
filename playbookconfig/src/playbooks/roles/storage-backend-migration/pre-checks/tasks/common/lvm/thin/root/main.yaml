@@ -1,0 +1,19 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Validate lvm_volume_size_gb
+  assert:
+    that:
+      - lvm_volume_size_gb_normalized is defined
+      - lvm_volume_size_gb_normalized is match("^[0-9]+$")
+      - lvm_volume_size_gb_normalized | int > 0
+      - lvm_volume_size_gb_normalized | int <= lvm_volume_size_gb_max | int
+    fail_msg: >
+      Invalid value for lvm_volume_size_gb: {{ lvm_volume_size_gb }}.
+      Must be "half", "all" or an integer between 1 and {{ lvm_volume_size_gb_max }}.
+    success_msg: >
+      Valid lvm_volume_size_gb: {{ lvm_volume_size_gb }}
+      lvm_volume_size_gb_normalized: {{ lvm_volume_size_gb_normalized }}

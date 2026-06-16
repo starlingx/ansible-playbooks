@@ -7,8 +7,6 @@
 - name: Remove Ceph configured flag
   command: rm -vf /etc/platform/.node_ceph_configured
   register: node_ceph_configured_output
-  args:
-    warn: false
 
 - name: Display file removed
   debug:
@@ -69,5 +67,3 @@
     sed -i -E '/ceph-mon-lv|ceph-lv|drbd9/d' /etc/fstab
   failed_when: false
   ignore_errors: true
-  args:
-    warn: false

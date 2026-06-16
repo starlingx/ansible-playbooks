@@ -4,55 +4,20 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: "PVC {{ pvc.name }}] Try to backup CephFS"
+- name: "[PVC {{ pvc.name }}] Create CephFS backup file"
+  shell: |
+    set -e -o pipefail
+    BACKUP_NAME="backup-${PVC_NAME}.tar.gz"
+    BKP_FILE_POD="/backup/${BACKUP_NAME}"
+    BKP_FILE_HOST="${CEPHFS_BACKUP_DIR}/${BACKUP_NAME}"
+
+    echo "Starting backup of /data/{{ pvc.name }}/..."
+    kubectl exec -n {{ cephfs_pvc_namespace }} {{ batch_pod_name }} -- tar --sparse -czf "$BKP_FILE_POD" -C "/data/{{ pvc.name }}/" . || { echo "ERROR: tar/gzip failed, possibly out of space"; exit 1; }
+
+    echo "Verifying backup integrity..."
+    gzip -t "$BKP_FILE_HOST" || { echo "ERROR: gzip integrity check failed"; exit 1; }
   environment:
     KUBECONFIG: "{{ kubeconfig }}"
-  block:
-    - name: "[PVC {{ pvc.name }}] Create pod using released pvc"
-      template:
-        src: pod-migration-export-cephfs.yaml.j2
-        dest: "{{ tmp_workspace }}/pod-migration-export-cephfs.yaml"
-        mode: 0644
-      vars:
-        pvc_name: "{{ pvc.name }}"
-      register: pod_file_created
-      failed_when: pod_file_created.failed
-
-    - name: "[PVC {{ pvc.name }}] Apply pod"
-      command: "kubectl apply -f {{ tmp_workspace }}/pod-migration-export-cephfs.yaml"
-      register: apply_pod_result
-
-    - name: "[PVC {{ pvc.name }}] Wait for pod to be applied"
-      command: kubectl get -n {{ cephfs_pvc_namespace }} pods migration-export-cephfs -o 'jsonpath={.status.phase}'
-      register: cephfs_pod_applied
-      until: "'Running' in cephfs_pod_applied.stdout"
-      retries: 60
-      delay: 10
-      changed_when: false
-      failed_when:
-        - "'Running' not in cephfs_pod_applied.stdout"
-
-    - name: "[PVC {{ pvc.name }}] Create CephFS backup file"
-      shell: |
-        set -e -o pipefail
-        BACKUP_NAME="backup-${PVC_NAME}.tar.gz"
-        BKP_FILE_POD="/backup/${BACKUP_NAME}"
-        BKP_FILE_HOST="${CEPHFS_BACKUP_DIR}/${BACKUP_NAME}"
-
-        echo "Starting backup of /data/..."
-        kubectl exec -n {{ cephfs_pvc_namespace }} migration-export-cephfs -- tar -czf "$BKP_FILE_POD" -C /data/ . || { echo "ERROR: tar/gzip failed, possibly out of space"; exit 1; }
-
-        echo "Verifying backup integrity..."
-        gzip -t "$BKP_FILE_HOST" || { echo "ERROR: gzip integrity check failed"; exit 1; }
-      environment:
-        KUBECONFIG: "{{ kubeconfig }}"
-        PVC_NAME: "{{ cephfs_pvc_namespace }}-{{ pvc.name }}"
-        CEPHFS_BACKUP_DIR: "{{ backups_cephfs_path }}"
-      register: backup_result
-      changed_when: backup_result.rc == 0
-
-  always:
-    - name: "[PVC {{ pvc.name }}] Cleanup backup pod"
-      environment:
-        KUBECONFIG: "{{ kubeconfig }}"
-      command: "kubectl delete -f {{ tmp_workspace }}/pod-migration-export-cephfs.yaml --ignore-not-found=true"
+    PVC_NAME: "{{ cephfs_pvc_namespace }}-{{ pvc.name }}"
+    CEPHFS_BACKUP_DIR: "{{ backups_cephfs_path }}"
+  register: backup_result

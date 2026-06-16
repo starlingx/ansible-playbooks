@@ -4,19 +4,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: Update puppet system config
-  shell: sysinv-puppet create-system-config
-  register: puppet_update_result
-  ignore_errors: true
+- name: Update SysInv host config
+  include_tasks: update_host_config.yaml
 
-- name: Debug Puppet system
-  debug:
-    var: puppet_update_result.stdout_lines
-
-- name: Update puppet host config
-  shell: sysinv-puppet create-host-config
-  register: puppet_host_result
-
-- name: Debug Puppet host
-  debug:
-    var: puppet_host_result.stdout_lines
+- name: Update SysInv system config
+  include_tasks: update_system_config.yaml

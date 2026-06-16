@@ -1,0 +1,23 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "[PVC {{ pvc.name }}] Create Ceph backup file"
+  shell: |
+    set -e -o pipefail
+    BACKUP_NAME="backup-${PVC_NAME}.tar.gz"
+    BKP_FILE_POD="/backup/${BACKUP_NAME}"
+    BKP_FILE_HOST="${CEPH_BACKUP_DIR}/${BACKUP_NAME}"
+
+    echo "Starting backup of /data/{{ pvc.name }}/..."
+    kubectl exec -n {{ generic_pvc_namespace }} {{ batch_pod_name }} -- tar --sparse -czf "$BKP_FILE_POD" -C "/data/{{ pvc.name }}/" . || { echo "ERROR: tar/gzip failed, possibly out of space"; exit 1; }
+
+    echo "Verifying backup integrity..."
+    gzip -t "$BKP_FILE_HOST" || { echo "ERROR: gzip integrity check failed"; exit 1; }
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+    PVC_NAME: "{{ generic_pvc_namespace }}-{{ pvc.name }}"
+    CEPH_BACKUP_DIR: "{{ generic_backups_path }}"
+  register: backup_result

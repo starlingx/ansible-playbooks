@@ -5,18 +5,26 @@
 #
 
 - name: Get system status from Kubernetes
-  shell: kubectl get system -n deployment
+  command: kubectl get system -n deployment
   environment:
     KUBECONFIG: "{{ kubeconfig }}"
   register: kubectl_system_output
   changed_when: false
+  failed_when: false
+
+- name: Fail if no system is found in Deployment Manager
+  fail:
+    msg: No system configuration found in Deployment Manager.
+  when:
+    - kubectl_system_output.stderr | length > 0
+    - kubectl_system_output.stdout | length == 0
 
 - name: Display system status
   debug:
     var: kubectl_system_output.stdout_lines
 
 - name: Get system from in JSON format
-  shell: kubectl get system -n deployment -o json
+  command: kubectl get system -n deployment -o json
   environment:
     KUBECONFIG: "{{ kubeconfig }}"
   register: system_json

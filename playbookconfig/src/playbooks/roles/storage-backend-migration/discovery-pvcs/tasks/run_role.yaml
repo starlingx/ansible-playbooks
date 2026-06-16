@@ -1,0 +1,119 @@
+- name: Debug pvcs_to_migrate var
+  debug:
+    var: pvcs_to_migrate
+
+- name: Validate pvcs_to_migrate is a list
+  assert:
+    that: pvcs_to_migrate is not defined or pvcs_to_migrate is sequence and pvcs_to_migrate is not string
+    fail_msg: "pvcs_to_migrate must be a list"
+
+- name: Debug pvcs_to_migrate var result
+  debug:
+    msg: '{{ pvcs_to_migrate | default([".*"]) | join("|") }}'
+
+- name: Get all PVCs as JSON
+  script:
+    cmd: >-
+      files/get_pvcs_json.sh
+      '{{ pvcs_to_migrate | default([".*"]) | join("|") }}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: pvcs_raw_result
+  changed_when: false
+  when: >-
+    cephfs_pvcs_raw is undefined or cephfs_pvcs_raw is none or
+    cephfs_pvcs_unmatched is undefined or cephfs_pvcs_unmatched is none or
+    rbd_pvcs_raw is undefined or rbd_pvcs_raw is none or
+    rbd_pvcs_names is undefined or rbd_pvcs_names is none
+
+- name: Set all PVC facts
+  vars:
+    pvcs: "{{ pvcs_raw_result.stdout | from_json }}"
+    cephfs_matched: "{{ pvcs | selectattr('type', 'eq', 'CephFS') | selectattr('match') | list }}"
+    cephfs_unmatched: "{{ pvcs | selectattr('type', 'eq', 'CephFS') | rejectattr('match') | list }}"
+    rbd_matched: "{{ pvcs | selectattr('type', 'eq', 'RBD') | selectattr('match') | list }}"
+    rbd_unmatched: "{{ pvcs | selectattr('type', 'eq', 'RBD') | rejectattr('match') | list }}"
+  set_fact:
+    cephfs_pvcs_raw: "{{ cephfs_matched | map(attribute='namespace') | zip(cephfs_matched | map(attribute='name')) | map('join', ' ') | list }}"
+    rbd_pvcs_raw: "{{ rbd_matched | map(attribute='namespace') | zip(rbd_matched | map(attribute='name')) | map('join', ' ') | list }}"
+    rbd_pvcs_names: "{{ rbd_matched | map(attribute='name') | list }}"
+    cephfs_pvcs_unmatched: "{{ cephfs_unmatched | map(attribute='namespace') | zip(cephfs_unmatched | map(attribute='name')) | map('join', ' ') | list }}"
+    rbd_pvcs_unmatched: "{{ rbd_unmatched | map(attribute='namespace') | zip(rbd_unmatched | map(attribute='name')) | map('join', ' ') | list }}"
+    cephfs_pvcs_by_namespace: >-
+      {{ dict(cephfs_matched | groupby('namespace')) }}
+    rbd_pvcs_by_namespace: >-
+      {{ dict(rbd_matched | groupby('namespace')) }}
+    filesystem_pvcs_by_namespace: >-
+      {{ dict((cephfs_matched + rbd_matched) | selectattr('volume_mode', 'eq', 'Filesystem') | groupby('namespace')) }}
+    block_pvcs_by_namespace: >-
+      {{ dict((cephfs_matched + rbd_matched) | selectattr('volume_mode', 'eq', 'Block') | groupby('namespace')) }}
+    cacheable: true
+  when: pvcs_raw_result.stdout is defined
+
+- name: Debug cephfs_pvcs_raw var
+  debug:
+    var: cephfs_pvcs_raw
+
+- name: Debug rbd_pvcs_raw var
+  debug:
+    var: rbd_pvcs_raw
+
+- name: Debug cephfs_pvcs_by_namespace var
+  debug:
+    var: cephfs_pvcs_by_namespace
+  when: cephfs_pvcs_by_namespace is defined
+
+- name: Debug rbd_pvcs_by_namespace var
+  debug:
+    var: rbd_pvcs_by_namespace
+  when: rbd_pvcs_by_namespace is defined
+
+- name: Debug rbd_pvcs_names var
+  debug:
+    var: rbd_pvcs_names
+
+- name: Debug cephfs_pvcs_unmatched var
+  debug:
+    var: cephfs_pvcs_unmatched
+
+- name: Debug rbd_pvcs_unmatched var
+  debug:
+    var: rbd_pvcs_unmatched
+
+- name: Abort after discovery of PVCs
+  block:
+    - name: Clear Ansible cache on abort
+      meta: clear_facts
+
+    - name: Remove in-progress migration flag
+      file:
+        path: /run/.storage_backend_migration_in_progress
+        state: absent
+
+    - name: Abort
+      fail:
+        msg: "Discovery complete. Failed automatically; the playbook was triggered remotely."
+  when:
+    - not confirm_pvcs_regex | default(false) | bool
+    - abort_discovery_if_not_confirm | default(false) | bool
+
+- name: Pause after discovery of PVCs
+  block:
+    - name: Wait for user confirmation
+      pause:
+        prompt: "Discovery completed. Use 'confirm_pvcs_regex=true' to skip this check. Press Enter to continue or Ctrl+C then 'A' to abort"
+  rescue:
+    - name: Clear Ansible cache on abort
+      meta: clear_facts
+
+    - name: Remove in-progress migration flag
+      file:
+        path: /run/.storage_backend_migration_in_progress
+        state: absent
+
+    - name: Abort
+      fail:
+        msg: "Discovery completed. User aborted the playbook."
+  when: not confirm_pvcs_regex | default(false) | bool
+
+

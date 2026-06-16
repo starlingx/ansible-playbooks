@@ -1,0 +1,13 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Restore DataVolume sources"
+  include_tasks: restore_source.yaml
+  loop: "{{ dv_map_original | dict2items }}"
+  loop_control:
+    loop_var: dv_entry
+    label: "{{ dv_entry.key }}"
+  when: dv_map_original | length > 0

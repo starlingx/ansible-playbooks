@@ -8,34 +8,44 @@
 #
 # It prepares the environment for the migrattion of storage backend used.
 #
+# When execute_init is set to false (e.g. when called from export-import),
+# all initialization tasks are skipped.
+#
 
 - name: Init system
   hosts: localhost
   gather_facts: false
 
   pre_tasks:
-    - name: Check for flag .rook_migration_in_progress
+    - name: Check for flag .storage_backend_migration_in_progress
       stat:
-        path: /run/.rook_migration_in_progress
+        path: /run/.storage_backend_migration_in_progress
       register: migration_in_progress_flag
+      when: execute_init | default(true) | bool
 
     - name: Fail if there is a migration in progress
       fail:
         msg: >-
           Migration is already in progress.
           Please wait until it completes.
-      when: migration_in_progress_flag.stat.exists
+      when:
+        - execute_init | default(true) | bool
+        - migration_in_progress_flag.stat.exists
 
     - name: Create in-progress migration flag
       file:
-        path: /run/.rook_migration_in_progress
+        path: /run/.storage_backend_migration_in_progress
         state: touch
         modification_time: preserve
         access_time: preserve
+      when: execute_init | default(true) | bool
 
-  roles:
-    - role: init-system
-      tags: pull-images
+  tasks:
+    - name: Run init-system role
+      include_role:
+        name: init-system
+      tags: always
+      when: execute_init | default(true) | bool
 
 - hosts: all
   gather_facts: false
@@ -44,25 +54,63 @@
       set_fact:
         migration_type: "{{ migration_type }}"
       changed_when: true
+      when: execute_init | default(true) | bool
+
+    - name: Set default for migration_target
+      set_fact:
+        migration_target: "{{ migration_target }}"
+      changed_when: true
+      tags: pull-images
+      when: execute_init | default(true) | bool
+
+    - name: Set default for tmp_path
+      set_fact:
+        tmp_path: "/tmp/{{ migration_target | replace('_', '-') }}-migration"
+      changed_when: true
+      tags: always
+      when: execute_init | default(true) | bool
 
     - name: Set roles_dir_path
       set_fact:
         roles_dir_path: "{{ playbook_dir }}/roles/storage-backend-migration"
-      when: roles_dir_path is undefined
-      tags: pull-images
+      when:
+        - execute_init | default(true) | bool
+        - roles_dir_path is undefined
+      tags: always
 
     - name: Set role path for common
       set_fact:
         role_path_common: "{{ roles_dir_path }}/common"
         cacheable: true
-      when: role_path_common is undefined
-      tags: pull-images
+      when:
+        - execute_init | default(true) | bool
+        - role_path_common is undefined
+      tags: always
+
+- name: Execute pre-migration custom action hook
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Run custom-action-hook role
+      include_role:
+        name: custom-action-hook
+      vars:
+        custom_action_script: "{{ pre_migration_hook }}"
+        phase: pre
+        checkpoint_name: pre-custom-action-hook
+      when:
+        - execute_init | default(true) | bool
+        - pre_migration_hook is defined
 
 - name: Get infos
   hosts: active_controller
   gather_facts: false
   become: true
 
-  roles:
-    - role: get-infos
-
+  tasks:
+    - name: Run get-infos role
+      include_role:
+        name: get-infos
+      when: execute_init | default(true) | bool

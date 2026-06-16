@@ -1,0 +1,17 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This playbook is intended to be run on standalone systems.
+#
+# Discovery the PVCs that will be migrated or deleted
+#
+
+- name: Discovery PVCs
+  hosts: active_controller
+  gather_facts: false
+
+  roles:
+    - role: discovery-pvcs

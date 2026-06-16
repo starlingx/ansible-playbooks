@@ -1,0 +1,117 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Suspend kubevirt helmrelease
+  command: >
+    kubectl -n kube-system patch helmrelease kubevirt-app
+    --type merge -p '{"spec":{"suspend":true}}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+
+- name: Scale down virt-operator
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "name"
+        name: "virt-operator"
+        namespace: "{{ kubevirt_namespace }}"
+        replicas: 0
+        kind: Deployment
+
+- name: Wait for virt-operator pod to be deleted
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/wait_resources_condition.yaml"
+  vars:
+    k8s_namespace: "{{ kubevirt_namespace }}"
+    k8s_resource_prefix: "virt-operator"
+    k8s_resource_type: "pod"
+    wait_mode: "deleted"
+
+- name: Scale down virt-controller
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "name"
+        name: "virt-controller"
+        namespace: "{{ kubevirt_namespace }}"
+        replicas: 0
+        kind: Deployment
+
+- name: Wait for virt-controller pod to be deleted
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/wait_resources_condition.yaml"
+  vars:
+    k8s_namespace: "{{ kubevirt_namespace }}"
+    k8s_resource_prefix: "virt-controller"
+    k8s_resource_type: "pod"
+    wait_mode: "deleted"
+
+- name: Get CDI validating webhook configuration
+  command: >
+    kubectl get validatingwebhookconfiguration {{ cdi_webhook_name }}
+    -o yaml
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: cdi_webhook_yaml
+  when: cdi_webhook_backup_data is undefined
+
+- name: Cache CDI webhook backup
+  set_fact:
+    cdi_webhook_backup_data: "{{ cdi_webhook_yaml.stdout | from_yaml }}"
+    cacheable: true
+  when: cdi_webhook_backup_data is undefined
+
+- name: Scale down CDI operator
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "name"
+        name: "cdi-operator"
+        namespace: "{{ cdi_namespace }}"
+        replicas: 0
+        kind: Deployment
+
+- name: Wait for CDI operator pod to be deleted
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/wait_resources_condition.yaml"
+  vars:
+    k8s_namespace: "{{ cdi_namespace }}"
+    k8s_resource_prefix: "cdi-operator"
+    k8s_resource_type: "pod"
+    wait_mode: "deleted"
+
+- name: Scale down CDI deployment
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "name"
+        name: "cdi-deployment"
+        namespace: "{{ cdi_namespace }}"
+        replicas: 0
+        kind: Deployment
+
+- name: Wait for CDI deployment pod to be deleted
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/wait_resources_condition.yaml"
+  vars:
+    k8s_namespace: "{{ cdi_namespace }}"
+    k8s_resource_prefix: "cdi-deployment"
+    k8s_resource_type: "pod"
+    wait_mode: "deleted"
+
+- name: Delete CDI validating webhook configuration
+  command: >
+    kubectl delete validatingwebhookconfiguration {{ cdi_webhook_name }}
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: delete_webhook_result
+  failed_when:
+    - delete_webhook_result.rc != 0
+    - '"not found" not in delete_webhook_result.stderr'

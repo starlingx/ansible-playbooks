@@ -7,8 +7,6 @@
 - name: Remove pmon.d ceph files
   shell: rm -vrf /etc/pmon.d/ceph*
   register: cleanup_pmon_files_output
-  args:
-    warn: false
   changed_when: cleanup_pmon_files_output.stdout_lines | length > 0
 
 - name: Display files removed from pmon

@@ -17,7 +17,7 @@
     ceph_total_bytes: "{{ (ceph_df_json.stdout | from_json).stats.total_bytes }}"
     ceph_used_bytes: "{{ (ceph_df_json.stdout | from_json).stats.total_used_raw_bytes  }}"
     ceph_avail_bytes: "{{ (ceph_df_json.stdout | from_json).stats.total_avail_bytes }}"
-    osd_count: "{{ hostvars[system.active_controller]['disks_by_host'].values() | map('length') | sum }}"
+    osd_count: "{{ hostvars[system.active_controller]['ceph_disks_by_host'].values() | map('length') | sum }}"
 
 - name: Show Ceph storage summary
   debug:

@@ -13,8 +13,8 @@
     (extra_pools_list is not defined) or (all_pools_list is not defined)
 
 - name: Parse and cache configuration for ALL pools
-  set_fact:
-    all_pools_list: |
+  vars:
+    _all_pools_json: |
       [
         {% for pool in ceph_pools_raw.stdout | from_json %}
         {
@@ -26,19 +26,21 @@
           "crush_rule_name": "replicated_rule",
           "size": {{ pool.size }},
           "min_size": {{ pool.min_size }},
-          "application": "{{ pool.application_metadata | list | first | default('') }}",
+          "application": "{{ pool.application_metadata | list | first | default('') }}"
           {% if pool.pg_autoscale_bias is defined %}
-          "pg_autoscale_bias": {{ pool.pg_autoscale_bias }},
+          ,"pg_autoscale_bias": {{ pool.pg_autoscale_bias }}
           {% endif %}
           {% if pool.pg_num_min is defined %}
-          "pg_num_min": {{ pool.pg_num_min }},
+          ,"pg_num_min": {{ pool.pg_num_min }}
           {% endif %}
           {% if pool.recovery_priority is defined %}
-          "recovery_priority": {{ pool.recovery_priority }}
+          ,"recovery_priority": {{ pool.recovery_priority }}
           {% endif %}
         }{{ ',' if not loop.last else '' }}
         {% endfor %}
       ]
+  set_fact:
+    all_pools_list: "{{ _all_pools_json | from_json if _all_pools_json is string else _all_pools_json }}"
     cacheable: true
   when: all_pools_list is not defined
 

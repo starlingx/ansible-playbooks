@@ -1,0 +1,223 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get PV name for unmatched CephFS PVCs
+  shell: >
+    kubectl get pvc -n {{ item.split(' ')[0] }} {{ item.split(' ')[1] }}
+    -o jsonpath='{.spec.volumeName}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: cephfs_pv_names_result
+  loop: "{{ hostvars[system.active_controller]['cephfs_pvcs_unmatched'] | default([]) }}"
+  when: 
+   - hostvars[system.active_controller]['cephfs_pvcs_unmatched'] | default([]) | length > 0
+   - cephfs_pv_names is undefined
+  ignore_errors: true
+
+- name: Save cephfs_pv_names var in cache
+  set_fact:
+    cephfs_pv_names: "{{ cephfs_pv_names_result.results |
+                         selectattr('stdout', 'defined') |
+                         map(attribute='stdout') |
+                         select('string') | list }}"
+    cacheable: true
+  when: cephfs_pv_names is undefined
+
+- name: Get CephFS subvolume name from unmatched PVs
+  shell: >
+    kubectl get pv {{ item }}
+    -o jsonpath='{.spec.csi.volumeAttributes.subvolumeName}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: cephfs_subvolume_names_result
+  loop: "{{ cephfs_pv_names | default([]) }}"
+  when:
+    - cephfs_pv_names is defined
+    - item | default('') | length > 0
+    - cephfs_subvolume_names is undefined
+  ignore_errors: true
+
+- name: Save cephfs_subvolume_names var in cache
+  set_fact:
+    cephfs_subvolume_names: "{{ cephfs_subvolume_names_result.results |
+                                selectattr('stdout', 'defined') |
+                                map(attribute='stdout') |
+                                select('string') | list }}"
+    cacheable: true
+  when: cephfs_subvolume_names is undefined
+
+- name: Get VolumeSnapshots referencing unmatched CephFS PVCs
+  shell: >
+    kubectl get volumesnapshot -n {{ item.split(' ')[0] }}
+    -o jsonpath='{range .items[?(@.spec.source.persistentVolumeClaimName=="{{ item.split(' ')[1] }}")]}{.metadata.name}{"\n"}{end}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: cephfs_snapshots_for_pvcs_result
+  loop: "{{ hostvars[system.active_controller]['cephfs_pvcs_unmatched'] | default([]) }}"
+  when: hostvars[system.active_controller]['cephfs_pvcs_unmatched'] | default([]) | length > 0
+  ignore_errors: true
+
+- name: Build cephfs_snapshots_for_pvcs list
+  set_fact:
+    cephfs_snapshots_for_pvcs: "{{ (cephfs_snapshots_for_pvcs | default([])) +
+                                   [{'namespace': item.item.split(' ')[0],
+                                     'snapshot_names': item.stdout_lines | default([])}] }}"
+  loop: "{{ cephfs_snapshots_for_pvcs_result.results | default([]) }}"
+  when: cephfs_snapshots_for_pvcs_result is defined
+
+- name: Save cephfs_snapshots_for_pvcs var in cache
+  set_fact:
+    cephfs_snapshots_for_pvcs: "{{ cephfs_snapshots_for_pvcs | default([]) }}"
+    cacheable: true
+  when: cephfs_snapshots_for_pvcs is defined
+
+- name: Delete VolumeSnapshots referencing unmatched CephFS PVCs
+  include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+  vars:
+    kind: VolumeSnapshot
+    k8s_namespace: "{{ item.0.namespace }}"
+    name: "{{ item.1 }}"
+  loop: "{{ cephfs_snapshots_for_pvcs | default([]) | subelements('snapshot_names', skip_missing=True) }}"
+  when: item.1 | length > 0
+
+- name: Delete unmatched CephFS PVCs
+  include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+  vars:
+    kind: PersistentVolumeClaim
+    k8s_namespace: "{{ item.split(' ')[0] }}"
+    name: "{{ item.split(' ')[1] }}"
+  loop: "{{ hostvars[system.active_controller]['cephfs_pvcs_unmatched'] }}"
+  when: hostvars[system.active_controller]['cephfs_pvcs_unmatched'] | default([]) | length > 0
+
+- name: Delete PVs for unmatched CephFS PVCs
+  include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+  vars:
+    kind: PersistentVolume
+    name: "{{ item }}"
+  loop: "{{ cephfs_pv_names | default([]) }}"
+  when:
+    - cephfs_pv_names is defined
+    - item | default('') | length > 0
+
+- name: List current Ceph subvolumes after cleanup
+  command: >
+    ceph fs subvolume ls "kube-cephfs" csi --format json
+  register: subvolume_list_after_cleanup
+  changed_when: false
+  ignore_errors: true
+
+- name: Update ceph_subvolume_sizes keeping only existing subvolumes
+  set_fact:
+    ceph_subvolume_sizes: "{{ ceph_subvolume_sizes | default({}) | dict2items |
+                              selectattr('key', 'in',
+                                (subvolume_list_after_cleanup.stdout | default('[]') | from_json) |
+                                map(attribute='name') | list) |
+                              items2dict }}"
+    cacheable: true
+  when:
+    - ceph_subvolume_sizes is defined
+    - subvolume_list_after_cleanup is defined
+    - subvolume_list_after_cleanup.rc == 0
+
+- name: Get PV name for unmatched RBD PVCs
+  shell: >
+    kubectl get pvc -n {{ item.split(' ')[0] }} {{ item.split(' ')[1] }}
+    -o jsonpath='{.spec.volumeName}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: rbd_pv_names_result
+  loop: "{{ rbd_pvcs_unmatched | default([]) }}"
+  when: 
+    - rbd_pvcs_unmatched | default([]) | length > 0
+    - rbd_pv_names is undefined
+  ignore_errors: true
+
+- name: Save rbd_pv_names var in cache
+  set_fact:
+    rbd_pv_names: "{{ rbd_pv_names_result.results |
+                      selectattr('stdout', 'defined') |
+                      map(attribute='stdout') |
+                      select('string') | list }}"
+    cacheable: true
+  when: rbd_pv_names is undefined
+
+- name: Get RBD image name from unmatched PVs
+  shell: >
+    kubectl get pv {{ item }}
+    -o jsonpath='{.spec.csi.volumeAttributes.imageName}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: rbd_image_names_result
+  loop: "{{ rbd_pv_names | default([]) }}"
+  when:
+    - rbd_pv_names is defined
+    - item | default('') | length > 0
+    - rbd_image_names is undefined
+  ignore_errors: true
+
+- name: Save rbd_image_names var in cache
+  set_fact:
+    rbd_image_names: "{{ rbd_image_names_result.results |
+                         selectattr('stdout', 'defined') |
+                         map(attribute='stdout') |
+                         select('string') | list }}"
+    cacheable: true
+  when: rbd_image_names is undefined
+
+- name: Get VolumeSnapshots referencing unmatched RBD PVCs
+  shell: >
+    kubectl get volumesnapshot -n {{ item.split(' ')[0] }}
+    -o jsonpath='{range .items[?(@.spec.source.persistentVolumeClaimName=="{{ item.split(' ')[1] }}")]}{.metadata.name}{"\n"}{end}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: rbd_snapshots_for_pvcs_result
+  loop: "{{ rbd_pvcs_unmatched | default([]) }}"
+  when:
+    - rbd_pvcs_unmatched | default([]) | length > 0
+  ignore_errors: true
+
+- name: Build rbd_snapshots_for_pvcs list
+  set_fact:
+    rbd_snapshots_for_pvcs: "{{ (rbd_snapshots_for_pvcs | default([])) +
+                                [{'namespace': item.item.split(' ')[0],
+                                  'snapshot_names': item.stdout_lines | default([])}] }}"
+  loop: "{{ rbd_snapshots_for_pvcs_result.results | default([]) }}"
+  when: rbd_snapshots_for_pvcs_result is defined
+
+- name: Save rbd_snapshots_for_pvcs var in cache
+  set_fact:
+    rbd_snapshots_for_pvcs: "{{ rbd_snapshots_for_pvcs | default([]) }}"
+    cacheable: true
+  when: rbd_snapshots_for_pvcs is defined
+
+- name: Delete VolumeSnapshots referencing unmatched RBD PVCs
+  include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+  vars:
+    kind: VolumeSnapshot
+    k8s_namespace: "{{ item.0.namespace }}"
+    name: "{{ item.1 }}"
+  loop: "{{ rbd_snapshots_for_pvcs | default([]) | subelements('snapshot_names', skip_missing=True) }}"
+  when:
+    - item.1 | length > 0
+
+- name: Delete unmatched RBD PVCs
+  include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+  vars:
+    kind: PersistentVolumeClaim
+    k8s_namespace: "{{ item.split(' ')[0] }}"
+    name: "{{ item.split(' ')[1] }}"
+  loop: "{{ rbd_pvcs_unmatched }}"
+  when: rbd_pvcs_unmatched | default([]) | length > 0
+
+- name: Delete PVs for unmatched RBD PVCs
+  include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+  vars:
+    kind: PersistentVolume
+    name: "{{ item }}"
+  loop: "{{ rbd_pv_names | default([]) }}"
+  when:
+    - rbd_pv_names is defined
+    - item | default('') | length > 0

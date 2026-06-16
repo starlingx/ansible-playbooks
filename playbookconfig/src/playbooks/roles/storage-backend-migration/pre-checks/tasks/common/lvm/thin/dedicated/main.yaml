@@ -1,0 +1,8 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Validate lvm_devices
+  include_tasks: "{{ role_path }}/tasks/common/lvm/validate_lvm_devices.yaml"

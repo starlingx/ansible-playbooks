@@ -1,3 +1,9 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
 - name: Get cluster-pod IP family
   become: true
   become_user: postgres

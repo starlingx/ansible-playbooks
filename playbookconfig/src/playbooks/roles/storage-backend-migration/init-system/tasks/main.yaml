@@ -19,28 +19,28 @@
   no_log: true
   when: ansible_password is undefined
 
-- name: Set hosts if undefined
-  block:
-    - name: Retrieve hosts
-      become: true
-      become_user: postgres
-      command: >
-        psql -d sysinv -t -A -F','
-        -c "SELECT hostname, personality FROM i_host
-            WHERE hostname IS NOT NULL AND PERSONALITY IS NOT NULL;"
-      register: host_list_output
-      changed_when: false
+- name: Retrieve hosts
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -F','
+    -c "SELECT hostname, personality FROM i_host
+        WHERE hostname IS NOT NULL AND PERSONALITY IS NOT NULL;"
+  register: host_list_output
+  changed_when: false
 
-    - name: Parse SQL output into list of dicts
-      set_fact:
-        hosts: >-
-          [
-            {% for line in host_list_output.stdout_lines %}
-            {"hostname": "{{ line.split(',')[0] }}", "personality": "{{ line.split(',')[1] }}"}{% if not loop.last %},{% endif %}
-            {% endfor %}
-          ]
-        cacheable: true
-  when: hosts is undefined
+- name: Build hosts list from database
+  set_fact:
+    _db_hosts: "{{ _db_hosts | default([]) + [{'hostname': item.split(',')[0], 'personality': item.split(',')[1]}] }}"
+  loop: "{{ host_list_output.stdout_lines }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Update hosts if undefined or count mismatch
+  set_fact:
+    hosts: "{{ _db_hosts }}"
+    cacheable: true
+  when: hosts is undefined or (hosts | length) != (_db_hosts | length)
 
 - name: Show list of hosts retrieved
   debug:

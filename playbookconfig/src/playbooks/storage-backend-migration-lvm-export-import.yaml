@@ -1,0 +1,115 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This playbook is intended to be run on standalone systems.
+#
+# It provides the capability to migrate the storage backend used.
+#
+# To run the playbook, the user would define the required variable settings
+# passing this on the ansible command-line as a parameter.
+#
+#
+# Example command:
+#  ANSIBLE_CONFIG='/usr/share/ansible/stx-ansible/playbooks/vars/storage-backend-migration/ansible.cfg' \
+#  ansible-playbook /usr/share/ansible/stx-ansible/playbooks/storage-backend-migration-lvm-export-import.yaml -v
+#
+# Optional extra variables:
+#
+# - osd_usage_safety_margin_percent: 0 <= int <= 100
+# - storage_backend_migration_backup_dir: string
+# - backups_path: <path/to/backups> (for export-import migration type)
+# - backups_min_safety_margin_bytes: int
+# - backups_max_safety_margin_percent: 0 <= int <= 100
+# - lvm_mode: thick or thin
+# - lvm_thin_disk: root or dedicated
+# - lvm_devices: list of device paths (e.g., ["/dev/disk/by-path/..."]). Defaults to all Ceph devices.
+# - lvm_vg_name: string
+# - lvm_volume_size_gb: half, all, or a positive integer in GB (LVM thin uses half of available space by default)
+
+
+- import_playbook: storage-backend-migration-init.yaml
+  vars:
+    migration_type: export_import
+    migration_target: lvm
+
+- import_playbook: storage-backend-migration-discovery.yaml
+
+- name: Execute pre-checks
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: pre-checks
+    - role: compute-lvm-pvc-sizes
+
+- import_playbook: storage-backend-migration-pre-migration.yaml
+
+- name: Execute pull-images
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: pull-images
+      tags: pull-images
+
+- name: Export ceph bare-metal data
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: manage-lv
+      lv_action: create
+      checkpoint_name: manage-lv-create
+      when: create_migration_lv
+
+    - role: remove-unmatched-pvcs
+    - role: export-lvm
+
+- import_playbook: storage-backend-migration-lvm-redeploy.yaml
+  vars:
+    migration_type: export_import
+    migration_target: lvm
+    execute_pre_check: false
+    execute_init: false
+    execute_pull_images: false
+    execute_pre_migration: false
+    execute_post_migration: false
+
+- name: Import ceph backed up data
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: import-lvm
+    - role: manage-lv
+      lv_action: remove
+      checkpoint_name: manage-lv-remove
+      when: create_migration_lv
+    - role: resize-lvm-vg
+      when: resize_vg_after_migration | bool
+
+- name: Restore DataVolume sources
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: manage-cdi
+      cdi_action: disable
+      checkpoint_name: manage-cdi-disable
+      when: dv_map_original | default({}) | length > 0
+    - role: restore-lvm-datavolume-sources
+      when: dv_map_original | default({}) | length > 0
+    - role: manage-cdi
+      cdi_action: enable
+      checkpoint_name: manage-cdi-enable
+      when: dv_map_original | default({}) | length > 0
+
+- import_playbook: storage-backend-migration-post-migration.yaml

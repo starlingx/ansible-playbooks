@@ -1,0 +1,33 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get hosts from deployment manager in JSON format
+  command: kubectl get host -n deployment -o json
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: hosts_json
+  changed_when: false
+
+- name: Parse hosts JSON
+  set_fact:
+    hosts_list: "{{ hosts_json.stdout | from_json }}"
+
+- name: Hosts in the inventory
+  set_fact:
+    inventory_hosts_list: "{{ (groups.all | list) | difference(groups.ungrouped | list) | sort }}"
+
+- name: Hosts in deployment-manager
+  set_fact:
+    dm_hosts_list: "{{ hosts_list | json_query('items[*].metadata.name') | list | sort }}"
+
+- name: Fail if there are hosts not defined in deployment-manager
+  fail:
+    msg: |
+      The following hosts are not configured in Deployment Manager:
+      {{ inventory_hosts_list | difference(dm_hosts_list) | join(', ') }}
+  when: >
+    dm_hosts_list | length == 0 or
+    inventory_hosts_list != dm_hosts_list

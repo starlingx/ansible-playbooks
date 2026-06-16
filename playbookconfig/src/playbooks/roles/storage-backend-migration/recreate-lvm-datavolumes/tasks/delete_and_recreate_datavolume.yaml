@@ -1,0 +1,34 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Delete DataVolume {{ data_volume_name.key }}"
+  include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+  vars:
+    kind: DataVolume
+    name: "{{ data_volume_name.key }}"
+    k8s_namespace: "{{ data_volume_name.value.namespace }}"
+
+- name: Render recreate_script.py using template
+  template:
+    src: recreate_script.py.j2
+    dest: "{{ tmp_workspace }}/recreate_script.py"
+    mode: 0644
+  register: python_script_creation
+  failed_when: python_script_creation.failed
+
+- name: "Execute recreate DataVolume script for {{ data_volume_name.key }}"
+  command: "python {{ tmp_workspace }}/recreate_script.py"
+
+- name: "Delete recreate DataVolume script for {{ data_volume_name.key }}"
+  command: "rm -rf {{ tmp_workspace }}/recreate_script.py"
+
+- name: "Apply new DataVolume {{ data_volume_name.key }} file"
+  command: "kubectl apply -f {{ tmp_workspace }}/{{ data_volume_name.key }}.yaml"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+
+- name: "Delete new DataVolume {{ data_volume_name.key }} file"
+  command: "rm -rf {{ tmp_workspace }}/{{ data_volume_name.key }}.yaml"

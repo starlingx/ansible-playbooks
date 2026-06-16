@@ -1,0 +1,39 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Fail if disk is the rootfs disk
+  fail:
+    msg: >-
+      The disk {{ non_ceph_disk.device_path }} is the root filesystem disk
+      and cannot be used for LVM.
+  when: ((non_ceph_disk.capabilities | from_json)['stor_function'] | default('')) == 'rootfs'
+
+- name: Fail if disk is already a physical volume
+  fail:
+    msg: >-
+      The disk {{ non_ceph_disk.device_path }} is already a physical volume in an LVM
+      volume group.
+      Only unassigned disks or current Ceph OSD disks can be used for LVM.
+      Check with 'system host-pv-list {{ inventory_hostname }}'.
+  when: non_ceph_disk.foripvid is not none
+
+# foristorid is normally only set for OSD disks, but we check it here
+# as a safety guard against unexpected database state.
+- name: Fail if disk is assigned to a storage volume
+  fail:
+    msg: >-
+      The disk {{ non_ceph_disk.device_path }} is already assigned to a storage volume.
+      Only unassigned disks or current Ceph OSD disks can be used for LVM.
+      Check with 'system host-stor-list {{ inventory_hostname }}'.
+  when: non_ceph_disk.foristorid is not none
+
+- name: Fail if disk has existing partitions
+  fail:
+    msg: >-
+      The disk {{ non_ceph_disk.device_path }} has {{ non_ceph_disk.partition_count }}
+      existing partition(s) and cannot be used for LVM.
+      Use a disk without partitions.
+  when: non_ceph_disk.partition_count | int > 0

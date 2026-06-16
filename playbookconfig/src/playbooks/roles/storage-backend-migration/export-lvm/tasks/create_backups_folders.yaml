@@ -1,0 +1,21 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Create backup folder for filesystem
+  file:
+    path: "{{ backups_filesystem_path }}"
+    state: directory
+    owner: "root"
+    group: "root"
+    mode: "0700"
+
+- name: Create backup folder for block
+  file:
+    path: "{{ backups_block_path }}"
+    state: directory
+    owner: "root"
+    group: "root"
+    mode: "0700"

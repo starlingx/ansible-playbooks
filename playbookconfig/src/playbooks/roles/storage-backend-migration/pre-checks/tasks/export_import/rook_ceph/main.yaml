@@ -1,0 +1,44 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Check space for backups
+  include_tasks: "{{ role_path_common }}/tasks/check_space_for_backups.yaml"
+
+- name: Check RBD snap images
+  shell: rbd ls {{ item.name }} | grep "rbd-snap"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: rbd_snap_images_output
+  loop: "{{ all_pools_list | selectattr('application', 'equalto', 'rbd') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  failed_when: false
+
+- name: Fail if there are snaphots
+  fail:
+    msg: |-
+      Snapshots are not allowed for export-import migration type!
+      This is because references to the snapshots are lost after the migration.
+      To erase your snapshots during the migration, please add the extra variable
+      '-e erase_snapshots=true'.
+      If using the 'erase_snapshots=true' the data from PVCs created from snapshots
+      will be preserved, just the snapshots themselves will be deleted.
+      There is no rollback for the snapshots when using '-e erase_snapshots=true'
+      the snapshots will be deleted permanently.
+
+      Also check RBD snap images using 'rbd ls' on the RBD pools.
+
+      Cephfs VolumeSnapshotsContents: {{ cephfs_vsc }}
+      Cephfs VolumeSnapshots: {{ cephfs_vs_by_namespace | default({}) }}
+      RBD    VolumeSnapshotsContents: {{ rbd_vsc }}
+      RBD    VolumeSnapshots: {{ rbd_vs_by_namespace | default({}) }}
+  when: >
+    not erase_snapshots_cache | bool and
+    (rbd_vs_raw | length > 0 or
+    rbd_vsc | length > 0 or
+    rbd_snap_images_output.results | selectattr('rc', 'equalto', 0) | list | length > 0 or
+    cephfs_vs_raw | length > 0 or
+    cephfs_vsc | length > 0)

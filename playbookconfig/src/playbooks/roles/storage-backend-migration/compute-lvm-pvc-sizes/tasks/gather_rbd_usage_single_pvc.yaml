@@ -1,0 +1,28 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get RBD image name
+  shell: |
+    PV=$(kubectl get pvc {{ pvc.name }} -n {{ pvc.namespace }} -o jsonpath='{.spec.volumeName}')
+    kubectl get pv "$PV" -o jsonpath='{.spec.csi.volumeAttributes.imageName}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: image_result
+  changed_when: false
+
+- name: Get RBD disk usage
+  command: "rbd du kube-rbd/{{ image_result.stdout }} --format json"
+  register: du_result
+  changed_when: false
+
+- name: Append to results
+  set_fact:
+    rbd_usage_results: >-
+      {{ rbd_usage_results | default([]) + [
+        pvc | combine({
+          'used_bytes': (du_result.stdout | from_json).images[0].used_size | default(0)
+        })
+      ] }}

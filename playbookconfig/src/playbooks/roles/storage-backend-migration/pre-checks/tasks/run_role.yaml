@@ -4,6 +4,17 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+- name: Ensure migration_target is defined and valid
+  assert:
+    that:
+      - migration_target is defined
+      - migration_target in valid_migration_targets
+    fail_msg: >-
+      Invalid or missing migration_target.
+      Must be one of: {{ valid_migration_targets | join(', ') }}.
+      Current value: {{ migration_target | default('undefined') }}
+    success_msg: "Migration target validated: {{ migration_target | default('undefined') }}"
+
 - name: Ensure migration_type is defined and valid
   assert:
     that:
@@ -13,7 +24,17 @@
       Invalid or missing migration_type.
       Must be one of: {{ valid_migration_types | join(', ') }}.
       Current value: {{ migration_type | default('undefined') }}
-    success_msg: "Migration type validated: {{ migration_type }}"
+    success_msg: "Migration type validated: {{ migration_type | default('undefined') }}"
+
+- name: Ensure LVM migration is only used with AIO-SX
+  assert:
+    that:
+      - system.system_deployment == "AIO-SX"
+    fail_msg: >
+      LVM migration target is only valid for AIO-SX system deployment.
+      Current system deployment: {{ system.system_deployment }}
+    success_msg: "System type for LVM migration validated: {{ system.system_deployment }}"
+  when: migration_target == "lvm"
 
 - name: Run common pre-checks
   include_tasks: "common/main.yaml"

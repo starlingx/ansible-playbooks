@@ -4,6 +4,20 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+- name: "Ensure {{ tmp_workspace }} exist"
+  file:
+    path: "{{ tmp_workspace }}"
+    state: directory
+  delegate_to: "{{ system.active_controller }}"
+
+- name: Copy scripts to workspace
+  copy:
+    src: "{{ role_path }}/files/{{ item }}"
+    dest: "{{ tmp_workspace }}/{{ item }}"
+    mode: "0755"
+  delegate_to: "{{ system.active_controller }}"
+  loop: "{{ script_files }}"
+
 - name: Get cluster status prior to migration to Bluestore
   command: timeout 30 ceph -s
   register: ceph_status
@@ -30,7 +44,7 @@
 
 - name: Migrate one OSD at a time
   include_tasks: migrate_one_by_one_osd.yaml
-  loop: "{{ hostvars[system.active_controller]['disks_by_host'][inventory_hostname] }}"
+  loop: "{{ hostvars[system.active_controller]['ceph_disks_by_host'][inventory_hostname] }}"
   loop_control:
     label: "Host {{ inventory_hostname }} OSD id = {{ item.osd_id }}"
   when:
@@ -40,7 +54,7 @@
 - name: Migrate all OSDs from a host at a time
   include_tasks: migrate_multi_osds.yaml
   vars:
-    host_osd_info: "{{ hostvars[system.active_controller]['disks_by_host'][inventory_hostname] }}"
+    host_osd_info: "{{ hostvars[system.active_controller]['ceph_disks_by_host'][inventory_hostname] }}"
   when: system.system_deployment != "AIO-SX"
 
 - name: Fix ceph runtime directory for root user
@@ -64,3 +78,9 @@
 - name: Debug Bluestore OSD count
   debug:
     var: bluestore_osd_count.stdout_lines
+
+- name: "Cleanup {{ tmp_workspace }}"
+  file:
+    path: "{{ tmp_workspace }}"
+    state: absent
+  delegate_to: "{{ system.active_controller }}"

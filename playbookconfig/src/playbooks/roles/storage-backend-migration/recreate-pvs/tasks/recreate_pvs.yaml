@@ -52,7 +52,7 @@
               if 'cephfs' in (pv_data.spec | default({})) else ''
             )
           ) -%}
-          {{ (subvolume_map | default({})).get(raw_name, raw_name) }}
+          {{ (subvolume_map | default({}))[raw_name] | default(raw_name) }}
 
     - name: "Show PV {{ pv_name }} subvolumeName"
       debug:
@@ -86,8 +86,6 @@
 
 - name: "Delete recreate PV script for {{ pv_name }}"
   command: "rm -rf {{ tmp_workspace }}/recreate_script.py"
-  args:
-    warn: false
 
 - name: "Apply new PV {{ pv_name }} file"
   command: "kubectl apply -f {{ tmp_workspace }}/{{ pv_name }}.yaml"
@@ -102,5 +100,3 @@
 
 - name: "Delete new PV {{ pv_name }} file"
   command: "rm -rf {{ tmp_workspace }}/{{ pv_name }}.yaml"
-  args:
-    warn: false

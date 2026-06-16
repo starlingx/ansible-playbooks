@@ -25,7 +25,7 @@
 
 - name: Remove in-progress migration flag
   file:
-    path: /run/.rook_migration_in_progress
+    path: /run/.storage_backend_migration_in_progress
     state: absent
   run_once: true
   delegate_to: "{{ system.active_controller }}"

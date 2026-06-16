@@ -3,3 +3,5 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
+
+drbd_ocf_script: /usr/lib/ocf/resource.d/linbit/drbd

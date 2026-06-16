@@ -1,0 +1,33 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Set LVM VG name
+  set_fact:
+    lvm_vg_name_cacheable: >-
+      {%- if lvm_mode == 'thin' and lvm_thin_disk == 'dedicated' -%}
+        {{ lvm_vg_name }}
+      {%- elif lvm_mode == 'thin' and lvm_thin_disk == 'root' -%}
+        cgts-vg
+      {%- elif lvm_mode == 'thick' -%}
+        {{ lvm_vg_name }}
+      {%- endif -%}
+    cacheable: true
+
+- name: Display lvm_vg_name_cacheable
+  debug:
+    var: lvm_vg_name_cacheable
+
+- name: "Configure {{ lvm_mode }} provisioning for {{ lvm_vg_name_cacheable }}"
+  include_tasks: "{{ lvm_mode }}/main.yaml"
+
+- name: Apply lvm-csi application
+  command: system application-apply lvm-csi
+  environment: "{{ system_env }}"
+  register: app_apply_result
+  failed_when:
+    - app_apply_result.rc != 0
+    - "'applying' not in (app_apply_result.stderr | default(''))"
+    - "'is already in progress' not in (app_apply_result.stderr | default(''))"

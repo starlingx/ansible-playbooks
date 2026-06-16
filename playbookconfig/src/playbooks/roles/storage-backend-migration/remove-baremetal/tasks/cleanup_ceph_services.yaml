@@ -11,24 +11,3 @@
   stat:
     path: /etc/platform/.node_ceph_configured
   register: node_ceph_configured_flag
-
-- name: Stop ceph daemons
-  block:
-  - name: Stop ceph daemons
-    command: "{{ item }}"
-    loop:
-      - "/etc/init.d/ceph-manager stop"
-      - "/etc/init.d/mgr-restful-plugin stop"
-      - "/etc/init.d/ceph stop"
-    register: ceph_daemons_stop_result
-
-  - name: Debug ceph_daemons_stop_result var
-    debug:
-      msg: "{{ item.stdout_lines | replace('\\n', '\n') }}"
-    loop: "{{ ceph_daemons_stop_result.results | default([]) }}"
-    loop_control:
-        label: "{{ item.item }}"
-  when: node_ceph_configured_flag.stat.exists
-
-- name: Deprovision cephmon-fs service
-  command: sm-deprovision service-group-member --apply controller-services cephmon-fs

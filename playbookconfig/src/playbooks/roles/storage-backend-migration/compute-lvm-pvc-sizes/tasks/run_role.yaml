@@ -1,0 +1,82 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Ensure {{ tmp_workspace }} exist"
+  file:
+    path: "{{ tmp_workspace }}"
+    state: directory
+
+- name: Compute LVM PVC sizes
+  block:
+    - name: Build flat list of PVCs classified by volumeMode
+      include_tasks: classify_pvcs.yaml
+
+    - name: Gather RBD usage per PVC
+      include_tasks: gather_rbd_usage_single_pvc.yaml
+      loop: "{{ filesystem_rbd_pvcs }}"
+      loop_control:
+        loop_var: pvc
+        label: "{{ pvc.namespace }}/{{ pvc.name }}"
+
+    - name: Gather CephFS usage per PVC
+      include_tasks: gather_cephfs_usage_single_pvc.yaml
+      loop: "{{ filesystem_cephfs_pvcs }}"
+      loop_control:
+        loop_var: pvc
+        label: "{{ pvc.namespace }}/{{ pvc.name }}"
+
+    - name: Compute initial target sizes
+      script: >
+        files/compute_initial_sizes.py
+        '{{ (rbd_usage_results | default([]) + cephfs_usage_results | default([])) | to_json }}'
+        --usage-threshold-regular-volume-percent '{{ usage_threshold_regular_volume_percent }}'
+        --usage-threshold-small-volume-percent '{{ usage_threshold_small_volume_percent }}'
+        --small-vol-gib '{{ small_volume_gib }}'
+        --upsize-percent '{{ upsize_percent }}'
+        --file-density-per-gib '{{ file_density_per_gib }}'
+      register: sizing_result
+      changed_when: false
+
+    - name: Set sizing initial fact
+      set_fact:
+        pvc_sizing_initial: "{{ sizing_result.stdout | from_json }}"
+
+    - name: Group PVCs needing file count by namespace
+      set_fact:
+        pvcs_needing_file_count_by_namespace: >-
+          {{ dict(pvc_sizing_initial | selectattr('needs_file_count') | groupby('namespace')) }}
+      when: pvc_sizing_initial | selectattr('needs_file_count') | list | length > 0
+
+    - name: Count files for high-usage PVCs
+      include_tasks: count_files_per_namespace.yaml
+      loop: "{{ pvcs_needing_file_count_by_namespace | default({}) | dict2items }}"
+      vars:
+        generic_pvc_namespace: "{{ item.key }}"
+        generic_pvc_list: "{{ item.value }}"
+      when: pvcs_needing_file_count_by_namespace | default({}) | length > 0
+
+    - name: Finalize PVC target sizes
+      script: >
+        files/finalize_sizes.py
+        '{{ pvc_sizing_initial | to_json }}'
+        --file-counts '{{ pvc_file_counts | default({}) | to_json }}'
+        --block-pvcs '{{ block_pvcs | default([]) | to_json }}'
+      register: sizing_final_result
+      changed_when: false
+
+    - name: Set PVC target sizes
+      set_fact:
+        pvc_target_sizes: "{{ sizing_final_result.stdout | from_json }}"
+        cacheable: true
+
+    - name: Check LVM space and print report
+      include_tasks: check_lvm_space.yaml
+
+  always:
+    - name: "Cleanup {{ tmp_workspace }}"
+      file:
+        path: "{{ tmp_workspace }}"
+        state: absent

@@ -38,6 +38,11 @@
   delegate_to: "{{ system.active_controller }}"
   changed_when: false
 
+- name: Remove stale drbd-cephmon resource file
+  shell: rm -rvf /etc/drbd.d/drbd-cephmon.res
+  delegate_to: "{{ item }}"
+  loop: "{{ groups.controllers }}"
+
 - name: Create floating monitor
   environment: "{{ system_env }}"
   command: system controllerfs-add ceph-float=20

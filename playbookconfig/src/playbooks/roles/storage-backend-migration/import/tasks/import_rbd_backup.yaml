@@ -81,7 +81,6 @@
       environment:
         KUBECONFIG: "{{ kubeconfig }}"
       register: import_result
-      changed_when: import_result.rc == 0
 
     - name: Show import result
       debug:

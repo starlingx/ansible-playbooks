@@ -1,0 +1,90 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# Wait for Ceph PG movement to start after an operation that triggers
+# data redistribution.
+# There is a short delay between a new OSDMap and OSDs updating PG
+# states, during which all PGs may still show as active+clean.
+# This task polls until any PG leaves active+clean, confirming
+# movement has started.
+# If nothing changes within the timeout, it proceeds (nothing to
+# move or already done).
+- name: Wait for PG movement to start
+  command: timeout 30 ceph pg stat --format json
+  register: pg_movement
+  changed_when: false
+  failed_when: false
+  retries: "{{ (filestore_bluestore_movement_timeout_seconds | int / filestore_bluestore_poll_interval_seconds | int) | int }}"
+  delay: "{{ filestore_bluestore_poll_interval_seconds }}"
+  vars:
+    pg_data: "{{ (pg_movement.stdout | from_json).pg_summary }}"
+    active_clean: "{{ pg_data.num_pg_by_state | selectattr('name', 'equalto', 'active+clean') | map(attribute='num') | first | default(0) }}"
+  until: >
+    pg_movement.rc == 0 and
+    active_clean | int < pg_data.num_pgs | int
+  when: wait_pg_movement | default(true) | bool
+
+- name: Wait until cluster finishes recovery
+  command: >-
+    python3 {{ tmp_workspace }}/wait_ceph_recovery.py
+    --stall-timeout {{ filestore_bluestore_stall_timeout_seconds }}
+    --poll-interval {{ filestore_bluestore_poll_interval_seconds }}
+  changed_when: false
+  # 24h – the script tracks progress and aborts on stall;
+  # async/retries are set high so Ansible never times out before it.
+  async: 86400
+  poll: 0
+  register: wait_recovery_job
+  delegate_to: "{{ system.active_controller }}"
+
+- name: Wait for recovery job to finish
+  async_status:
+    jid: "{{ wait_recovery_job.ansible_job_id }}"
+  register: wait_recovery_result
+  until: wait_recovery_result.finished | default(false)
+  retries: 1440  # 1440 × 60s = 24h
+  delay: 60
+  delegate_to: "{{ system.active_controller }}"
+
+- name: Display recovery wait result
+  debug:
+    var: wait_recovery_result
+
+- name: Check cluster health after recovery
+  command: ceph health -f json
+  register: ceph_health
+  changed_when: false
+
+- name: Wait until ceph is HEALTH_OK
+  command: ceph health -f json
+  register: ceph_health
+  retries: 60
+  delay: 10
+  until: >
+    (
+      ceph_health.stdout | from_json | json_query("status") == "HEALTH_OK"
+    ) or
+    (
+      (
+        ceph_health.stdout | from_json | json_query("checks")
+      | dict2items
+      | selectattr("value.severity", "equalto", "HEALTH_WARN")
+      | list
+      | length
+      ) == 0
+    )
+  changed_when: false
+
+# The reason to check for 'recover' instead of 'recovery' is that this way it
+# also matches some PGs in recovery state in addition to the 'recovery' entry
+- name: Wait until the 'recover' keyword goes away from ceph status
+  command: timeout 30 ceph -s
+  register: ceph_status
+  until: >
+    'recover' not in ceph_status.stdout
+  retries: 30
+  delay: 10
+  changed_when: false

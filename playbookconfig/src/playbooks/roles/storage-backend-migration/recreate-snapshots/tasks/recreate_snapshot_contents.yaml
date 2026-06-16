@@ -92,8 +92,6 @@
 
 - name: "Delete recreate VSC script for {{ snapshot_content_name.key }}"
   command: "rm -rf {{ tmp_workspace }}/recreate_script.py"
-  args:
-    warn: false
 
 - name: "Apply new VSC {{ snapshot_content_name.key }} file"
   command: "kubectl apply -f {{ tmp_workspace }}/{{ snapshot_content_name.key }}.yaml"
@@ -102,6 +100,4 @@
 
 - name: "Delete new VSC {{ snapshot_content_name.key }} file"
   command: "rm -rf {{ tmp_workspace }}/{{ snapshot_content_name.key }}.yaml"
-  args:
-    warn: false
 

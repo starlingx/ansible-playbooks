@@ -1,0 +1,8 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Check LVM {{ lvm_mode }} export-import cases"
+  include_tasks: "{{ lvm_mode }}/main.yaml"

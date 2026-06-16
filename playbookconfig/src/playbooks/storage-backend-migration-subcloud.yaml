@@ -15,6 +15,7 @@
 #
 # - target_list
 # - migration_type: redeploy, export-import or in-service
+# - migration_target: rook-ceph or lvm
 #
 # To run the playbook, the user would define an overrides file that
 # provides the required variable settings, passing this on the ansible
@@ -25,7 +26,7 @@
 # Example command:
 # ansible-playbook /usr/share/ansible/stx-ansible/playbooks/storage-backend-migration-subcloud.yaml -v \
 #     -i my_inventory.yaml \
-#     --extra-vars "target_list=subcloud1 migration_type=redeploy"
+#     --extra-vars "target_list=subcloud1 migration_type=redeploy migration_target=rook-ceph"
 #
 # Use target_list to target individual subclouds, or a comma-separated
 # list of subclouds such as 'subcloud1,subcloud2'. To target all online
@@ -43,26 +44,84 @@
 # - backups_max_safety_margin_percent: 0 <= int <= 100
 # - erase_snapshots: bool
 # - allow_out_of_sync: bool
-#
+# - lvm_mode: thick or thin
+# - lvm_thin_disk: root or dedicated
+# - lvm_devices: list of device paths (e.g., ["/dev/disk/by-path/..."]). Defaults to all Ceph devices.
+# - lvm_volume_size_gb: half, all, or a positive integer in GB (LVM thin uses half of available space by default)
+# - lvm_vg_name: string
+# - pvcs_to_migrate: list of PVC names to migrate (selective migration)
+# - confirm_pvcs_regex: bool - confirm PVC regex selection and proceed with migration
+# - pre_migration_hook: URI (file://, http://, https://) - must be reachable from the SystemController
+# - post_migration_hook: URI (file://, http://, https://) - must be reachable from the SystemController
 
 - hosts: localhost
+  gather_facts: no
+  vars_files:
+    - vars/common/main.yml
+  tasks:
+    - name: Get all online subclouds in the system
+      block:
+        - name: Get online subclouds from dcmanager
+          shell: |
+            source /etc/platform/openrc
+            dcmanager subcloud list -c name -c availability | awk ' $4 == "online" { print $2 }'
+          register: subclouds
+
+        - name: Add host to target_group
+          add_host:
+            name: "{{ item }}"
+            groups: target_group
+          with_items: "{{ subclouds.stdout_lines }}"
+
+      when:
+        - target_list is defined
+        - "'all_online_subclouds' in target_list"
+
+    - name: Get subcloud from extra-vars
+      add_host:
+        name: "{{ item }}"
+        groups: target_group
+      with_items: "{{ target_list.split(',') }}"
+      when:
+        - target_list is defined
+        - "item != 'all_online_subclouds'"
+
+- hosts: target_group
   gather_facts: no
   vars:
     valid_migration_types:
       - redeploy
       - export-import
       - in-service
+    valid_migration_targets:
+      - rook-ceph
+      - lvm
+    valid_lvm_modes:
+      - thick
+      - thin
+    valid_lvm_thin_disks:
+      - root
+      - dedicated
+    tmp_path: "/tmp/{{ migration_target }}-migration"
+    hook_tmp_dir: "{{ tmp_path }}/hooks"
   vars_files:
     - vars/common/main.yml
+
+  roles:
+    - common/check-connectivity
+
   tasks:
-    - name: Fail if target_list is not defined
-      fail:
-        msg: >-
-          Please provide the target list in extra-vars.
-          Example --extra-vars "target_list=subcloud1,subcloud2"
-          or "target_list=all_online_subclouds" to target all online subclouds
-          in 'dcmanager subcloud list'
-      when: target_list is undefined
+
+    - name: Ensure migration_target is defined and valid
+      assert:
+        that:
+          - migration_target is defined
+          - migration_target in valid_migration_targets
+        fail_msg: >-
+          Invalid or missing migration_target.
+          Must be one of: {{ valid_migration_targets | join(', ') }}.
+          Current value: {{ migration_target | default('undefined') }}
+        success_msg: "Migration target validated: {{ migration_target | default('undefined') }}"
 
     - name: Ensure migration_type is defined and valid
       assert:
@@ -73,9 +132,16 @@
           Invalid or missing migration_type.
           Must be one of: {{ valid_migration_types | join(', ') }}.
           Current value: {{ migration_type | default('undefined') }}
-        success_msg: "Migration type validated: {{ migration_type }}"
+        success_msg: "Migration type validated: {{ migration_type | default('undefined') }}"
 
-    - name: Validate optional parameters
+    - name: Ensure in-service migration is not used with LVM target
+      fail:
+        msg: "In-service migration not supported for LVM target"
+      when:
+        - migration_target == "lvm"
+        - migration_type == "in-service"
+
+    - name: Validate OSD safety margin
       assert:
         that:
           - osd_usage_safety_margin_percent | int >= 0 and osd_usage_safety_margin_percent | int <= 100
@@ -142,79 +208,196 @@
         fail_msg: "allow_out_of_sync must be a bool"
       when: allow_out_of_sync is defined
 
-    - name: Get all online subclouds in the system
-      block:
-        - name: Get online subclouds from dcmanager
-          shell: |
-            source /etc/platform/openrc
-            dcmanager subcloud list -c name -c availability | awk ' $4 == "online" { print $2 }'
-          register: subclouds
+    - name: Validate lvm_mode
+      assert:
+        that:
+          - lvm_mode is defined
+          - lvm_mode in valid_lvm_modes
+        fail_msg: >-
+          Invalid lvm_mode.
+          Must be one of: {{ valid_lvm_modes | join(', ') }}.
+          Current value: {{ lvm_mode | default('undefined') }}
+        success_msg: "LVM mode validated: {{ lvm_mode }}"
+      when: lvm_mode is defined
 
-        - name: Add host to target_group
-          add_host:
-            name: "{{ item }}"
-            groups: target_group
-          loop: "{{ subclouds.stdout_lines }}"
+    - name: Validate lvm_thin_disk
+      assert:
+        that:
+          - lvm_thin_disk is defined
+          - lvm_thin_disk in valid_lvm_thin_disks
+        fail_msg: >-
+          Invalid lvm_thin_disk.
+          Must be one of: {{ valid_lvm_thin_disks | join(', ') }}.
+          Current value: {{ lvm_thin_disk | default('undefined') }}
+        success_msg: "LVM thin disk mode validated: {{ lvm_thin_disk }}"
+      when: lvm_thin_disk is defined
 
-      when: "'all_online_subclouds' in target_list"
+    - name: Validate lvm_devices
+      assert:
+        that:
+          - lvm_devices is sequence and lvm_devices is not string
+        fail_msg: "lvm_devices must be a list"
+      when: lvm_devices is defined
 
-    - name: Get subcloud from extra-vars
-      add_host:
-        name: "{{ item }}"
-        groups: target_group
-      loop: "{{ target_list.split(',') }}"
-      when: "item != 'all_online_subclouds'"
+    - name: Validate lvm_volume_size_gb
+      assert:
+        that:
+          - lvm_volume_size_gb == "half" or lvm_volume_size_gb == "all" or (lvm_volume_size_gb is match("^[0-9]+$") and lvm_volume_size_gb | int > 0)
+        fail_msg: "lvm_volume_size_gb must be 'half', 'all', or a positive integer in GB, got: {{ lvm_volume_size_gb }}"
+        success_msg: "LVM volume size validated: {{ lvm_volume_size_gb }}"
+      when: lvm_volume_size_gb is defined
 
-- hosts: target_group
-  gather_facts: no
+    - name: Validate lvm_vg_name
+      assert:
+        that:
+          - lvm_vg_name | length > 0
+        fail_msg: "lvm_vg_name must be a non-empty string"
+      when: lvm_vg_name is defined
 
-  roles:
-    - common/check-connectivity
+    - name: Validate pre_migration_hook URI scheme
+      assert:
+        that:
+          - pre_migration_hook is match('^(file|https?)://')
+        fail_msg: >-
+          Invalid pre_migration_hook URI: '{{ pre_migration_hook }}'.
+          Must start with file://, http://, or https://.
+      when: pre_migration_hook is defined
 
-  tasks:
-    - name: Build extra vars for inner playbook
+    - name: Validate post_migration_hook URI scheme
+      assert:
+        that:
+          - post_migration_hook is match('^(file|https?)://')
+        fail_msg: >-
+          Invalid post_migration_hook URI: '{{ post_migration_hook }}'.
+          Must start with file://, http://, or https://.
+      when: post_migration_hook is defined
+
+    - name: Validate pvcs_to_migrate
+      assert:
+        that:
+          - pvcs_to_migrate is sequence and pvcs_to_migrate is not string
+        fail_msg: "pvcs_to_migrate must be a list"
+      when: pvcs_to_migrate is defined
+
+    - name: Validate confirm_pvcs_regex
+      assert:
+        that:
+          - confirm_pvcs_regex == "true" or confirm_pvcs_regex == "false"
+        fail_msg: "confirm_pvcs_regex must be a bool"
+      when: confirm_pvcs_regex is defined
+
+    - name: Create hook scripts directory on SystemController
+      file:
+        path: "{{ hook_tmp_dir }}"
+        state: directory
+        mode: "0755"
+      when: pre_migration_hook is defined or post_migration_hook is defined
+
+    - name: Download pre_migration_hook script to SystemController
+      get_url:
+        url: "{{ pre_migration_hook }}"
+        dest: "{{ hook_tmp_dir }}/pre_migration_hook"
+        mode: "0755"
+        force: true
+      when: pre_migration_hook is defined
+
+    - name: Download post_migration_hook script to SystemController
+      get_url:
+        url: "{{ post_migration_hook }}"
+        dest: "{{ hook_tmp_dir }}/post_migration_hook"
+        mode: "0755"
+        force: true
+      when: post_migration_hook is defined
+
+    - name: Persist hook_tmp_dir as host fact for cross-play access
       set_fact:
-        extra_vars_arg: >
-          {%- set vars_list = [] -%}
-          {%- if osd_usage_safety_margin_percent is defined -%}
-            {%- set _ = vars_list.append('osd_usage_safety_margin_percent=' + osd_usage_safety_margin_percent | string) -%}
-          {%- endif -%}
-          {%- if cgts_vg_min_required_free_gib is defined -%}
-            {%- set _ = vars_list.append('cgts_vg_min_required_free_gib=' + cgts_vg_min_required_free_gib | string) -%}
-          {%- endif -%}
-          {%- if minimum_platform_mem_workers is defined -%}
-            {%- set _ = vars_list.append('minimum_platform_mem_workers=' + minimum_platform_mem_workers | string) -%}
-          {%- endif -%}
-          {%- if storage_backend_migration_backup_dir is defined -%}
-            {%- set _ = vars_list.append('storage_backend_migration_backup_dir=' + storage_backend_migration_backup_dir) -%}
-          {%- endif -%}
-          {%- if backups_path is defined -%}
-            {%- set _ = vars_list.append('backups_path=' + backups_path) -%}
-          {%- endif -%}
-          {%- if backups_min_safety_margin_bytes is defined -%}
-            {%- set _ = vars_list.append('backups_min_safety_margin_bytes=' + backups_min_safety_margin_bytes | string) -%}
-          {%- endif -%}
-          {%- if osd_usage_safety_margin_percent is defined -%}
-            {%- set _ = vars_list.append('osd_usage_safety_margin_percent=' + osd_usage_safety_margin_percent | string) -%}
-          {%- endif -%}
-          {%- if erase_snapshots is defined -%}
-            {%- set _ = vars_list.append('erase_snapshots=' + erase_snapshots) -%}
-          {%- endif -%}
-          {%- if allow_out_of_sync is defined -%}
-            {%- set _ = vars_list.append('allow_out_of_sync=' + allow_out_of_sync) -%}
-          {%- endif -%}
-          {{ '--extra-vars "' ~ (vars_list | join(' ')) ~ '"'
-            if vars_list | length > 0 else '' }}
+        hook_tmp_dir: "{{ hook_tmp_dir }}"
+      when: pre_migration_hook is defined or post_migration_hook is defined
+
+    - name: Build extra vars for inner playbook
+      vars:
+        _vars_dict: >-
+          {{
+            {}
+            | combine({'osd_usage_safety_margin_percent': osd_usage_safety_margin_percent} if osd_usage_safety_margin_percent is defined else {})
+            | combine({'cgts_vg_min_required_free_gib': cgts_vg_min_required_free_gib} if cgts_vg_min_required_free_gib is defined else {})
+            | combine({'minimum_platform_mem_workers': minimum_platform_mem_workers} if minimum_platform_mem_workers is defined else {})
+            | combine({'storage_backend_migration_backup_dir': storage_backend_migration_backup_dir} if storage_backend_migration_backup_dir is defined else {})
+            | combine({'backups_path': backups_path} if backups_path is defined else {})
+            | combine({'backups_min_safety_margin_bytes': backups_min_safety_margin_bytes} if backups_min_safety_margin_bytes is defined else {})
+            | combine({'backups_max_safety_margin_percent': backups_max_safety_margin_percent} if backups_max_safety_margin_percent is defined else {})
+            | combine({'erase_snapshots': erase_snapshots} if erase_snapshots is defined else {})
+            | combine({'allow_out_of_sync': allow_out_of_sync} if allow_out_of_sync is defined else {})
+            | combine({'lvm_mode': lvm_mode} if lvm_mode is defined else {})
+            | combine({'lvm_thin_disk': lvm_thin_disk} if lvm_thin_disk is defined else {})
+            | combine({'lvm_devices': lvm_devices} if lvm_devices is defined else {})
+            | combine({'lvm_volume_size_gb': lvm_volume_size_gb} if lvm_volume_size_gb is defined else {})
+            | combine({'lvm_vg_name': lvm_vg_name} if lvm_vg_name is defined else {})
+            | combine({'pvcs_to_migrate': pvcs_to_migrate} if pvcs_to_migrate is defined else {})
+            | combine({'confirm_pvcs_regex': confirm_pvcs_regex} if confirm_pvcs_regex is defined else {})
+            | combine({'abort_discovery_if_not_confirm': true})
+            | combine({'pre_migration_hook': 'file://' + hook_tmp_dir + '/pre_migration_hook'} if pre_migration_hook is defined else {})
+            | combine({'post_migration_hook': 'file://' + hook_tmp_dir + '/post_migration_hook'} if post_migration_hook is defined else {})
+          }}
+      set_fact:
+        extra_vars_arg: >-
+          {{ "--extra-vars '" ~ (_vars_dict | to_json) ~ "'" if _vars_dict | length > 0 else '' }}
 
     - name: Display extra-vars argument
       debug:
         var: extra_vars_arg
 
-    - name: "Run migration playbook on subcloud"
-      command: >
-        ansible-playbook
-        /usr/share/ansible/stx-ansible/playbooks/storage-backend-migration-{{ migration_type }}.yaml -v
-        {{ extra_vars_arg }}
-      environment:
-        ANSIBLE_CONFIG: "/usr/share/ansible/stx-ansible/playbooks/vars/storage-backend-migration/ansible.cfg"
+    - name: Copy hook scripts, run migration, and cleanup
+      block:
+        - name: Create hook scripts directory on subcloud
+          file:
+            path: "{{ hook_tmp_dir }}"
+            state: directory
+            mode: "0755"
+          when: pre_migration_hook is defined or post_migration_hook is defined
 
+        - name: Copy pre_migration_hook script to subcloud
+          copy:
+            src: "{{ hostvars.localhost.hook_tmp_dir }}/pre_migration_hook"
+            dest: "{{ hook_tmp_dir }}/pre_migration_hook"
+            mode: "0755"
+          when: pre_migration_hook is defined
+
+        - name: Copy post_migration_hook script to subcloud
+          copy:
+            src: "{{ hostvars.localhost.hook_tmp_dir }}/post_migration_hook"
+            dest: "{{ hook_tmp_dir }}/post_migration_hook"
+            mode: "0755"
+          when: post_migration_hook is defined
+
+        - name: "Run migration playbook on subcloud"
+          command: >
+            ansible-playbook
+            /usr/share/ansible/stx-ansible/playbooks/storage-backend-migration-{{ migration_target }}-{{ migration_type }}.yaml -v
+            {{ extra_vars_arg }}
+          environment:
+            ANSIBLE_CONFIG: "/usr/share/ansible/stx-ansible/playbooks/vars/storage-backend-migration/ansible.cfg"
+          register: migration_result
+          failed_when:
+            - migration_result.rc != 0
+            - '"Discovery complete. Failed automatically; the playbook was triggered remotely." not in migration_result.stdout'
+
+        - name: "Explain how to continue to the migration"
+          debug:
+            msg: 'Use -e "confirm_pvcs_regex=true" to continue to the migration'
+          when: '"Discovery complete. Failed automatically; the playbook was triggered remotely." in migration_result.stdout'
+
+      always:
+        - name: Cleanup hook scripts from subcloud
+          file:
+            path: "{{ hook_tmp_dir }}"
+            state: absent
+          when: pre_migration_hook is defined or post_migration_hook is defined
+
+        - name: Cleanup hook scripts from SystemController
+          file:
+            path: "{{ hostvars.localhost.hook_tmp_dir }}"
+            state: absent
+          delegate_to: localhost
+          run_once: true
+          when: pre_migration_hook is defined or post_migration_hook is defined

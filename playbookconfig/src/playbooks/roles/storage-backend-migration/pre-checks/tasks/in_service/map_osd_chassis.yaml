@@ -9,21 +9,23 @@
   register: ceph_osd_tree_json
   changed_when: false
 
+- name: Build OSD to chassis list
+  set_fact:
+    _osd_chassis_list: "{{ _osd_chassis_list | default([]) + ([{'osd_id': item.id, 'chassis_name': _chassis.name}] if _chassis else []) }}"
+  vars:
+    nodes: "{{ (ceph_osd_tree_json.stdout | from_json).nodes }}"
+    _host_nodes: "{{ nodes | selectattr('children', 'defined') | list }}"
+    _chassis_nodes: "{{ nodes | selectattr('type', 'equalto', 'chassis') | list }}"
+    _host: "{{ _host_nodes | selectattr('children', 'contains', item.id) | first | default(false) }}"
+    _chassis: "{{ (_chassis_nodes | selectattr('children', 'contains', _host.id) | first | default(false)) if _host else false }}"
+  loop: "{{ (ceph_osd_tree_json.stdout | from_json).nodes | selectattr('type', 'equalto', 'osd') | list }}"
+  loop_control:
+    label: "OSD {{ item.id }}"
+
 - name: Generate OSD to Chassis mapping
   set_fact:
     osd_to_chassis: "{{ osd_to_chassis | default({}) | combine({ item.osd_id | string: item.chassis_name }) }}"
-  vars:
-    nodes: "{{ (ceph_osd_tree_json.stdout | from_json).nodes }}"
-    osd_list: >-
-      {%- set results = [] -%}
-      {%- for osd in nodes if osd.type == 'osd' -%}
-        {%- set host = nodes | selectattr('children', 'defined') | selectattr('children', 'contains', osd.id) | first -%}
-        {%- set chassis = nodes | selectattr('type', 'equalto', 'chassis') | selectattr('children', 'contains', host.id) | first | default(none) -%}
-        {%- if chassis -%}
-          {%- set _ = results.append({'osd_id': osd.id, 'chassis_name': chassis.name}) -%}
-        {%- endif -%}
-      {%- endfor -%}
-      {{ results }}
-  loop: "{{ osd_list }}"
+  loop: "{{ _osd_chassis_list | default([]) }}"
   loop_control:
     label: "OSD {{ item.osd_id }} -> Chassis {{ item.chassis_name }}"
+  when: _osd_chassis_list | default([]) | length > 0

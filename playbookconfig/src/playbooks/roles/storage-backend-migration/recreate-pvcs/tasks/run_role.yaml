@@ -4,15 +4,29 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+- name: "Ensure {{ tmp_workspace }} exist"
+  file:
+    path: "{{ tmp_workspace }}"
+    state: directory
+
+- name: Copy files to workspace
+  copy:
+    src: "{{ roles_dir_path }}/{{ role_name }}/files/{{ item }}"
+    dest: "{{ tmp_workspace }}/{{ item }}"
+    mode: "0755"
+  loop: "{{ files_to_copy }}"
+
 - name: Recover Ceph PVCs after host redeployed
-  shell: /usr/share/ansible/stx-ansible/playbooks/roles/restore-platform/restore-more-data/files/recover_ceph_pvcs.sh
+  shell: "{{ tmp_workspace }}/recreate_ceph_pvcs.sh"
   register: recover_ceph_pvcs_output
   environment:
     KUBECONFIG: "{{ kubeconfig }}"
-  args:
-    chdir: /usr/share/ansible/stx-ansible/playbooks/roles/restore-platform/restore-more-data/files/
 
 - name: Show recreate script output
   debug:
     msg: "{{ recover_ceph_pvcs_output.stdout_lines }}"
 
+- name: Cleanup temporary workspace folder
+  file:
+    path: "{{ tmp_workspace }}"
+    state: absent

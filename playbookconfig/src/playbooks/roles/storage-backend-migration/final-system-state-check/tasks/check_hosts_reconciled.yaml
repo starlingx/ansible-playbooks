@@ -1,0 +1,54 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get hosts status from Kubernetes
+  shell: kubectl get hosts -n deployment
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: kubectl_hosts_output
+  changed_when: false
+
+- name: Display host status
+  debug:
+    var: kubectl_hosts_output.stdout_lines
+
+- name: Get hosts from in JSON format
+  shell: kubectl get hosts -n deployment -o json
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: hosts_json
+  changed_when: false
+
+- name: Parse hosts JSON
+  set_fact:
+    hosts_list: "{{ hosts_json.stdout | from_json }}"
+
+- name: Set bad host list
+  set_fact:
+    bad_hosts_reconciled: >-
+        {{
+          hosts_list['items']
+          | selectattr('status.reconciled', '!=', true)
+          | list
+        }}
+
+- name: Display hosts that are not reconciled
+  debug:
+    msg: >
+      Some hosts are NOT reconciled:
+      {{
+        bad_hosts_reconciled
+        | map(attribute='metadata.name')
+        | unique
+        | list
+      }}
+  when: bad_hosts_reconciled | length > 0
+
+- name: All hosts are reconciled
+  debug:
+    msg: "All hosts are reconciled"
+  when: bad_hosts_reconciled | length == 0
+

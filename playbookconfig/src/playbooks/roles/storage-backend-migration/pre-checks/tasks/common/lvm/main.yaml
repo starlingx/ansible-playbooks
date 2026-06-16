@@ -1,0 +1,19 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Ensure lvm_mode is defined and valid
+  assert:
+    that:
+      - lvm_mode is defined
+      - lvm_mode in valid_lvm_modes
+    fail_msg: >-
+      Invalid or missing lvm_mode.
+      Must be one of: {{ valid_lvm_modes | join(', ') }}.
+      Current value: {{ lvm_mode | default('undefined') }}
+    success_msg: "LVM mode validated: {{ lvm_mode }}"
+
+- name: "Check LVM {{ lvm_mode }} common cases"
+  include_tasks: "{{ lvm_mode }}/main.yaml"

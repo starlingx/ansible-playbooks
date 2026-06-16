@@ -1,0 +1,109 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This playbook is intended to be run on standalone systems.
+#
+# It provides the capability to migrate the storage backend used.
+#
+# To run the playbook, the user would define the required variable settings
+# passing this on the ansible command-line as a parameter.
+#
+#
+# Example command:
+#  ANSIBLE_CONFIG='/usr/share/ansible/stx-ansible/playbooks/vars/storage-backend-migration/ansible.cfg' \
+#  ansible-playbook /usr/share/ansible/stx-ansible/playbooks/storage-backend-migration-rook-ceph-export-import.yaml -v
+#
+# Optional extra variables:
+#
+# - osd_usage_safety_margin_percent: 0 <= int <= 100
+# - cgts_vg_min_required_free_gib: 1 <= int <= 100
+# - minimum_platform_mem_workers: 1000 <= int <= 100000
+# - storage_backend_migration_backup_dir: string
+# - backups_path: <path/to/backups> (for export-import migration type or in-service if using kube-rbdkube-system pool)
+# - backups_min_safety_margin_bytes: int
+# - backups_max_safety_margin_percent: 0 <= int <= 100
+# - erase_snapshots: bool
+# - allow_out_of_sync: bool
+#
+
+- import_playbook: storage-backend-migration-init.yaml
+  vars:
+    migration_type: export_import
+    migration_target: rook_ceph
+
+- import_playbook: storage-backend-migration-discovery.yaml
+
+- name: Execute pre-checks
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: pre-checks
+
+- import_playbook: storage-backend-migration-pre-migration.yaml
+
+- name: Execute pull-images
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: pull-images
+      tags: pull-images
+
+- name: Export ceph bare-metal data
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: manage-lv
+      lv_action: create
+      checkpoint_name: manage-lv-create
+      when: create_migration_lv
+
+    - role: migrate-pool-with-backup
+      original_pool: kube-rbdkube-system
+      new_pool: kube-rbd
+      when: old_pool_exist
+
+    - role: remove-unmatched-pvcs
+    - role: export
+
+- import_playbook: storage-backend-migration-rook-ceph-redeploy.yaml
+  vars:
+    migration_type: export_import
+    migration_target: rook_ceph
+    execute_pre_check: false
+    execute_init: false
+    execute_pull_images: false
+    execute_pre_migration: false
+    execute_post_migration: false
+
+- name: Import ceph backed up data
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: recreate-pools
+    - role: recreate-pvs
+    - role: import
+    - role: manage-lv
+      lv_action: remove
+      checkpoint_name: manage-lv-remove
+      when: create_migration_lv
+
+- name: Update rook-ceph PVC annotations
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: update-pvc-annotations
+
+- import_playbook: storage-backend-migration-post-migration.yaml

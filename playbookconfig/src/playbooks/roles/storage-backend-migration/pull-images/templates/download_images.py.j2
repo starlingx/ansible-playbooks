@@ -16,7 +16,11 @@ eventlet.monkey_patch()
 
 import logging
 import sys
+import warnings
 
+# To supress SQLAlchemy warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", message="relationship '.*' will copy column")
 
 logging.basicConfig(
     level=logging.INFO,

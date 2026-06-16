@@ -1,0 +1,44 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Create new OSD entry
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -q -c
+    "INSERT INTO i_istor (uuid, osdid, idisk_uuid, state, function, forihostid, fortierid, created_at)
+      VALUES (
+        '{{ item.osd_uuid }}',
+        {{ item.osd_id }},
+        '{{ item.disk_uuid }}',
+        'configured',
+        'osd',
+        {{ item.host_id }},
+        {{ item.tier_id }},
+        '{{ now(fmt='%Y-%m-%d %H:%M:%S.%f') }}'
+      )
+      ON CONFLICT (uuid) DO NOTHING
+      RETURNING id;"
+  register: osd_entry_insert_result
+  delegate_to: "{{ system.active_controller }}"
+  changed_when: osd_entry_insert_result.stdout | length > 0
+
+- name: Update the OSD reference
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -q -c
+      "WITH istor_tmp AS (SELECT id FROM i_istor WHERE uuid = '{{ item.osd_uuid }}')
+       UPDATE i_idisk
+          SET foristorid = istor_tmp.id,
+              updated_at = '{{ now(fmt='%Y-%m-%d %H:%M:%S.%f') }}'
+         FROM istor_tmp
+        WHERE i_idisk.uuid = '{{ item.disk_uuid }}'
+          AND i_idisk.foristorid IS DISTINCT FROM istor_tmp.id
+       RETURNING i_idisk.id;"
+  register: disk_istor_ref_result
+  delegate_to: "{{ system.active_controller }}"
+  changed_when: disk_istor_ref_result.stdout | length > 0

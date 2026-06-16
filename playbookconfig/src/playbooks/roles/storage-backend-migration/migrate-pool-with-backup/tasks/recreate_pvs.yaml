@@ -87,5 +87,3 @@
 
 - name: "Delete new PV {{ pv_name }} file"
   command: "rm -rf {{ tmp_workspace }}/{{ pv_name }}.yaml"
-  args:
-    warn: false

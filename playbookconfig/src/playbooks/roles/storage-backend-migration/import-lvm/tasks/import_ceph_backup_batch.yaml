@@ -1,0 +1,50 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Batch import for namespace {{ generic_pvc_namespace }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  vars:
+    batch_pod_name: "migration-import-generic-batch"
+  block:
+    - name: Create batch pod with {{ batch_pvcs | length }} PVCs
+      template:
+        src: "{{ role_path_common }}/templates/pod-migration-batch.yaml.j2"
+        dest: "{{ tmp_workspace }}/pod-migration-import-generic-batch.yaml"
+        mode: "0644"
+      vars:
+        pod_name: "{{ batch_pod_name }}"
+        pod_namespace: "{{ generic_pvc_namespace }}"
+        batch_pvc_list: "{{ batch_pvcs }}"
+        backup_path: "{{ generic_backups_path }}"
+        read_only: false
+
+    - name: Delete batch pod if exists
+      command: "kubectl delete pod {{ batch_pod_name }} -n {{ generic_pvc_namespace }} --ignore-not-found=true"
+
+    - name: Apply batch pod
+      command: "kubectl apply -f {{ tmp_workspace }}/pod-migration-import-generic-batch.yaml"
+
+    - name: Wait for batch pod to be running
+      command: >
+        kubectl get pod {{ batch_pod_name }} -n {{ generic_pvc_namespace }}
+        -o jsonpath='{.status.phase}'
+      register: batch_pod_status
+      until: "'Running' in batch_pod_status.stdout"
+      retries: 60
+      delay: 10
+      changed_when: false
+
+    - name: Import each PVC in batch
+      include_tasks: import_ceph_backup_single_pvc.yaml
+      loop: "{{ batch_pvcs }}"
+      loop_control:
+        loop_var: pvc
+
+    - name: Cleanup batch pod
+      command: "kubectl delete -f {{ tmp_workspace }}/pod-migration-import-generic-batch.yaml --ignore-not-found=true"
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"

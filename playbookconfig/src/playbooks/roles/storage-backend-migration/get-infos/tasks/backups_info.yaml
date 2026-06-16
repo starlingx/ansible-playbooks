@@ -37,14 +37,14 @@
 
     - name: Register total used bytes in ceph without consider replicas
       set_fact:
-        ceph_used_bytes: >
+        ceph_used_bytes: >-
           {{ (ceph_df_json.stdout | from_json).pools
              | map (attribute='stats.stored')
              | sum }}
 
     - name: Register total available bytes in ceph cluster
       set_fact:
-        cluster_avail_space_bytes: >
+        cluster_avail_space_bytes: >-
           {{ (ceph_df_json.stdout | from_json).stats.total_avail_bytes }}
         cacheable: true
 
@@ -54,7 +54,7 @@
 
     - name: Register total bytes used by kube-rbdkube-system pool
       set_fact:
-        old_pool_bytes: >
+        old_pool_bytes: >-
           {{ (ceph_df_json.stdout | from_json).pools
              | selectattr('name', 'equalto', 'kube-rbdkube-system')
              | map (attribute='stats.stored')
@@ -63,7 +63,7 @@
 
     - name: Register backups required space for export_import
       set_fact:
-        backups_required_bytes_no_margin: >
+        backups_required_bytes_no_margin: >-
           {{ [ceph_used_bytes | default(0) | int,
               old_pool_bytes | default(0) | int]
               | max }}
@@ -71,19 +71,20 @@
 
     - name: Register backups required space for in_service
       set_fact:
-        backups_required_bytes_no_margin: >
+        backups_required_bytes_no_margin: >-
           {{ old_pool_bytes | default(0) }}
       when: migration_type == 'in_service'
 
     - name: Calculate safety margin for backups
       set_fact:
-        backups_safety_margin_bytes: >
+        backups_safety_margin_bytes: >-
           {{ [backups_required_bytes_no_margin | int * (backups_max_safety_margin_percent | int / 100),
               backups_min_safety_margin_bytes | int] | max }}
+        cacheable: true
 
     - name: Register final backups required space with an extra safety margin
       set_fact:
-        backups_required_bytes: >
+        backups_required_bytes: >-
           {{ backups_required_bytes_no_margin | int + backups_safety_margin_bytes | int }}
         cacheable: true
   when: backups_required_bytes is undefined

@@ -1,0 +1,23 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Ensure {{ tmp_workspace }} exist"
+  file:
+    path: "{{ tmp_workspace }}"
+    state: directory
+
+- name: "Include tasks to iterate over each DataVolume"
+  include_tasks: recreate_datavolumes.yaml
+  loop: "{{ dv_map_original | dict2items }}"
+  loop_control:
+    loop_var: data_volume_name
+  when: dv_map_original | length > 0
+
+# Clean only if all tasks was completed, to avoid errors when reexecuting.
+- name: "Cleanup {{ tmp_workspace }}"
+  file:
+    path: "{{ tmp_workspace }}"
+    state: absent

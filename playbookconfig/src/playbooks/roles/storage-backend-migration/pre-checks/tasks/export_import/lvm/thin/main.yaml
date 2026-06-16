@@ -1,0 +1,8 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "LVM {{ lvm_thin_disk }} disk specific checks"
+  include_tasks: "{{ lvm_thin_disk }}/main.yaml"

@@ -57,6 +57,9 @@
         delay: 10
   when: app_status_check.stdout | trim not in ['apply-failed', 'applied']
 
+- name: Add fixed monitors
+  include_tasks: "{{ roles_dir_path }}/deploy-rook/tasks/add_monitors.yaml"
+
 # This in needed to allow us to lock and unlock, otherwise it complains about
 # app in transition
 - name: Re-apply rook-ceph app before adding floating monitor to DX
@@ -101,8 +104,10 @@
 
   when: system.system_deployment == "AIO-DX"
 
-- name: Add monitors
+- name: Add floating monitor
   include_tasks: "{{ roles_dir_path }}/deploy-rook/tasks/add_monitors.yaml"
+  vars:
+    add_floating: true
 
 - name: Change capabilities for hosts with OSDs and monitors
   include_tasks: "{{ roles_dir_path }}/deploy-rook/tasks/change_capabilities.yaml"

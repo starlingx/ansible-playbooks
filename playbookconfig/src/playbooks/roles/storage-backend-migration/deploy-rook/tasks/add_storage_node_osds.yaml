@@ -24,8 +24,8 @@
   environment: "{{ system_env }}"
   command: >-
     system host-stor-add {{ item.0.key }} {{ item.1.disk_uuid }} --tier-uuid {{ item.1.tier_uuid }}
-  loop: "{{ disks_by_host_db | dict2items | subelements('value') }}"
+  loop: "{{ ceph_disks_by_host_db | dict2items | subelements('value') }}"
   loop_control:
     label: "{{ item.0.key }} - disk uuid ({{ item.1.disk_uuid }}) - tier uuid ({{ item.1.tier_uuid }})"
   vars:
-    disks_by_host_db: "{{ hostvars[system.active_controller]['disks_by_host'] }}"
+    ceph_disks_by_host_db: "{{ hostvars[system.active_controller]['ceph_disks_by_host'] }}"

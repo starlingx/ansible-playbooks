@@ -13,7 +13,7 @@
   file:
     path: "{{ storage_backend_migration_backup_dir }}"
     state: directory
-    mode: "0644"
+    mode: "0777"
 
 - name: Register total available bytes for storage backend migration backup path
   shell: |

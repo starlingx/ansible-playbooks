@@ -1,0 +1,11 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Recreate OSD database entries
+  include_tasks: recreate_osd.yaml
+  loop: "{{ hostvars[system.active_controller]['ceph_disks_by_host'][inventory_hostname] }}"
+  loop_control:
+    label: "Host {{ inventory_hostname }} - OSD id = {{ item.osd_id }}"

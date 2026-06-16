@@ -22,6 +22,12 @@
   debug:
     var: system
 
+- name: Ensure active controller is in hosts list
+  set_fact:
+    hosts: "{{ hosts + [{'hostname': system.active_controller, 'personality': 'controller'}] }}"
+    cacheable: true
+  when: system.active_controller not in (hosts | map(attribute='hostname') | list)
+
 - name: Add hosts to inventory grouped by personality
   add_host:
     name: "{{ item.hostname }}"
@@ -34,7 +40,9 @@
 - name: Add active controller group
   add_host:
     name: "{{ system.active_controller }}"
-    groups: active_controller
+    groups:
+      - controllers
+      - active_controller
     ansible_connection: "{{ ansible_connection }}"
     ansible_become_pass: "{{ ansible_become_pass }}"
     ansible_password: "{{ ansible_password }}"

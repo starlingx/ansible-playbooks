@@ -9,7 +9,7 @@
     wipefs -a -f {{ item.disk_device_path }}
     sgdisk --zap-all {{ item.disk_device_path }}
     kpartx -d {{ item.disk_device_path }}
-  loop: "{{ hostvars[system.active_controller]['disks_by_host'][inventory_hostname] }}"
+  loop: "{{ hostvars[system.active_controller]['ceph_disks_by_host'][inventory_hostname] }}"
   loop_control:
     label: "OSD id = {{ item.osd_id }}"
   register: wipe_osds_output

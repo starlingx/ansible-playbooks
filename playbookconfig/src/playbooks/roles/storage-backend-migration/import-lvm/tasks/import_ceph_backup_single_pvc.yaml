@@ -1,0 +1,19 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "[PVC {{ pvc.name }}] Import Ceph backup file"
+  shell: |
+    set -e -o pipefail
+    echo "Importing backup to /data/{{ pvc.name }}/..."
+    kubectl exec -n {{ generic_pvc_namespace }} {{ batch_pod_name }} -- tar -xzf "/backup/backup-${PVC_NAME}.tar.gz" -C "/data/{{ pvc.name }}/"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+    PVC_NAME: "{{ generic_pvc_namespace }}-{{ pvc.name }}"
+  register: import_result
+
+- name: "[PVC {{ pvc.name }}] Show import data result"
+  debug:
+    var: import_result.stdout_lines

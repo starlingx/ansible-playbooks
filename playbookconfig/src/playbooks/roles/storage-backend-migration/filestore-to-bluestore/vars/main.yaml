@@ -1,0 +1,23 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+tmp_workspace: "{{ tmp_path }}/{{ role_name }}"
+
+# Stall timeout for Ceph recovery progress detection (in seconds).
+# If no progress is detected (active+clean PG count not increasing)
+# for this duration, the wait task will fail.
+filestore_bluestore_stall_timeout_seconds: 900
+
+# Timeout for waiting for PG movement to start (in seconds).
+filestore_bluestore_movement_timeout_seconds: 180
+
+# Poll interval for checking Ceph recovery progress (in seconds).
+filestore_bluestore_poll_interval_seconds: 10
+
+script_files:
+  - wait_ceph_pg_states.py
+  - wait_ceph_drain.py
+  - wait_ceph_recovery.py
