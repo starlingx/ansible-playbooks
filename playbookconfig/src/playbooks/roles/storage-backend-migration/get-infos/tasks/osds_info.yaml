@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: Set disks_by_host_db
+- name: Set ceph_disks_by_host_db
   block:
     - name: Get OSD information from database
       become: true
@@ -19,7 +19,10 @@
               JSON_BUILD_OBJECT(
                 'disk_device_path', i_idisk.device_path,
                 'disk_uuid', i_idisk.uuid,
+                'host_id', i_idisk.forihostid,
                 'osd_id', i_istor.osdid,
+                'osd_uuid', i_istor.uuid,
+                'tier_id', storage_tiers.id,
                 'tier_uuid', storage_tiers.uuid,
                 'tier_name', storage_tiers.name
               )
@@ -36,13 +39,13 @@
 
     - name: Set fact from SQL JSON output
       set_fact:
-        disks_by_host_db: "{{ db_osd_info.stdout | from_json }}"
+        ceph_disks_by_host_db: "{{ db_osd_info.stdout | from_json }}"
         cacheable: true
-  when: disks_by_host_db is undefined
+  when: ceph_disks_by_host_db is undefined
 
 - name: Debug OSDs from database
   debug:
-    var: disks_by_host_db
+    var: ceph_disks_by_host_db
 
 - name: Add hosts with disks to dynamic group
   add_host:
@@ -51,7 +54,7 @@
     ansible_become_pass: "{{ ansible_become_pass }}"
     ansible_password: "{{ ansible_password }}"
     system: "{{ system }}"
-  loop: "{{ disks_by_host_db | dict2items }}"
+  loop: "{{ ceph_disks_by_host_db | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
 
@@ -103,13 +106,13 @@
     var: groups.single_host_with_mon_and_osd
   when: groups.single_host_with_mon_and_osd is defined
 
-- name: Set disks_by_host if undefined
+- name: Set ceph_disks_by_host if undefined
   include_tasks: osd_format_info.yaml
   when:
-    - disks_by_host is undefined
+    - ceph_disks_by_host is undefined
     - groups.with_osds | length > 0
 
-- name: Debug disks_by_host
+- name: Debug ceph_disks_by_host
   debug:
-    var: disks_by_host
-  when: disks_by_host is defined
+    var: ceph_disks_by_host
+  when: ceph_disks_by_host is defined

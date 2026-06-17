@@ -1,0 +1,31 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Resize LVM VG {{ lvm_vg_name_cacheable }} to {{ lvm_volume_size_gb_normalized }} GB"
+  command: >
+    system host-lvg-modify {{ inventory_hostname }} {{ lvm_vg_name_cacheable }}
+    -s {{ lvm_volume_size_gb_normalized }}
+  environment: "{{ system_env }}"
+
+- name: "Wait for {{ lvm_vg_name_cacheable }} pool size to be resized to {{ lvm_volume_size_gb_normalized }} GB"
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -c
+    "SELECT vg_state, capabilities::json->>'lvm_pool_size' FROM i_lvg WHERE lvm_vg_name = '{{ lvm_vg_name_cacheable }}'"
+  register: lvm_pool_status
+  until: lvm_pool_status.stdout.split('|')[0] == 'provisioned' and lvm_pool_status.stdout.split('|')[1] | int == lvm_volume_size_gb_normalized | int
+  retries: 60
+  delay: 10
+  changed_when: false
+
+- name: "Wait for lvmcsi-pool to be resized to {{ lvm_volume_size_gb_normalized }} GB"
+  shell: "lvs --noheadings --units g --nosuffix -o lv_size {{ lvm_vg_name_cacheable }}/lvmcsi-pool | awk '{print int($1)}'"
+  register: lvmcsi_pool_size
+  until: lvmcsi_pool_size.stdout | int >= lvm_volume_size_gb_normalized | int
+  retries: 60
+  delay: 10
+  changed_when: false

@@ -1,0 +1,18 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Wait for lvm-csi to reach applied
+  include_tasks: "{{ role_path_common }}/tasks/check_app_status.yaml"
+  vars:
+    app_name_to_check: lvm-csi
+    success_statuses:
+      - applied
+    failure_statuses:
+      - apply-failed
+    retries: 366 # 1 hour and 1 minute, good luck
+    delay: 10
+
+# TODO: Add post-deploy checks

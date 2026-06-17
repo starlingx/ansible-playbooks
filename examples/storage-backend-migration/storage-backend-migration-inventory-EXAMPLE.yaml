@@ -15,32 +15,42 @@
 # Example ansible command:
 # ansible-playbook /usr/share/ansible/stx-ansible/playbooks/storage-backend-migration-subcloud.yaml -v \
 #     -i my-inventory-file.yaml \
-#     --extra-vars "target_list=subcloud1 migration_type=redeploy"
+#     --extra-vars "target_list=subcloud1 migration_type=redeploy migration_target=rook-ceph"
 
 # Use target_list to specify individual subclouds, or a comma-separated
 # list of subclouds such as 'subcloud1,subcloud2'. To target all online
 # subclouds at once, use 'target_list=all_online_subclouds'.
-#
-#
 all:
   children:
     # This will be applied to all online subclouds.
-    # Use the example below in hosts to override specific settings for a subcloud, such as passwords.
+    # Use the example below in hosts to override specific settings for a
+    # subcloud, such as passwords or migration options, such as
+    # `pvcs_to_migrate`, `lvm_devices`, etc.
+    # For the list of all migration options accepted, check the header comments
+    # in playbookconfig/src/playbooks/storage-backend-migration-subcloud.yaml.
     target_group:
+      # Common vars comes here
       vars:
         # SSH password to connect to all subclouds
         ansible_ssh_user: sysadmin
-        ansible_ssh_pass: <sysadmin-pwd>
-        # Sudo password
-        ansible_become_pass: <sysadmin-pwd>
-#      Add a child group, as shown below, if you need individual
-#      overrides for specific subcloud hosts.
-#      Use the hosts section to add the list of hosts.
-#      Use the vars section to override target_group variables,
-#      such as the ssh password.
-#      Note that you can also override multiple hosts at once or
-#      have multiple child groups if necessary.
-#      Example:
+        ansible_ssh_pass: Li69nux*1234
+        ansible_become_pass: Li69nux*1234 # Sudo password
+        ansible_ssh_common_args: "-o PreferredAuthentications=password"
+      hosts:
+        # Specific vars to this subcloud comes here
+        subcloud1:
+          pvcs_to_migrate:
+            - pvc-cephfs.*
+        # Specific vars to this subcloud comes here
+        subcloud2:
+          pvcs_to_migrate:
+            - pvc-rbd.*
+
+#     Add a child group, as shown below, if you need common
+#     vars overrides for a set of subcloud hosts.
+#     Use the hosts section to add the list of hosts.
+#     Use the vars section to override target_group variables,
+#     such as the ssh password and migration options.
 #      children:
 #        different_password_group:
 #          vars:
@@ -48,5 +58,5 @@ all:
 #            ansible_ssh_pass: <sysadmin-pwd>
 #            ansible_become_pass: <sysadmin-pwd>
 #          hosts:
-#            subcloud1:
-#            subcloud2:
+#            subcloud3:
+#            subcloud4:

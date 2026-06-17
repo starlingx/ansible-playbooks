@@ -1,0 +1,21 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "[PVC {{ sizing_pvc.namespace }}/{{ sizing_pvc.name }}] Count files in volume"
+  shell: >
+    kubectl exec {{ batch_pod_name }} -n {{ sizing_pvc.namespace }} --
+    sh -c 'find /data/{{ sizing_pvc.name }} -xdev -mindepth 1 -printf . | wc -c'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: file_count_result
+  changed_when: false
+
+- name: "[PVC {{ sizing_pvc.namespace }}/{{ sizing_pvc.name }}] Store file count"
+  set_fact:
+    pvc_file_counts: >-
+      {{ pvc_file_counts | default({}) | combine({
+        sizing_pvc.namespace + '/' + sizing_pvc.name: file_count_result.stdout | int
+      }) }}

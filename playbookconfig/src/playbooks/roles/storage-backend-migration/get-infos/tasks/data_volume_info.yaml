@@ -1,0 +1,52 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get ceph DataVolumes and build dv_map_original
+  block:
+    - name: Get DataVolumes with storageClassName general or cephfs
+      shell: >-
+        kubectl get datavolume -A
+        -o jsonpath='{range .items[?(@.spec.pvc.storageClassName=="general")]}{@}{"\n"}{end}{range .items[?(@.spec.pvc.storageClassName=="cephfs")]}{@}{"\n"}{end}'
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      register: dv_ceph_raw
+      failed_when:
+        - dv_ceph_raw.rc != 0
+        - ("the server doesn't have a resource type" not in dv_ceph_raw.stderr)
+      changed_when: false
+
+    - name: Build dv_map_original from results
+      vars:
+        ceph_dvs: "{{ dv_ceph_raw.stdout_lines | default([]) | select | map('from_json') | list }}"
+      set_fact:
+        _dv_map_build: >-
+          {{ _dv_map_build | default({}) | combine({
+            item.metadata.name: {
+              'namespace': item.metadata.namespace,
+              'phase': item.status.phase | default(''),
+              'source': item.spec.source | default(None),
+              'sourceRef': item.spec.sourceRef | default(None)
+            }
+          }) }}
+      loop: "{{ ceph_dvs }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+
+    - name: Cache dv_map_original
+      set_fact:
+        dv_map_original: "{{ _dv_map_build | default({}) }}"
+        cacheable: true
+  when: dv_map_original is undefined
+
+- name: Set empty dv_map_original if no DataVolumes found
+  set_fact:
+    dv_map_original: {}
+    cacheable: true
+  when: dv_map_original is undefined
+
+- name: Display dv_map_original
+  debug:
+    var: dv_map_original

@@ -4,7 +4,12 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: Fail if is migration is not supported on this system
+- name: Fail if migration type target is not supported for LVM
+  fail:
+    msg: "In-service migration not supported for LVM target"
+  when: migration_target == "lvm"
+
+- name: Fail if migration is not supported on this system
   fail:
     msg: "In-service migration not supported in {{ system.system_deployment }} deployment"
   when: system.system_deployment == "STORAGE"

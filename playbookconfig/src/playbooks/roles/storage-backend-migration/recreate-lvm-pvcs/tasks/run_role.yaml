@@ -1,0 +1,42 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Ensure {{ tmp_workspace }} exist"
+  file:
+    path: "{{ tmp_workspace }}"
+    state: directory
+
+- name: Copy files to workspace
+  copy:
+    src: "{{ roles_dir_path }}/{{ role_name }}/files/{{ item }}"
+    dest: "{{ tmp_workspace }}/{{ item }}"
+    mode: "0755"
+  loop: "{{ files_to_copy }}"
+
+- name: "Recover Ceph PVCs as LVM PVCs using storageClass {{ lvm_vg_name_cacheable }}"
+  shell: "{{ tmp_workspace }}/recreate_ceph_as_lvm_pvcs.sh {{ lvm_vg_name_cacheable }}"
+  register: recover_ceph_as_lvm_pvcs_output
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+    PVC_UPSIZES: "{{ pvc_upsizes_str }}"
+  vars:
+    bytes_per_gib: 1073741824
+    upsized_pvcs: >-
+      {{ pvc_target_sizes | default([])
+         | json_query('[?needs_upsize]') }}
+    pvc_upsizes_str: >-
+      {%- if upsized_pvcs | length > 0 -%}
+      ({% for pvc in upsized_pvcs %} ["{{ pvc.namespace }}/{{ pvc.name }}"]="{{ (pvc.target_bytes / bytes_per_gib) | int }}Gi"{% endfor %})
+      {%- endif -%}
+
+- name: Show recreate script output
+  debug:
+    msg: "{{ recover_ceph_as_lvm_pvcs_output.stdout_lines }}"
+
+- name: Cleanup temporary workspace folder
+  file:
+    path: "{{ tmp_workspace }}"
+    state: absent

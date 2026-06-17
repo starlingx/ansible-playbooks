@@ -52,12 +52,12 @@ def parse_args():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
         "--set",
-        choices=["in_progress", "error", "not_in_sync"],
+        choices=["in_progress", "error", "not_reconciled"],
         help="Set alarm type"
     )
     group.add_argument(
         "--clear",
-        choices=["in_progress", "error", "not_in_sync"],
+        choices=["in_progress", "error", "not_reconciled"],
         help="Clear alarm"
     )
 
@@ -78,21 +78,21 @@ if __name__ == "__main__":
     args_map = {
         "in_progress": dict(
             severity=fm_constants.FM_ALARM_SEVERITY_MINOR,
-            reason_text="Rook Migration is in progress",
+            reason_text="Storage Backend Migration is in progress",
             probable_cause=fm_constants.ALARM_PROBABLE_CAUSE_8,
             proposed_repair_action="No action required.",
         ),
         "error": dict(
             severity=fm_constants.FM_ALARM_SEVERITY_MAJOR,
-            reason_text="Error during Rook Migration",
+            reason_text="Error during Storage Backend Migration",
             probable_cause=fm_constants.ALARM_PROBABLE_CAUSE_39,
             proposed_repair_action=f"Check {args.file_name or '<file-name>'}, fix and re-run migration.",
         ),
-        "not_in_sync": dict(
+        "not_reconciled": dict(
             severity=fm_constants.FM_ALARM_SEVERITY_WARNING,
-            reason_text="Hosts or system not in-sync or not reconciled after Rook migration",
+            reason_text="Hosts or system not reconciled after Storage Backend migration",
             probable_cause=fm_constants.ALARM_PROBABLE_CAUSE_75,
-            proposed_repair_action=f"Check the generated DM file in {args.file_name or '<file-name>'}, fix it and re-apply it."
+            proposed_repair_action=f"Check the hosts and system kubernetes resources. Check the generated DM file in {args.file_name or '<file-name>'}, fix it and re-apply it."
         )
     }
 

@@ -250,7 +250,7 @@ spec:
     useAllNodes: false
     useAllDevices: false
     nodes:
-{% for host, disks in disks_by_host.items() %}
+{% for host, disks in ceph_disks_by_host.items() %}
       - name: {{ host }}
         devices:
 {% for disk in disks %}

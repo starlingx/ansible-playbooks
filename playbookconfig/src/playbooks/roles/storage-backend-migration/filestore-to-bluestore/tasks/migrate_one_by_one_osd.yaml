@@ -4,73 +4,57 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+- name: Get the current metadata of OSD {{ item.osd_id }}
+  command: ceph osd metadata {{ item.osd_id }}
+  register: current_osd_metadata
+  changed_when: false
+
+- name: Get the current ObjectStore status from OSD {{ item.osd_id }}
+  set_fact:
+    current_osd_type: "{{ (current_osd_metadata.stdout | from_json).osd_objectstore }}"
+
 - name: Mark OSD as out if replica is 1
   block:
-    - name: Reweight osd {{ item.osd_id }} to zero
+    - name: Reweight OSD {{ item.osd_id }} to zero
       command: ceph osd crush reweight osd.{{ item.osd_id }} 0
       register: reweight_zero_result
 
-    - name: Wait for OSD {{ item.osd_id }} to be safe to destroy
-      command: ceph osd safe-to-destroy {{ item.osd_id }}
-      register: safe_to_destroy_check
-      until: safe_to_destroy_check.rc == 0
-      retries: 1080
-      delay: 10
-      failed_when: safe_to_destroy_check.rc != 0
-      changed_when: false
-
-    - name: Wait until cluster finishes recovery
-      command: ceph health -f json
-      register: ceph_health
-      retries: 180
-      delay: 10
-      until: >
-        (
-          ceph_health.stdout | from_json | json_query("status") == "HEALTH_OK"
-        ) or
-        (
-          (
-            ceph_health.stdout | from_json | json_query("checks")
-          | dict2items
-          | selectattr("value.severity", "equalto", "HEALTH_WARN")
-          | list
-          | length
-          ) == 0
-        )
-      changed_when: false
-
-    - name: Wait until all PGs are active+clean
-      command: timeout 30 ceph pg stat
-      register: ceph_pg_stat
-      until: >
-        ceph_pg_stat.stdout is search('^([0-9]+) pgs: \\1 active\\+clean')
-      retries: 180
-      delay: 10
-      changed_when: false
-
-    - name: Wait until the 'recover' keyword goes away from ceph status
-      command: timeout 30 ceph -s
-      register: ceph_status
-      until: >
-        'recover' not in ceph_status.stdout
-      retries: 120
-      delay: 10
-      changed_when: false
+    - name: Wait for OSD {{ item.osd_id }} to drain after reweight
+      block:
+        - name: Wait for OSD {{ item.osd_id }} to drain after reweight
+          include_tasks: wait_drain.yaml
+          vars:
+            osd_id: "{{ item.osd_id }}"
+      rescue:
+        - name: Drain after reweight did not fully complete
+          debug:
+            msg: "OSD {{ item.osd_id }} drain after reweight timed out. Proceeding to osd out."
 
     - name: Mark osd {{ item.osd_id }} as out
       command: ceph osd out {{ item.osd_id }}
       register: mark_osd_out_result
 
-    - name: Wait until the 'recover' keyword goes away from ceph status
-      command: timeout 30 ceph -s
-      register: ceph_status
-      until: >
-        'recover' not in ceph_status.stdout
-      retries: 120
+    - name: Wait for OSD {{ item.osd_id }} to drain after mark out
+      include_tasks: wait_drain.yaml
+      vars:
+        osd_id: "{{ item.osd_id }}"
+
+    - name: Wait for OSD {{ item.osd_id }} to be safe to destroy
+      command: ceph osd safe-to-destroy {{ item.osd_id }}
+      register: safe_to_destroy_check
+      until: safe_to_destroy_check.rc == 0
+      retries: 30
       delay: 10
+      failed_when: safe_to_destroy_check.rc != 0
       changed_when: false
 
-  when: hostvars[system.active_controller]['pool_size'] | int < 2
+    - name: Wait until cluster finishes recovery after marking OSD out
+      include_tasks: wait_recovery.yaml
+      vars:
+        wait_pg_movement: false
+  when:
+    - hostvars[system.active_controller]['pool_size'] | int < 2
+    - current_osd_type == "filestore"
 
 - name: Migrate one OSD
   include_tasks: migrate_single_osd.yaml # it takes an item
@@ -107,43 +91,8 @@
     )
   changed_when: false
 
-- name: Wait until cluster finishes recovery
-  command: ceph health -f json
-  register: ceph_health
-  retries: 1080
-  delay: 10
-  until: >
-    (
-      ceph_health.stdout | from_json | json_query("status") == "HEALTH_OK"
-    ) or
-    (
-      (
-        ceph_health.stdout | from_json | json_query("checks")
-      | dict2items
-      | selectattr("value.severity", "equalto", "HEALTH_WARN")
-      | list
-      | length
-      ) == 0
-    )
-  changed_when: false
-
-- name: Wait until all PGs are active+clean
-  command: timeout 30 ceph pg stat
-  register: ceph_pg_stat
-  until: >
-    ceph_pg_stat.stdout is search('^([0-9]+) pgs: \\1 active\\+clean')
-  retries: 240
-  delay: 10
-  changed_when: false
-
-- name: Wait until the 'recover' keyword goes away from ceph status
-  command: timeout 30 ceph -s
-  register: ceph_status
-  until: >
-    'recover' not in ceph_status.stdout
-  retries: 120
-  delay: 10
-  changed_when: false
+- name: Wait until cluster finishes recovery and health check
+  include_tasks: wait_recovery.yaml
 
 - name: Display cluster status
   debug:

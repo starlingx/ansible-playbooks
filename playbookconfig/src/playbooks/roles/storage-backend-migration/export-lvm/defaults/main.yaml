@@ -1,0 +1,8 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+backups_filesystem_path: "{{ backups_path }}/filesystem"
+backups_block_path: "{{ backups_path }}/block"

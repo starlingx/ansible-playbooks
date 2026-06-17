@@ -5,18 +5,26 @@
 #
 
 - name: Get hosts status from Kubernetes
-  shell: kubectl get hosts -n deployment
+  command: kubectl get hosts -n deployment
   environment:
     KUBECONFIG: "{{ kubeconfig }}"
   register: kubectl_hosts_output
   changed_when: false
+  failed_when: false
+
+- name: Fail if no hosts are found in Deployment Manager
+  fail:
+    msg: No host configuration found in Deployment Manager.
+  when:
+    - kubectl_hosts_output.stderr | length > 0
+    - kubectl_hosts_output.stdout | length == 0
 
 - name: Display host status
   debug:
     var: kubectl_hosts_output.stdout_lines
 
 - name: Get hosts from in JSON format
-  shell: kubectl get hosts -n deployment -o json
+  command: kubectl get hosts -n deployment -o json
   environment:
     KUBECONFIG: "{{ kubeconfig }}"
   register: hosts_json

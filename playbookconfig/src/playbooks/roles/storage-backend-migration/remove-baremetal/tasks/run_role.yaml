@@ -4,19 +4,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: Create SM crash prevention file
-  file:
-    path: /var/run/.sm_no_trap_conn_loss_exit
-    state: touch
-    modification_time: preserve
-    access_time: preserve
-  when: inventory_hostname in groups.controllers
-
 - name: Remove pmon.d SM file
   shell: rm -vrf /etc/pmon.d/sm.conf
   register: cleanup_pmon_files_output
-  args:
-    warn: false
   changed_when: cleanup_pmon_files_output.stdout_lines | length > 0
 
 - name: Give pmon a few extra seconds to identify the changes
@@ -26,9 +16,15 @@
   delegate_to: "{{ system.active_controller }}"
   changed_when: false
 
+- name: Cleanup ceph services
+  include_tasks: cleanup_ceph_services.yaml
+
 - name: Deprovision Services
   include_tasks: deprovision_services.yaml
   when: inventory_hostname in groups.controllers
+
+- name: Stop ceph services
+  include_tasks: stop_ceph_services.yaml
 
 - name: Retrieve all ceph backends aside from original
   become: true
@@ -53,7 +49,7 @@
           state = 'configuring-with-app',
           services = 'block,filesystem',
           capabilities = (
-            capabilities::jsonb || '{\"deployment_model\": \"{{ deloyment_model }}\", \"replication\": \"{{ pool_size }}\", \"min_replication\": \"{{ pool_minsize }}\"}'::jsonb
+            capabilities::jsonb || '{\"deployment_model\": \"{{ deployment_model }}\", \"replication\": \"{{ pool_size }}\", \"min_replication\": \"{{ pool_minsize }}\"}'::jsonb
           )::text
       WHERE id = {{ storage_backend.id }};
     INSERT INTO storage_ceph_rook (id) VALUES ({{ storage_backend.id }}) ON CONFLICT (id) DO NOTHING;
@@ -63,8 +59,45 @@
     "
   vars:
     storage_backend: "{{ hostvars[system.active_controller].storage_backend }}"
-    deloyment_model: "{{ hostvars[system.active_controller].deployment_model }}"
-  when: inventory_hostname in groups.active_controller
+    deployment_model: "{{ hostvars[system.active_controller].deployment_model }}"
+  when:
+    - inventory_hostname in groups.active_controller
+    - migration_target == "rook_ceph"
+
+- name: Convert storage-backend to lvm
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -c "
+    BEGIN;
+    DELETE FROM storage_ceph;
+    UPDATE i_idisk SET foristorid = NULL WHERE foristorid IN (SELECT id FROM i_istor WHERE function = 'osd');
+    DELETE FROM i_istor WHERE function = 'osd';
+    DELETE FROM storage_tiers WHERE type = 'ceph';
+    DELETE FROM clusters WHERE name = 'ceph_cluster';
+    UPDATE storage_backend
+      SET name = 'lvm-store',
+          backend = 'lvm',
+          state = 'configuring-with-app',
+          services = NULL,
+          capabilities = (
+            jsonb_build_object(
+              'migration_target', capabilities::jsonb->'migration_target',
+              'migration_type', capabilities::jsonb->'migration_type',
+              'migration_step', capabilities::jsonb->'migration_step',
+              'migration_status', capabilities::jsonb->'migration_status'
+            )
+          )::text
+      WHERE id = {{ storage_backend.id }};
+    INSERT INTO storage_lvm (id) VALUES ({{ storage_backend.id }}) ON CONFLICT (id) DO NOTHING;
+    DELETE FROM storage_backend WHERE id != {{ storage_backend.id }} AND backend = 'ceph';
+    COMMIT
+    "
+  vars:
+    storage_backend: "{{ hostvars[system.active_controller].storage_backend }}"
+  when:
+    - inventory_hostname in groups.active_controller
+    - migration_target == "lvm"
 
 - name: Remove Ceph backends aside from original
   vars:
@@ -83,9 +116,6 @@
     force: false
   include_tasks: "{{ role_path_common }}/tasks/remove_app.yaml"
   when: inventory_hostname in groups.active_controller
-
-- name: Cleanup ceph services
-  include_tasks: cleanup_ceph_services.yaml
 
 - name: Cleanup k8s resources
   include_tasks: cleanup_resource_k8s.yaml
@@ -121,10 +151,4 @@
     dest: /etc/pmon.d/sm.conf
     src: /usr/share/starlingx/pmon.d/sm.conf
     state: link
-  when: inventory_hostname in groups.controllers
-
-- name: Remove SM crash prevention file
-  file:
-    path: /var/run/.sm_no_trap_conn_loss_exit
-    state: absent
   when: inventory_hostname in groups.controllers

@@ -1,0 +1,29 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get CephFS subvolume name
+  shell: |
+    PV=$(kubectl get pvc {{ pvc.name }} -n {{ pvc.namespace }} -o jsonpath='{.spec.volumeName}')
+    kubectl get pv "$PV" -o jsonpath='{.spec.csi.volumeAttributes.subvolumeName}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: subvol_result
+  changed_when: false
+
+- name: Get CephFS subvolume info
+  command: >
+    ceph fs subvolume info kube-cephfs {{ subvol_result.stdout }} csi --format json
+  register: subvol_info_result
+  changed_when: false
+
+- name: Append to results
+  set_fact:
+    cephfs_usage_results: >-
+      {{ cephfs_usage_results | default([]) + [
+        pvc | combine({
+          'used_bytes': (subvol_info_result.stdout | from_json).bytes_used | default(0)
+        })
+      ] }}

@@ -1,0 +1,39 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Create dedicated VG {{ lvm_vg_name_cacheable }}
+  command: >
+    system host-lvg-add {{ inventory_hostname }} {{ lvm_vg_name_cacheable }}
+    --lvm_function lvm-csi
+  environment: "{{ system_env }}"
+  register: lvg_add_result
+  failed_when:
+    - lvg_add_result.rc != 0
+    - "'already present' not in (lvg_add_result.stderr | default(''))"
+  changed_when: lvg_add_result.rc == 0
+
+- name: Add disks as LVM PVs
+  command: >
+    system host-pv-add {{ inventory_hostname }} {{ lvm_vg_name_cacheable }} {{ item }}
+  environment: "{{ system_env }}"
+  register: pv_add_result
+  failed_when:
+    - pv_add_result.rc != 0
+    - "'already assigned' not in (pv_add_result.stderr | default(''))"
+  changed_when: pv_add_result.rc == 0
+  loop: "{{ lvm_devices_cached }}"
+
+- name: "Wait for LVG {{ lvm_vg_name_cacheable }} to reach provisioned state"
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -c
+    "SELECT vg_state FROM i_lvg WHERE lvm_vg_name = '{{ lvm_vg_name_cacheable }}'"
+  register: lvg_state
+  until: lvg_state.stdout == 'provisioned'
+  retries: 60
+  delay: 10
+  changed_when: false

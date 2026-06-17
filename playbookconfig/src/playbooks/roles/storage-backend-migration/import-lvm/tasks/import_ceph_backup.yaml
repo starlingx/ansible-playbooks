@@ -1,0 +1,23 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Create secret for registry in namespace
+  include_tasks: "{{ role_path_common }}/tasks/create_registry_secret.yaml"
+  vars:
+    namespace: "{{ generic_pvc_namespace }}"
+
+- name: Import ceph backups
+  block:
+    - name: Import ceph backups for namespace {{ generic_pvc_namespace }} in batches
+      include_tasks: import_ceph_backup_batch.yaml
+      loop: "{{ generic_pvc_list | batch(pvc_batch_size | int) | list }}"
+      loop_control:
+        loop_var: batch_pvcs
+  always:
+    - name: Delete registry secret
+      command: "kubectl delete -f {{ tmp_workspace }}/secret-migration-registry-local.yaml --ignore-not-found=true"
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"

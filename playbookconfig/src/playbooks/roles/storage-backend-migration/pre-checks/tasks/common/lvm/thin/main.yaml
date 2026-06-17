@@ -1,0 +1,19 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Ensure lvm_thin_disk is defined and valid
+  assert:
+    that:
+      - lvm_thin_disk is defined
+      - lvm_thin_disk in valid_lvm_thin_disks
+    fail_msg: >-
+      Invalid or missing lvm_thin_disk.
+      Must be one of: {{ valid_lvm_thin_disks | join(', ') }}.
+      Current value: {{ lvm_thin_disk | default('undefined') }}
+    success_msg: "LVM thin disk mode validated: {{ lvm_thin_disk }}"
+
+- name: "Check thin {{ lvm_thin_disk }} disk specifics"
+  include_tasks: "{{ lvm_thin_disk }}/main.yaml"

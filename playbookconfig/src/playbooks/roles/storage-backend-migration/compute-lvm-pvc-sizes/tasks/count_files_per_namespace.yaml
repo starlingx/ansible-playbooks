@@ -1,0 +1,24 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Create secret for registry in namespace {{ generic_pvc_namespace }}
+  include_tasks: "{{ role_path_common }}/tasks/create_registry_secret.yaml"
+  vars:
+    namespace: "{{ generic_pvc_namespace }}"
+    tmp_workspace: "{{ tmp_path }}"
+
+- name: Count files for PVCs in namespace {{ generic_pvc_namespace }}
+  block:
+    - name: Count files in batches for namespace {{ generic_pvc_namespace }}
+      include_tasks: count_files_batch.yaml
+      loop: "{{ generic_pvc_list | batch(pvc_batch_size | int) | list }}"
+      loop_control:
+        loop_var: batch_pvcs
+  always:
+    - name: Delete registry secret
+      command: "kubectl delete -f {{ tmp_path }}/secret-migration-registry-local.yaml --ignore-not-found=true"
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"

@@ -1,0 +1,14 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Check if there is sufficient space in cgts-vg
+  include_tasks: "{{ role_path }}/tasks/common/check_cgtsvg_space.yaml"
+  vars:
+    min_required_free_gib: "{{ cgts_vg_min_required_free_gib }}"
+
+- name: Check if any VolumeSnapshot is not ready
+  include_tasks: "{{ role_path }}/tasks/common/check_volume_snapshots.yaml"
+

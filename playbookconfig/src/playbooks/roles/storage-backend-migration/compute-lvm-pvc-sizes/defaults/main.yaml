@@ -1,0 +1,22 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# Usage threshold (%) above which file counting is triggered.
+# Volumes at or above this usage may need upsizing for XFS overhead.
+usage_threshold_regular_volume_percent: 85
+
+# Lower threshold for small volumes (≤ small_volume_gib).
+# XFS overhead is proportionally larger on small volumes.
+usage_threshold_small_volume_percent: 80
+
+# Volumes at or below this size (GiB) use the lower threshold.
+small_volume_gib: 1
+
+# Percentage to upsize when high usage + high file density is detected.
+upsize_percent: 5
+
+# File density threshold (files per GiB of used space).
+file_density_per_gib: 50000

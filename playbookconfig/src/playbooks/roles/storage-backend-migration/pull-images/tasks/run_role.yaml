@@ -16,23 +16,17 @@
   debug:
     var: system_env
 
+- name: Set images to use based on migration target
+  set_fact:
+    images_to_use: "{{ images_rook_ceph if migration_target == 'rook_ceph' else images_lvm }}"
+
 - block:
     - name: Get list of images to download
       set_fact:
-        images_to_download: >-
-          {{
-            images_to_download | default([]) +
-            (current_values | default([])) |
-            list
-          }}
-      loop: "{{ images | dict2items | map(attribute='value') | list }}"
+        images_to_download: "{{ images_to_download | default([]) + current_values }}"
+      loop: "{{ images_to_use | dict2items | map(attribute='value') | list }}"
       vars:
-        current_values: >-
-          {%- if item is mapping -%}
-            {{ item.values() | list }}
-          {%- else -%}
-            [{{ item | to_json }}]
-          {%- endif -%}
+        current_values: "{{ item.values() | list if item is mapping else [item] }}"
 
     - name: Show list of images to download
       debug:
@@ -45,17 +39,27 @@
 
     - name: Pull, tag, and push images to Local Registry ({{ local_registry }})
       command: "python {{ tmp_workspace }}/download_images.py"
+      async: 3600
+      poll: 0
+      register: download_images_job
+
+    - name: Wait for image pull to finish
+      async_status:
+        jid: "{{ download_images_job.ansible_job_id }}"
       register: download_images_result
+      until: download_images_result.finished | default(false)
+      retries: 60
+      delay: 60
       failed_when: false
 
-    - name: Show download images output
+    - name: Show download images result
       debug:
-        var: download_images_result.stdout_lines
+        var: download_images_result
 
     - name: Fail if there were a error processing some image
       fail:
         msg: Some images were not downloaded
-      when: download_images_result.rc != 0
+      when: download_images_result.rc is not defined or download_images_result.rc != 0
 
   always:
     - name: "Cleanup {{ tmp_workspace }} after failure"

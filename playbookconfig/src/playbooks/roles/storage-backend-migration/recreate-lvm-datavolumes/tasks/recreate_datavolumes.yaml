@@ -1,0 +1,94 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Check if DataVolume {{ data_volume_name.key }} exists"
+  shell: "kubectl get DataVolume -n {{ data_volume_name.value.namespace }} {{ data_volume_name.key }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: dv_check
+  failed_when: false
+  changed_when: false
+
+- name: "Save DataVolume {{ data_volume_name.key }} to {{ tmp_workspace }}/{{ data_volume_name.key }}.yaml file"
+  shell: >
+    kubectl get DataVolume -n {{ data_volume_name.value.namespace }} {{ data_volume_name.key }} -o yaml > {{ tmp_workspace }}/{{ data_volume_name.key }}.yaml
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: vs_metadata_output
+  when: dv_check.rc == 0
+
+# If we delete the DVs when their owner VMs have dataVolumeTemplates
+# they get recreated by k8s instantly.
+# To avoid this we temporarily patch the VMs, removing this dataVolumeTemplates.
+# After recreating the DVs, we patch this back.
+- name: "Get owner VM of DataVolume {{ data_volume_name.key }}"
+  shell: >-
+    kubectl get DataVolume {{ data_volume_name.key }} -n {{ data_volume_name.value.namespace }}
+    -o jsonpath='{.metadata.ownerReferences[?(@.kind=="VirtualMachine")].name}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: dv_owner_vm
+  when: dv_check.rc == 0
+
+- name: Set has_owner_vm fact
+  set_fact:
+    has_owner_vm: "{{ dv_owner_vm.stdout is defined and dv_owner_vm.stdout | length > 0 }}"
+
+- name: "Check if VM {{ dv_owner_vm.stdout | default('') }} has dataVolumeTemplates"
+  shell: >-
+    kubectl get vm {{ dv_owner_vm.stdout }} -n {{ data_volume_name.value.namespace }}
+    -o jsonpath='{.spec.dataVolumeTemplates}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: vm_dvt_check
+  when: has_owner_vm
+
+- name: Set has_dv_templates fact
+  set_fact:
+    has_dv_templates: "{{ has_owner_vm and vm_dvt_check.stdout is defined and vm_dvt_check.stdout | length > 0 }}"
+
+- name: "Save dataVolumeTemplates from VM {{ dv_owner_vm.stdout | default('') }}"
+  shell: >-
+    kubectl get vm {{ dv_owner_vm.stdout }} -n {{ data_volume_name.value.namespace }}
+    -o jsonpath='{.spec.dataVolumeTemplates}' > {{ tmp_workspace }}/{{ data_volume_name.key }}_dvt.json
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  when: has_dv_templates
+
+- name: "Remove dataVolumeTemplates and recreate DataVolume {{ data_volume_name.key }}"
+  when: has_dv_templates
+  block:
+    - name: "Remove dataVolumeTemplates from VM {{ dv_owner_vm.stdout | default('') }}"
+      command: >-
+        kubectl patch vm {{ dv_owner_vm.stdout }} -n {{ data_volume_name.value.namespace }}
+        --type=json -p '[{"op":"remove","path":"/spec/dataVolumeTemplates"}]'
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: "Delete and recreate DataVolume {{ data_volume_name.key }}"
+      include_tasks: delete_and_recreate_datavolume.yaml
+
+  always:
+    - name: "Read saved dataVolumeTemplates for {{ data_volume_name.key }}"
+      slurp:
+        src: "{{ tmp_workspace }}/{{ data_volume_name.key }}_dvt.json"
+      register: saved_dvt
+
+    - name: "Patch dataVolumeTemplates back on VM {{ dv_owner_vm.stdout }}"
+      command: >-
+        kubectl patch vm {{ dv_owner_vm.stdout }} -n {{ data_volume_name.value.namespace }}
+        --type=merge -p '{"spec":{"dataVolumeTemplates":{{ saved_dvt.content | b64decode }}}}'
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: "Delete saved dataVolumeTemplates file for {{ data_volume_name.key }}"
+      file:
+        path: "{{ tmp_workspace }}/{{ data_volume_name.key }}_dvt.json"
+        state: absent
+
+- name: "Delete and recreate DataVolume {{ data_volume_name.key }} when there are no dataVolumeTemplates"
+  include_tasks: delete_and_recreate_datavolume.yaml
+  when: not has_dv_templates

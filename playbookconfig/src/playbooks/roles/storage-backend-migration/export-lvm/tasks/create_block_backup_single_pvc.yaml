@@ -1,0 +1,25 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "[PVC {{ pvc.name }}] Create block backup file"
+  shell: |
+    set -e -o pipefail
+    BACKUP_NAME="backup-${PVC_NAME}.img.gz"
+    BKP_FILE_POD="/backup/${BACKUP_NAME}"
+    BKP_FILE_HOST="${BLOCK_BACKUP_DIR}/${BACKUP_NAME}"
+
+    echo "Starting block backup of /dev/block-{{ pvc_index }}..."
+    kubectl exec -n {{ generic_pvc_namespace }} {{ batch_pod_name }} -- \
+      sh -c "dd if=/dev/block-{{ pvc_index }} bs=4M | gzip > ${BKP_FILE_POD}" \
+      || { echo "ERROR: dd/gzip failed, possibly out of space"; exit 1; }
+
+    echo "Verifying backup integrity..."
+    gzip -t "$BKP_FILE_HOST" || { echo "ERROR: gzip integrity check failed"; exit 1; }
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+    PVC_NAME: "{{ generic_pvc_namespace }}-{{ pvc.name }}"
+    BLOCK_BACKUP_DIR: "{{ generic_backups_path }}"
+  register: backup_result

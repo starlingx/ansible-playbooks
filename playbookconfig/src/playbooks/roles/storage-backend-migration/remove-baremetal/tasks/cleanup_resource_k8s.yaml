@@ -26,4 +26,5 @@
   include_tasks: "cleanup_snapshots.yaml"
   when: >
     migration_type == "redeploy" or
-    (migration_type == "export_import" and erase_snapshots_cache | bool)
+    (migration_type == "export_import" and erase_snapshots_cache | bool) or
+    (migration_target == "lvm")

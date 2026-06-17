@@ -129,8 +129,8 @@
   when: all_pools_list | selectattr('name', 'equalto', 'kube-rbd') | list | length == 0
 
 - name: Remove kube-rbdkube-system from all_pools_list and add kube-rbd if not present
-  set_fact:
-    all_pools_list: |
+  vars:
+    _all_pools_json: |
       {{ (all_pools_list | rejectattr('name', 'equalto', 'kube-rbdkube-system') | list) + 
          ([] if (all_pools_list | selectattr('name', 'equalto', 'kube-rbd') | list | length > 0) else [{
            'name': kube_rbd_pool_config.pool_name,
@@ -143,6 +143,8 @@
            'min_size': kube_rbd_pool_config.min_size,
            'application': kube_rbd_pool_config.application_metadata | list | first | default('')
          }]) }}
+  set_fact:
+    all_pools_list: "{{ _all_pools_json | from_json if _all_pools_json is string else _all_pools_json }}"
     cacheable: true
 
 - name: Debug new all_pools_list without old rbd pool

@@ -1,0 +1,100 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Restore CDI validating webhook configuration
+  shell: |
+    cat <<'EOF' | kubectl apply -f -
+    {{ cdi_webhook_backup_data | to_nice_yaml(indent=2) }}
+    EOF
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+
+- name: Scale up CDI deployment
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "name"
+        name: "cdi-deployment"
+        namespace: "{{ cdi_namespace }}"
+        replicas: 1
+        kind: Deployment
+
+- name: Wait for CDI deployment pod to be ready
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/wait_resources_condition.yaml"
+  vars:
+    k8s_namespace: "{{ cdi_namespace }}"
+    k8s_resource_prefix: "cdi-deployment"
+    k8s_resource_type: "pod"
+    wait_mode: "Ready"
+
+- name: Scale up CDI operator
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "name"
+        name: "cdi-operator"
+        namespace: "{{ cdi_namespace }}"
+        replicas: 1
+        kind: Deployment
+
+- name: Wait for CDI operator pod to be ready
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/wait_resources_condition.yaml"
+  vars:
+    k8s_namespace: "{{ cdi_namespace }}"
+    k8s_resource_prefix: "cdi-operator"
+    k8s_resource_type: "pod"
+    wait_mode: "Ready"
+
+- name: Scale up virt-controller
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "name"
+        name: "virt-controller"
+        namespace: "{{ kubevirt_namespace }}"
+        replicas: 1
+        kind: Deployment
+
+- name: Scale up virt-operator
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/scale_resources.yaml"
+  vars:
+    resources:
+      - method: "name"
+        name: "virt-operator"
+        namespace: "{{ kubevirt_namespace }}"
+        replicas: 1
+        kind: Deployment
+
+- name: Wait for virt-operator pod to be ready
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/wait_resources_condition.yaml"
+  vars:
+    k8s_namespace: "{{ kubevirt_namespace }}"
+    k8s_resource_prefix: "virt-operator"
+    k8s_resource_type: "pod"
+    wait_mode: "Ready"
+
+- name: Wait for virt-controller pod to be ready
+  run_once: true
+  include_tasks: "{{ roles_dir_path }}/common/tasks/kubernetes/wait_resources_condition.yaml"
+  vars:
+    k8s_namespace: "{{ kubevirt_namespace }}"
+    k8s_resource_prefix: "virt-controller"
+    k8s_resource_type: "pod"
+    wait_mode: "Ready"
+
+- name: Resume kubevirt helmrelease
+  command: >
+    kubectl -n kube-system patch helmrelease kubevirt-app
+    --type merge -p '{"spec":{"suspend":false}}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"

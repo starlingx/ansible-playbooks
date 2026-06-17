@@ -26,13 +26,20 @@
 
   roles:
     - role: wait-apps-reapply
-    - role: generate-system-dm-file
+    - role: update-system-dm-file
     - role: final-system-state-check
 
 - name: Execute Post-migration
   hosts: active_controller
   gather_facts: false
   become: true
+
+  roles:
+    - role: custom-action-hook
+      custom_action_script: "{{ post_migration_hook }}"
+      phase: post
+      checkpoint_name: post-custom-action-hook
+      when: post_migration_hook is defined
 
   post_tasks:
     - name: Clear storage-backend migration capability
@@ -41,7 +48,7 @@
       shell: >
         psql -d sysinv -c "
         UPDATE storage_backend
-        SET capabilities = (capabilities::jsonb - 'migration_type' - 'migration_step' - 'migration_status')::text
+        SET capabilities = (capabilities::jsonb - 'migration_target' - 'migration_type' - 'migration_step' - 'migration_status')::text
         WHERE id = {{ storage_backend.id }};
         "
       vars:
@@ -57,7 +64,7 @@
 
     - name: Remove in-progress migration flag
       file:
-        path: /run/.rook_migration_in_progress
+        path: /run/.storage_backend_migration_in_progress
         state: absent
 
     - name: New DM file reminder

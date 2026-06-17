@@ -9,29 +9,27 @@
     path: "{{ tmp_workspace }}"
     state: directory
 
-- name: Check if hosts are in-sync and reconciled
-  include_tasks: "check_hosts_in_sync.yaml"
+- name: Check if hosts are reconciled
+  include_tasks: "check_hosts_reconciled.yaml"
 
-- name: Check if system is in-sync and reconciled
-  include_tasks: "check_system_in_sync.yaml"
+- name: Check if system is reconciled
+  include_tasks: "check_system_reconciled.yaml"
 
-- name: Raise not-in-sync migration alarm if hosts are not in-sync or not reconciled
-  script: "{{ role_path_common }}/files/fm_alarm.py --entity-uuid {{ storage_backend.uuid }} --set not_in_sync --file-name {{ final_dm_file_path }}"
+- name: Raise not reconciled migration alarm if hosts are not reconciled
+  script: "{{ role_path_common }}/files/fm_alarm.py --entity-uuid {{ storage_backend.uuid }} --set not_reconciled --file-name {{ final_dm_file_path }}"
+  vars:
+    storage_backend: "{{ hostvars[system.active_controller].storage_backend }}"
+    final_dm_file_path:  "{{ hostvars[system.active_controller].final_dm_full_file_path }}"
+  when: bad_hosts_reconciled | length > 0 or bad_system_reconciled | length > 0
+
+- name: Clear not reconciled migration alarm if hosts and system are reconciled
+  script: "{{ role_path_common }}/files/fm_alarm.py --entity-uuid {{ storage_backend.uuid }} --clear not_reconciled --file-name {{ final_dm_file_path }}"
   vars:
     storage_backend: "{{ hostvars[system.active_controller].storage_backend }}"
     final_dm_file_path:  "{{ hostvars[system.active_controller].final_dm_full_file_path }}"
   when:
-    - bad_hosts_in_sync | length > 0 or bad_system_in_sync | length > 0
-    - not allow_out_of_sync | bool
-
-- name: Clear not-in-sync migration alarm if hosts and system are in-sync and reconciled
-  script: "{{ role_path_common }}/files/fm_alarm.py --entity-uuid {{ storage_backend.uuid }} --clear not_in_sync --file-name {{ final_dm_file_path }}"
-  vars:
-    storage_backend: "{{ hostvars[system.active_controller].storage_backend }}"
-    final_dm_file_path:  "{{ hostvars[system.active_controller].final_dm_full_file_path }}"
-  when:
-    - bad_system_in_sync | length == 0
-    - bad_hosts_in_sync | length == 0
+    - bad_system_reconciled | length == 0
+    - bad_hosts_reconciled| length == 0
 
 - name: Display system alarms after migration
   include_tasks: "{{ roles_dir_path }}/pre-checks/tasks/common/display_alarms.yaml"
@@ -40,10 +38,12 @@
   command: timeout 30 ceph -s
   register: ceph_status
   changed_when: false
+  when: migration_target == "rook_ceph"
 
 - name: Final Ceph Cluster status
   debug:
     var: ceph_status.stdout_lines
+  when: migration_target == "rook_ceph"
 
 - name: Cleanup temporary workspace folder
   file:

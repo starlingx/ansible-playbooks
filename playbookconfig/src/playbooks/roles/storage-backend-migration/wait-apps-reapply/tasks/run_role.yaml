@@ -6,3 +6,4 @@
 
 - name: Wait for Rook-Ceph reapply
   include_tasks: wait_rook_ceph.yaml
+  when: migration_target == "rook_ceph"

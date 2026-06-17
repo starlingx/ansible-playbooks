@@ -15,12 +15,16 @@
     mode: '0644'
 
 - block:
+    - name: Set OSD state filter based on migration type
+      set_fact:
+        osd_state_filter: "{{ 'configured' if migration_type == 'in_service' else 'configuring-with-app' }}"
+
     - name: Change OSD id to NULL in the DB
       become: true
       become_user: postgres
       command: >
         psql -d sysinv -t -A
-        -c "UPDATE i_istor SET osdid=NULL WHERE state='configured' RETURNING id;"
+        -c "UPDATE i_istor SET osdid=NULL WHERE state='{{ osd_state_filter }}' RETURNING id;"
       register: change_osd_id_to_null
       changed_when: change_osd_id_to_null.stdout_lines | length > 0
 

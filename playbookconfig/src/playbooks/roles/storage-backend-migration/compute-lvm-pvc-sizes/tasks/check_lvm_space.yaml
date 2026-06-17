@@ -1,0 +1,86 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Compute LVM space values
+  set_fact:
+    pvc_total_target_bytes: "{{ pvc_target_sizes | map(attribute='target_bytes') | map('int') | sum }}"
+    lvm_total_raw: "{{ total_raw }}"
+    lvm_metadata_overhead: "{{ lvm_metadata_overhead }}"
+    lvm_spare: "{{ spare }}"
+    lvm_thin_metadata: "{{ thin_metadata }}"
+    lvm_usable_bytes: "{{ (total_raw | int) - (lvm_metadata_overhead | int) - (spare | int) - (thin_metadata | int) }}"
+  vars:
+    selected_disks: "{{ all_disks_db | selectattr('device_path', 'in', lvm_devices_cached) | list }}"
+    total_raw: "{{ selected_disks | map(attribute='size_mib') | map('int') | sum * 1024 * 1024 }}"
+    lvm_metadata_overhead: "{{ selected_disks | length * lvm_overhead_per_pv_bytes | int }}"
+    spare: "{{ lvm_spare_gib | int * 1024 * 1024 * 1024 }}"
+    thin_metadata: "{{ (total_raw | int * lvm_thin_metadata_percent | int / 100) | int if lvm_mode == 'thin' else 0 }}"
+
+- name: Build PVC details table (prettytable)
+  set_fact:
+    pvc_details_table: >-
+      {{ report_table | from_json | community.general.to_prettytable(column_order=['Name', 'Type', 'Mode', 'Requested', 'Used', 'Usage', 'Files/GiB', 'Target', 'Action']) }}
+  vars:
+    report_table: >-
+      [{% for pvc in pvc_target_sizes %}
+      {"Name": "{{ pvc.namespace }}/{{ pvc.name }}",
+       "Type": "{{ pvc.type }}",
+       "Mode": "{{ pvc.volume_mode | default('Filesystem') }}",
+       "Requested": "{{ pvc.requested_bytes | human_readable(unit='G') }}",
+       "Used": "{{ (pvc.used_bytes | human_readable(unit='G')) if pvc.used_bytes else '-' }}",
+       "Usage": "{{ pvc.usage_display | default('-') }}",
+       "Files/GiB": "{{ (pvc.files_per_gib | string) if pvc.files_per_gib is not none else '-' }}",
+       "Target": "{{ pvc.target_bytes | human_readable(unit='G') }}",
+       "Action": "{{ ('+' ~ pvc.upsize_percent ~ '%') if pvc.needs_upsize else 'same size' }}"}
+      {{ '' if loop.last else ',' }}{% endfor %}]
+  when: is_trixie | bool
+
+- name: Build PVC details table (plain)
+  set_fact:
+    pvc_details_table: |-
+      {% for pvc in pvc_target_sizes %}
+        {{ pvc.namespace }}/{{ pvc.name }}  {{ pvc.type }}  Mode={{ pvc.volume_mode | default('Filesystem') }}  Req={{ pvc.requested_bytes | human_readable(unit='G') }}  {% if pvc.used_bytes %}Used={{ pvc.used_bytes | human_readable(unit='G') }}  Usage={{ pvc.usage_display }}  {% endif %}{% if pvc.files_per_gib is not none %}Files/GiB={{ pvc.files_per_gib }}  {% endif %}Target={{ pvc.target_bytes | human_readable(unit='G') }}  Action={{ '+' ~ pvc.upsize_percent ~ '%' if pvc.needs_upsize else 'same size' }}
+      {% endfor %}
+  when: is_bullseye | bool
+
+- name: Print migration sizing report
+  vars:
+    bytes_per_gib: 1073741824
+    usable_gib_exact: "{{ lvm_usable_bytes | int / bytes_per_gib }}"
+    usable_gib_rounded: "{{ usable_gib_exact | float | round(2) }}"
+    usable_round_char: "{{ '<' if (usable_gib_rounded | float) > (usable_gib_exact | float) else '>' if (usable_gib_rounded | float) < (usable_gib_exact | float) else '' }}"
+  debug:
+    msg: |-
+      #jinja2: trim_blocks: True, lstrip_blocks: True
+      === Migration Sizing Report ===
+      LVM Space Breakdown:
+        Selected disks raw: {{ lvm_total_raw | int | human_readable }}
+        LVM metadata:       - {{ lvm_metadata_overhead | int | human_readable }}
+        Spare reservation:  - {{ lvm_spare | int | human_readable }}
+        {% if lvm_mode == 'thin' %}
+        Thin metadata:      - {{ lvm_thin_metadata | int | human_readable }}
+        {% endif %}
+        Usable:             = {{ usable_round_char }}{{ '%.2f' | format(usable_gib_rounded | float) }} GB
+
+      Total Required:       {{ pvc_total_target_bytes | int | human_readable }}
+      {% if pvc_total_target_bytes | int <= lvm_usable_bytes | int %}
+      Status: PASS ({{ (lvm_usable_bytes | int - pvc_total_target_bytes | int) | human_readable(unit='G') }} headroom)
+      {% else %}
+      Status: FAIL (deficit: {{ (pvc_total_target_bytes | int - lvm_usable_bytes | int) | human_readable(unit='G') }})
+      {% endif %}
+
+      PVC Details:
+      {{ pvc_details_table }}
+
+- name: Fail if LVM space is insufficient
+  fail:
+    msg: >-
+      FAIL: Not enough space in selected disks for migration.
+      Total target size: {{ pvc_total_target_bytes | int | human_readable(unit='G') }}.
+      Available LVM space: {{ lvm_usable_bytes | int | human_readable(unit='G') }}.
+      Deficit: {{ (pvc_total_target_bytes | int - lvm_usable_bytes | int) | human_readable(unit='G') }}.
+      Consider adding additional disks or reducing PVC data before migration.
+  when: pvc_total_target_bytes | int > lvm_usable_bytes | int

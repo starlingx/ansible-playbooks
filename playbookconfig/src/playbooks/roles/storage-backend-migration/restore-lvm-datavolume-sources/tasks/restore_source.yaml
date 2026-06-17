@@ -1,0 +1,50 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Set DV facts for {{ dv_entry.key }}"
+  set_fact:
+    dv_name: "{{ dv_entry.key }}"
+    dv_namespace: "{{ dv_entry.value.namespace }}"
+    dv_source: "{{ dv_entry.value.source }}"
+    dv_source_ref: "{{ dv_entry.value.sourceRef }}"
+    dv_was_completed: "{{ dv_entry.value.phase == 'Succeeded' }}"
+
+- name: "Skip {{ dv_name }}: was not Succeeded"
+  debug:
+    msg: "Skipping {{ dv_name }}: original phase was '{{ dv_entry.value.phase }}'"
+  when: not dv_was_completed
+
+- name: "Restore source on {{ dv_name }}"
+  when: dv_was_completed
+  block:
+    - name: "Remove blank source from DataVolume {{ dv_name }}"
+      command: >-
+        kubectl patch datavolume {{ dv_name }}
+        -n {{ dv_namespace }}
+        --type merge
+        -p '{"spec":{"source":null}}'
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: "Restore sourceRef on DataVolume {{ dv_name }}"
+      command: >-
+        kubectl patch datavolume {{ dv_name }}
+        -n {{ dv_namespace }}
+        --type merge
+        -p '{"spec":{"sourceRef":{{ dv_source_ref | to_json }}}}'
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      when: dv_source_ref | length > 0
+
+    - name: "Restore source on DataVolume {{ dv_name }}"
+      command: >-
+        kubectl patch datavolume {{ dv_name }}
+        -n {{ dv_namespace }}
+        --type merge
+        -p '{"spec":{"source":{{ dv_source | to_json }}}}'
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      when: dv_source | length > 0

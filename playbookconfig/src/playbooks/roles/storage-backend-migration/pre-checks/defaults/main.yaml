@@ -19,3 +19,15 @@ ceph_allowed_pools:
  - cinder-volumes
  - ephemeral
  - kube-rbdkube-system
+
+valid_migration_targets:
+  - rook_ceph
+  - lvm
+
+valid_lvm_modes:
+  - thin
+  - thick
+
+valid_lvm_thin_disks:
+  - root
+  - dedicated

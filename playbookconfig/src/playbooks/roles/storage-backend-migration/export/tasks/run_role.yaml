@@ -39,13 +39,11 @@
       command: rm -rf {{ backups_path }}/*
       environment: "{{ system_env }}"
       ignore_errors: true
-      args:
-        warn: false
 
     - name: Capture failure details
       set_fact:
         failure_msg: >
-          Task '{{ ansible_failed_task.name }}' failed.
+          Task export failed.
           Error: {{ ansible_failed_result.msg | default('No error message captured.') }}
 
     - name: Force playbook failure

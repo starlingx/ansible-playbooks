@@ -21,7 +21,7 @@
 
 - name: Get list of OSD IDs from database lookup
   set_fact:
-    all_osd_ids: "{{ disks_by_host_db.values() | flatten | map(attribute='osd_id') | list }}"
+    all_osd_ids: "{{ ceph_disks_by_host_db.values() | flatten | map(attribute='osd_id') | list }}"
 
 - name: Build OSD info lookup table with metadata
   shell: "ceph osd metadata {{ item }} -f json"
@@ -47,24 +47,16 @@
     item_json: "{{ item.stdout | from_json }}"
   when: item.rc == 0 and item.stdout | length > 0
 
-- name: Integrate Ceph OSD data into disks_by_host
-  vars:
-    disks_by_host_template: |
-      {% set new_disks_by_host = {} %}
-      {% for hostname, disks in disks_by_host_db.items() %}
-        {% set new_disk_list = [] %}
-        {% for disk in disks %}
-          {% set osd_id = disk.osd_id %}
-          {% set ceph_data = ceph_osd_lookup.get(osd_id, {}) %}
-
-          {% set _ = disk.update(ceph_data) %}
-
-          {% set _ = new_disk_list.append(disk) %}
-        {% endfor %}
-        {% set _ = new_disks_by_host.update({hostname: new_disk_list}) %}
-      {% endfor %}
-      {{ new_disks_by_host | to_json }}
+- name: Integrate Ceph OSD data into ceph_disks_by_host
   set_fact:
-    disks_by_host: "{{ disks_by_host_template | from_json }}"
+    ceph_disks_by_host: "{{ ceph_disks_by_host | default({}) | combine({ item.key: _enriched_disks | from_json }) }}"
     cacheable: true
+  loop: "{{ ceph_disks_by_host_db | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  vars:
+    _enriched_disks: >-
+      [{% for disk in item.value %}
+      {{ disk | combine(ceph_osd_lookup[disk.osd_id] | default({})) | to_json }}{% if not loop.last %},{% endif %}
+      {% endfor %}]
   when: ceph_osd_lookup is defined

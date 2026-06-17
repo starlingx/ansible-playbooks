@@ -6,7 +6,7 @@
 
 - name: Add monitors to hosts
   environment: "{{ system_env }}"
-  command: system host-fs-add {{ item }} ceph=20
+  command: system host-fs-add {{ item }} ceph={{ ceph_mon_gib | int }}
   loop: "{{ hosts_to_add_mon | default(groups.with_monitor) }}"
   register: add_mon_result
   failed_when: >
@@ -30,7 +30,7 @@
   register: ceph_mons_ready
   retries: 60
   delay: 10
-  until: ceph_mons_ready.stdout == expected_mons
+  until: ceph_mons_ready.stdout | int == expected_mons | int
   vars:
     expected_mons: "{{ hosts_to_add_mon | default(groups.with_monitor) | length }}"
   changed_when: false

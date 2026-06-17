@@ -4,6 +4,16 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+- name: Get Debian codename
+  shell: grep VERSION_CODENAME /etc/os-release | cut -d'=' -f2
+  register: codename
+  changed_when: false
+
+- name: Set codename facts
+  set_fact:
+    is_trixie: "{{ codename.stdout == 'trixie' }}"
+    is_bullseye: "{{ codename.stdout == 'bullseye' }}"
+
 - name: Main execution block
   block:
     - name: "Get storage-backend information"
@@ -21,9 +31,6 @@
     - name: "Get Ceph Pools information"
       include_tasks: ceph_pools_info.yaml
 
-    - name: "Get PVCs information"
-      include_tasks: pvcs_info.yaml
-
     - name: Get backups info and behavior
       include_tasks: backups_info.yaml
       when: migration_type == "export_import" or old_pool_exist and migration_type != "redeploy"
@@ -34,28 +41,14 @@
     - name: Get snapshots info
       include_tasks: "snapshot_info.yaml"
 
+    - name: Get LVM OSDs info
+      include_tasks: "lvm_disk_info.yaml"
+      when: migration_target == "lvm"
+
+    - name: Get DataVolume info
+      include_tasks: "data_volume_info.yaml"
+
   rescue:
-    - name: Clear Facts Cache (Ansible Cache)
-      meta: clear_facts
-
-    - name: Clear Facts Cache (Ansible Cache) for localhost in dynamic place
-      file:
-        path: "~/.storage-backend-migration-ansible-cache/localhost"
-        state: absent
-      delegate_to: localhost
-      become: false
-      ignore_errors: true
-
-    - name: Clear Facts Cache (Ansible Cache) for localhost in a fixed place
-      file:
-        path: "/home/sysadmin/.storage-backend-migration-ansible-cache/localhost"
-        state: absent
-      delegate_to: localhost
-      become: false
-      ignore_errors: true
-
-    - name: Show that cleanup is complete
-      debug:
-        msg: "The checkpoint tasks failed and the Ansible facts cache has been cleared."
+    - include_tasks: "{{ role_path_common }}/tasks/clear_facts_cache.yaml"
 
     - include_tasks: "{{ role_path_common }}/tasks/fail_playbook.yaml"

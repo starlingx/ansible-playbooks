@@ -44,8 +44,6 @@
 - name: Delete old Pacific dir and metadata
   shell: rm -rvf {{ rook_base_pacific }}
   register: removed_old_pacific_files
-  args:
-    warn: false
 
 - name: Display removed Pacific files
   debug:

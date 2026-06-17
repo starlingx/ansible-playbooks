@@ -1,0 +1,72 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# Build namespace/name pairs for discovered PVCs (CephFS + RBD) and
+# DataVolumes, then verify every DV has a matching PVC.  Comparing by
+# namespace/name prevents false matches across namespaces.
+
+- name: Build namespace/name list of discovered PVCs from CephFS and RBD
+  vars:
+    cephfs_pvcs_flat: >-
+      {{ cephfs_pvcs_by_namespace | default({}) | dict2items
+         | map(attribute='value') | flatten | list }}
+    rbd_pvcs_flat: >-
+      {{ rbd_pvcs_by_namespace | default({}) | dict2items
+         | map(attribute='value') | flatten | list }}
+    all_pvcs: "{{ cephfs_pvcs_flat + rbd_pvcs_flat }}"
+  set_fact:
+    discovered_pvc_keys: >-
+      {{ all_pvcs | map(attribute='namespace') | zip(all_pvcs | map(attribute='name'))
+         | map('join', '/') | unique | sort | list }}
+
+- name: Build namespace/name list of DataVolumes
+  vars:
+    dv_items: "{{ dv_map_original | default({}) | dict2items }}"
+  set_fact:
+    dv_keys: >-
+      {{ dv_items | map(attribute='value') | map(attribute='namespace')
+         | zip(dv_items | map(attribute='key'))
+         | map('join', '/') | sort | list }}
+
+- name: Debug discovered PVC keys (namespace/name)
+  debug:
+    var: discovered_pvc_keys
+
+- name: Debug DataVolume keys (namespace/name)
+  debug:
+    var: dv_keys
+
+- name: Find DataVolumes without a matching discovered PVC
+  set_fact:
+    dvs_without_pvc: "{{ dv_keys | difference(discovered_pvc_keys) }}"
+
+- name: Debug DVs without matching PVC
+  debug:
+    var: dvs_without_pvc
+  when: dvs_without_pvc | length > 0
+
+- name: Fail if any DataVolumes have no matching discovered PVC
+  fail:
+    msg: |
+      DataVolume / PVC mismatch detected (namespace/name).
+      The following DataVolumes have no corresponding discovered PVC
+      and could be accidentally deleted during migration:
+
+        {{ dvs_without_pvc | join('\n    ') }}
+
+      To continue, choose one of the options below:
+
+        Option 1 - Include the missing PVCs and re-run:
+          Review the PVC selection criteria to ensure the PVCs owned by
+          the above DataVolumes are included in the discovery, then
+          re-run the migration playbook.
+
+        Option 2 - Delete the DataVolumes and re-run:
+          If you do NOT want to migrate those PVCs, delete the
+          corresponding DataVolumes before re-running:
+            kubectl delete dv <name> -n <namespace>
+          Once removed, re-run the migration playbook.
+  when: dvs_without_pvc | length > 0

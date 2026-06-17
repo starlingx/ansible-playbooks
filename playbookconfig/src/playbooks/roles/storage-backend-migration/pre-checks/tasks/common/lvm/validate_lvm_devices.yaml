@@ -1,0 +1,35 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Validate LVM selected devices exist
+  assert:
+    that:
+      - invalid_devices | length == 0
+    fail_msg: >-
+      The device(s) {{ invalid_devices | join(', ') }}
+      does not exist in the system inventory.
+      Check available devices with 'system host-disk-list {{ inventory_hostname }}'
+      and pass the target device_path values to lvm_devices.
+    success_msg: "LVM selected devices exist in inventory."
+  vars:
+    invalid_devices: "{{ lvm_devices_cached | difference(all_disks_db | map(attribute='device_path') | list) }}"
+
+- name: Compute non-Ceph disks selected for LVM
+  set_fact:
+    non_ceph_disks: >-
+      {{ all_disks_db
+         | selectattr('device_path', 'in', lvm_devices_cached)
+         | rejectattr('device_path', 'in', ceph_device_paths)
+         | list }}
+  vars:
+    ceph_device_paths: "{{ ceph_disks_by_host_db[inventory_hostname] | map(attribute='disk_device_path') | list }}"
+
+- name: Validate non-Ceph disks selected for LVM
+  include_tasks: validate_non_ceph_disk.yaml
+  loop: "{{ non_ceph_disks }}"
+  loop_control:
+    loop_var: non_ceph_disk
+    label: "{{ non_ceph_disk.device_path }}"

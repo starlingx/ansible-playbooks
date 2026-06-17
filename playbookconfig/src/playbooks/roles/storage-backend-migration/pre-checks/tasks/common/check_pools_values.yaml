@@ -7,20 +7,24 @@
 - name: Validate data integrity of the generated pool list
   set_fact:
     invalid_pool_fields: >-
-      [
-        {% set pools_data = all_pools_list %}
-        {% for pool in pools_data %}
-
-          {% set mandatory_fields = ['name', 'id', 'pg_num', 'pgp_num', 'crush_rule', 'size', 'min_size', 'application'] %}
-
-          {% for field in mandatory_fields %}
-            {% if pool[field] is not defined or pool[field] is none or pool[field] | string | length == 0 %}
-               "Pool '{{ pool.name | default('Unknown') }}': Field '{{ field }}' is empty or null",
-            {% endif %}
-          {% endfor %}
-
-        {% endfor %}
-      ]
+      {{ invalid_pool_fields | default([]) +
+         ([ "Pool '" ~ (item.0.name | default('Unknown')) ~ "': Field '" ~ item.1 ~ "' is empty or null" ]
+          if (item.0[item.1] is not defined or item.0[item.1] is none or item.0[item.1] | string | length == 0)
+          else [])
+      }}
+  loop: "{{ all_pools_list | product(mandatory_fields) | list }}"
+  loop_control:
+    label: "{{ item.0.name | default('Unknown') }} - {{ item.1 }}"
+  vars:
+    mandatory_fields:
+      - name
+      - id
+      - pg_num
+      - pgp_num
+      - crush_rule
+      - size
+      - min_size
+      - application
   when: all_pools_list is defined and all_pools_list | length > 0
 
 - block:

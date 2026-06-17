@@ -21,7 +21,9 @@
   until:
     - app_status_check.rc == 0
     - app_status_check.stdout is defined
-    - app_status_check.stdout.strip() in (success_statuses | default(['applied']))
+    - >
+      app_status_check.stdout.strip() in (success_statuses | default(['applied'])) or
+      app_status_check.stdout.strip() in (failure_statuses | default([]))
   failed_when: >
     app_status_check.rc != 0 or
     (

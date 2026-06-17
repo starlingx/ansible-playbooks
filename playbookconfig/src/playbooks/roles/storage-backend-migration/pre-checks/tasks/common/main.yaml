@@ -19,6 +19,9 @@
 - name: Check deployment-manager is applied
   include_tasks: "check_dm_app.yaml"
 
+- name: Check if hosts in deployment-manager are configured
+  include_tasks: "check_dm_hosts_configured.yaml"
+
 - name: Check openstack app is not applied
   include_tasks: "check_openstack_app.yaml"
   when: block_openstack_app | bool
@@ -50,11 +53,6 @@
 - name: Check if there is sufficient space in /var
   include_tasks: "check_var_space.yaml"
 
-- name: Check if there is sufficient space in cgts-vg
-  include_tasks: "check_cgtsvg_space.yaml"
-  vars:
-    min_required_free_gib: "{{ cgts_vg_min_required_free_gib }}"
-
 - name: Check if there is not allowed pools
   include_tasks: check_allowed_pools.yaml
 
@@ -64,8 +62,23 @@
 - name: Check if there is a upgrade in progress
   include_tasks: "check_upgrade_in_progress.yaml"
 
+- name: Validate custom action hook URIs
+  include_tasks: "check_custom_action_hooks.yaml"
+
 - name: Check if any pods are using Ceph PVCs
   include_tasks: "check_ceph_pvcs.yaml"
 
-- name: Check if any VolumeSnapshot is not ready
-  include_tasks: "check_volume_snapshots.yaml"
+- name: "Check DataVolumes matching PVCs"
+  include_tasks: "check_dvs.yaml"
+  when: dv_map_original | length > 0
+
+- name: Check kubevirt-app is applied when DataVolumes exist
+  include_tasks: "{{ role_path_common }}/tasks/check_app_status.yaml"
+  vars:
+    app_name_to_check: kubevirt-app
+    success_statuses:
+      - applied
+  when: dv_map_original | length > 0
+
+- name: "Check {{ migration_target }} migration common cases"
+  include_tasks: "{{ migration_target }}/main.yaml"

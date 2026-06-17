@@ -4,20 +4,20 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: "Create secret for registry in namespace {{ cephfs_pvc_namespace }}"
+- name: Create secret for registry in namespace
   include_tasks: "{{ role_path_common }}/tasks/create_registry_secret.yaml"
   vars:
     namespace: "{{ cephfs_pvc_namespace }}"
 
 - name: Create cephfs backups
   block:
-    - name: Create cephfs backups for namespace {{ cephfs_pvc_namespace }}
-      include_tasks: create_cephfs_backup_single_pvc.yaml
-      loop: "{{ cephfs_pvc_list }}"
+    - name: Create cephfs backups for namespace {{ cephfs_pvc_namespace }} in batches
+      include_tasks: create_cephfs_backup_batch.yaml
+      loop: "{{ cephfs_pvc_list | batch(pvc_batch_size | int) | list }}"
       loop_control:
-        loop_var: pvc
+        loop_var: batch_pvcs
   always:
     - name: Delete registry secret
-      command: "kubectl delete -f {{ tmp_workspace }}/secret-migration-registry-local.yaml"
+      command: "kubectl delete -f {{ tmp_workspace }}/secret-migration-registry-local.yaml --ignore-not-found=true"
       environment:
         KUBECONFIG: "{{ kubeconfig }}"

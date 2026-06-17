@@ -1,0 +1,49 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Ensure {{ tmp_workspace }} exist"
+  file:
+    path: "{{ tmp_workspace }}"
+    state: directory
+
+- name: "Run {{ phase }}-migration custom action hook"
+  block:
+    - name: "Reset hook_result for {{ phase }}-migration"
+      set_fact:
+        hook_result: null
+
+    - name: "Download {{ phase }}-migration hook script"
+      get_url:
+        url: "{{ custom_action_script }}"
+        dest: "{{ tmp_workspace }}/hook-script"
+        mode: "0755"
+
+    - name: "Execute {{ phase }}-migration hook script"
+      become_user: sysadmin
+      command: "{{ tmp_workspace }}/hook-script"
+      register: hook_result
+      environment:
+        # KUBECONFIG is not set in non-interactive shells (see /etc/profile.d/kubeconfig.sh),
+        # so set it explicitly here for kubectl usage in hook scripts.
+        KUBECONFIG: "{{ kubeconfig }}"
+
+  rescue:
+    - name: "Fail with {{ phase }}-migration hook error message"
+      fail:
+        msg: >-
+          The {{ phase }}-migration custom action hook failed to download or execute.
+          Check above for details.
+
+  always:
+    - name: "Display result of {{ phase }}-migration hook script"
+      debug:
+        var: hook_result
+      when: hook_result | default(None) != None
+
+    - name: "Cleanup {{ tmp_workspace }}"
+      file:
+        path: "{{ tmp_workspace }}"
+        state: absent

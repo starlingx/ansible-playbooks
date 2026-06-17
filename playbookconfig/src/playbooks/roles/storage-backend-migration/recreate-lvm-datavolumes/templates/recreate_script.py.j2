@@ -1,0 +1,55 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+import yaml
+
+filename="{{ tmp_workspace }}/{{ data_volume_name.key }}.yaml"
+
+with open(filename, 'r') as f:
+    data = yaml.safe_load(f)
+
+# Check if original DataVolume was completed
+original_phase = data.get('status', {}).get('phase')
+was_completed = original_phase == 'Succeeded'
+migration_type = "{{ migration_type }}"
+
+data['spec']['pvc']['storageClassName'] = "{{ lvm_vg_name_cacheable }}"
+
+# TopoLVM does not support RWX, change it to RWO
+if 'ReadWriteMany' in data['spec']['pvc']['accessModes']:
+    access_modes = data['spec']['pvc']['accessModes']
+    new_access_modes = []
+    for mode in access_modes:
+        if mode == 'ReadWriteMany':
+            new_access_modes.append('ReadWriteOnce')
+        else:
+            new_access_modes.append(mode)
+    data['spec']['pvc']['accessModes'] = new_access_modes
+
+# If the DataVolume was completed, change source to blank to avoid upload process
+if was_completed and migration_type == "export_import":
+    # DataVolumes use either spec.source (inline) or spec.sourceRef (reference).
+    # Remove whichever is present and replace with an inline blank source.
+    # The sourceRef cannot be set to blank, on the inline source.
+    data['spec'].pop('sourceRef', None)
+    data['spec']['source'] = {'blank': {}}
+
+    # Add completion annotations to indicate it's already done
+    if 'annotations' not in data['metadata']:
+        data['metadata']['annotations'] = {}
+
+    data['metadata']['annotations']['cdi.kubevirt.io/storage.condition.bound'] = 'true'
+    data['metadata']['annotations']['cdi.kubevirt.io/storage.condition.running'] = 'false'
+    data['metadata']['annotations']['cdi.kubevirt.io/storage.upload.target.complete'] = 'true'
+
+with open(filename, 'w') as f:
+  yaml.dump(
+      data,
+      f,
+      default_flow_style=False,
+      sort_keys=False,
+      indent=2
+  )

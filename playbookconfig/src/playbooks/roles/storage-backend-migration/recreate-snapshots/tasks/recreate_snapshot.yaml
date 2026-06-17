@@ -40,8 +40,6 @@
 
 - name: "Delete recreate VS script for {{ snapshot_content_name.value.vs_name }}"
   command: "rm -rf {{ tmp_workspace }}/recreate_vs_script.py"
-  args:
-    warn: false
 
 - name: "Apply new VS {{ snapshot_content_name.value.vs_name }} file"
   command: "kubectl apply -f {{ tmp_workspace }}/{{ snapshot_content_name.value.vs_name }}.yaml"
@@ -50,5 +48,3 @@
 
 - name: "Delete new VS {{ snapshot_content_name.value.vs_name }} file"
   command: "rm -rf {{ tmp_workspace }}/{{ snapshot_content_name.value.vs_name }}.yaml"
-  args:
-    warn: false

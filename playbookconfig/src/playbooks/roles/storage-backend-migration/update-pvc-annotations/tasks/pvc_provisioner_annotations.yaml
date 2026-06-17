@@ -1,0 +1,73 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Update CephFS PVC provisioner annotations
+  with_dict: "{{ cephfs_pvcs_by_namespace }}"
+  vars:
+    pvc_namespace: "{{ item.key }}"
+    pvc_names: "{{ item.value | selectattr('match') | map(attribute='name') | join(' ') }}"
+  command: >
+    kubectl annotate -n {{ pvc_namespace }} --overwrite pvc {{ pvc_names }}
+      "volume.beta.kubernetes.io/storage-provisioner=rook-ceph.cephfs.csi.ceph.com"
+      "volume.kubernetes.io/storage-provisioner=rook-ceph.cephfs.csi.ceph.com"
+  register: kubectl_cephfs_result
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  when:
+    - cephfs_pvcs_by_namespace is defined
+    - cephfs_pvcs_by_namespace | length > 0
+  failed_when: false
+
+- name: Fails if any kubectl command in the loop returns an error.
+  fail:
+    msg:
+      - "Failed to update CephFS PVC provisioner annotations:"
+      - "{{ kubectl_cephfs_result.results | map(attribute='stderr_lines') | reject('equalto', '') | flatten }}"
+  when: 
+    - kubectl_cephfs_result is not skipped
+    - kubectl_cephfs_result.results | rejectattr('rc', 'equalto', 0) | length > 0
+
+- name: Shows updated PVCs using CephFS
+  debug:
+    msg: 
+      - "Following CephFS PVCs were updated:"
+      - "{{ kubectl_cephfs_result.results | map(attribute='stdout_lines') | flatten }}"
+  when: 
+    - kubectl_cephfs_result is not skipped
+
+- name: Update Ceph RBD PVC provisioner annotations
+  with_dict: "{{ rbd_pvcs_by_namespace }}"
+  vars:
+    pvc_namespace: "{{ item.key }}"
+    pvc_names: "{{ item.value | selectattr('match') | map(attribute='name') | join(' ') }}"
+  command: >
+    kubectl annotate -n {{ pvc_namespace }} --overwrite pvc {{ pvc_names }}
+      "volume.beta.kubernetes.io/storage-provisioner=rook-ceph.rbd.csi.ceph.com"
+      "volume.kubernetes.io/storage-provisioner=rook-ceph.rbd.csi.ceph.com"
+  register: kubectl_rbd_result
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  when:
+    - rbd_pvcs_by_namespace is defined
+    - rbd_pvcs_by_namespace | length > 0
+  failed_when: false
+
+- name: Fails if any kubectl command in the loop returns an error.
+  fail:
+    msg:
+      - "Failed to update Ceph RBD PVC provisioner annotations:"
+      - "{{ kubectl_rbd_result.results | map(attribute='stderr_lines') | reject('equalto', '') | flatten }}"
+  when:
+    - kubectl_rbd_result is not skipped
+    - kubectl_rbd_result.results | rejectattr('rc', 'equalto', 0) | length > 0
+
+- name: Shows updated PVCs using Ceph RBD
+  debug:
+    msg: 
+      - "Following Ceph RBD PVCs were updated:"
+      - "{{ kubectl_rbd_result.results | map(attribute='stdout_lines') | flatten }}"
+  when:
+    - kubectl_rbd_result is not skipped

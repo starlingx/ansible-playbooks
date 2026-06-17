@@ -1,0 +1,28 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# The pre_migration_hook validation is not needed here because the hook
+# already runs during init, before pre-checks. If the URI is invalid or
+# unreachable, it will fail there immediately.
+# The post_migration_hook validation is needed here to avoid issues later
+# because the post hook only executes at the end of the migration.
+
+- name: Validate post_migration_hook URI scheme
+  assert:
+    that:
+      - post_migration_hook is match('^(file|https?)://')
+    fail_msg: >-
+      Invalid post_migration_hook URI: '{{ post_migration_hook }}'.
+      Must start with file://, http://, or https://.
+  when: post_migration_hook is defined
+
+- name: Validate post_migration_hook URI is reachable
+  get_url:
+    url: "{{ post_migration_hook }}"
+    dest: /tmp/post_migration_hook_check
+  check_mode: yes
+  changed_when: false
+  when: post_migration_hook is defined

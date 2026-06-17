@@ -31,24 +31,7 @@
   changed_when: false
 
 - name: Wait for all PGs not be incomplete|inactive|peering
-  command: timeout 30 ceph pg stat
-  register: ceph_pg_stat
-  retries: 180
-  delay: 10
-  until: >
-    'incomplete' not in ceph_pg_stat.stdout and
-    'inactive' not in ceph_pg_stat.stdout and
-    'peering' not in ceph_pg_stat.stdout
-  changed_when: false
-
-- name: Wait until the 'recover' keyword goes away from ceph status
-  command: timeout 30 ceph -s
-  register: ceph_status
-  until: >
-    'recover' not in ceph_status.stdout
-  retries: 120
-  delay: 10
-  changed_when: false
+  include_tasks: wait_pg_states.yaml
 
 - name: Display cluster status
   debug:
@@ -74,15 +57,7 @@
   changed_when: false
 
 - name: Wait for cluster to stabilize after OSD destroy/purge
-  command: timeout 30 ceph pg stat
-  register: ceph_pg_stat_after_destroy
-  until: >
-    'incomplete' not in ceph_pg_stat_after_destroy.stdout and
-    'inactive' not in ceph_pg_stat_after_destroy.stdout and
-    'peering' not in ceph_pg_stat_after_destroy.stdout
-  retries: 60
-  delay: 10
-  changed_when: false
+  include_tasks: wait_pg_states.yaml
 
 - name: Give Ceph some time to rellocate the active PGs before starting OSDs
   pause:
@@ -120,43 +95,8 @@
     )
   changed_when: false
 
-- name: Wait until cluster finishes recovery
-  command: ceph health -f json
-  register: ceph_health
-  retries: 1080
-  delay: 10
-  until: >
-    (
-      ceph_health.stdout | from_json | json_query("status") == "HEALTH_OK"
-    ) or
-    (
-      (
-        ceph_health.stdout | from_json | json_query("checks")
-      | dict2items
-      | selectattr("value.severity", "equalto", "HEALTH_WARN")
-      | list
-      | length
-      ) == 0
-    )
-  changed_when: false
-
-- name: Wait until all PGs are active+clean
-  command: timeout 30 ceph pg stat
-  register: ceph_pg_stat
-  until: >
-    ceph_pg_stat.stdout is search('^([0-9]+) pgs: \\1 active\\+clean')
-  retries: 240
-  delay: 10
-  changed_when: false
-
-- name: Wait until the 'recover' keyword goes away from ceph status
-  command: timeout 30 ceph -s
-  register: ceph_status
-  until: >
-    'recover' not in ceph_status.stdout
-  retries: 120
-  delay: 10
-  changed_when: false
+- name: Wait until cluster finishes recovery and health check
+  include_tasks: wait_recovery.yaml
 
 - name: Display cluster status
   debug:

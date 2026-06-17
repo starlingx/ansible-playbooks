@@ -18,8 +18,6 @@
     /opt/platform/sysinv/{{ system.sw_version }}/.crushmap_applied
   register: cleanup_ceph_files_output
   ignore_errors: true
-  args:
-    warn: false
 
 - name: Display files removed
   debug:
@@ -32,8 +30,6 @@
   shell: find /etc/ceph -mindepth 1 ! -name 'ceph.conf' -exec rm -rfv {} +
   register: cleanup_etc_ceph_output
   ignore_errors: true
-  args:
-    warn: false
 
 - name: Display files removed from /etc/ceph
   debug:

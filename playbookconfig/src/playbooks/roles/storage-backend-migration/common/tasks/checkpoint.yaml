@@ -14,12 +14,18 @@
         UPDATE storage_backend
         SET capabilities = (
           capabilities::jsonb
-          || '{\"migration_type\": \"{{ migration_type }}\", \"migration_step\": \"{{ checkpoint }}\", \"migration_status\": \"in-progress\"}'::jsonb
+          || '{ \"migration_target\": \"{{ migration_target_detailed }}\", \"migration_type\": \"{{ migration_type }}\", \"migration_step\": \"{{ checkpoint }}\", \"migration_status\": \"in-progress\"}'::jsonb
         )::text
         WHERE id = {{ storage_backend.id }};
         "
       vars:
         storage_backend: "{{ hostvars[system.active_controller].storage_backend }}"
+        migration_target_detailed: >-
+          "{{ [ migration_target,
+                lvm_mode if migration_target == 'lvm' else '',
+                lvm_thin_disk if migration_target == 'lvm' and lvm_mode == 'thin' else ''
+              ] | select | join('/')
+          }}"
       run_once: true
       delegate_to: "{{ system.active_controller }}"
       when: hostvars[system.active_controller].storage_backend is defined

@@ -1,0 +1,27 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Build flat list of PVCs classified by volumeMode
+  set_fact:
+    filesystem_rbd_pvcs: >-
+      {{ rbd_pvcs_by_namespace | default({}) | dict2items |
+         map(attribute='value') | flatten |
+         selectattr('volume_mode', 'eq', 'Filesystem') | list }}
+    filesystem_cephfs_pvcs: >-
+      {{ cephfs_pvcs_by_namespace | default({}) | dict2items |
+         map(attribute='value') | flatten |
+         selectattr('volume_mode', 'eq', 'Filesystem') | list }}
+    block_pvcs: >-
+      {{ block_pvcs_by_namespace | default({}) | dict2items |
+         map(attribute='value') | flatten }}
+
+- name: Show PVC classification
+  debug:
+    msg: >-
+      Filesystem PVCs: {{ (filesystem_rbd_pvcs | length) + (filesystem_cephfs_pvcs | length) }}
+      (RBD: {{ filesystem_rbd_pvcs | length }},
+       CephFS: {{ filesystem_cephfs_pvcs | length }}).
+      Block PVCs: {{ block_pvcs | length }}.

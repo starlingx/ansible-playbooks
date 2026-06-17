@@ -1,0 +1,135 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Validate and persist lvm_devices
+  block:
+    - name: Validate lvm_devices
+      assert:
+        that:
+          - lvm_devices is sequence and lvm_devices is not string
+          - lvm_devices | length > 0
+        fail_msg: "lvm_devices must be a non-empty list"
+      when: lvm_devices is defined
+
+    - name: Persist lvm_devices_cached
+      set_fact:
+        lvm_devices_cached: "{{ lvm_devices | default(ceph_devices) | map('trim') | list }}"
+        cacheable: true
+      vars:
+        ceph_devices: "{{ ceph_disks_by_host_db[inventory_hostname] | map(attribute='disk_device_path') | list }}"
+  when:
+    - lvm_mode == 'thick' or (lvm_mode == 'thin' and lvm_thin_disk == 'dedicated')
+    - lvm_devices_cached is undefined
+
+- name: Show lvm_devices_cached
+  debug:
+    var: lvm_devices_cached
+  when: lvm_devices_cached is defined
+
+- name: Get all inventory disks from database
+  block:
+    - name: Query all disks from sysinv database
+      become: true
+      become_user: postgres
+      command: >
+        psql -d sysinv -t -A -F '|' -c
+        "SELECT JSON_AGG(
+          JSON_BUILD_OBJECT(
+            'device_path', d.device_path,
+            'foristorid', d.foristorid,
+            'foripvid', d.foripvid,
+            'capabilities', d.capabilities,
+            'size_mib', d.size_mib,
+            'partition_count', COALESCE(p.part_count, 0)
+          )
+        )
+        FROM i_idisk d
+        LEFT JOIN (
+          SELECT idisk_id, COUNT(*) AS part_count
+          FROM partition
+          GROUP BY idisk_id
+        ) p ON d.id = p.idisk_id;"
+      register: all_disks_query
+      changed_when: false
+
+    - name: Set all_disks_db fact
+      set_fact:
+        all_disks_db: "{{ all_disks_query.stdout | from_json }}"
+  when: lvm_mode == 'thick' or (lvm_mode == 'thin' and lvm_thin_disk == 'dedicated')
+
+- name: Get CGTS-VG available space
+  block:
+    - name: Register total available bytes for cgts-vg
+      shell: "vgs --units b --no-suffix -o vg_free cgts-vg --noheadings --rows | tr -d ' '"
+      changed_when: false
+      register: cgts_vg_space_avail_bytes_out
+
+    - name: Register available space in CGTS-VG
+      set_fact:
+        cgts_vg_space_avail_bytes: "{{ cgts_vg_space_avail_bytes_out.stdout }}"
+        cgts_vg_space_avail_gb: "{{ (cgts_vg_space_avail_bytes_out.stdout | int / 1073741824) | round | int }}"
+        cacheable: true
+  when: cgts_vg_space_avail_bytes is undefined or cgts_vg_space_avail_gb is undefined
+
+# Use 95% of available space or leave 1GB free, whichever ensures at least 1GB remains
+- name: Register lvm_volume_size_gb_max in GB
+  set_fact:
+    lvm_volume_size_gb_max: >-
+       {{ ([(cgts_vg_space_avail_bytes | int * 0.95) | round(0, 'floor') | int,
+            (cgts_vg_space_avail_bytes | int - 1073741824)] | min / 1073741824) | round(0, 'floor') | int }}
+    cacheable: true
+  when: lvm_volume_size_gb_max is undefined
+
+- name: Register lvm_volume_size_gb_normalized in GB
+  set_fact:
+    lvm_volume_size_gb_normalized: >-
+      {%- if lvm_volume_size_gb == 'all' -%}
+        {{ lvm_volume_size_gb_max }}
+      {%- elif lvm_volume_size_gb == 'half' -%}
+        {{ (cgts_vg_space_avail_bytes | int / 2 / 1073741824) | round(0, 'floor') | int }}
+      {%- else -%}
+        {{ lvm_volume_size_gb }}
+      {%- endif -%}
+    cacheable: true
+  when: lvm_volume_size_gb_normalized is undefined
+
+- name: Convert bytes to GB for backup calculations
+  set_fact:
+    backups_required_gb: "{{ (backups_required_bytes | int / 1073741824) | round(0, 'ceil') | int }}"
+    backups_safety_margin_gb: "{{ (backups_safety_margin_bytes | int / 1073741824) | round(0, 'ceil') | int }}"
+    cacheable: true
+  when:
+    - backups_required_bytes is defined
+    - backups_safety_margin_bytes is defined
+    - backups_required_gb is undefined or backups_safety_margin_gb is undefined
+
+# When creating the LV in the same VG as the backups, the max usable space
+# may not be enough to hold both the backups and the full requested LV at the
+# same time. In that case, we create a smaller LV initially and resize it
+# after the backups are removed.
+- name: Check if VG resize is needed after migration
+  set_fact:
+    resize_vg_after_migration: "{{ (create_migration_lv | default(false)) | bool and migration_type == 'export_import' and
+      lvm_mode == 'thin' and lvm_thin_disk == 'root' and
+      (lvm_volume_size_gb_max | int < backups_required_gb | int + lvm_volume_size_gb_normalized | int) }}"
+    cacheable: true
+  when: resize_vg_after_migration is undefined
+
+# Initial LV size: when resize is needed, use maximum available space minus backup space
+# to utilize all available space while leaving room for backups.
+# The minimum is the backup size itself
+# If no resize is needed, use the full normalized size.
+- name: Set initial LV size
+  set_fact:
+    lvm_volume_initial_size_gb: >-
+      {%- if resize_vg_after_migration | bool -%}
+        {{ [lvm_volume_size_gb_max | int - backups_required_gb | int,
+            backups_required_gb | int] | max }}
+      {%- else -%}
+        {{ lvm_volume_size_gb_normalized | int }}
+      {%- endif -%}
+    cacheable: true
+  when: lvm_volume_initial_size_gb is undefined

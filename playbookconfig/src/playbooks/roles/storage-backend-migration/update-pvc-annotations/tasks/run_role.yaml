@@ -1,0 +1,8 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Update PVC provisioner annotations
+  include_tasks: pvc_provisioner_annotations.yaml
