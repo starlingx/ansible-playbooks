@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -31,9 +31,9 @@
   - name: Set add_docker_prefix flag
     set_fact:
       add_docker_prefix:
-        "{{ 'yes' if (input_archive|basename).startswith('container-image') and
+        "{{ 'True' if (input_archive|basename).startswith('container-image') and
                      (input_archive|basename).endswith('.tar.gz')
-                  else 'no' }}"
+                  else 'False' }}"
 
   - name: Push imported images to local registry
     script: push_imported_images_to_local_registry.py {{ virtual_type.stdout|lower }}
