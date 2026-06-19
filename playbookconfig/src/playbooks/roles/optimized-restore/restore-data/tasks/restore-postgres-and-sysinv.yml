@@ -325,7 +325,7 @@
     - name: Query rook-ceph user_overrides from restored DB
       shell: >-
         psql -t -A -c
-        "SELECT ho.name || '=' || md5(ho.user_overrides)
+        "SELECT ho.name
          FROM helm_overrides ho
          JOIN kube_app ka ON ho.app_id = ka.id
          WHERE ka.name='rook-ceph'
@@ -334,28 +334,25 @@
       become_user: postgres
       register: restored_user_overrides_raw
 
-    - name: Parse restored user-overrides into chart=hash map
+    - name: Set restored charts list
       set_fact:
-        restored_overrides_map: >-
-          {{ dict(restored_user_overrides_raw.stdout_lines
-             | map('split', '=', 1)
-             | list) }}
+        restored_overrides_charts: "{{ restored_user_overrides_raw.stdout_lines }}"
 
     - name: Log restored user-overrides comparison
       debug:
         msg:
           - "Expected charts: {{ backup_rook_user_overrides_data.keys() | list }}"
-          - "Restored charts: {{ restored_overrides_map.keys() | list }}"
+          - "Restored charts: {{ restored_overrides_charts }}"
 
     - name: Fail if user-overrides charts are missing after restore
       fail:
         msg: >-
           Rook-ceph user-overrides charts missing after postgres restore.
           Expected: {{ backup_rook_user_overrides_data.keys() | list }}.
-          Found: {{ restored_overrides_map.keys() | list }}.
+          Found: {{ restored_overrides_charts }}.
       when: >-
         (backup_rook_user_overrides_data.keys() | list | sort) !=
-        (restored_overrides_map.keys() | list | sort)
+        (restored_overrides_charts | sort)
 
     - name: Verify user-overrides content integrity
       shell: >-
@@ -374,7 +371,7 @@
         msg: >-
           Rook-ceph user-overrides content mismatch for chart
           '{{ item.item.key }}'.
-      when: item.stdout != item.item.value
+      when: item.stdout | trim != item.item.value | trim
       loop: "{{ db_override_content.results }}"
       loop_control:
         label: "{{ item.item.key }}"
