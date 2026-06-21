@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2023 Wind River Systems, Inc.
+# Copyright (c) 2021-2023,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -51,6 +51,10 @@
 #
 all:
   vars:
+    # CA parameters (system_root_ca_cert, system_local_ca_cert, system_local_ca_key) are optional.
+    # Provide them when replacing the system-local-ca.
+    # Omit all three to keep the existing CA and only update platform certificate key types.
+    #
     # If using an Intermediate CA for system_local_ca_cert (recommended), the value
     # for system_root_ca_cert needs to be the Root CA which is the Issuer of system_local_ca_cert
     system_root_ca_cert: <base64_cert>
@@ -83,6 +87,11 @@ all:
           subject_O: myorganization
           subject_OU: engineering
           subject_CN: myorganization.com
+          # algorithm and key_size are optional. If not specified, defaults to ECDSA P-384.
+          # Valid options: algorithm ECDSA with key_size 256, 384 or 521;
+          #                algorithm RSA with key_size 3072 or 4096.
+          # algorithm: ECDSA
+          # key_size: 384
         # SSH password to connect to all subclouds
         ansible_ssh_user: sysadmin
         ansible_ssh_pass: <sysadmin-pwd>

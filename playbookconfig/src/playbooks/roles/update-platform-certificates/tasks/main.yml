@@ -1,17 +1,17 @@
 ---
 #
-# Copyright (c) 2021-2024 Wind River Systems, Inc.
+# Copyright (c) 2021-2024,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # These tasks perform a clean installation of platform certificates with
-# cert-manager ( rest-api/https, registry.local and oidc-auth-app )
+# cert-manager ( rest-api/https, registry.local, openldap and oidc-auth-app )
 #
 # Before installing new certificates, a backup of old ones is saved to
 # /home/sysadmin/certificates_backup/ in case they are needed
 #
 # The RCA that signs the ICA that is used to issue the certificates created
-# is also installed to the platform as a Trusted CA
+# is also installed to the platform as a Trusted CA when CA is provided
 #
 # For oidc-auth-app certificate an application-apply is also performed
 # in order to restart the application with the new certificate
@@ -20,6 +20,18 @@
 # Precheck to ensure conditions for Install/Update are met.
 - name: Precheck before Install / Update certificate
   block:
+    - name: Check for upgrade in progress
+      include_tasks: check-upgrade-in-progress.yml
+
+    - name: Fail if CA parameters are partially provided
+      fail:
+        msg: >-
+          All three CA parameters (system_root_ca_cert, system_local_ca_cert,
+          system_local_ca_key) must be provided together, or all omitted.
+      when: >-
+        (system_root_ca_cert | default('') | length > 0) != (system_local_ca_cert | default('') | length > 0) or
+        (system_root_ca_cert | default('') | length > 0) != (system_local_ca_key | default('') | length > 0)
+
     - name: Check for management affecting alarms
       include_tasks: check-for-management-alarms.yml
       when: ignore_alarms is undefined or ignore_alarms | bool == False
@@ -27,6 +39,7 @@
     - name: Verify CA overrides provided for 'system-local-ca' issuer
       include_role:
         name: common/verify-system-local-ca-overrides
+      when: system_local_ca_cert | default('') | length > 0
   when: mode == 'update'
 
 - name: Install / Update cert-manager certificate
@@ -69,6 +82,7 @@
         name: common/generate-platform-certificates-template
       vars:
         destination: "{{ cert_manager_spec_file }}"
+        include_system_local_ca: "{{ system_local_ca_cert | default('') | length > 0 }}"
 
     - name: Retrieve certificates that may own system-local-ca secret
       shell: >-
@@ -81,25 +95,28 @@
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: cert_to_remove
 
-    - name: Dump system-local-ca secret (to recover if necessary)
-      command: kubectl get secret -n cert-manager system-local-ca -o yaml --ignore-not-found=true
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      register: system_local_ca_dump
-      no_log: true
+    - name: Backup and delete 'system-local-ca' clusterIssuer and secret
+      block:
+      - name: Dump system-local-ca secret (to recover if necessary)
+        command: kubectl get secret -n cert-manager system-local-ca -o yaml --ignore-not-found=true
+        environment:
+          KUBECONFIG: /etc/kubernetes/admin.conf
+        register: system_local_ca_dump
+        no_log: true
 
-    - name: Delete certificate that owns the secret 'system-local-ca' if it exists
-      include_role:
-        name: common/delete-kubernetes-resources
-      when: cert_to_remove.stdout | length > 0
-      loop: "{{ cert_to_remove.stdout_lines | map('from_yaml') | list }}"
+      - name: Delete certificate that owns the secret 'system-local-ca' if it exists
+        include_role:
+          name: common/delete-kubernetes-resources
+        when: cert_to_remove.stdout | length > 0
+        loop: "{{ cert_to_remove.stdout_lines | map('from_yaml') | list }}"
 
-    - name: Delete the 'system-local-ca' clusterIssuer and secret if they exist
-      include_role:
-        name: common/delete-kubernetes-resources
-      loop:
-        - { name: system-local-ca, namespace: cert-manager, type: clusterissuer }
-        - { name: system-local-ca, namespace: cert-manager, type: secret }
+      - name: Delete the 'system-local-ca' clusterIssuer and secret if they exist
+        include_role:
+          name: common/delete-kubernetes-resources
+        loop:
+          - { name: system-local-ca, namespace: cert-manager, type: clusterissuer }
+          - { name: system-local-ca, namespace: cert-manager, type: secret }
+      when: system_local_ca_cert | default('') | length > 0
 
     - name: Remove default leaf certificates
       include_role:
@@ -158,6 +175,7 @@
         name: common/install-rca-as-trusted
       vars:
         rca_cert: "{{ system_root_ca_cert }}"
+      when: system_local_ca_cert | default('') | length > 0
 
     - name: Restart kube-apiserver to pick the new certificate
       include_role:
@@ -215,7 +233,7 @@
 
       - name: Update IPSec CA certificates
         include_tasks: update_ipsec_CA_certificates_in_hosts.yaml
-        loop: "{{ ip_addrs_list_result.stdout }}"
+        loop: "{{ ip_addrs_list_result.stdout | from_yaml }}"
 
       - name: Show failed hosts if IPSec CA certificates update failed
         debug:
@@ -230,7 +248,7 @@
       - block:
         - name: Update IPSec certificates
           include_tasks: update_ipsec_certificates_in_hosts.yaml
-          loop: "{{ ip_addrs_list_result.stdout }}"
+          loop: "{{ ip_addrs_list_result.stdout | from_yaml }}"
 
         - name: Show failed hosts if IPSec certificates update failed
           debug:
@@ -252,7 +270,9 @@
             name: configure-ipsec/update_heartbeat_failure_action
           vars:
             action: 'fail'
-      when: system_mode_result.stdout != 'simplex'
+      when:
+        - system_local_ca_cert | default('') | length > 0
+        - system_mode_result.stdout != 'simplex'
 
     - name: Signal that user provided the CA data for system-local-ca
       block:
@@ -270,6 +290,7 @@
           mode: 0644
           state: touch
         become: yes
+      when: system_local_ca_cert | default('') | length > 0
 
   rescue:
     - name: Check if system-local-ca is in place
@@ -289,7 +310,7 @@
       retries: 10
       delay: 30
       no_log: true
-      when: system_local_ca_get.stdout == ""
+      when: system_local_ca_get.stdout == "" and system_local_ca_dump is defined
 
     - block:
       - debug:

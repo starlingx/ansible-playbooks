@@ -1,0 +1,59 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# These tasks are meant to run in a DC system controller to pre-check
+# the type of the provided certificates and fail if there is a subcloud
+# that does not support it.
+#
+# If system-local-ca variables is not provided, the type of the currently
+# installed one is checked instead.
+#
+
+- name: Retrieve installed CA key when variable is not provided
+  shell: >-
+    kubectl get secret system-local-ca -n cert-manager
+    -o jsonpath='{.data.tls\.key}' | base64 -d
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: installed_ca_key
+  no_log: true
+  when: system_local_ca_key | default('') | length == 0
+
+- name: Get CA key content
+  set_fact:
+    ca_key_content: >-
+      {{ (system_local_ca_key | b64decode)
+      if (system_local_ca_key | default('') | length > 0)
+      else installed_ca_key.stdout }}
+  no_log: true
+
+- name: Get CA private key type
+  community.crypto.openssl_privatekey_info:
+    content: "{{ ca_key_content }}"
+  register: ca_key_info
+  no_log: true
+
+- name: Load default platform certificate vars
+  include_vars:
+    dir: "{{ playbook_dir }}/roles/common/generate-platform-certificates-template/vars"
+    name: platform_certs_vars
+
+- name: Validate RSA compatibility for subclouds older than 26.10
+  fail:
+    msg: >-
+      Cannot install certificates on '{{ item.name }}' (version
+      {{ item.software_version | default('unknown') }}). Versions older than 26.10
+      only support RSA certificates. Currently provided system-local-ca is
+      {{ ca_key_info.type }} and platform certificates are {{ platform_certs_algorithm }}.
+  vars:
+    platform_certs_algorithm: >-
+      {{ system_platform_certificate.algorithm | default(platform_certs_vars.default.algorithm) }}
+  loop: "{{ target_subclouds }}"
+  when:
+    - ca_key_info.type != 'RSA' or
+      platform_certs_algorithm != 'RSA'
+    - item.software_version is not defined or
+      item.software_version is version('26.10', '<')

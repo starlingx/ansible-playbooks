@@ -1,0 +1,31 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Use dcmanager to get subclouds info and build the target_subclouds
+# list based on target_list (all_online_subclouds or specific names).
+#
+
+- name: Get all subclouds from dcmanager
+  shell: |
+    source /etc/platform/openrc
+    dcmanager subcloud list -f json -c name -c availability -c software_version
+  register: subcloud_list_result
+
+- name: Parse subclouds list
+  set_fact:
+    subclouds: "{{ subcloud_list_result.stdout | from_json }}"
+
+- name: Select all online subclouds
+  set_fact:
+    target_subclouds: >-
+      {{ subclouds | selectattr('availability', 'equalto', 'online') | list }}
+  when: "'all_online_subclouds' in target_list.split(',')"
+
+- name: Select specific subclouds
+  set_fact:
+    target_subclouds: >-
+      {{ subclouds | selectattr('name', 'in', target_list.split(',')) | list }}
+  when: "'all_online_subclouds' not in target_list.split(',')"

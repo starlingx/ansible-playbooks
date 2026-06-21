@@ -1,5 +1,6 @@
 ## strips out any bad character from region name. Only [^A-Za-z0-9-]" is supported
 {% set clean_region_name = region_name_register.stdout | replace("_", "-") | regex_replace("[^A-Za-z0-9-]","") | lower %}
+{% if include_system_local_ca | default(true) | bool %}
 ---
 apiVersion: v1
 data:
@@ -11,9 +12,11 @@ metadata:
   name: system-local-ca
   namespace: cert-manager
 type: kubernetes.io/tls
+{% endif %}
 ---
 apiVersion: v1
 items:
+{% if include_system_local_ca | default(true) | bool %}
 - apiVersion: "{{ cert_manager_api_version.stdout | default(default.cert_manager_version, true) }}"
   kind: ClusterIssuer
   metadata:
@@ -23,6 +26,7 @@ items:
     ca:
       secretName: system-local-ca
   status: {}
+{% endif %}
 {% if install_system_restapi_gui_certificate | bool %}
 {% set short_certificate_name = 'system-restapi-gui' %}
 - apiVersion: "{{ cert_manager_api_version.stdout | default(default.cert_manager_version, true) }}"

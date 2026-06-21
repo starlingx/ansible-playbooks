@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2024 Wind River Systems, Inc.
+# Copyright (c) 2021-2024,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -8,12 +8,17 @@
 # standalone systems.
 #
 # It provides the capability to migrate platform certificates
-# (registry.local, https/rest-api, oidc-client) to cert-manager.
+# (registry.local, https/rest-api, oidc-client, openldap) to cert-manager
+# or to re-issue them with a different key type or size.
 #
 # To run the playbook, the user would define an overrides file that
 # provides the required variable settings, passing this on the ansible
 # command-line as a parameter.
 # (see update-platform-certificates-inventory-EXAMPLE.yml)
+#
+# CA parameters (system_root_ca_cert, system_local_ca_cert, system_local_ca_key)
+# are optional for re-issuance. If omitted, the playbook keeps
+# the existing CA and only updates platform certificate key types and sizes.
 #
 # Example command:
 # ansible-playbook update_platform_certificates.yml \
@@ -43,28 +48,31 @@
           in 'dcmanager subcloud list'
       when: target_list is undefined
 
-    - name: Get all online subclouds in the system
-      block:
-        - name: Get online subclouds from dcmanager
-          shell: |
-            source /etc/platform/openrc
-            dcmanager subcloud list -c name -c availability | awk ' $4 == "online" { print $2 }'
-          register: subclouds
-
-        - name: Add host to target_group
-          add_host:
-            name: "{{ item }}"
-            groups: target_group
-          loop: "{{ subclouds.stdout_lines }}"
-
-      when: "'all_online_subclouds' in target_list"
-
-    - name: Get subcloud from extra-vars
+    - name: Add localhost to target_group
       add_host:
-        name: "{{ item }}"
+        name: localhost
         groups: target_group
-      loop: "{{ target_list.split(',') }}"
-      when: "item != 'all_online_subclouds'"
+      when: "'localhost' in target_list.split(',')"
+
+    - name: Build subcloud target group
+      block:
+        - name: Build target subcloud list
+          include_role:
+            name: update-platform-certificates
+            tasks_from: build-target-subcloud-list.yml
+
+        - name: Check ECDSA compatibility with target subclouds
+          include_role:
+            name: update-platform-certificates
+            tasks_from: check-subcloud-ecdsa-compat.yml
+
+        - name: Add subclouds to target_group
+          add_host:
+            name: "{{ item.name }}"
+            groups: target_group
+          loop: "{{ target_subclouds }}"
+
+      when: target_list != "localhost"
 
 - hosts: target_group
   gather_facts: no
@@ -119,4 +127,4 @@
         retries: 10
         delay: 10
 
-      when: mode == 'update'
+      when: mode == 'update' and (system_root_ca_cert | default('') | length > 0)
