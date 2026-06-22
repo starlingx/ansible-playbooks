@@ -1827,9 +1827,9 @@
       when: system_local_ca_cert | length > 0
     when: mode != 'restore'
 
-- name: Verify user provided SANs for platform certificates
+- name: Validate platform certificate overrides
   include_role:
-    name: common/validate-cert-subject-fields
+    name: common/validate-platform-cert-overrides
   when: system_platform_certificate is defined
 
 - name: Check for ssl_ca_cert file

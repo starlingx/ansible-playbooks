@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2025 Wind River Systems, Inc.
+# Copyright (c) 2022-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -8,9 +8,9 @@
 # generate a certificate spec file which is going to be applied to
 # kubernetes at a later step
 #
-- name: Validate subject fields
+- name: Validate platform certificate overrides
   include_role:
-    name: common/validate-cert-subject-fields
+    name: common/validate-platform-cert-overrides
 
 - block:
   - name: Get primary and secondary ip addresses

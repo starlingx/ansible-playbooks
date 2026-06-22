@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -11,3 +11,5 @@ default:
   duration: '2160h'     # 90d
   renewBefore: '360h'  # 15d
   subject_O: 'starlingx'
+  algorithm: 'ECDSA'
+  key_size: 384

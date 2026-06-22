@@ -45,6 +45,9 @@ items:
       name: system-local-ca
     renewBefore: "{{ system_platform_certificate.renewBefore | default(default.renewBefore, true) }}"
     secretName: system-restapi-gui-certificate
+    privateKey:
+      algorithm: "{{ system_platform_certificate.algorithm | default(default.algorithm, true) }}"
+      size: {{ system_platform_certificate.key_size | default(default.key_size, true) }}
 {% include 'subject_snippet.j2' %}
   status: {}
 {% endif %}
@@ -74,6 +77,9 @@ items:
       name: system-local-ca
     renewBefore: "{{ system_platform_certificate.renewBefore | default(default.renewBefore, true) }}"
     secretName: system-registry-local-certificate
+    privateKey:
+      algorithm: "{{ system_platform_certificate.algorithm | default(default.algorithm, true) }}"
+      size: {{ system_platform_certificate.key_size | default(default.key_size, true) }}
 {% include 'subject_snippet.j2' %}
   status: {}
 {% endif %}
@@ -117,6 +123,9 @@ items:
       name: system-local-ca
     renewBefore: "{{ system_platform_certificate.renewBefore | default(default.renewBefore, true) }}"
     secretName: oidc-auth-apps-certificate
+    privateKey:
+      algorithm: "{{ system_platform_certificate.algorithm | default(default.algorithm, true) }}"
+      size: {{ system_platform_certificate.key_size | default(default.key_size, true) }}
 {% include 'subject_snippet.j2' %}
   status: {}
 {% endif %}
@@ -157,6 +166,9 @@ items:
       name: system-local-ca
     renewBefore: "{{ system_platform_certificate.renewBefore | default(default.renewBefore, true) }}"
     secretName: system-openldap-local-certificate
+    privateKey:
+      algorithm: "{{ system_platform_certificate.algorithm | default(default.algorithm, true) }}"
+      size: {{ system_platform_certificate.key_size | default(default.key_size, true) }}
 {% include 'subject_snippet.j2' %}
   status: {}
 {% endif %}
