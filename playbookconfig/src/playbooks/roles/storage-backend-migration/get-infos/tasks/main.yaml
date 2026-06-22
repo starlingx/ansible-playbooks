@@ -31,10 +31,6 @@
     - name: "Get Ceph Pools information"
       include_tasks: ceph_pools_info.yaml
 
-    - name: Get backups info and behavior
-      include_tasks: backups_info.yaml
-      when: migration_type == "export_import" or old_pool_exist and migration_type != "redeploy"
-
     - name: Get network info
       include_tasks: network_info.yaml
 
@@ -47,6 +43,13 @@
 
     - name: Get DataVolume info
       include_tasks: "data_volume_info.yaml"
+
+    - name: Get RBD size info
+      include_tasks: "rbd_size_info.yaml"
+
+    - name: Get backups info and behavior
+      include_tasks: backups_info.yaml
+      when: migration_type == "export_import" or old_pool_exist and migration_type != "redeploy"
 
   rescue:
     - include_tasks: "{{ role_path_common }}/tasks/clear_facts_cache.yaml"

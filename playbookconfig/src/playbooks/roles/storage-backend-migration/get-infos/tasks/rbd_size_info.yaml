@@ -1,0 +1,43 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get information about RBD volumes
+  shell: |-
+    kubectl get pv -o jsonpath='
+      {range .items[?(@.metadata.annotations.pv\.kubernetes\.io/provisioned-by=="rbd.csi.ceph.com")]}
+      - namespace{":"} {.spec.claimRef.namespace}
+        pvc{":"} {.spec.claimRef.name}
+        pv{":"} {.metadata.name}
+        pool{":"} {.spec.csi.volumeAttributes.pool}
+        imageName{":"} {.spec.csi.volumeAttributes.imageName}
+      {end}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: kubectl_pv_rbd_info_output
+  changed_when: false
+
+- name: Transform from YAML
+  set_fact:
+    pv_rbd_info: "{{ kubectl_pv_rbd_info_output.stdout | from_yaml }}"
+  when: kubectl_pv_rbd_info_output | length > 0
+
+- name: Print RBD info
+  debug:
+    var: pv_rbd_info
+
+- name: Get size estimate for each RBD image
+  shell: rbd diff --pool {{ item.pool }} --image {{ item.imageName }} | awk '$3 == "data" { SUM += $2 } END { print SUM }'
+  register: rbd_image_size_in_bytes_output
+  with_items: "{{ pv_rbd_info }}"
+  changed_when: false
+
+- name: Sum all RBD images size
+  set_fact:
+    rbd_total_size_in_bytes: "{{ rbd_image_size_in_bytes_output.results | map(attribute='stdout') | map('int') | sum }}"
+
+- name: Print RBD total size
+  debug:
+    msg: "RBD total size: {{ rbd_total_size_in_bytes }} bytes ({{rbd_total_size_in_bytes / 1073741824}} GiB)"
