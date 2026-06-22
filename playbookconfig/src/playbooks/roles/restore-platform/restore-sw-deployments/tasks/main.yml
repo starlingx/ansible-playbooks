@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024-2025 Wind River Systems, Inc.
+# Copyright (c) 2024-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -52,13 +52,13 @@
         sw_deployments_info: "{{ _sw_deployments_info }}"
         sw_deployments_enabled: "{{ _sw_deployments_info.backup_patched }}"
         do_sw_deployments_prepare: "{{ not in_progress_flag.stat.exists }}"
-        do_sw_deployments_restore: "{{ _sw_deployments_info.target_release_id is not none }}"
+        do_sw_deployments_restore: "{{ _sw_deployments_info.deployments_to_restore | default([]) | length > 0 }}"
         do_sw_deployments_begin: "{{ not rr_flag.stat.exists }}"
         do_sw_deployments_end: true
         do_sw_deployments_reboot: >-
           {{
             not rr_flag.stat.exists and (
-              sw_deployments_force_reboot|bool or _sw_deployments_info.target_reboot_required|bool
+              sw_deployments_force_reboot|bool or _sw_deployments_info.target_reboot_required|default(false)|bool
             )
           }}
       vars:

@@ -1,0 +1,97 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASKS DESCRIPTION:
+#   Perform a full deploy cycle (start -> host -> activate -> complete -> delete)
+#   for a single set of metapackages belonging to one sw_version.
+#
+
+- name: "Deploy start for {{ current_deployment.sw_version }}"
+  block:
+    - name: Execute software deploy start
+      command: "software deploy start {{ current_deployment.metapackages | join(' ') }}"
+
+    - name: Wait for software deploy start to finish
+      command: software deploy show
+      register: wait_for_start_result
+      until: wait_for_start_result.stdout | regex_search('start-(done|failed)')
+      retries: "{{ (wait_for_start_timeout|int + 9) // 10 }}"
+      delay: 10
+      failed_when: wait_for_start_result.stdout | regex_search('start-failed')
+
+  rescue:
+    - name: Failed while attempting software deploy start
+      fail:
+        msg: |
+          {{ software_deploy_error_msg }}
+
+          Deployment: {{ current_deployment.sw_version }}
+          Metapackages: {{ current_deployment.metapackages | join(', ') }}
+
+          Step error:
+            {{ ansible_failed_result | to_nice_yaml | indent(2) }}
+
+- name: "Deploy host for {{ current_deployment.sw_version }}"
+  block:
+    - name: Execute software deploy host localhost
+      command: software deploy host localhost --yes
+
+  rescue:
+    - name: Failed while attempting software deploy host
+      fail:
+        msg: |
+          {{ software_deploy_error_msg }}
+
+          Deployment: {{ current_deployment.sw_version }}
+          Metapackages: {{ current_deployment.metapackages | join(', ') }}
+
+          Step error:
+            {{ ansible_failed_result | to_nice_yaml | indent(2) }}
+
+- name: "Deploy activate for {{ current_deployment.sw_version }}"
+  block:
+    - name: Execute software deploy activate
+      command: software deploy activate
+
+    - name: Wait for software deploy activate to finish
+      command: software deploy show
+      register: wait_for_activate_result
+      until: wait_for_activate_result.stdout | regex_search('activate-(done|failed)')
+      retries: "{{ (wait_for_activate_timeout|int + 9) // 10 }}"
+      delay: 10
+      failed_when: wait_for_activate_result.stdout | regex_search('activate-failed')
+
+  rescue:
+    - name: Failed while attempting software deploy activate
+      fail:
+        msg: |
+          {{ software_deploy_error_msg }}
+
+          Deployment: {{ current_deployment.sw_version }}
+          Metapackages: {{ current_deployment.metapackages | join(', ') }}
+
+          Step error:
+            {{ ansible_failed_result | to_nice_yaml | indent(2) }}
+
+- name: "Complete deployment for {{ current_deployment.sw_version }}"
+  block:
+    - name: Execute software deploy complete
+      command: software deploy complete
+
+    - name: Execute software deploy delete
+      command: software deploy delete
+
+  rescue:
+    - name: Failed while attempting software deploy complete or delete
+      fail:
+        msg: |
+          {{ software_deploy_error_msg }}
+
+          Deployment: {{ current_deployment.sw_version }}
+          Metapackages: {{ current_deployment.metapackages | join(', ') }}
+
+          Step error:
+            {{ ansible_failed_result | to_nice_yaml | indent(2) }}

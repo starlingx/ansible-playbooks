@@ -13,7 +13,7 @@ verify_base_commit: true
 # It was created during backup.
 sw_deployments_backup_info_file: "etc/platform/.backup_sw_deployments_info.json"
 
-# All the data that needs to be restore for this is under these files/directories.
+# All the data that needs to be restored for this is under these files/directories.
 sw_deployments_restore_items:
   - "opt/software"
   - "var/www/pages/updates"

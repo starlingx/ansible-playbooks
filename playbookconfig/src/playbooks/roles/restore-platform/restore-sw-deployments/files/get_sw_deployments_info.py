@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2024-2025 Wind River Systems, Inc.
+# Copyright (c) 2024-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 
 from argparse import ArgumentParser
+from collections import defaultdict
 from functools import lru_cache
 import json
 from pathlib import Path
@@ -36,19 +37,11 @@ def get_sw_version(patch_metadata):
     return tuple(map(int, xnode.text.split(".")))
 
 
-def get_root_commit(patch_metadata):
-    """Read the first commit from a deployed patch metadata string"""
+def get_commit(patch_metadata):
+    """Read the commit from a deployed metapackage metadata string"""
 
     xroot = ET.XML(patch_metadata)
     xnode = xroot.find("./contents/ostree/commit1/commit")
-    return xnode.text if xnode is not None else None
-
-
-def get_base_commit(patch_metadata):
-    """Read the base commit from a deployed patch metadata string"""
-
-    xroot = ET.XML(patch_metadata)
-    xnode = xroot.find("./contents/ostree/base/commit")
     return xnode.text if xnode is not None else None
 
 
@@ -60,16 +53,23 @@ def get_reboot_required_patch(patch_metadata):
     return xnode.text == "Y" if xnode is not None else False
 
 
+def get_metapackage_id(path):
+    """Derive the metapackage ID from its metadata file path"""
+
+    return Path(path).name.replace("-metadata.xml", "")
+
+
 @lru_cache(maxsize=None)
 def get_metadata(backup_data):
-    """Get the paths to all the metadata files and group them by type
+    """Get the paths to all the metapackage metadata files and group them by state.
 
-    Group by type, sorted by recentness.  Latest patch will be last index.
+    Looks in opt/software/releases/metadata/<state>/*.xml
     """
 
     metadata = {}
     p = subprocess.run(
-        TAR_CMD + ["--wildcards", "-tf", backup_data, "opt/software/metadata/*.xml"],
+        TAR_CMD + ["--wildcards", "-tf", backup_data,
+                   "opt/software/releases/metadata/*/*.xml"],
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
@@ -77,24 +77,62 @@ def get_metadata(backup_data):
     )
     entries = p.stdout.splitlines() if p.returncode == 0 else []
     for v in entries:
-        metadata.setdefault(Path(v).parent.name, []).append(v)
+        state = Path(v).parent.name
+        metadata.setdefault(state, []).append(v)
     for k, v in metadata.items():
         metadata[k] = sorted(v, key=lambda x: get_sw_version(read_file(backup_data, x)))
     return metadata
 
 
-def get_target_commit(backup_data, metadata):
-    """Get the base OSTree commit of the ISO/earliest commit"""
+def get_deployed_groups(backup_data, metadata):
+    """Group deployed metapackages by sw_version, sorted by version.
 
-    if not metadata:
-        target_commit = None
-    elif len(metadata.get("deployed", [])) == 1:
-        target_commit = get_root_commit(read_file(backup_data, metadata["deployed"][0]))
-    elif len(metadata.get("deployed", [])) > 1:
-        target_commit = get_base_commit(read_file(backup_data, metadata["deployed"][1]))
-    else:
-        raise EnvironmentError("Unable to determine root/base commit")
-    return target_commit
+    Returns a list of dicts:
+      [{"sw_version": (major, minor, ...), "metapackages": ["id1", "id2", ...],
+        "paths": ["path1", "path2", ...]}, ...]
+    """
+
+    groups = defaultdict(lambda: {"metapackages": [], "paths": []})
+    for path in metadata.get("deployed", []):
+        content = read_file(backup_data, path)
+        sw_version = get_sw_version(content)
+        metapkg_id = get_metapackage_id(path)
+        groups[sw_version]["metapackages"].append(metapkg_id)
+        groups[sw_version]["paths"].append(path)
+
+    result = []
+    for sw_version in sorted(groups.keys()):
+        result.append({
+            "sw_version": sw_version,
+            "metapackages": groups[sw_version]["metapackages"],
+            "paths": groups[sw_version]["paths"],
+        })
+    return result
+
+
+def get_target_commit(backup_data, deployed_groups):
+    """Get the target OSTree commit from the ISO base group (first in sorted order).
+
+    All metapackages in the base group should share the same commit.
+    """
+
+    if not deployed_groups:
+        return None
+
+    base_group = deployed_groups[0]
+    commits = set()
+    for path in base_group["paths"]:
+        content = read_file(backup_data, path)
+        commit = get_commit(content)
+        if commit:
+            commits.add(commit)
+
+    if len(commits) > 1:
+        raise EnvironmentError(
+            "Base ISO metapackages have inconsistent commit IDs: {}".format(commits)
+        )
+
+    return commits.pop() if commits else None
 
 
 @lru_cache(maxsize=None)
@@ -109,38 +147,50 @@ def check_if_backup_patched(backup_data):
     return rc == 0
 
 
-def get_target_release_id(metadata):
-    """Get which release we will upgrade too"""
+def get_deployments_to_restore(deployed_groups):
+    """Get deployments to restore (everything after the base ISO group).
 
-    if len(metadata["deployed"]) <= 1:
-        return None
+    Returns a list of dicts with sw_version string and metapackage IDs.
+    """
 
-    patch_path = metadata["deployed"][-1]
-    return Path(patch_path).name.replace("-metadata.xml", "")
+    if len(deployed_groups) <= 1:
+        return []
+
+    result = []
+    for group in deployed_groups[1:]:
+        result.append({
+            "sw_version": ".".join(map(str, group["sw_version"])),
+            "metapackages": group["metapackages"],
+            "paths": group["paths"],
+        })
+    return result
 
 
-def get_target_reboot_required(backup_data, metadata):
-    """Get if we are RR for our target upgrade"""
+def get_target_reboot_required(backup_data, deployments_to_restore):
+    """Check if any metapackage in the deployments to restore requires a reboot"""
 
-    return any(
-        get_reboot_required_patch(read_file(backup_data, v))
-        for v in metadata["deployed"][1:]
-    )
+    for deployment in deployments_to_restore:
+        for path in deployment["paths"]:
+            if get_reboot_required_patch(read_file(backup_data, path)):
+                return True
+    return False
 
 
-def get_tar_transforms(metadata):
-    """Convert deployed release to available releases"""
+def get_tar_transforms(deployments_to_restore):
+    """Convert deployed metapackages to available for extraction"""
 
     transforms = []
-    for v in metadata.get("deployed", [])[1:]:
-        transforms.append(f"s|{v}|{v.replace('deployed', 'available')}|")
+    for deployment in deployments_to_restore:
+        for path in deployment["paths"]:
+            transforms.append(
+                "s|{}|{}|".format(path, path.replace("deployed", "available"))
+            )
     return transforms
 
 
 def get_tar_excludes(backup_data, metadata):
     """Prevent unwanted items from being extracted during restore"""
 
-    # Exclude everything with a software version below minimum since they cannot be restored
     excludes = []
     for kind in ["committed", "unavailable"]:
         for v in metadata.get(kind, []):
@@ -156,6 +206,7 @@ def collect_sw_deployments_info(backup_data):
 
     result = {}
     metadata = get_metadata(backup_data)
+    deployed_groups = get_deployed_groups(backup_data, metadata)
 
     # Fail if committed data is found above minimum release
     for v in metadata.get("committed", []):
@@ -164,12 +215,15 @@ def collect_sw_deployments_info(backup_data):
             raise NotImplementedError("Committed patches not supported yet")
 
     result["backup_patched"] = check_if_backup_patched(backup_data)
-    result["target_commit"] = get_target_commit(backup_data, metadata)
+    result["target_commit"] = get_target_commit(backup_data, deployed_groups)
 
     if result["backup_patched"]:
-        result["target_release_id"] = get_target_release_id(metadata)
-        result["target_reboot_required"] = get_target_reboot_required(backup_data, metadata)
-        result["tar_transforms"] = get_tar_transforms(metadata)
+        deployments_to_restore = get_deployments_to_restore(deployed_groups)
+        result["deployments_to_restore"] = deployments_to_restore
+        result["target_reboot_required"] = get_target_reboot_required(
+            backup_data, deployments_to_restore
+        )
+        result["tar_transforms"] = get_tar_transforms(deployments_to_restore)
         result["tar_excludes"] = get_tar_excludes(backup_data, metadata)
 
     result["metadata"] = metadata

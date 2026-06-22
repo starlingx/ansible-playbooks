@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024-2025 Wind River Systems, Inc.
+# Copyright (c) 2024-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -24,6 +24,10 @@
       include_tasks: begin.yml
       when: do_sw_deployments_begin|bool
 
+    - name: Finish restoring software deployments
+      include_tasks: end.yml
+      when: do_sw_deployments_end|bool
+
     - name: Do software deployments reboot if required
       include_tasks: reboot.yml
       when: do_sw_deployments_reboot|bool
@@ -32,10 +36,6 @@
       file:
         path: "{{ restore_patching_rr_flag }}"
         state: absent
-
-    - name: Finish restoring software deployments
-      include_tasks: end.yml
-      when: do_sw_deployments_end|bool
 
   when: do_sw_deployments_restore|bool
 

@@ -92,6 +92,7 @@ sw_deployments_backup_targets:
 # Only include metadata if software deployments are excluded
 sw_deployments_backup_metadata_targets:
   - "{{ software_permdir }}/metadata"
+  - "{{ software_permdir }}/releases/metadata"
 
 # Image filesystem backup configurations
 backup_registry_filesystem: false
