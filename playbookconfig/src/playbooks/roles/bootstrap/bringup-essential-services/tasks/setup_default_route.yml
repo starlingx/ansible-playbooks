@@ -50,14 +50,14 @@
   - name: Set primary OAM interface and network mask facts
     set_fact:
       oam_interface: "{{ oam_interface_check.stdout }}"
-      oam_network_mask_primary: "{{ network_params.external_oam_subnet_primary | regex_replace('.*/(.?.?)$','\\1') }}"
+      oam_network_mask_primary: "{{ network_params.external_oam_subnet_primary | regex_replace('.*/([0-9]+)$','\\1') }}"
 
   - name: Set primary OAM floating IP
     shell: "{{ ip_command_primary }} addr replace {{ network_params.external_oam_floating_address_primary }}/{{
             oam_network_mask_primary }} dev {{ oam_interface }}"
 
   when: network_params.external_oam_floating_address_primary is defined and
-        network_params.external_oam_floating_address_primary
+        network_params.external_oam_floating_address_primary | length > 0
 
 # ip and default route for secondary OAM
 - block:
@@ -74,7 +74,7 @@
 
   - set_fact:
       oam_interface: "{{ oam_interface_check.stdout }}"
-      oam_network_mask_secondary: "{{ network_params.external_oam_subnet_secondary | regex_replace('.*/(.?.?)$','\\1') }}"
+      oam_network_mask_secondary: "{{ network_params.external_oam_subnet_secondary | regex_replace('.*/([0-9]+)$','\\1') }}"
 
   - set_fact:
       ip_command_secondary: "{{ 'ip' if network_params.external_oam_subnet_secondary|ipv6 == False else 'ip -6' }}"
