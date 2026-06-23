@@ -15,4 +15,5 @@
     retries: 366 # 1 hour and 1 minute, good luck
     delay: 10
 
-# TODO: Add post-deploy checks
+- name: Delete old cluster alarms
+  include_tasks: "{{ role_path_common }}/tasks/delete_old_cluster_alarms.yaml"

@@ -83,5 +83,5 @@
     var: ceph_status.stdout_lines
 
 - name: Delete old cluster alarms
-  include_tasks: delete_old_cluster_alarms.yaml
+  include_tasks: "{{ role_path_common }}/tasks/delete_old_cluster_alarms.yaml"
   when: migration_type != "in_service" # in-service keeps the same fsid
