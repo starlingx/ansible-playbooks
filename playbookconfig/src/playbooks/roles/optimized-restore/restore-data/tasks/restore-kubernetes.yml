@@ -52,6 +52,11 @@
     name: kubelet
     state: stopped
     enabled: true
+  when: not (factory_restore | default(false))
+
+- name: Stop kubelet during factory restore
+  command: pmon-stop kubelet
+  when: factory_restore | default(false)
 
 - name: Start containerd service
   systemd:
@@ -204,6 +209,11 @@
       systemd:
         name: kubelet
         state: started
+      when: not (factory_restore | default(false))
+
+    - name: Start kubelet during factory restore
+      command: pmon-start kubelet
+      when: factory_restore | default(false)
 
   when: not upgrade_in_progress
 
