@@ -35,12 +35,15 @@
       changed_when: false
       register: ceph_df_json
 
+    # Changed to use "rbd diff" to calculate the space used by RBD volumes
     - name: Register total used bytes in ceph without consider replicas
       set_fact:
         ceph_used_bytes: >-
           {{ (ceph_df_json.stdout | from_json).pools
+             | rejectattr('name', 'equalto', 'kube-rbd')
              | map (attribute='stats.stored')
-             | sum }}
+             | sum
+             + rbd_total_size_in_bytes }}
 
     - name: Register total available bytes in ceph cluster
       set_fact:
