@@ -94,6 +94,8 @@ kubelet_configurations_defaults:
     nodefs.available: '10%'
     nodefs.inodesFree: '5%'
     imagefs.available: '2Gi'
+  shutdownGracePeriod: "60s"
+  shutdownGracePeriodCriticalPods: "20s"
 
 # SSL certs configuration
 ca_cert_dir: "/etc/pki/ca-trust/source/anchors"
