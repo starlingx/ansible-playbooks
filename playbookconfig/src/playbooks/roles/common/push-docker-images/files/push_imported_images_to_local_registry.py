@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2021-2023 Wind River Systems, Inc.
+# Copyright (c) 2021-2023, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -135,7 +135,8 @@ if __name__ == '__main__':
             print("Subcloud is virtual. MAX_PUSH_THREAD is set to %d" % MAX_PUSH_THREAD)
 
     if os.getenv('ADD_DOCKER_PREFIX') is not None:
-        add_docker_prefix = (os.environ['ADD_DOCKER_PREFIX'] == 'True')
+        add_docker_prefix = (os.environ['ADD_DOCKER_PREFIX']
+                             in ('True', 'true', 'yes', '1'))
 
     image_list = get_list_of_imported_images()
     if not image_list:

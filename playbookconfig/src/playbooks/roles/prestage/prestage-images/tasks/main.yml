@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023, 2025 Wind River Systems, Inc.
+# Copyright (c) 2022-2023, 2025-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -36,7 +36,7 @@
       set_fact:
         prestage_env:
           REGISTRIES: "{{ docker_registries | to_json }}"
-          PRESTAGE_DOWNLOAD: yes
+          PRESTAGE_DOWNLOAD: True
           PRESTAGE_REASON: "{{ prestage_reason }}"
 
     - name: Download container images for prestage
