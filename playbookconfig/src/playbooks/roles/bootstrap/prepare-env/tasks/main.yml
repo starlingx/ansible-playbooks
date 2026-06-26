@@ -390,7 +390,7 @@
   set_fact:
     apiserver_oidc:
       client_id: stx-oidc-client-app
-      username_claim: name
+      username_claim: preferred_username
       groups_claim: groups
       issuer_url: >-
         {{
