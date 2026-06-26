@@ -104,7 +104,6 @@
         remote_src: yes
       loop:
         - ejbca_db.sql
-        - ejbca-superadmin-credentials.json
       ignore_errors: yes
 
     - name: Clean up temporary directory
@@ -118,6 +117,13 @@
         system application-show ejbca --format value --column status
       register: app_status
       ignore_errors: yes
+
+    - name: Fail if EJBCA app is not applied
+      fail:
+        msg: >
+          EJBCA application must be in 'applied' state to restore.
+          Current status: {{ app_status.stdout | default('not present') }}
+      when: app_status.rc != 0 or app_status.stdout != "applied"
 
     - name: Remove EJBCA app to ensure clean restore
       block:
