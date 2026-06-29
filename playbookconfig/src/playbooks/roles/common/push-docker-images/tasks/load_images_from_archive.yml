@@ -31,9 +31,9 @@
   - name: Set add_docker_prefix flag
     set_fact:
       add_docker_prefix:
-        "{{ 'True' if (input_archive|basename).startswith('container-image') and
+        "{{ True if (input_archive|basename).startswith('container-image') and
                      (input_archive|basename).endswith('.tar.gz')
-                  else 'False' }}"
+                  else False }}"
 
   - name: Push imported images to local registry
     script: push_imported_images_to_local_registry.py {{ virtual_type.stdout|lower }}

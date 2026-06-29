@@ -16,7 +16,7 @@
 
 - name: Set default value for add_docker_prefix if it is undefined
   set_fact:
-    add_docker_prefix: "{{ add_docker_prefix|default('no') }}"
+    add_docker_prefix: "{{ add_docker_prefix|default(False) }}"
 
 - name: Get docker registries if not in bootstap or restore mode
   include_tasks: get_docker_registry.yml

@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2019-2025 Wind River Systems, Inc.
+# Copyright (c) 2019-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -426,7 +426,8 @@ if __name__ == '__main__':
     start = time.time()
 
     if os.getenv('ADD_DOCKER_PREFIX') is not None:
-        add_docker_prefix = (os.environ['ADD_DOCKER_PREFIX'] == 'True')
+        add_docker_prefix = (os.environ['ADD_DOCKER_PREFIX']
+                             in ('True', 'true', 'yes', '1'))
 
     use_multiprocessing = os.environ.get('USE_MULTIPROCESSING') == '1'
     if use_multiprocessing:
@@ -435,7 +436,8 @@ if __name__ == '__main__':
     if len(sys.argv) == 2:
         success_msg = "All images downloaded and pushed to the local registry"
         if os.getenv('PRESTAGE_DOWNLOAD') is not None:
-            prestage_download = os.environ['PRESTAGE_DOWNLOAD']
+            prestage_download = (os.environ['PRESTAGE_DOWNLOAD']
+                                 in ('True', 'true', 'yes', '1'))
 
         if not prestage_download:
             failed_downloads = map_function(
@@ -465,7 +467,7 @@ if __name__ == '__main__':
         if os.getenv('LOCAL_DOWNLOAD') is not None:
             local_download = os.environ['LOCAL_DOWNLOAD']
 
-        if local_download == 'True':
+        if local_download in ('True', 'true', 'yes', '1'):
             success_msg = "All images retrieved from the local registry"
             failed_downloads = map_function(
                 image_list,
