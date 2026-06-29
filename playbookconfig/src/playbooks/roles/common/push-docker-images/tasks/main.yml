@@ -272,7 +272,9 @@
 - block:
   - set_fact:
       download_images: "{{ download_images_list | join(',') }}"
-      use_multiprocessing: "{{ download_images_use_multiprocessing | default(false) | bool }}"
+      use_multiprocessing: >-
+        {{ true if (distributed_cloud_role is not defined or distributed_cloud_role != 'subcloud')
+           else false }}
 
   - block:
     - name: "{{ download_images_task_name }} - multiprocessing disabled"
