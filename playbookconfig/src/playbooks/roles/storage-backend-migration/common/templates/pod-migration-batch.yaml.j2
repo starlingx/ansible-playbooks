@@ -10,6 +10,10 @@ metadata:
   name: {{ pod_name }}
   namespace: {{ pod_namespace }}
 spec:
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
   nodeSelector:
     kubernetes.io/hostname: "{{ inventory_hostname }}"
   containers:

@@ -183,6 +183,7 @@
         label: "{{ item }}"
       shell: >
         kubectl exec -n rook-ceph {{ recovery_pod.stdout }} -- bash -c "
+        set -e;
         ceph-bluestore-tool quick-fix --path {{ rook_base_pod }}/{{ item }};
         ceph-bluestore-tool repair --path {{ rook_base_pod }}/{{ item }}"
       register: result
@@ -224,6 +225,7 @@
 - name: Replace store.db on monitor
   shell: >
     kubectl exec -n rook-ceph {{ recovery_pod.stdout }} -- bash -c "
+    set -e;
     rm -rf /var/lib/rook/mon-{{ mon_name }}/data/store.db;
     cp -ar {{ tmp_workspace }}/monstore/store.db /var/lib/rook/mon-{{ mon_name }}/data
     "
@@ -285,6 +287,7 @@
   - name: Add new FSID
     shell: >
       kubectl exec -n rook-ceph {{ recovery_pod.stdout }} -- bash -c "
+      set -e;
       monmaptool --fsid {{ hostvars[system.active_controller]['ceph_fsid'] }} {{ tmp_workspace }}/mon-{{ mon_name }}.map;
       monmaptool {{ tmp_workspace }}/mon-{{ mon_name }}.map --set-min-mon-release pacific;
       monmaptool --print {{ tmp_workspace }}/mon-{{ mon_name }}.map"

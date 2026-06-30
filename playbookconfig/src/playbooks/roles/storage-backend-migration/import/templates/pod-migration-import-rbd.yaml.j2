@@ -10,6 +10,10 @@ metadata:
   name: migration-import-rbd
   namespace: rook-ceph
 spec:
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
   nodeName: {{ inventory_hostname }}
   initContainers:
     - name: config-init
