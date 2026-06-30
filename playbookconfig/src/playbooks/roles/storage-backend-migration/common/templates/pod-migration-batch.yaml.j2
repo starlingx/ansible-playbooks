@@ -18,7 +18,8 @@ spec:
     kubernetes.io/hostname: "{{ inventory_hostname }}"
   containers:
     - name: {{ pod_name }}
-      image: {{ images.ceph_config_helper }}
+      image: {{ images.dar_backup }}
+      imagePullPolicy: IfNotPresent
       command: [ "sleep", "infinity" ]
       volumeMounts:
 {% for pvc in batch_pvc_list %}

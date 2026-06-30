@@ -8,7 +8,7 @@
   shell: |
     set -e -o pipefail
     echo "Importing backup to /data/{{ pvc.name }}/..."
-    kubectl exec -n {{ generic_pvc_namespace }} {{ batch_pod_name }} -- tar -xzf "/backup/backup-${PVC_NAME}.tar.gz" -C "/data/{{ pvc.name }}/"
+    kubectl exec -n {{ generic_pvc_namespace }} {{ batch_pod_name }} -- dar -x "/backup/backup-${PVC_NAME}.dar" -R "/data/{{ pvc.name }}/" -O -Q
   environment:
     KUBECONFIG: "{{ kubeconfig }}"
     PVC_NAME: "{{ generic_pvc_namespace }}-{{ pvc.name }}"

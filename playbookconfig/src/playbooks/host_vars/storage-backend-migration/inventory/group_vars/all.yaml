@@ -10,6 +10,7 @@
 
 common_images:
   ceph_config_helper: registry.local:9001/docker.io/openstackhelm/ceph-config-helper:ubuntu_jammy_18.2.2-1-20240312
+  dar_backup: registry.local:9001/docker.io/per2jensen/dar-backup:0.5.26-2
 
 rook_specific_images:
   csi_attacher: registry.local:9001/registry.k8s.io/sig-storage/csi-attacher:v4.8.1
