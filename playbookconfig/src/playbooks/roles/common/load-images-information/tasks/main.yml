@@ -155,7 +155,8 @@
             cert_manager_startupapicheck_img,
             oidc_stx_oidc_client_img,
             oidc_dex_img,
-            oidc_curl_img
+            oidc_curl_img,
+            oidc_busybox_img
           ] | select('defined') | list
         }}
 

@@ -34,3 +34,4 @@ flux_kustomize_controller_img: ghcr.io/fluxcd/kustomize-controller:v1.8.2
 oidc_stx_oidc_client_img: docker.io/starlingx/stx-oidc-client:stx.13.0-v1.0.11
 oidc_dex_img: ghcr.io/dexidp/dex:v2.44.0
 oidc_curl_img: docker.io/curlimages/curl:8.17.0
+oidc_busybox_img: docker.io/library/busybox:1.37.0
