@@ -1,0 +1,44 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# SUB-TASK DESCRIPTION:
+#   This sub-task will wipe all LVs created for LVM CSI Purpose during restore
+#   operation.
+#
+
+- block:
+    - name: Check for LVM CSI data wipe flag
+      fail:
+        msg: "wipe_lvm_disks is misconfigured. Valid value is either 'true' or 'false'"
+      when: (mode == "restore") and (not wipe_lvm_disks | type_debug == 'bool') and
+            (wipe_lvm_disks != 'true') and
+            (wipe_lvm_disks != 'false')
+
+    - block:
+        - name: Wipe LVM resources
+          script: wipe_lvm_resources.sh "{{ mode }}"
+          register: results
+
+        - name: Result of wiping lvm resources
+          debug: var=results.stdout_lines
+
+      when: (mode == "restore" and wipe_lvm_disks == 'true') or
+            (mode == "bootstrap")
+
+    - name: Creates the Wipe LVM Mode flag
+      ansible.builtin.copy:
+        dest: "/etc/platform/.wipe_lvm_mode"
+        mode: '0644'
+        content: |
+          {%- if mode == 'restore' and wipe_lvm_disks | bool -%}
+          wipe-lv
+          {%- elif mode == 'restore' -%}
+          restore
+          {%- elif mode == 'bootstrap' -%}
+          bootstrap
+          {%- else -%}
+          {%- endif %}
+  when: not factory_restore | default(false) | bool

@@ -1882,6 +1882,9 @@
 - import_role:
     name: common/wipe-ceph-osds
 
+- import_role:
+    name: common/wipe-lvm-disks
+
 # bootstrap_config ini file generation
 - block:
   # A previous config workdir can exist if the playbook failed or
