@@ -1,0 +1,98 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Recreates a single PVC restoring ReadOnlyMany access mode after import.
+# Receives: readonly_pvc (dict with 'name'), cephfs_pvc_namespace
+#
+
+- name: "Restore PVC {{ readonly_pvc.name }} to ReadOnlyMany"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  block:
+    - name: "Check if PVC {{ readonly_pvc.name }} still exists"
+      command: >
+        kubectl get pvc {{ readonly_pvc.name }} -n {{ cephfs_pvc_namespace }}
+        -o jsonpath='{.spec.volumeName}'
+      register: pvc_check
+      failed_when: false
+      changed_when: false
+
+    - name: "Save PVC {{ readonly_pvc.name }} manifest to file"
+      shell: "kubectl get pvc {{ readonly_pvc.name }} -n {{ cephfs_pvc_namespace }} -o yaml > {{ tmp_workspace }}/restore_{{ readonly_pvc.name }}.yaml"
+      when: pvc_check.rc == 0
+
+    - name: "Set PV name for {{ readonly_pvc.name }}"
+      set_fact:
+        pv_name: "{{ pvc_check.stdout }}"
+      when: pvc_check.rc == 0
+
+    - name: "Get PV name from saved manifest (PVC already deleted)"
+      shell: >
+        python3 -c "
+        import yaml;
+        data = yaml.safe_load(open('{{ tmp_workspace }}/restore_{{ readonly_pvc.name }}.yaml'));
+        print(data['spec']['volumeName'])"
+      register: pv_name_from_file
+      when: pvc_check.rc != 0
+      changed_when: false
+
+    - name: "Set PV name from file"
+      set_fact:
+        pv_name: "{{ pv_name_from_file.stdout }}"
+      when: pvc_check.rc != 0
+
+    - name: "Patch PV {{ pv_name }} accessModes to ReadOnlyMany and restore original reclaim policy"
+      command: >
+        kubectl patch pv {{ pv_name }}
+        --type='json'
+        -p='[
+          {"op": "replace", "path": "/spec/accessModes", "value": ["ReadOnlyMany"]},
+          {"op": "replace", "path": "/spec/persistentVolumeReclaimPolicy", "value": "{{ readonly_pvc.reclaim_policy | default("Delete") }}"}
+        ]'
+
+    - name: "Delete PVC {{ readonly_pvc.name }}"
+      include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+      vars:
+        kind: PersistentVolumeClaim
+        name: "{{ readonly_pvc.name }}"
+        k8s_namespace: "{{ cephfs_pvc_namespace }}"
+      when: pvc_check.rc == 0
+
+    - name: "Remove claimRef from PV {{ pv_name }}"
+      command: >
+        kubectl patch pv {{ pv_name }}
+        --type='json'
+        -p='[{"op": "remove", "path": "/spec/claimRef"}]'
+      register: remove_claimref
+      failed_when: >
+        remove_claimref.rc != 0 and
+        'missing value' not in (remove_claimref.stderr | default(''))
+
+    - name: "Render restore script for PVC {{ readonly_pvc.name }}"
+      template:
+        src: restore_pvc_access_mode.py.j2
+        dest: "{{ tmp_workspace }}/restore_pvc_access_mode_{{ readonly_pvc.name }}.py"
+        mode: "0644"
+      vars:
+        pvc_name: "{{ readonly_pvc.name }}"
+
+    - name: "Execute restore script for PVC {{ readonly_pvc.name }}"
+      command: "python {{ tmp_workspace }}/restore_pvc_access_mode_{{ readonly_pvc.name }}.py"
+
+    - name: "Apply restored PVC {{ readonly_pvc.name }}"
+      command: "kubectl apply -f {{ tmp_workspace }}/restore_{{ readonly_pvc.name }}.yaml"
+
+    - name: "Wait for PVC {{ readonly_pvc.name }} to be Bound"
+      command: >
+        kubectl get pvc {{ readonly_pvc.name }} -n {{ cephfs_pvc_namespace }}
+        -o jsonpath='{.status.phase}'
+      register: pvc_phase
+      until: pvc_phase.stdout == 'Bound'
+      retries: 30
+      delay: 5
+      changed_when: false
+
+    - name: "Cleanup temporary files for PVC {{ readonly_pvc.name }}"
+      command: "rm -f {{ tmp_workspace }}/restore_{{ readonly_pvc.name }}.yaml {{ tmp_workspace }}/restore_pvc_access_mode_{{ readonly_pvc.name }}.py"

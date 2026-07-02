@@ -14,7 +14,7 @@
 - name: Get all PVCs as JSON
   script:
     cmd: >-
-      files/get_pvcs_json.sh
+      files/get_pvcs_json.py
       '{{ pvcs_to_migrate | default([".*"]) | join("|") }}'
   environment:
     KUBECONFIG: "{{ kubeconfig }}"

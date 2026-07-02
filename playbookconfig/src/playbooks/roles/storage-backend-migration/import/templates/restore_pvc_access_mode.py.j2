@@ -1,0 +1,36 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+import yaml
+
+filename = "{{ tmp_workspace }}/restore_{{ pvc_name }}.yaml"
+
+with open(filename, 'r') as f:
+    data = yaml.safe_load(f)
+
+# Restore ReadOnlyMany access mode
+data['spec']['accessModes'] = ['ReadOnlyMany']
+
+# Remove server-side fields that prevent re-apply
+for field in ['resourceVersion', 'uid', 'creationTimestamp', 'managedFields']:
+    data.get('metadata', {}).pop(field, None)
+
+data.get('metadata', {}).get('annotations', {}).pop('kubectl.kubernetes.io/last-applied-configuration', None)
+
+# Remove bind annotations that prevent rebinding
+data.get('metadata', {}).get('annotations', {}).pop('pv.kubernetes.io/bind-completed', None)
+data.get('metadata', {}).get('annotations', {}).pop('pv.kubernetes.io/bound-by-controller', None)
+
+data.pop('status', None)
+
+with open(filename, 'w') as f:
+    yaml.dump(
+        data,
+        f,
+        default_flow_style=False,
+        sort_keys=False,
+        indent=2
+    )
