@@ -14,10 +14,6 @@
 #   restore_timeout:    (optional) Total timeout in seconds for the restore
 #                       operation.
 #
-#   resume_mode:        (optional) When true, skip the "wait for subcloud to go
-#                       offline" step. Used when dcmanager resumes monitoring
-#                       after a system controller swact or service restart.
-#
 #   Example command:
 #   ansible-playbook /usr/share/ansible/stx-ansible/playbooks/onsite_restore_subcloud.yml \
 #   -i <inventory-file> --limit <subcloudname> -e 'restore_timeout=<restore_timeout>'
@@ -27,7 +23,6 @@
   vars:
     restore_timeout: 5400
     restore_complete_flag: /var/run/.auto_restore_complete
-    resume_mode: false
 
   tasks:
     - name: Main restore workflow
@@ -35,16 +30,6 @@
         - name: Record restore start time
           set_fact:
             restore_start: "{{ now(fmt='%s') }}"
-
-        - name: Wait for subcloud to go offline (restore initiated)
-          wait_for:
-            host: "{{ ansible_host }}"
-            port: 22
-            state: stopped
-            timeout: 300
-            sleep: 30
-          delegate_to: localhost
-          when: not resume_mode | bool
 
         - name: Wait for on-site restore completion
           block:
