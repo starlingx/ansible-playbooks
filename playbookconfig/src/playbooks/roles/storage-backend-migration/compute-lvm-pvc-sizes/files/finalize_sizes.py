@@ -29,6 +29,8 @@ def main():
                         help='JSON dict of namespace/name -> file count')
     parser.add_argument('--block-pvcs', required=True,
                         help='JSON array of block PVCs with requested_size')
+    parser.add_argument('--xfs-min-bytes', type=int, required=True,
+                        help='XFS minimum filesystem size in bytes')
     args = parser.parse_args()
 
     pvcs = json.loads(args.initial_sizing)
@@ -40,6 +42,7 @@ def main():
     # Filesystem PVCs: apply file density decision
     for pvc in pvcs:
         if not pvc.get('needs_file_count'):
+            pvc['effective_bytes'] = max(pvc['target_bytes'], args.xfs_min_bytes)
             pvc['needs_upsize'] = False
             pvc['file_count'] = None
             pvc['files_per_gib'] = None
@@ -62,6 +65,7 @@ def main():
             needs_upsize = False
 
         pvc['target_bytes'] = target_bytes
+        pvc['effective_bytes'] = max(target_bytes, args.xfs_min_bytes)
         pvc['needs_upsize'] = needs_upsize
         pvc['file_count'] = file_count
         pvc['files_per_gib'] = files_per_gib
@@ -79,6 +83,7 @@ def main():
             'used_bytes': 0,
             'usage_percent': 0,
             'target_bytes': requested_bytes,
+            'effective_bytes': requested_bytes,
             'needs_upsize': False,
             'needs_file_count': False,
             'file_count': None,

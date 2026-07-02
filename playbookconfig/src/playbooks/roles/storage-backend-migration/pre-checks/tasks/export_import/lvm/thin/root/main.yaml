@@ -4,39 +4,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: Check if CGTS-VG can hold 2x the backup data (backups + LVM VG)
-  fail:
-    msg: >
-      Not enough space in CGTS-VG to hold backups and the new LVM volume.
-      Since both the backup and the import LV live in the same VG,
-      the max usable space must fit at least 2x the backup data.
-
-      CGTS-VG free space:          {{ cgts_vg_space_avail_gb }} GB
-      Max usable (95% or free-1G): {{ lvm_volume_size_gb_max }} GB
-      Ceph backup data required:   {{ backups_required_gb }} GB
-        (ceph used data + {{ backups_safety_margin_gb }} GB safety margin)
-      Space needed (2x backups):   {{ backups_required_gb | int * 2 }} GB
-
-      Free CGTS-VG space or consider using -e "backups_path=/path/to/external" to skip LV creation,
-      handling it before the migration.
-  when:
-    - create_migration_lv | bool
-    - lvm_volume_size_gb_max | int < backups_required_gb | int * 2
-
-- name: Check if requested LVM volume is at least as large as the backup data
-  fail:
-    msg: >
-      The requested LVM volume is too small to hold the ceph data.
-
-      Requested LVM volume size:  {{ lvm_volume_size_gb_normalized }} GB
-      Ceph backup data required:  {{ backups_required_gb }} GB
-        (ceph used data + {{ backups_safety_margin_gb }} GB safety margin)
-
-      Increase lvm_volume_size_gb to at least {{ backups_required_gb }} GB.
-  when:
-    - create_migration_lv | bool
-    - lvm_volume_size_gb_normalized | int < backups_required_gb | int
-
 - name: Check if initial LV + backups fit in the VG
   fail:
     msg: >

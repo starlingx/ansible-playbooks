@@ -21,6 +21,7 @@
         batch_pvc_list: "{{ batch_pvcs }}"
         backup_path: "{{ backups_cephfs_path }}"
         read_only: false
+        pod_image: "{{ images.dar_backup }}"
 
     - name: Delete batch pod if exists
       command: "kubectl delete pod {{ batch_pod_name }} -n {{ cephfs_pvc_namespace }} --ignore-not-found=true"

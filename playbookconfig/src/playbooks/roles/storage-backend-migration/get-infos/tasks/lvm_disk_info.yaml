@@ -70,9 +70,8 @@
     - name: Register available space in CGTS-VG
       set_fact:
         cgts_vg_space_avail_bytes: "{{ cgts_vg_space_avail_bytes_out.stdout }}"
-        cgts_vg_space_avail_gb: "{{ (cgts_vg_space_avail_bytes_out.stdout | int / 1073741824) | round | int }}"
         cacheable: true
-  when: cgts_vg_space_avail_bytes is undefined or cgts_vg_space_avail_gb is undefined
+  when: cgts_vg_space_avail_bytes is undefined
 
 # Use 95% of available space or leave 1GB free, whichever ensures at least 1GB remains
 - name: Register lvm_volume_size_gb_max in GB
@@ -99,12 +98,10 @@
 - name: Convert bytes to GB for backup calculations
   set_fact:
     backups_required_gb: "{{ (backups_required_bytes | int / 1073741824) | round(0, 'ceil') | int }}"
-    backups_safety_margin_gb: "{{ (backups_safety_margin_bytes | int / 1073741824) | round(0, 'ceil') | int }}"
     cacheable: true
   when:
     - backups_required_bytes is defined
-    - backups_safety_margin_bytes is defined
-    - backups_required_gb is undefined or backups_safety_margin_gb is undefined
+    - backups_required_gb is undefined
 
 # When creating the LV in the same VG as the backups, the max usable space
 # may not be enough to hold both the backups and the full requested LV at the

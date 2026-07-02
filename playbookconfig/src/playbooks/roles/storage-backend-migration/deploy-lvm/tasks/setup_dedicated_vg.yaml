@@ -7,7 +7,7 @@
 - name: Create dedicated VG {{ lvm_vg_name_cacheable }}
   command: >
     system host-lvg-add {{ inventory_hostname }} {{ lvm_vg_name_cacheable }}
-    --lvm_function lvm-csi
+    --lvm_function lvm-csi --lvm_type {{ lvm_mode }}
   environment: "{{ system_env }}"
   register: lvg_add_result
   failed_when:
@@ -25,6 +25,18 @@
     - "'already assigned' not in (pv_add_result.stderr | default(''))"
   changed_when: pv_add_result.rc == 0
   loop: "{{ lvm_devices_cached }}"
+
+- name: "Wait for all PVs in {{ lvm_vg_name_cacheable }} to reach provisioned state"
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -c
+    "SELECT COUNT(*) FROM i_pv WHERE lvm_vg_name = '{{ lvm_vg_name_cacheable }}' AND pv_state = 'provisioned'"
+  register: pv_provisioned_count
+  until: pv_provisioned_count.stdout | int == lvm_devices_cached | length
+  retries: 60
+  delay: 10
+  changed_when: false
 
 - name: "Wait for LVG {{ lvm_vg_name_cacheable }} to reach provisioned state"
   become: true

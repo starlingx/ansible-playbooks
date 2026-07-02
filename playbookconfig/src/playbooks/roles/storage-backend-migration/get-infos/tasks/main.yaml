@@ -37,10 +37,6 @@
     - name: Get snapshots info
       include_tasks: "snapshot_info.yaml"
 
-    - name: Get LVM OSDs info
-      include_tasks: "lvm_disk_info.yaml"
-      when: migration_target == "lvm"
-
     - name: Get DataVolume info
       include_tasks: "data_volume_info.yaml"
 
@@ -50,6 +46,10 @@
     - name: Get backups info and behavior
       include_tasks: backups_info.yaml
       when: migration_type == "export_import" or old_pool_exist and migration_type != "redeploy"
+
+    - name: Get LVM OSDs info
+      include_tasks: "lvm_disk_info.yaml"
+      when: migration_target == "lvm"
 
   rescue:
     - include_tasks: "{{ role_path_common }}/tasks/clear_facts_cache.yaml"

@@ -14,8 +14,8 @@
   changed_when: false
 
 - name: Get RBD disk usage
-  command: "rbd du kube-rbd/{{ image_result.stdout }} --format json"
-  register: du_result
+  shell: rbd diff --pool kube-rbd --image {{ image_result.stdout }} | awk '$3 == "data" { SUM += $2 } END { print SUM+0 }'
+  register: rbd_image_size_in_bytes_output
   changed_when: false
 
 - name: Append to results
@@ -23,6 +23,6 @@
     rbd_usage_results: >-
       {{ rbd_usage_results | default([]) + [
         pvc | combine({
-          'used_bytes': (du_result.stdout | from_json).images[0].used_size | default(0)
+          'used_bytes': rbd_image_size_in_bytes_output.stdout | int
         })
       ] }}

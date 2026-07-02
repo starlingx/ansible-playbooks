@@ -64,6 +64,7 @@
         '{{ pvc_sizing_initial | to_json }}'
         --file-counts '{{ pvc_file_counts | default({}) | to_json }}'
         --block-pvcs '{{ block_pvcs | default([]) | to_json }}'
+        --xfs-min-bytes '{{ xfs_min_size_bytes }}'
       register: sizing_final_result
       changed_when: false
 

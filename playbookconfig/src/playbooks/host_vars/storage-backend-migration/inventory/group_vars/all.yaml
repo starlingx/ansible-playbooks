@@ -89,7 +89,8 @@ erase_snapshots: false # for export-import only
 
 lvm_spare_gib: 1 # TopoLVM spare-gb reservation
 lvm_overhead_per_pv_bytes: 4194304 # 4 MiB LVM metadata overhead per PV
-lvm_thin_metadata_percent: 1 # thin pool metadata reservation
+lvm_thin_vg_reserved_percent: 1 # thin/dedicated only: thin pool uses ~99% of VG free space
+lvm_thin_metadata_percent: 0.20 # safety margin for thin pool data/metadata split
 
 lvm_mode: thick # thick or thin
 

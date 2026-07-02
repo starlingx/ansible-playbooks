@@ -18,7 +18,7 @@ spec:
     kubernetes.io/hostname: "{{ inventory_hostname }}"
   containers:
     - name: {{ pod_name }}
-      image: {{ images.dar_backup }}
+      image: {{ pod_image }}
       imagePullPolicy: IfNotPresent
       command: [ "sleep", "infinity" ]
       volumeMounts:

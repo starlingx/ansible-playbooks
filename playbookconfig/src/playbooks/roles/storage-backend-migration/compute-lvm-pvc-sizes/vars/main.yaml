@@ -5,3 +5,6 @@
 #
 
 tmp_workspace: "{{ tmp_path }}/{{ role_name }}"
+
+# XFS minimum filesystem size: 300 MiB (xfsprogs >= 6.x)
+xfs_min_size_bytes: 314572800
