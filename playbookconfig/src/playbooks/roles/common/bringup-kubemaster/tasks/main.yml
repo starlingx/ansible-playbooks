@@ -85,23 +85,25 @@
   when: mode != 'restore'
 
 - block:
-  - name: Generate private key for kubernetes-ca (Bullseye)
+  # TODO(rdossant): Remove this size condition when Bullseye
+  # supports ECDSA or is deprecated.
+  - name: Generate private key for kubernetes-ca (RSA)
     openssl_privatekey:
       path: "{{ kubeadm_pki_dir }}/ca.key"
       type: RSA
-      size: 4096
+      size: "{{ (key_size if algorithm == 'RSA' else 4096) | int }}"
       state: present
       force: true
-    when: is_bullseye
+    when: is_bullseye or algorithm == 'RSA'
 
-  - name: Generate private key for kubernetes-ca (Trixie)
+  - name: Generate private key for kubernetes-ca (ECDSA)
     openssl_privatekey:
       path: "{{ kubeadm_pki_dir }}/ca.key"
       type: ECC
-      curve: secp384r1
+      curve: secp{{ key_size }}r1
       state: present
       force: true
-    when: is_trixie
+    when: is_trixie and algorithm == 'ECDSA'
 
   - name: Generate CSR for kubernetes-ca
     openssl_csr:
@@ -125,6 +127,10 @@
       csr_path: "{{ kubeadm_pki_dir }}/ca.csr"
       provider: selfsigned
       force: true
+
+  vars:
+    algorithm: "{{ system_platform_certificate.algorithm | default('ECDSA', true) }}"
+    key_size: "{{ system_platform_certificate.key_size | default(384, true) }}"
 
 - name: Set kubelet node configuration if single-stack
   set_fact:
