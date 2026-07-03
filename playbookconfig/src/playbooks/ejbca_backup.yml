@@ -96,12 +96,6 @@
         msg: "pg_dump produced an empty file"
       when: dump_stat.stat.size == 0
 
-    - name: Export superadmin credentials secret
-      shell: >
-        kubectl --kubeconfig={{ kubeconfig }}
-        get secret ejbca-superadmin-credentials -n {{ ejbca_ns }}
-        -o json > {{ tmp_backup_dir.path }}/ejbca-superadmin-credentials.json
-
     - name: Set backup tarball filename
       set_fact:
         backup_filename: >-
