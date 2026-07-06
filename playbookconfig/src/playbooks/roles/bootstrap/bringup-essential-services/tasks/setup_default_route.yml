@@ -56,6 +56,33 @@
     shell: "{{ ip_command_primary }} addr replace {{ network_params.external_oam_floating_address_primary }}/{{
             oam_network_mask_primary }} dev {{ oam_interface }}"
 
+  - name: Send Gratuitous ARP for IPv4 primary OAM floating IP
+    shell: "arping -c 3 -U -I {{ oam_interface }} {{ network_params.external_oam_floating_address_primary }}"
+    failed_when: false
+    when:
+      - oam_interface != 'lo'
+      - ip_command_primary == 'ip'
+
+  - name: Send Unsolicited Neighbor Advertisement for IPv6 primary OAM floating IP (Bullseye)
+    shell: "/usr/lib/heartbeat/send_ua {{ network_params.external_oam_floating_address_primary }}
+            {{ oam_network_mask_primary }} {{ oam_interface }}"
+    failed_when: false
+    when:
+      - oam_interface != 'lo'
+      - oam_network_mask_primary != ''
+      - ip_command_primary == 'ip -6'
+      - is_bullseye
+
+  - name: Send Unsolicited Neighbor Advertisement for IPv6 primary OAM floating IP (Trixie)
+    shell: "/usr/libexec/heartbeat/send_ua {{ network_params.external_oam_floating_address_primary }}
+            {{ oam_network_mask_primary }} {{ oam_interface }}"
+    failed_when: false
+    when:
+      - oam_interface != 'lo'
+      - oam_network_mask_primary != ''
+      - ip_command_primary == 'ip -6'
+      - is_trixie
+
   when: network_params.external_oam_floating_address_primary is defined and
         network_params.external_oam_floating_address_primary | length > 0
 
@@ -97,6 +124,36 @@
     debug:
       msg: Ignoring "{{ set_secondary_oam.stderr_lines }}"
     when: set_secondary_oam.rc != 0 or set_secondary_oam.stderr
+
+  - name: Send Gratuitous ARP for IPv4 secondary OAM floating IP
+    shell: "arping -c 3 -U -I {{ oam_interface }} {{ network_params.external_oam_floating_address_secondary }}"
+    failed_when: false
+    when:
+      - set_secondary_oam.rc == 0
+      - oam_interface != 'lo'
+      - ip_command_secondary == 'ip'
+
+  - name: Send Unsolicited Neighbor Advertisement for IPv6 secondary OAM floating IP (Bullseye)
+    shell: "/usr/lib/heartbeat/send_ua {{ network_params.external_oam_floating_address_secondary }}
+            {{ oam_network_mask_secondary }} {{ oam_interface }}"
+    failed_when: false
+    when:
+      - set_secondary_oam.rc == 0
+      - oam_interface != 'lo'
+      - oam_network_mask_secondary != ''
+      - ip_command_secondary == 'ip -6'
+      - is_bullseye
+
+  - name: Send Unsolicited Neighbor Advertisement for IPv6 secondary OAM floating IP (Trixie)
+    shell: "/usr/libexec/heartbeat/send_ua {{ network_params.external_oam_floating_address_secondary }}
+            {{ oam_network_mask_secondary }} {{ oam_interface }}"
+    failed_when: false
+    when:
+      - set_secondary_oam.rc == 0
+      - oam_interface != 'lo'
+      - oam_network_mask_secondary != ''
+      - ip_command_secondary == 'ip -6'
+      - is_trixie
 
   - name: Check if the default route exists
     shell: "{{ ip_command_secondary }} route show | grep 'default via {{
