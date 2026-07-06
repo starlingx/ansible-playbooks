@@ -130,12 +130,28 @@
     failed_when: false
 
   - name: Label calico-system namespace as platform component
-    command: kubectl --kubeconfig=/etc/kubernetes/admin.conf label namespace calico-system
-            app.starlingx.io/component=platform --overwrite
+    command: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf label namespace
+      calico-system
+      app.starlingx.io/component=platform
+      pod-security.kubernetes.io/audit-version=latest
+      pod-security.kubernetes.io/enforce-version=latest
+      pod-security.kubernetes.io/warn-version=latest
+      pod-security.kubernetes.io/audit=privileged
+      pod-security.kubernetes.io/enforce=privileged
+      pod-security.kubernetes.io/warn=privileged --overwrite
 
   - name: Label tigera-operator namespace as platform component
-    command: kubectl --kubeconfig=/etc/kubernetes/admin.conf label namespace tigera-operator
-            app.starlingx.io/component=platform --overwrite
+    command: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf label namespace
+      tigera-operator
+      app.starlingx.io/component=platform
+      pod-security.kubernetes.io/audit-version=latest
+      pod-security.kubernetes.io/enforce-version=latest
+      pod-security.kubernetes.io/warn-version=latest
+      pod-security.kubernetes.io/audit=privileged
+      pod-security.kubernetes.io/enforce=privileged
+      pod-security.kubernetes.io/warn=privileged --overwrite
 
   - name: Copy registry secret to calico-system namespace
     shell: >
@@ -198,6 +214,125 @@
     command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/update_calico-custom-resources.yaml"
     retries: 5
     delay: 3
+    register: result
+    until: result.rc == 0
+
+  - name: Create tigera-gateway namespace
+    command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace tigera-gateway"
+    register: result
+    failed_when: result.rc != 0 and 'already exists' not in result.stderr
+    retries: 3
+    delay: 5
+
+  - name: Label tigera-gateway namespace as platform component
+    command: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf label namespace
+      tigera-gateway
+      app.starlingx.io/component=platform
+      pod-security.kubernetes.io/audit-version=latest
+      pod-security.kubernetes.io/enforce-version=latest
+      pod-security.kubernetes.io/warn-version=latest
+      pod-security.kubernetes.io/audit=privileged
+      pod-security.kubernetes.io/enforce=privileged
+      pod-security.kubernetes.io/warn=privileged --overwrite
+
+  - name: Copy registry secret to tigera-gateway namespace
+    shell: >
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret registry-local-secret
+      -n kube-system -o yaml |
+      sed 's/namespace: kube-system/namespace: tigera-gateway/' |
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
+    register: copy_secret_tigera_gw
+    failed_when: copy_secret_tigera_gw.rc != 0
+
+  - name: Create custom EnvoyGateway config file
+    template:
+      src: "roles/common/bringup-kubemaster/templates/\
+        k8s-{{ kubernetes_long_version }}/calico-gateway-api-envoy-config.yaml.j2"
+      dest: /etc/kubernetes/calico-gateway-api-envoy-config.yaml
+
+  - name: Apply custom EnvoyGateway config
+    command: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf apply
+      -f /etc/kubernetes/calico-gateway-api-envoy-config.yaml
+    retries: 3
+    delay: 5
+    register: result
+    until: result.rc == 0
+
+  - name: Create Calico Gateway API config file
+    template:
+      src: "roles/common/bringup-kubemaster/templates/\
+        k8s-{{ kubernetes_long_version }}/calico-gateway-api.yaml.j2"
+      dest: /etc/kubernetes/calico-gateway-api.yaml
+
+  - name: Apply Calico Gateway API resource
+    command: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf apply
+      -f /etc/kubernetes/calico-gateway-api.yaml
+    retries: 5
+    delay: 5
+    register: result
+    until: result.rc == 0
+
+  - name: Wait for Envoy Gateway pod to be created
+    shell: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods
+      --namespace=tigera-gateway
+      --no-headers 2>/dev/null | grep -c envoy-gateway
+    retries: 30
+    delay: 10
+    register: envoy_gw_exists
+    until: envoy_gw_exists.stdout | int > 0
+
+  - name: Wait for Envoy Gateway to be ready
+    shell: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods
+      --namespace=tigera-gateway
+      --no-headers 2>/dev/null | grep envoy-gateway | grep -q Running
+    retries: 12
+    delay: 10
+    register: envoy_gw_ready
+    until: envoy_gw_ready.rc == 0
+
+  - name: Wait for GatewayClass to be accepted
+    shell: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf
+      get gatewayclass tigera-gateway-class
+      -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}'
+    retries: 12
+    delay: 10
+    register: gwclass_status
+    until: gwclass_status.stdout == "True"
+
+  - name: Create XListenerSet CRD config file
+    template:
+      src: "roles/common/bringup-kubemaster/templates/\
+        k8s-{{ kubernetes_long_version }}/calico-gateway-api-xlistenerset-crd.yaml.j2"
+      dest: /etc/kubernetes/calico-gateway-api-xlistenerset-crd.yaml
+
+  - name: Apply XListenerSet experimental CRD
+    command: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf apply
+      -f /etc/kubernetes/calico-gateway-api-xlistenerset-crd.yaml
+      --server-side --force-conflicts
+    retries: 3
+    delay: 5
+    register: result
+    until: result.rc == 0
+
+  - name: Create XListenerSet RBAC config file
+    template:
+      src: "roles/common/bringup-kubemaster/templates/\
+        k8s-{{ kubernetes_long_version }}/calico-gateway-api-xlistenerset-rbac.yaml.j2"
+      dest: /etc/kubernetes/calico-gateway-api-xlistenerset-rbac.yaml
+
+  - name: Apply XListenerSet RBAC
+    command: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf apply
+      -f /etc/kubernetes/calico-gateway-api-xlistenerset-rbac.yaml
+    retries: 3
+    delay: 5
     register: result
     until: result.rc == 0
 

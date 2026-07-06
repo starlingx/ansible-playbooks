@@ -7,7 +7,11 @@ apiVersion: operator.tigera.io/v1
 kind: Installation
 metadata:
   name: default
-spec: {}
+spec:
+  registry: {{ local_registry }}/quay.io
+  imagePullSecrets:
+    - name: {{ registry_local_secret_name | default('registry-local-secret') }}
+
 ---
 # This section configures the Calico API server.
 apiVersion: operator.tigera.io/v1

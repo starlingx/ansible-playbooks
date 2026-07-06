@@ -18,7 +18,7 @@ calico_pod2daemon_flexvol_img: quay.io/calico/pod2daemon-flexvol:v3.31.5
 calico_typha_img: quay.io/calico/typha:v3.31.5
 calico_whisker_backend_img: quay.io/calico/whisker-backend:v3.31.5
 calico_whisker_img: quay.io/calico/whisker:v3.31.5
-tigera_operator_img: quay.io/tigera/operator:v1.40.10
+tigera_operator_img: quay.io/tigera/operator:v1.40.12
 
 multus_img: ghcr.io/k8snetworkplumbingwg/multus-cni:v4.2.4-debug
 sriov_cni_img: ghcr.io/k8snetworkplumbingwg/sriov-cni:v2.10.0

@@ -1,0 +1,18 @@
+---
+# Custom EnvoyGateway base configuration for the Calico Ingress Gateway.
+# Referenced by the GatewayAPI CR via envoyGatewayConfigRef.
+# The Tigera Operator uses this as a base and overlays registry/image settings.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-envoy-gateway-config
+  namespace: tigera-gateway
+data:
+  envoy-gateway.yaml: |
+    apiVersion: gateway.envoyproxy.io/v1alpha1
+    kind: EnvoyGateway
+    gatewayAPI:
+      enabled:
+        - XListenerSet
+    provider:
+      type: Kubernetes
