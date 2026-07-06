@@ -12,6 +12,8 @@
 
 # We may need to update /etc/hosts because registry.central will not be
 # available on system controllers or subclouds because dnsmasq is not brought up.
+# For factory restore without reinstall, this is not needed because image pulls
+# are skipped
 - block:
   - name: Get primary system-controller-oam floating ip address
     include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
@@ -25,6 +27,12 @@
   - name: Assign primary system-controller-oam ip addresses
     set_fact:
       sc_oam_vip: "{{ addresses.floating_address }}"
+  when: not (factory_restore | default(false))
+
+- name: Set sc_oam_vip to false during factory restore
+  set_fact:
+    sc_oam_vip: false
+  when: factory_restore | default(false)
 
 - name: Add host route to registry.central if present
   lineinfile:
