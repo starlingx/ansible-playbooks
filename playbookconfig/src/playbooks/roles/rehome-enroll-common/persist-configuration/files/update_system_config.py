@@ -16,8 +16,8 @@ import time
 from barbicanclient import client as barbican_client
 from cgtsclient import client as cgts_client
 from datetime import datetime
-from keystoneclient.auth.identity import v3
-from keystoneclient import session
+from keystoneauth1.identity import v3
+from keystoneauth1 import session
 from netaddr import IPNetwork
 from packaging.version import Version, InvalidVersion
 from sysinv.common import constants as sysinv_constants

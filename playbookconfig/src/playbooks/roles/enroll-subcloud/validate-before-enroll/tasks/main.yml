@@ -41,7 +41,7 @@
       Docker registries are
       {%+ for k, v in docker_registries.items() %}
       {%+ if "password" in v %}
-      {%+ set _ = v.update({"password": "REDACTED"}) %}
+      {%+ set v = v | combine({"password": "REDACTED"}) %}
       {%+ endif %}
         {{ k }}:
           {{ (v | to_nice_yaml | indent(4)).rstrip() }}
