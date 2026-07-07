@@ -93,6 +93,12 @@ spec:
               watch_endpoints
           imagePullPolicy: IfNotPresent
           tty: true
+          resources:
+            limits:
+              memory: "1Gi"
+            requests:
+              cpu: 0
+              memory: 0
           securityContext:
             runAsNonRoot: true
             runAsUser: 2016

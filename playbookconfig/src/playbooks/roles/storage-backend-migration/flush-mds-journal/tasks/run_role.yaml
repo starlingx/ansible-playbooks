@@ -1,0 +1,17 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get active MDS daemon name
+  shell: ceph mds stat | grep -oP '(?<==)\S+(?==up:active)'
+  register: active_mds_daemons
+  changed_when: false
+
+- name: Flush MDS journal
+  command: ceph daemon mds.{{ item }} flush journal
+  loop: "{{ active_mds_daemons.stdout_lines }}"
+  register: flush_result
+  delegate_to: "{{ item }}"
+  when: active_mds_daemons.stdout_lines | length > 0

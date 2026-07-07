@@ -102,6 +102,14 @@
   roles:
     - role: remove-unmatched-pvcs
 
+- name: Flush MDS journal before stopping Ceph
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: flush-mds-journal
+
 - name: Stop OSD systemctl processes
   hosts: with_osds
   gather_facts: false
