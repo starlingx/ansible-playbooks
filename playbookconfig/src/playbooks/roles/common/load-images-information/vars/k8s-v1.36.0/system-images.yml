@@ -5,6 +5,21 @@ kubernetes_entrypoint_img: quay.io/stackanetes/kubernetes-entrypoint:v0.3.1
 calico_cni_img: quay.io/calico/cni:v3.31.5
 calico_node_img: quay.io/calico/node:v3.31.5
 calico_kube_controllers_img: quay.io/calico/kube-controllers:v3.31.5
+# New Calico/Tigera images
+calico_apiserver_img: quay.io/calico/apiserver:v3.31.5
+calico_ctl_img: quay.io/calico/ctl:v3.31.5
+calico_csi_img: quay.io/calico/csi:v3.31.5
+calico_dikastes_img: quay.io/calico/dikastes:v3.31.5
+calico_envoy_gateway_img: quay.io/calico/envoy-gateway:v3.31.5
+calico_envoy_proxy_img: quay.io/calico/envoy-proxy:v3.31.5
+calico_goldmane_img: quay.io/calico/goldmane:v3.31.5
+calico_node_driver_registrar_img: quay.io/calico/node-driver-registrar:v3.31.5
+calico_pod2daemon_flexvol_img: quay.io/calico/pod2daemon-flexvol:v3.31.5
+calico_typha_img: quay.io/calico/typha:v3.31.5
+calico_whisker_backend_img: quay.io/calico/whisker-backend:v3.31.5
+calico_whisker_img: quay.io/calico/whisker:v3.31.5
+tigera_operator_img: quay.io/tigera/operator:v1.40.10
+
 multus_img: ghcr.io/k8snetworkplumbingwg/multus-cni:v4.2.4-debug
 sriov_cni_img: ghcr.io/k8snetworkplumbingwg/sriov-cni:v2.10.0
 sriov_network_device_img: ghcr.io/k8snetworkplumbingwg/sriov-network-device-plugin:v3.11.0
