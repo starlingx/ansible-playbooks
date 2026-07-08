@@ -54,6 +54,7 @@
       dest: "/etc/ssl/private/{{ sc_adminep_cert }}"
       content: "{{ get_admin_ep_cert.stdout }}"
       mode: 0400
+  become: yes
   when: mode is defined and mode == "enroll"
 
 - block:
