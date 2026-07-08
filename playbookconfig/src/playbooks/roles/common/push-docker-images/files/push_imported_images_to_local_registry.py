@@ -71,8 +71,13 @@ def push_an_image(img):
                 # e.g. k8s.gcr.io/kube-apiserver:v1.24.4
                 new_img = img
     else:
-        # e.g. rabbitmq:3.8.11-management
-        new_img = "docker.io/" + img if add_docker_prefix else img
+        # e.g. busybox:1.37.0
+        # Official Docker Hub images live under library/ namespace.
+        # When loaded from a prestaged archive via 'docker load', Docker
+        # strips the docker.io/library/ prefix. We must add it back so the
+        # image is pushed to the local registry under the canonical path
+        # that consuming apps expect.
+        new_img = "docker.io/library/" + img if add_docker_prefix else img
 
     print("Image name used for local lookup is {}".format(new_img))
     target_img = img
