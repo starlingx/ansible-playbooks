@@ -332,6 +332,49 @@
               No StorageClass available for rook-ceph storage.
           when: sc_count.stdout | int == 0
 
+        # Save rook-ceph K8s state before etcd restore overwrites it.
+        # After etcd restore, secrets/configmap/deployment will have the
+        # backup system's values, but MON's persistent data on disk still
+        # has the factory's keys and FSID. We patch these back after
+        # etcd restore to keep Ceph auth consistent.
+        - name: Create temp directory for rook-ceph state
+          file:
+            path: /tmp/factory_rook_ceph_restore
+            state: directory
+
+        - name: Save all factory rook-ceph secrets
+          shell: >-
+            kubectl get secrets -n rook-ceph
+            --field-selector type!=helm.sh/release.v1
+            -o json > /tmp/factory_rook_ceph_restore/secrets.json
+
+        - name: Save factory rook-ceph mon-endpoints configmap
+          shell: >-
+            kubectl get configmap -n rook-ceph rook-ceph-mon-endpoints
+            -o json > /tmp/factory_rook_ceph_restore/configmap.json
+
+        - name: Get rook-ceph monitor deployment name
+          shell: >-
+            kubectl get deploy -n rook-ceph -l app=rook-ceph-mon
+            -o jsonpath='{.items[0].metadata.name}'
+          register: rook_ceph_mon_name
+
+        - name: Save factory rook-ceph mon deployment
+          shell: >-
+            kubectl get deploy -n rook-ceph {{ rook_ceph_mon_name.stdout }}
+            -o json > /tmp/factory_rook_ceph_restore/mon_deploy.json
+
+        - name: Save factory rook-ceph mon service
+          shell: >-
+            kubectl get svc -n rook-ceph {{ rook_ceph_mon_name.stdout }}
+            -o json > /tmp/factory_rook_ceph_restore/mon_svc.json
+
+        - name: Save factory rook-ceph CephCluster Custom Resource
+          shell: >-
+            kubectl get cephcluster -n rook-ceph rook-ceph
+            -o json > /tmp/factory_rook_ceph_restore/cephcluster.json
+
+      become: yes
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       when: factory_storage_backend | default('') == 'rook-ceph'

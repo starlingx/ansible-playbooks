@@ -27,12 +27,14 @@
 
 - name: Mount ceph data directory to rook-ceph
   import_role: name=common/mount-ceph-data
+  when: not (factory_restore | default(false))
 
 - name: Restore kubernetes service and data
   import_tasks: restore-kubernetes.yml
 
 - name: Restore ceph data
   import_tasks: restore-ceph-data.yml
+  when: not (factory_restore | default(false))
 
 - name: Upgrade networking
   include_tasks: upgrade-networking.yml
