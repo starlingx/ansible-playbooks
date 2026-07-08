@@ -294,8 +294,16 @@
     - name: Start SM services
       command: pmon-start sm
 
+    # pmon-start SM but its API socket
+    # takes a few seconds to be ready. sm-start silently fails with
+    # rc=0 and "socket error" in stdout if sent before the socket
+    # is listening. Retry until the message is actually delivered.
     - name: Start/ manage postgres via SM
       command: sm-start service postgres
+      register: sm_start_postgres
+      retries: 10
+      delay: 2
+      until: "'socket error' not in sm_start_postgres.stdout"
 
     - name: Start services via SM
       command: "sm-start service {{ item }}"
