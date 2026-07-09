@@ -20,7 +20,7 @@ calico_whisker_backend_img: quay.io/calico/whisker-backend:v3.31.5
 calico_whisker_img: quay.io/calico/whisker:v3.31.5
 tigera_operator_img: quay.io/tigera/operator:v1.40.10
 
-multus_img: ghcr.io/k8snetworkplumbingwg/multus-cni:v4.2.4-debug
+multus_img: ghcr.io/k8snetworkplumbingwg/multus-cni:v4.2.4-thick
 sriov_cni_img: ghcr.io/k8snetworkplumbingwg/sriov-cni:v2.10.0
 sriov_network_device_img: ghcr.io/k8snetworkplumbingwg/sriov-network-device-plugin:v3.11.0
 # Nginx images
