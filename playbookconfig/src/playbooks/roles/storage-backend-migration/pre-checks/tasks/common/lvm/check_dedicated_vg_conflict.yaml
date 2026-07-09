@@ -1,0 +1,44 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Validate lvm_vg_name format
+  assert:
+    that:
+      - lvm_vg_name is defined
+      - lvm_vg_name is regex('^[a-zA-Z0-9_-]+$')
+    fail_msg: >-
+      Invalid lvm_vg_name '{{ lvm_vg_name | default('undefined') }}'.
+      Must match ^[a-zA-Z0-9_-]+$.
+    success_msg: "lvm_vg_name validated: {{ lvm_vg_name }}"
+
+- name: Validate inventory_hostname format
+  assert:
+    that:
+      - inventory_hostname is defined
+      - inventory_hostname is regex('^[a-zA-Z0-9._-]+$')
+    fail_msg: >-
+      Invalid inventory_hostname '{{ inventory_hostname | default('undefined') }}'.
+      Must match ^[a-zA-Z0-9._-]+$.
+    success_msg: "inventory_hostname validated: {{ inventory_hostname }}"
+
+- name: Check if VG '{{ lvm_vg_name }}' already exists
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -c
+    "SELECT vg_state FROM i_lvg
+     JOIN i_host ON i_lvg.forihostid = i_host.id
+     WHERE lvm_vg_name = '{{ lvm_vg_name }}'
+     AND i_host.hostname = '{{ inventory_hostname }}';"
+  register: existing_vg_check
+  changed_when: false
+
+- name: Fail if dedicated VG '{{ lvm_vg_name }}' already exists
+  fail:
+    msg: >-
+      Volume Group '{{ lvm_vg_name }}' already exists
+      and conflicts with the LVM migration which needs to create this VG.
+  when: existing_vg_check.stdout_lines | length > 0

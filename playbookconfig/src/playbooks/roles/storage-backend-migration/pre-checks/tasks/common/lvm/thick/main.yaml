@@ -4,6 +4,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+- name: Check dedicated VG does not already exist
+  include_tasks: "{{ role_path }}/tasks/common/lvm/check_dedicated_vg_conflict.yaml"
+
 - name: Validate lvm_devices
   include_tasks: "{{ role_path }}/tasks/common/lvm/validate_lvm_devices.yaml"
 
