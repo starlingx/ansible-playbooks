@@ -1,0 +1,12 @@
+---
+# This section enables the Calico Ingress Gateway which provides an
+# implementation of the Kubernetes Gateway API using Envoy Gateway.
+# For more information, see: https://docs.tigera.io/calico/3.31/networking/ingress-gateway/create-ingress-gateway
+apiVersion: operator.tigera.io/v1
+kind: GatewayAPI
+metadata:
+  name: default
+spec:
+  envoyGatewayConfigRef:
+    name: custom-envoy-gateway-config
+    namespace: tigera-gateway
