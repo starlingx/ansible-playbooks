@@ -800,11 +800,24 @@
         # been removed. Therefore, to prevent the task from failing, 'ignore_errors' was added.
         - name: Delete all resources from the rook-ceph namespace
           shell: |
-            CRDS=$(kubectl api-resources --namespaced=true --verbs=delete -o name | \
-              grep -v "event" | tr "\n" "," | sed -e 's/,$//')
-            kubectl patch -n rook-ceph $(kubectl get -n rook-ceph $CRDS -o name) \
-              --type merge -p '{"metadata":{"finalizers": []}}'
-            kubectl delete -n rook-ceph "$CRDS" --all --force
+            kubectl api-resources --namespaced=true --verbs=delete -o name \
+              | grep -v "event" \
+              | while read -r resource; do
+                  kubectl get -n rook-ceph "$resource" \
+                    --ignore-not-found \
+                    -o name 2>/dev/null \
+                    | xargs -r kubectl patch -n rook-ceph \
+                        --type merge \
+                        -p '{"metadata":{"finalizers":[]}}' \
+                    || true
+
+                  kubectl delete -n rook-ceph "$resource" \
+                    --all \
+                    --force \
+                    --ignore-not-found \
+                    2>/dev/null \
+                    || true
+                done
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
           ignore_errors: true

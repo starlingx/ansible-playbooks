@@ -487,6 +487,7 @@ data:
       ceph_fsid=$(_jq '.ceph_fsid')
       osd_id=$(_jq '.osd_id')
       osd_uuid=$(_jq '.osd_uuid')
+      osd_device=$(_jq '.device')
 
       # If the ceph_fsid associated with the OSD is different from the cluster, skip that OSD.
       if [ "$FSID" != "$ceph_fsid" ]; then
@@ -497,12 +498,18 @@ data:
       CLUSTER_HAS_OSD=true
       OSD_DIR="/var/lib/rook/data/rook-ceph/${ceph_fsid}_${osd_uuid}"
 
+      # Extract the OSD keyring directly from the bluestore label on disk.
+      # This avoids depending on the keyring file in the host path, which may
+      # be empty if the init container "cephx-keyring-update" overwrote it
+      # while the cluster was not yet accessible.
+      OSD_KEYRING=""
       for i in {1..60}
       do
-        if [ -f ${OSD_DIR}/keyring ]; then
+        OSD_KEYRING=$(ceph-bluestore-tool show-label --dev ${osd_device} | jq -r '.[].osd_key')
+        if [ -n "${OSD_KEYRING}" ]; then
           break
         elif [ $i -eq 60 ]; then
-          fail "Unable to get osd.${osd_id} keyring from ${HOSTNAME}."
+          fail "Unable to get osd.${osd_id} keyring from bluestore label on ${osd_device} (${HOSTNAME})."
         fi
         sleep 5
       done
@@ -510,7 +517,6 @@ data:
       kubectl_scale_deployment osd=${osd_id} 0
 
       # Create a file containing the keyring
-      OSD_KEYRING=$(cat ${OSD_DIR}/keyring | sed -n -e 's/^.*key = //p')
       cat > /tmp/osd.${osd_id}.keyring << EOF
     [osd.${osd_id}]
             key = ${OSD_KEYRING}
@@ -529,6 +535,20 @@ data:
         fi
         sleep ${TIME_RETRY}
       done
+
+      kubectl_scale_deployment osd=${osd_id} 1
+
+      for i in {1..60}
+      do
+        if [ -s ${OSD_DIR}/keyring ]; then
+          break
+        elif [ $i -eq 60 ]; then
+          fail "The osd.${osd_id} on ${HOSTNAME} did not become ready."
+        fi
+        sleep 5
+      done
+
+      kubectl_scale_deployment osd=${osd_id} 0
 
       # Updates the monitor database with OSD data
       exec_ceph_cmd ceph-objectstore-tool --type bluestore --data-path ${OSD_DIR} --op update-mon-db --mon-store-path /tmp/monstore
@@ -627,6 +647,7 @@ data:
       ceph_fsid=$(_jq '.ceph_fsid')
       osd_id=$(_jq '.osd_id')
       osd_uuid=$(_jq '.osd_uuid')
+      osd_device=$(_jq '.device')
 
       # If the ceph_fsid associated with the OSD is different from the cluster, skip that OSD.
       if [ "$FSID" != "$ceph_fsid" ]; then
@@ -636,15 +657,19 @@ data:
 
       # This means this cluster has OSD
       CLUSTER_HAS_OSD=true
-      OSD_DIR="/var/lib/rook/rook-ceph/${ceph_fsid}_${osd_uuid}"
 
-      # Wait until the OSD keyring is available
+      # Extract the OSD keyring directly from the bluestore label on disk.
+      # This avoids depending on the keyring file in the host path, which may
+      # be empty if the init container "cephx-keyring-update" overwrote it
+      # while the cluster was not yet accessible.
+      OSD_KEYRING=""
       for i in {1..60}
       do
-        if [ -f ${OSD_DIR}/keyring ]; then
+        OSD_KEYRING=$(ceph-bluestore-tool show-label --dev ${osd_device} | jq -r '.[].osd_key')
+        if [ -n "${OSD_KEYRING}" ]; then
           break
         elif [ $i -eq 60 ]; then
-          fail "Unable to get osd.${osd_id} keyring from ${HOSTNAME}."
+          fail "Unable to get osd.${osd_id} keyring from bluestore label on ${osd_device} (${HOSTNAME})."
         fi
         sleep 5
       done
@@ -652,7 +677,6 @@ data:
       kubectl_scale_deployment osd=${osd_id} 0
 
       # Create a file containing the keyring
-      OSD_KEYRING=$(cat ${OSD_DIR}/keyring | sed -n -e 's/^.*key = //p')
       cat > /tmp/osd.${osd_id}.keyring << EOF
     [osd.${osd_id}]
             key = ${OSD_KEYRING}
