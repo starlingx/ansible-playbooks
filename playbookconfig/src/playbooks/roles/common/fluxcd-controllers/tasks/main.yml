@@ -45,16 +45,23 @@
       check" tried 20 attempts to check k8s health and failed.
   when: k8s_health_check.rc != 0
 
-- name: Bring up FluxCD helm and source controllers
-  import_tasks: bringup_fluxcd.yml
+- name: Set FluxCD deploy command
+  set_fact:
+    fluxcd_deploy_cmd: >-
+      {% if (mode is defined and mode == 'restore') or
+            (upgrade_activate_from_release is defined) %}
+      sysinv-flux deploy-controllers-restore --skip-download-images
+      {% else %}
+      sysinv-flux deploy-controllers --skip-download-images
+      {% endif %}
+
+- name: Deploy FluxCD controllers
+  command: "{{ fluxcd_deploy_cmd }}"
   become: yes
   register: bringup_fluxcd_result
   retries: "{{ bringup_fluxcd_retries }}"
   delay: "{{ delay_time }}"
   until: bringup_fluxcd_result is succeeded
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-    HOME: /home/sysadmin
 
 - name: Configure fluxcd deployments
   block:
