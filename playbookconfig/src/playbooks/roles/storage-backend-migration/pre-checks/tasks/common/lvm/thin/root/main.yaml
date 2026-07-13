@@ -4,6 +4,38 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+- name: Validate inventory_hostname format
+  assert:
+    that:
+      - inventory_hostname is defined
+      - inventory_hostname is regex('^[a-zA-Z0-9._-]+$')
+    fail_msg: >-
+      Invalid inventory_hostname '{{ inventory_hostname | default('undefined') }}'.
+      Must match ^[a-zA-Z0-9._-]+$.
+    success_msg: "inventory_hostname validated: {{ inventory_hostname }}"
+
+- name: Check if cgts-vg already has lvm_function configured
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -c
+    "SELECT i_lvg.capabilities::json->>'lvm_function' FROM i_lvg
+     JOIN i_host ON i_lvg.forihostid = i_host.id
+     WHERE lvm_vg_name = 'cgts-vg'
+     AND i_host.hostname = '{{ inventory_hostname }}';"
+  register: cgtsvg_lvm_function_check
+  changed_when: false
+
+- name: Fail if cgts-vg already has lvm_function configured
+  fail:
+    msg: >-
+      Volume Group 'cgts-vg' on host '{{ inventory_hostname }}' already has
+      lvm_function '{{ cgtsvg_lvm_function_check.stdout | trim }}' configured
+      and conflicts with the LVM migration.
+  when:
+    - cgtsvg_lvm_function_check.stdout | trim | length > 0
+    - cgtsvg_lvm_function_check.stdout | trim != 'none'
+
 - name: Validate lvm_volume_size_gb
   assert:
     that:

@@ -15,5 +15,21 @@
       Current value: {{ lvm_mode | default('undefined') }}
     success_msg: "LVM mode validated: {{ lvm_mode }}"
 
+- name: Check if an LVM storage-backend already exists
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -c
+    "SELECT name FROM storage_backend WHERE backend = 'lvm';"
+  register: lvm_backend_check
+  changed_when: false
+
+- name: Fail if LVM storage-backend already exists
+  fail:
+    msg: >-
+      An LVM storage-backend already exists ('{{ lvm_backend_check.stdout | trim }}')
+      and conflicts with the LVM migration.
+  when: lvm_backend_check.stdout_lines | length > 0
+
 - name: "Check LVM {{ lvm_mode }} common cases"
   include_tasks: "{{ lvm_mode }}/main.yaml"
