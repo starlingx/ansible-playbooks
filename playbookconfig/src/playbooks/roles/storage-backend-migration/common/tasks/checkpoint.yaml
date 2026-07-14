@@ -6,6 +6,13 @@
 
 - name: Block to run or not this role
   block:
+    - name: Stop execution if there are hosts marked as unreachable
+      fail:
+        msg: "The following hosts are marked as unreachable: {{ unreachable_hosts | flatten }}"
+      when:
+        - unreachable_hosts is defined
+        - unreachable_hosts | length > 0
+
     - name: Update storage-backend migration capabilities
       become: true
       become_user: postgres
@@ -32,6 +39,11 @@
 
     - name: "Run role {{ role_name }}"
       include_tasks: "{{ roles_dir_path }}/{{ role_name }}/tasks/run_role.yaml"
+
+    - name: Fail if any host became unreachable during the execution of the role
+      fail:
+        msg: "The following hosts have become unreachable: {{ ansible_play_hosts_all | difference(ansible_play_hosts) | flatten }}"
+      when: ansible_play_hosts_all | length != ansible_play_hosts | length
 
     - name: Mark this role as run
       set_fact:
