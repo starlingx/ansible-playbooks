@@ -1,0 +1,21 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Identify PVCs with ReadOnlyMany as sole access mode
+  set_fact:
+    readonly_pvcs: "{{ cephfs_pvc_list | selectattr('access_modes', 'defined') | selectattr('access_modes', 'eq', 'ReadOnlyMany') | list }}"
+
+- name: Display PVCs that will be recreated with ReadWriteMany
+  debug:
+    msg: "Found {{ readonly_pvcs | length }} PVC(s) with ReadOnlyMany only: {{ readonly_pvcs | map(attribute='name') | list }}"
+
+- name: Recreate PVCs with ReadWriteMany access mode
+  include_tasks: patch_readonly_single_pvc.yaml
+  loop: "{{ readonly_pvcs }}"
+  loop_control:
+    loop_var: readonly_pvc
+    label: "{{ readonly_pvc.name }}"
+  when: readonly_pvcs | length > 0

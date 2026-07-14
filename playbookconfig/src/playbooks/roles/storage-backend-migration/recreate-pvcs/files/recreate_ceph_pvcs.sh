@@ -7,6 +7,8 @@
 
 # Temporary file for manipulation
 PVC_RECOVER_YAML="/tmp/pvc-recover.yaml"
+PV_RECOVER_YAML="/tmp/pv-recover.yaml"
+RECLAIM_POLICY_MAP="/tmp/reclaim-policy-map.txt"
 
 # Get all namespaces to search for PVCs
 PVCS_NAMESPACE_LIST=$(kubectl get namespaces -o name | sed 's/^namespace\///')
@@ -25,21 +27,35 @@ for NAMESPACE in ${PVCS_NAMESPACE_LIST}; do
     # Delete all PVCs in NAMESPACE
     for PVC in ${PVCS_NAME_LIST}; do
 
-        # Store PVC details
-        kubectl -n "${NAMESPACE}" get "${PVC}" -o yaml > ${PVC_RECOVER_YAML}
-        if ! grep -E "rbd.csi.ceph.com|cephfs.csi.ceph.com|ceph.com/rbd|ceph.com/cephfs" \
-                ${PVC_RECOVER_YAML} 1>/dev/null 2>&1; then
-            echo "  Skipping ${PVC}: not provisioned by ceph-csi"
-            continue
-        fi
-
         # Store PV name
         PV_NAME=$(kubectl -n "${NAMESPACE}" get "${PVC}" -o jsonpath='{.spec.volumeName}')
         PV="persistentvolume/${PV_NAME}"
 
+        # Store PV details
+        kubectl get "${PV}" -o yaml > ${PV_RECOVER_YAML}
+
+        # Store PVC details
+        kubectl -n "${NAMESPACE}" get "${PVC}" -o yaml > ${PVC_RECOVER_YAML}
+
+        # Check if PVC/PV was provisioned by ceph-csi (check both PVC and PV)
+        if ! grep -E "rbd.csi.ceph.com|cephfs.csi.ceph.com|ceph.com/rbd|ceph.com/cephfs" \
+                ${PVC_RECOVER_YAML} ${PV_RECOVER_YAML} 1>/dev/null 2>&1; then
+            echo "  Skipping ${PVC}: not provisioned by ceph-csi"
+            continue
+        fi
+
+        # Save original reclaim policy for later restoration
+        ORIGINAL_RECLAIM_POLICY=$(kubectl get "${PV}" -o jsonpath='{.spec.persistentVolumeReclaimPolicy}')
+        PVC_SHORT_NAME=$(echo "${PVC}" | sed 's|^persistentvolumeclaim/||')
+
         # Remove bind information
         sed -i -e '/volumeName:/d' -e '/pv.kubernetes.io\/bind-completed:/d' \
             -e '/pv.kubernetes.io\/bound-by-controller:/d' "${PVC_RECOVER_YAML}"
+
+        # Replace ReadOnlyMany with ReadWriteOnce so CSI can provision dynamically.
+        # RBD (storageClass general) do not support ReadWriteMany, change to
+        # ReadWriteOnce to ensure the PVCs is provisioned as expected
+        sed -i 's/ReadOnlyMany/ReadWriteOnce/g' "${PVC_RECOVER_YAML}"
 
         # If the PVC was created from a snapshot, remove the Volume Snaphost references (dataSource sections)
         if grep -E "snapshot.storage.k8s.io" ${PVC_RECOVER_YAML} 1>/dev/null 2>&1; then
@@ -90,6 +106,43 @@ for NAMESPACE in ${PVCS_NAMESPACE_LIST}; do
 
         # Recreate the PVC
         kubectl apply -f "${PVC_RECOVER_YAML}"
+        echo "${NAMESPACE} ${PVC_SHORT_NAME} ${ORIGINAL_RECLAIM_POLICY}" >> "${RECLAIM_POLICY_MAP}"
         rm -f "${PVC_RECOVER_YAML}"
     done
 done
+
+# Restore original reclaimPolicy on new PVs
+echo "Restoring original reclaimPolicy on recreated PVs..."
+while read -r NS PVC_NAME POLICY; do
+    [ -z "${NS}" ] && continue
+
+    # Get the StorageClass binding mode to decide if we should wait
+    SC_NAME=$(kubectl -n "${NS}" get pvc "${PVC_NAME}" -o jsonpath='{.spec.storageClassName}' 2>/dev/null)
+    BIND_MODE=$(kubectl get sc "${SC_NAME}" -o jsonpath='{.volumeBindingMode}' 2>/dev/null)
+
+    if [ "${BIND_MODE}" = "WaitForFirstConsumer" ]; then
+        echo "  Skipping ${NS}/${PVC_NAME}: StorageClass ${SC_NAME} uses WaitForFirstConsumer"
+        continue
+    fi
+
+    # Wait for PVC to be Bound (up to 150s)
+    for i in {1..30}; do
+        PHASE=$(kubectl -n "${NS}" get pvc "${PVC_NAME}" -o jsonpath='{.status.phase}' 2>/dev/null)
+        [ "${PHASE}" = "Bound" ] && break
+        echo "  Waiting 5 seconds to check bound again for PVC ${PVC_NAME}"
+        sleep 5
+    done
+
+    if [ "${PHASE}" != "Bound" ]; then
+        echo "  WARNING: PVC ${NS}/${PVC_NAME} not Bound after timeout, skipping reclaimPolicy restore"
+        continue
+    fi
+
+    NEW_PV=$(kubectl -n "${NS}" get pvc "${PVC_NAME}" -o jsonpath='{.spec.volumeName}')
+    if [ -n "${NEW_PV}" ]; then
+        kubectl patch pv "${NEW_PV}" -p "{\"spec\":{\"persistentVolumeReclaimPolicy\":\"${POLICY}\"}}"
+        echo "  ${NEW_PV} -> reclaimPolicy=${POLICY}"
+    fi
+done < "${RECLAIM_POLICY_MAP}"
+
+rm -f "${RECLAIM_POLICY_MAP}"

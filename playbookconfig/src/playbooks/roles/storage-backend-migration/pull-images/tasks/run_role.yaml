@@ -62,6 +62,16 @@
       when: download_images_result.rc is not defined or download_images_result.rc != 0
 
   always:
+    - name: Show download images output log
+      command: "cat {{ tmp_workspace }}/download_images.log"
+      register: download_images_log
+      failed_when: false
+
+    - name: Display download images output
+      debug:
+        var: download_images_log.stdout_lines
+      when: download_images_log.stdout_lines | default([]) | length > 0
+
     - name: "Cleanup {{ tmp_workspace }} after failure"
       file:
         path: "{{ tmp_workspace }}"

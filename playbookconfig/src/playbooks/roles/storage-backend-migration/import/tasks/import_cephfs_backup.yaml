@@ -9,6 +9,9 @@
   vars:
     namespace: "{{ cephfs_pvc_namespace }}"
 
+- name: Patch PVCs/PVs with ReadOnlyMany access mode before import
+  include_tasks: patch_readonly_access_modes.yaml
+
 - name: Import cephfs backups
   block:
     - name: Import cephfs backups for namespace {{ cephfs_pvc_namespace }} in batches
@@ -21,3 +24,7 @@
       command: "kubectl delete -f {{ tmp_workspace }}/secret-migration-registry-local.yaml --ignore-not-found=true"
       environment:
         KUBECONFIG: "{{ kubeconfig }}"
+
+- name: Restore PVCs/PVs to ReadOnlyMany access mode after import
+  include_tasks: restore_readonly_access_modes.yaml
+  when: readonly_pvcs is defined and readonly_pvcs | length > 0

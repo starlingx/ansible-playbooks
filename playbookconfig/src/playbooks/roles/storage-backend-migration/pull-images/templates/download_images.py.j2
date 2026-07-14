@@ -22,11 +22,22 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", message="relationship '.*' will copy column")
 
+LOG_FILE = "{{ tmp_workspace }}/download_images.log"
+
+_file_handler = logging.FileHandler(LOG_FILE)
+_file_handler.setLevel(logging.INFO)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)]
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        _file_handler,
+    ]
 )
+
+logger = logging.getLogger(__name__)
 
 cfg.CONF(default_config_files=['/etc/sysinv/sysinv.conf'])
 
@@ -52,5 +63,10 @@ for tag, success in pool.imap(
                       app,
                       registries_info),
                       images_to_download):
-    if not success:
+    if success:
+        logger.info("Image downloaded successfully: %s", tag)
+        _file_handler.flush()
+    else:
+        logger.error("Failed to download image: %s", tag)
+        _file_handler.flush()
         raise Exception("Some images were not downloaded")

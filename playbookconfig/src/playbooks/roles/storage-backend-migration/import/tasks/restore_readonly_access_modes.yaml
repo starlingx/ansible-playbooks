@@ -1,0 +1,19 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+
+- name: Display PVCs that will be restored to ReadOnlyMany
+  debug:
+    msg: "Restoring {{ readonly_pvcs | length }} PVC(s) to ReadOnlyMany: {{ readonly_pvcs | map(attribute='name') | list }}"
+  when: readonly_pvcs | length > 0
+
+- name: Recreate PVCs with original ReadOnlyMany access mode
+  include_tasks: restore_readonly_single_pvc.yaml
+  loop: "{{ readonly_pvcs }}"
+  loop_control:
+    loop_var: readonly_pvc
+    label: "{{ readonly_pvc.name }}"
+  when: readonly_pvcs | length > 0
