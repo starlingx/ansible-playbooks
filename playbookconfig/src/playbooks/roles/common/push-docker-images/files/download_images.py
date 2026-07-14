@@ -216,7 +216,7 @@ def download_and_push_an_image(img):
         print("Image %s not found on local registry, attempt to download..."
               % target_img)
         try:
-            response = client.pull(target_img)
+            response = client.pull(target_img, auth_config=auth)
             check_response(response)
             print("Image download succeeded: %s" % target_img)
             client.tag(target_img, local_img)
