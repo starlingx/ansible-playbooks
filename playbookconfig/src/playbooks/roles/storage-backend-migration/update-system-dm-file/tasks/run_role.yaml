@@ -61,6 +61,15 @@
   environment:
     KUBECONFIG: "{{ kubeconfig }}"
 
+- name: Make DM update host stale defaults to reflect new DM file
+  shell: |
+    for host in $(kubectl -n deployment get host -o jsonpath='{.items[*].metadata.name}'); do
+      kubectl -n deployment patch host ${host} --type=merge --subresource=status \
+        -p='{"status":{"defaults":null,"observedGeneration":0}}'
+    done
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+
 - name: Cleanup temporary workspace folder
   file:
     path: "{{ tmp_workspace }}"
