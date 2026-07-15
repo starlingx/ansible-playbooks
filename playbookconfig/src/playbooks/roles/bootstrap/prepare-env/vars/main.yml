@@ -85,7 +85,7 @@ kubelet_extra_args_defaults:
 kubelet_configurations_defaults:
   nodeStatusUpdateFrequency: "4s"
   failSwapOn: false
-  cgroupDriver: "cgroupfs"
+  cgroupDriver: "systemd"
   cgroupRoot: "{{ kubelet_cgroup_root }}"
   imageGCHighThresholdPercent: 79
   imageGCLowThresholdPercent: 75
