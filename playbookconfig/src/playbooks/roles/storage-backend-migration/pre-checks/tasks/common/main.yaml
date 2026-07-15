@@ -65,6 +65,10 @@
 - name: Validate custom action hook URIs
   include_tasks: "check_custom_action_hooks.yaml"
 
+- name: Check if there are Ceph PVCs to migrate
+  include_tasks: "check_no_pvcs_found.yaml"
+  when: migration_type != "redeploy"
+
 - name: Check if any pods are using Ceph PVCs
   include_tasks: "check_ceph_pvcs.yaml"
 

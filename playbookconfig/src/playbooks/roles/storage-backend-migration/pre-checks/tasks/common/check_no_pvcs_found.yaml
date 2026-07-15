@@ -1,0 +1,16 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Fail if no Ceph PVCs were discovered
+  fail:
+    msg: >-
+      No Ceph PVCs to migrate. Check your pvcs_to_migrate filter if you
+      expected PVCs to be found. If you want to proceed with the migration
+      anyway, please run the redeploy playbook:
+      storage-backend-migration-{{ migration_target | replace('_', '-') }}-redeploy.yaml
+  when:
+    - cephfs_pvcs_raw | length == 0
+    - rbd_pvcs_raw | length == 0

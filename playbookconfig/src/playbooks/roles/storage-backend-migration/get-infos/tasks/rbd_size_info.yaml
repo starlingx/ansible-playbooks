@@ -23,8 +23,7 @@
 
     - name: Transform from YAML
       set_fact:
-        pv_rbd_info: "{{ kubectl_pv_rbd_info_output.stdout | from_yaml }}"
-      when: kubectl_pv_rbd_info_output | length > 0
+        pv_rbd_info: "{{ kubectl_pv_rbd_info_output.stdout | from_yaml | default([], true) }}"
 
     - name: Print RBD info
       debug:
@@ -35,11 +34,19 @@
       register: rbd_image_size_in_bytes_output
       with_items: "{{ pv_rbd_info }}"
       changed_when: false
+      when: pv_rbd_info | length > 0
 
     - name: Sum all RBD images size
       set_fact:
         rbd_total_size_in_bytes: "{{ rbd_image_size_in_bytes_output.results | map(attribute='stdout') | map('int') | sum }}"
         cacheable: true
+      when: pv_rbd_info | length > 0
+
+    - name: Set RBD total size to zero when no PVCs found
+      set_fact:
+        rbd_total_size_in_bytes: 0
+        cacheable: true
+      when: pv_rbd_info | length == 0
   when: rbd_total_size_in_bytes is undefined
 
 - name: Display rbd_total_size_in_bytes
