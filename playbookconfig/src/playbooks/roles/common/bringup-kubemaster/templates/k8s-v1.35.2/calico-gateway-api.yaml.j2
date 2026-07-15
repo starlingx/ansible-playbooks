@@ -10,3 +10,21 @@ spec:
   envoyGatewayConfigRef:
     name: custom-envoy-gateway-config
     namespace: tigera-gateway
+  gatewayControllerDeployment:
+    spec:
+      template:
+        spec:
+          tolerations:
+            - effect: NoSchedule
+              operator: Exists
+            - effect: NoExecute
+              operator: Exists
+  gatewayCertgenJob:
+    spec:
+      template:
+        spec:
+          tolerations:
+            - effect: NoSchedule
+              operator: Exists
+            - effect: NoExecute
+              operator: Exists
