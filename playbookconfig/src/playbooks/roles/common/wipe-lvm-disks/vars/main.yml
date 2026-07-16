@@ -1,0 +1,4 @@
+---
+# Changing this value will only impact restore.
+# If set to true, the script will wipe all LVM-CSI Logical Volume purpose.
+wipe_lvm_disks: false

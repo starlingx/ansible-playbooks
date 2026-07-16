@@ -29,6 +29,7 @@
     - optimized-restore/prepare-env
     - restore-platform/prepare-env
     - { role: common/wipe-ceph-osds, become: yes }
+    - { role: common/wipe-lvm-disks, become: yes }
     - { role: optimized-restore/apply-manifest, become: yes }
     - { role: optimized-restore/restore-configuration, become: yes }
     - { role: optimized-restore/restore-data, become: yes }
