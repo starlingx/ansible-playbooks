@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021-2024 Wind River Systems, Inc.
+# Copyright (c) 2021-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -9,6 +9,30 @@
 #   in database, reloads the configurations of related services and
 #   restarts these services
 #
+
+# After patch deployment, apps may be reapplying asynchronously.
+# Wait for them to settle before restarting sysinv, which would
+# interrupt in-progress app reapply operations.
+- name: Check and wait for app update
+  block:
+    - name: Wait for all apps to finish applying
+      shell: |
+        system application-list --nowrap | grep -cE 'applying|updating|recovering' || true
+      environment: "{{ openrc_env }}"
+      register: apps_in_progress
+      retries: 30
+      delay: 20
+      until: apps_in_progress.stdout | int == 0
+
+    - name: Check no apps are in a failed state
+      shell: |
+        system application-list --nowrap | grep 'apply-failed' | awk '{print $2}'
+      environment: "{{ openrc_env }}"
+      register: failed_apps
+      failed_when: failed_apps.stdout != ""
+  when:
+    - release_ids_to_apply is defined
+    - release_ids_to_apply | length > 0
 
 - name: Update keystone passwords
   block:
