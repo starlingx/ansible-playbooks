@@ -36,6 +36,25 @@
     --exclude {{ v | quote }}
     {% endfor %}
 
+- name: Set lvm-csi backend flag path
+  set_fact:
+    archive_lvm_csi_backend_flag: "{{ lvm_csi_backend_flag | regex_replace('^\\/', '') }}"
+
+- name: Look for the flag indicating that lvm-csi is configured
+  shell: "tar -tf {{ restore_data_file }} | grep '{{ archive_lvm_csi_backend_flag }}'"
+  failed_when: false
+  register: lvm_csi_backend
+
+- block:
+    - name: Mark lvm-csi backend as configured
+      file:
+        path: "{{ lvm_csi_backend_flag }}"
+        owner: root
+        group: root
+        mode: '0644'
+        state: touch
+  when: lvm_csi_backend.rc is defined and lvm_csi_backend.rc == 0
+
 - name: Extract management_interface from backup
   shell: >
     set -o pipefail;

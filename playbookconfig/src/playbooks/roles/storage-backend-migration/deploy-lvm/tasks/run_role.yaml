@@ -4,6 +4,16 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+- name: Ensure /etc/platform/.node_lvm_csi_configured exists
+  file:
+    path: /etc/platform/.node_lvm_csi_configured
+    state: touch
+    modification_time: preserve
+    access_time: preserve
+    owner: root
+    group: root
+    mode: '0644'
+
 - name: Set LVM VG name
   set_fact:
     lvm_vg_name_cacheable: >-

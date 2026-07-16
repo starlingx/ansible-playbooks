@@ -18,6 +18,7 @@
     archive_platform_conf_path: "{{ platform_conf_path | regex_replace('^\\/', '') }}"
     archive_ceph_backend_flag: "{{ ceph_backend_flag | regex_replace('^\\/', '') }}"
     archive_rook_backend_flag: "{{ rook_backend_flag | regex_replace('^\\/', '') }}"
+    archive_lvm_csi_backend_flag: "{{ lvm_csi_backend_flag | regex_replace('^\\/', '') }}"
     archive_fernet_keys_permdir: "{{ fernet_keys_permdir | regex_replace('^\\/', '') }}"
 
 # User postgres needs access files in this folder during restore
@@ -338,6 +339,21 @@
   shell: "tar -tf {{ restore_data_file }} | grep '{{ archive_rook_backend_flag }}'"
   failed_when: false
   register: rook_backend
+
+- name: Look for the flag indicating that lvm-csi is configured
+  shell: "tar -tf {{ restore_data_file }} | grep '{{ archive_lvm_csi_backend_flag }}'"
+  failed_when: false
+  register: lvm_csi_backend
+
+- block:
+    - name: Mark lvm-csi backend as configured
+      file:
+        path: "{{ lvm_csi_backend_flag }}"
+        owner: root
+        group: root
+        mode: '0644'
+        state: touch
+  when: lvm_csi_backend.rc is defined and lvm_csi_backend.rc == 0
 
 # Restore ceph crushmap if ceph backend is configured and Ceph cluster is being restored
 - block:
