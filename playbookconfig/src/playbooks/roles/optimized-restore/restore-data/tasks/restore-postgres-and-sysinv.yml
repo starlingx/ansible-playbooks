@@ -315,6 +315,26 @@
         - haproxy
         - mtc-agent
 
+    # During factory restore without reinstall Keystone caches user
+    # lookups and token validation results in memcached via oslo_cache.
+    # After postgres restore, the cached user objects still contain factory
+    # password hashes. Authentication fails because Keystone validates
+    # passwords against the cached (stale) hash instead of querying
+    # the restored DB. Flushing memcached forces fresh DB lookups.
+    - name: Restart memcached to clear stale auth cache
+      systemd:
+        name: memcached
+        state: restarted
+
+    # Confirm Keystone can issue tokens after memcached flush.
+    - name: Wait for Keystone to be ready after memcached flush
+      shell: "source /etc/platform/openrc; openstack token issue"
+      register: keystone_check
+      retries: 30
+      delay: 5
+      timeout: 30
+      until: keystone_check.rc == 0
+
     - name: Start pmon-managed flock services
       command: "pmon-start {{ item }}"
       loop:
