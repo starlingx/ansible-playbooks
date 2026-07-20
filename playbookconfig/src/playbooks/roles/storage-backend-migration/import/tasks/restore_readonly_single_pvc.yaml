@@ -43,15 +43,6 @@
         pv_name: "{{ pv_name_from_file.stdout }}"
       when: pvc_check.rc != 0
 
-    - name: "Patch PV {{ pv_name }} accessModes to ReadOnlyMany and restore original reclaim policy"
-      command: >
-        kubectl patch pv {{ pv_name }}
-        --type='json'
-        -p='[
-          {"op": "replace", "path": "/spec/accessModes", "value": ["ReadOnlyMany"]},
-          {"op": "replace", "path": "/spec/persistentVolumeReclaimPolicy", "value": "{{ readonly_pvc.reclaim_policy | default("Delete") }}"}
-        ]'
-
     - name: "Delete PVC {{ readonly_pvc.name }}"
       include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
       vars:
@@ -69,6 +60,15 @@
       failed_when: >
         remove_claimref.rc != 0 and
         'missing value' not in (remove_claimref.stderr | default(''))
+
+    - name: "Patch PV {{ pv_name }} accessModes to ReadOnlyMany and restore original reclaim policy"
+      command: >
+        kubectl patch pv {{ pv_name }}
+        --type='json'
+        -p='[
+          {"op": "replace", "path": "/spec/accessModes", "value": ["ReadOnlyMany"]},
+          {"op": "replace", "path": "/spec/persistentVolumeReclaimPolicy", "value": "{{ readonly_pvc.reclaim_policy | default("Delete") }}"}
+        ]'
 
     - name: "Render restore script for PVC {{ readonly_pvc.name }}"
       template:
