@@ -338,6 +338,35 @@
 
   when: kubernetes_long_version is version('v1.35.2', '>=')
 
+# During the transition from thin to thick multus plugin mode, the old
+# thin-mode CNI config file and ConfigMaps must be removed BEFORE applying
+# the new DaemonSet. The thick daemon's auto-config reads /etc/cni/net.d/
+# to find the cluster network; if 05-multus.conf (thin) is still present,
+# the daemon references it in its generated shim config (00-multus.conf),
+# causing kubelet to spawn thousands of stuck multus-shim processes.
+- name: Check for legacy thin-mode multus CNI config
+  stat:
+    path: /etc/cni/net.d/05-multus.conf
+  register: legacy_multus_conf
+
+- name: Remove legacy thin-mode multus CNI config from host
+  file:
+    path: /etc/cni/net.d/05-multus.conf
+    state: absent
+  when: legacy_multus_conf.stat.exists
+
+- name: Remove legacy thin-mode multus ConfigMap
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf delete configmap
+    multus-cni-config.v1 --namespace=kube-system --ignore-not-found=true
+  when: legacy_multus_conf.stat.exists
+
+- name: Remove legacy multus watcher ConfigMap
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf delete configmap
+    multus-watcher-script --namespace=kube-system --ignore-not-found=true
+  when: legacy_multus_conf.stat.exists
+
 - name: Create Multus config file
   template:
     src: "roles/common/bringup-kubemaster/templates/k8s-{{ kubernetes_long_version }}/multus-cni.yaml.j2"
@@ -349,6 +378,44 @@
   delay: 3
   register: result
   until: result.rc == 0
+
+- name: Wait for Multus daemon rollout to complete
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf
+    rollout status daemonset/kube-multus-ds-amd64
+    --namespace=kube-system --timeout=120s
+  retries: 3
+  delay: 10
+  register: multus_rollout
+  until: multus_rollout.rc == 0
+
+- name: Check if legacy multus CNI config was recreated during rollout
+  stat:
+    path: /etc/cni/net.d/05-multus.conf
+  register: legacy_multus_conf_post
+
+- block:
+  - name: Remove recreated legacy thin-mode multus CNI config
+    file:
+      path: /etc/cni/net.d/05-multus.conf
+      state: absent
+
+  - name: Restart Multus daemon to regenerate clean config
+    command: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf delete pod
+      --namespace=kube-system -l name=multus --wait=false
+
+  - name: Wait for Multus daemon to be ready after restart
+    command: >-
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf
+      rollout status daemonset/kube-multus-ds-amd64
+      --namespace=kube-system --timeout=120s
+    retries: 3
+    delay: 10
+    register: multus_rollout_post
+    until: multus_rollout_post.rc == 0
+
+  when: legacy_multus_conf_post.stat.exists
 
 - block:
   - name: Check if SRIOV config file is present in the backup tarball
