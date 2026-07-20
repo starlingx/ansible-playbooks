@@ -5,3 +5,9 @@
 
 %:
 	dh $@
+
+execute_before_dh_auto_install:
+	$(eval OS_CODENAME ?= $(shell lsb_release -cs))
+	find playbooks/roles/common/load-images-information/vars \
+		-name 'system-images.yml' -exec \
+		sed -i -e 's|@OS_CODENAME@|$(OS_CODENAME)|g' {} +
