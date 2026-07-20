@@ -38,7 +38,8 @@
     usm_scripts_dir: /usr/sbin/software-deploy
     ostree_rev: starlingx
     usm_software_dir: /opt/software
-    usm_metadata_dir: /opt/software/metadata
+    usm_metadata_dir: "{{ '/opt/software/metadata' if software_version is version('26.10', '<')
+                          else '/opt/software/releases/metadata' }}"
     usm_software_scripts_dir: /opt/software/software-scripts
     tmp_metadata_dir: /opt/software/tmp
     tmp_metadata_sync_dir: /opt/software/tmp/metadata-sync

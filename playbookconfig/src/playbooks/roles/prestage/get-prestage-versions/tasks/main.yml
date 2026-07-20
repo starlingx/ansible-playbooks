@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024-2025 Wind River Systems, Inc.
+# Copyright (c) 2024-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -55,22 +55,42 @@
 # latest patch of the prestaged releases. This is obtained from the metadata
 # in the "available" state, since it is assumed that this is the state in
 # which the software is left when it is prestaged to the subcloud.
-# These metadata files are obtained from the /opt/software/metadata/available
-# directory.
+#
+# For component-based releases, the product release file at the metadata
+# root (*-{version}-metadata.xml) is used to determine the version.
+# If no product release files are found, fallback to the available/ subdir
+# (legacy releases).
+#
 # We print the MM.mm format when the prestaged release has no patches applied.
 # Otherwise, the release is printed in MM.mm.pp format to indicate the patch
 # level of the prestaged release.
-- name: Find metadata files in available state
+- name: Find product release metadata files at metadata root (component-based path)
+  shell: |
+    find {{ host_software_metadata_dir }}/ -maxdepth 1 -type f \
+    -name '*-*-metadata.xml' | \
+    awk -F'/' '{split($NF, parts, "-"); print parts[2]}' | \
+    sed 's/\.0$//g' | sort -V | \
+    awk -F'.' '{versions[$1"."$2] = $0} END {for (v in versions) print versions[v]}' | \
+    grep .
+  register: versions_product
+  failed_when: false
+
+- name: Find metadata files in available state (legacy path)
   shell: |
     find {{ host_software_metadata_dir }}/available/ -name '*.xml' | \
     awk -F'/' '{split($NF, versions, "-"); print versions[2]}' | \
     sed 's/\.0$//g' | sort -V | \
-    awk -F'.' '{versions[$1"."$2] = $0} END {for (v in versions) print versions[v]}'
-  register: versions
+    awk -F'.' '{versions[$1"."$2] = $0} END {for (v in versions) print versions[v]}' | \
+    grep .
+  register: versions_legacy
+  failed_when: false
+  when: versions_product.stdout_lines | default([]) | length == 0
 
 - name: Generate a versions list from metadata files name
   set_fact:
-    versions_list: "{{ versions.stdout_lines }}"
+    versions_list: "{{ versions_product.stdout_lines
+                    if versions_product.stdout_lines | default([]) | length > 0
+                    else versions_legacy.stdout_lines | default([]) }}"
 
 # Add the "for-sw-deploy" label to differentiate the versions list.
 # As long as versions_list contains versions, they will be displayed.

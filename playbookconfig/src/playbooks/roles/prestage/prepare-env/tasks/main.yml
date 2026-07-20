@@ -50,10 +50,9 @@
     prestage_source: remote
     software_bin: "/usr/bin/software"
     prestage_dir: "{{ platform_backup_dir }}/{{ software_version }}"
-    host_software_metadata_dir: "/opt/software/metadata"
     patches_prestage_dir: "{{ platform_backup_dir }}/{{ software_version }}/patches"
-    host_patch_metadata_dir: "{{ '/opt/patching/metadata' if software_version
-                              is version('24.09', '<') else '/opt/software/metadata' }}"
+    host_patch_metadata_dir: "{{ '/opt/software/metadata' if software_version is version('26.10', '<')
+                                 else '/opt/software/releases/metadata' }}"
 
 - name: Retrieve current software version of the system controller
   shell: source /etc/build.info; echo $SW_VERSION
@@ -67,6 +66,11 @@
 - name: Set host_software_version fact
   set_fact:
     host_software_version: "{{ current_software_version.stdout }}"
+
+- name: Set host software metadata dir based on subcloud version
+  set_fact:
+    host_software_metadata_dir: "{{ '/opt/software/metadata' if host_software_version is version('26.10', '<')
+                                    else '/opt/software/releases/metadata' }}"
 
 - name: Change prestage_source to local
   set_fact:
