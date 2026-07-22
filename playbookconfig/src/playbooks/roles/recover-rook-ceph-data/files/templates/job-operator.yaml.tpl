@@ -41,10 +41,20 @@ spec:
       - name: kube-config
         hostPath:
           path: /etc/kubernetes/admin.conf
+      - name: rook-ceph-log
+        hostPath:
+          path: /var/lib/ceph/data/rook-ceph/log/
+          type: DirectoryOrCreate
       initContainers:
-        - name: init
+        - name: provision
           image: $CEPH_CONFIG_HELPER_IMAGE
-          command: [ "/bin/bash", "/tmp/mount/provision.sh" ]
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -o pipefail
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+              /bin/bash /tmp/mount/provision.sh 2>&1 \
+                | tee -a /var/log/rook-ceph/recovery-operator-provision-${TIMESTAMP}.log
           env:
           - name: ROOK_MONS
             valueFrom:
@@ -61,10 +71,18 @@ spec:
             mountPath: /tmp/mount
           - name: ceph-config
             mountPath: /etc/ceph
+          - name: rook-ceph-log
+            mountPath: /var/log/rook-ceph
       containers:
-        - name: recovery
+        - name: operator
           image: $CEPH_CONFIG_HELPER_IMAGE
-          command: [ "/bin/bash", "/tmp/mount/operator.sh" ]
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -o pipefail
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+              /bin/bash /tmp/mount/operator.sh 2>&1 \
+                | tee -a /var/log/rook-ceph/recovery-operator-${TIMESTAMP}.log
           env:
           - name: RECOVERY_TYPE
             value: $RECOVERY_TYPE
@@ -86,3 +104,5 @@ spec:
           - name: kube-config
             mountPath: /etc/kubernetes/admin.conf
             readOnly: true
+          - name: rook-ceph-log
+            mountPath: /var/log/rook-ceph

@@ -53,10 +53,20 @@ spec:
       - name: kube-config
         hostPath:
           path: /etc/kubernetes/admin.conf
+      - name: rook-ceph-log
+        hostPath:
+          path: /var/lib/ceph/data/rook-ceph/log/
+          type: DirectoryOrCreate
       initContainers:
-        - name: init
+        - name: provision
           image: $CEPH_CONFIG_HELPER_IMAGE
-          command: [ "/bin/bash", "/tmp/mount/provision.sh" ]
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -o pipefail
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+              /bin/bash /tmp/mount/provision.sh 2>&1 \
+                | tee -a /var/log/rook-ceph/recovery-osd-keyring-update-provision-${TIMESTAMP}.log
           env:
           - name: ROOK_MONS
             valueFrom:
@@ -73,9 +83,11 @@ spec:
             mountPath: /tmp/mount
           - name: ceph-config
             mountPath: /etc/ceph
+          - name: rook-ceph-log
+            mountPath: /var/log/rook-ceph
         - name: osd-data
           image: $CEPH_IMAGE
-          command: [ "/bin/bash", "-c", "/usr/sbin/ceph-volume raw list > /tmp/ceph/osd_data" ]
+          command: ["/bin/bash", "-c", "/usr/sbin/ceph-volume raw list > /tmp/ceph/osd_data"]
           securityContext:
             privileged: true
             readOnlyRootFilesystem: false
@@ -89,10 +101,32 @@ spec:
             mountPath: /dev
           - name: run-udev
             mountPath: /run/udev
+        - name: wait-ceph-ready
+          image: $CEPH_CONFIG_HELPER_IMAGE
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -o pipefail
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+              /bin/bash /tmp/mount/wait_ceph_ready.sh 2>&1 \
+                | tee -a /var/log/rook-ceph/recovery-osd-keyring-update-wait-ceph-ready-${TIMESTAMP}.log
+          volumeMounts:
+          - name: rook-ceph-recovery
+            mountPath: /tmp/mount
+          - name: ceph-config
+            mountPath: /etc/ceph
+          - name: rook-ceph-log
+            mountPath: /var/log/rook-ceph
       containers:
         - name: osd-keyring-update
           image: $CEPH_CONFIG_HELPER_IMAGE
-          command: [ "/bin/bash", "/tmp/mount/osd_keyring_update.sh" ]
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -o pipefail
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+              /bin/bash /tmp/mount/osd_keyring_update.sh 2>&1 \
+                | tee -a /var/log/rook-ceph/recovery-osd-keyring-update-${TIMESTAMP}.log
           env:
           - name: HOSTNAME
             value: $TARGET_HOSTNAME
@@ -116,3 +150,5 @@ spec:
           - name: kube-config
             mountPath: /etc/kubernetes/admin.conf
             readOnly: true
+          - name: rook-ceph-log
+            mountPath: /var/log/rook-ceph

@@ -52,6 +52,7 @@ data:
 
     exec_k8s_cmd() {
       local cmd_output rc
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] exec_k8s_cmd: $@" >&2
       # Check if a callback variable is provided
       if [[ -v $1 ]] || ! command -v "$1" &>/dev/null; then
         local -n cmd_output=$1
@@ -84,6 +85,7 @@ data:
     exec_ceph_cmd() {
       local cmd_output rc
       local timeout=60
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] exec_ceph_cmd: $@" >&2
       # Check if a callback variable is provided
       if [[ -v $1 ]] || ! command -v "$1" &>/dev/null; then
         local -n cmd_output=$1
@@ -93,6 +95,8 @@ data:
       # Check if the command contains "config", "tool" or "scan" to adjust the timeout
       if [[ "$@" =~ "config" ]]; then
         timeout=30   # Timeout for commands related to "config"
+      elif [[ "$@" =~ "journal" ]]; then
+        timeout=600  # Timeout for commands related to "journal"
       elif [[ "$@" =~ "tool" ]]; then
         timeout=180  # Timeout for commands related to "tool"
       elif [[ "$@" =~ "scan" ]]; then
@@ -357,8 +361,8 @@ data:
     kubectl_scale_deployment operator=rook app=rook-ceph-operator 1
     exec_ceph_cmd ceph -s
 
-    echo "rook-ceph recovery operator completed successfully."
-    update_status "operator-completed"
+    echo "rook-ceph recovery completed successfully."
+    update_status "recovery-completed"
     exit 0
 
   monstore_rebuild.sh: |-
@@ -760,48 +764,16 @@ data:
     echo "mon rollback completed successfully."
     exit 0
 
-  log_collector.sh: |-
+  wait_ceph_ready.sh: |-
     #!/bin/bash
     set -x
 
-    LOG_FILE="/var/log/ceph/restore.log"
-    source /tmp/mount/common.sh
-
-    wait_for_status "operator-completed recovery-failed"
-
-    # Wait for all jobs to complete.
-    exec_k8s_cmd kubectl -n rook-ceph wait --for=condition=complete job -l app.kubernetes.io/part-of=rook-ceph-recovery --timeout=${TIME_WAIT_JOB_COMPLETE}
-
-    rm -rf ${LOG_FILE}
-    exec_k8s_cmd PODS_NAME kubectl -n rook-ceph get pods -l app.kubernetes.io/part-of=rook-ceph-recovery --no-headers -o custom-columns=":metadata.name"
-    for POD_NAME in $PODS_NAME; do
-      exec_k8s_cmd POD_STATUS kubectl -n rook-ceph get pod "$POD_NAME" -o=jsonpath='{.status.phase}'
-      if [[ "$POD_STATUS" == "Running" || "$POD_STATUS" == "Succeeded" || "$POD_STATUS" == "Failed" ]]; then
-        set +x
-        echo -e "\n##############################\n${POD_NAME}\n##############################" >> ${LOG_FILE}
-        exec_k8s_cmd kubectl -n rook-ceph logs $POD_NAME >> ${LOG_FILE}
-        set -x
-      fi
+    echo "Waiting for ceph to become responsive..."
+    until ceph -s; do
+      echo "Ceph is not ready yet. Retrying in 10 seconds..."
+      sleep 10
     done
-
-    # If the recovery operator is complete, there is no need to keep the jobs.
-    if check_status "operator-completed"; then
-      exec_k8s_cmd kubectl -n rook-ceph delete jobs -l app.kubernetes.io/part-of=rook-ceph-recovery
-      exec_k8s_cmd kubectl -n rook-ceph wait --for=delete job -l app.kubernetes.io/part-of=rook-ceph-recovery --timeout=60s
-      if [ $? -ne 0 ]; then
-        exec_k8s_cmd kubectl -n rook-ceph delete jobs -l app.kubernetes.io/part-of=rook-ceph-recovery --grace-period=0 --force
-      fi
-      exec_k8s_cmd kubectl -n rook-ceph delete pods -l app.kubernetes.io/part-of=rook-ceph-recovery --grace-period=0 --force
-    fi
-
-    echo "logs collected successfully."
-
-    set +x
-    echo -e "\n##############################\nrook-ceph-recovery-log-collector\n##############################" >> ${LOG_FILE}
-    exec_k8s_cmd kubectl -n rook-ceph logs -l app=rook-ceph-recovery-log-collector --tail=-1 >> ${LOG_FILE}
-
-    update_status "recovery-completed"
-    exit 0
+    echo "Ceph is responsive."
 
   status: "recovery-pending"
 
