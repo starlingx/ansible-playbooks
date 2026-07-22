@@ -82,8 +82,8 @@
             --column status --format value"
     register: check_applied
     until: check_applied.stdout == "applied"
-    retries: 30
-    delay: 20
+    retries: 120
+    delay: 5
   when: '"applied" not in check_exist.stdout'
 
 - name: Include applied application in control list
