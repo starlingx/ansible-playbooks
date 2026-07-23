@@ -21,7 +21,6 @@ CLUSTERROLE_BINDING_TEMPLATE_FILENAME = "clusterrolebinding.yaml.tpl"
 CONFIGMAP_TEMPLATE_FILENAME = "configmap.yaml.tpl"
 SERVICEACCOUNT_TEMPLATE_FILENAME = "serviceaccount.yaml.tpl"
 MON_CLEANUP_JOB_TEMPLATE_FILENAME = "job-mon-cleanup.yaml.tpl"
-LOG_COLLECTOR_JOB_TEMPLATE_FILENAME = "job-log-collector.yaml.tpl"
 MON_ROLLBACK_JOB_TEMPLATE_FILENAME = "job-mon-rollback.yaml.tpl"
 OPERATOR_JOB_TEMPLATE_FILENAME = "job-operator.yaml.tpl"
 MONSTORE_REBUILD_JOB_TEMPLATE_FILENAME = "job-monstore-rebuild.yaml.tpl"
@@ -32,7 +31,6 @@ CLUSTERROLE_BINDING_RESOURCE_FILENAME = "clusterrolebinding.yaml"
 CONFIGMAP_RESOURCE_FILENAME = "configmap.yaml"
 SERVICEACCOUNT_RESOURCE_FILENAME = "serviceaccount.yaml"
 MON_CLEANUP_JOB_RESOURCE_FILENAME = "job-mon-cleanup-{}.yaml"
-LOG_COLLECTOR_JOB_RESOURCE_FILENAME = "job-log-collector.yaml"
 MON_ROLLBACK_JOB_RESOURCE_FILENAME = "job-mon-rollback-{}.yaml"
 OPERATOR_JOB_RESOURCE_FILENAME = "job-operator.yaml"
 MONSTORE_REBUILD_JOB_RESOURCE_FILENAME = "job-monstore-rebuild.yaml"
@@ -135,11 +133,6 @@ def recover():
                                                                                    "MONMAP_BINARY": monmap_b64})
     create_and_apply_k8s_resource(monstore_rebuild_job_resource, MONSTORE_REBUILD_JOB_RESOURCE_FILENAME)
 
-    log_collector_job_template = get_template(LOG_COLLECTOR_JOB_TEMPLATE_FILENAME)
-    log_collector_job_resource = log_collector_job_template.safe_substitute({"CEPH_CONFIG_HELPER_IMAGE": CEPH_CONFIG_HELPER_IMAGE,
-                                                                             "TARGET_HOSTNAME": recovery_target_host})
-    create_and_apply_k8s_resource(log_collector_job_resource, LOG_COLLECTOR_JOB_RESOURCE_FILENAME)
-
     if recovery_type != "SINGLE_HOST":
         for target_host in hosts_with_osd:
             osd_keyring_update_job_template = get_template(OSD_KEYRING_UPDATE_TEMPLATE_FILENAME)
@@ -169,8 +162,8 @@ def recover():
 
     # If the recovery target host is controller-0, it means the playbook is running, so we need to wait for the process to complete.
     if recovery_target_host == "controller-0":
-        # When it is SINGLE_HOST, the log-collector job needs to be completed.
-        job_label = "rook-ceph-recovery-log-collector"
+        # When it is SINGLE_HOST, the operator job needs to be completed.
+        job_label = "rook-ceph-recovery-operator"
         # When it is OSD_AND_MON or OSD_ONLY, wait for the monstore to rebuild, which is the job to be done in this first step.
         if recovery_type != "SINGLE_HOST":
             job_label = "rook-ceph-recovery-monstore-rebuild"

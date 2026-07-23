@@ -39,10 +39,20 @@ spec:
       - name: kube-config
         hostPath:
           path: /etc/kubernetes/admin.conf
+      - name: rook-ceph-log
+        hostPath:
+          path: /var/lib/ceph/data/rook-ceph/log/
+          type: DirectoryOrCreate
       containers:
         - name: mon-rollback
           image: $CEPH_CONFIG_HELPER_IMAGE
-          command: [ "/bin/bash", "/tmp/mount/mon_rollback.sh" ]
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -o pipefail
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+              /bin/bash /tmp/mount/mon_rollback.sh 2>&1 \
+                | tee -a /var/log/rook-ceph/recovery-mon-rollback-${TIMESTAMP}.log
           env:
           - name: RECOVERY_HOSTNAME
             value: $TARGET_RECOVERY_HOSTNAME
@@ -62,3 +72,5 @@ spec:
           - name: kube-config
             mountPath: /etc/kubernetes/admin.conf
             readOnly: true
+          - name: rook-ceph-log
+            mountPath: /var/log/rook-ceph
