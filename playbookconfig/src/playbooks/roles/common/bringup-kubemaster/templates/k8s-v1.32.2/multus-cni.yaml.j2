@@ -2,34 +2,24 @@
 # Multus Version v4.2.0
 # Based on:
 # https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v4.2.0/deployments/
-#             multus-daemonset.yml
+#             multus-daemonset-thick.yml
 #
 # This file is licensed under Apache 2.0.  You can obtain a copy of the license at:
 # https://github.com/k8snetworkplumbingwg/multus-cni/blob/v4.2.0/LICENSE
 #
 # The following modifications have been made:
 #
-# - The multus CNI configuration file has been explicitly specified to ensure
-#   it has a lower lexographic order than the calico CNI configuration file.
-# - The configMap has been modified to work with Calico rather than Flannel
-# - The tuning plugin is used to update sysctl tcp_keepalive timers.
-# - The portmap plugin is enabled to allow forwarding from one or more ports
-#   on the host to the container
-# - The cnibin volume hostPath is made variable
-# - An updateStrategy was added to the DaemonSet spec to allow controlled template
-#   updates of pods with "kubectl apply".
-# - The attributes confDir, cniDir and binDir are added to the configmap of
-#   multus-cni-config.
-# - Due to the limitations on resource tracking and CPU usage in Kubernetes,
-#   platform pod's CPU requests are set to zero and must not request CPU resources.
-# - Set memory request to zero, otherwise it interferes with the ability of application pods
-#   to reserve the full amount of memory that K8s says is available.
-# - Add a watcher script in a sidecar container to monitor the ServiceAccount token expiry
-#   and re-generate the Kubeconfig file accordingly.
-# - Multus conf file permission is set to 600 to comply with CIS Benchmark Standards
-# - Use "-debug" image to allow shell command execution in the Multus pod
+# - DaemonSet name changed to kube-multus-ds-amd64 for consistency
+# - Added nodeSelector for amd64 architecture
+# - Added imagePullSecrets for local registry access
+# - Image reference uses Jinja2 variables for local registry
+# - Resources set to zero per platform pod resource policy
+# - CNI bin path changed to /var/opt/cni/bin
+# - Added binDir and cniDir to daemon config
+# - Added updateStrategy RollingUpdate with maxUnavailable 1
+# - Using thick plugin mode for reliable CNI DEL with delegate caching
 #
-# Copyright (c) 2025 Wind River Systems, Inc.
+# Copyright (c) 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -95,7 +85,9 @@ rules:
       - pods/status
     verbs:
       - get
+      - list
       - update
+      - watch
   - apiGroups:
       - ""
       - events.k8s.io
@@ -128,135 +120,26 @@ metadata:
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: multus-cni-config.v1
+  name: multus-daemon-config
   namespace: kube-system
   labels:
     tier: node
     app: multus
 data:
-  # NOTE: If you'd prefer to manually apply a configuration file, you may create one here.
-  # In the case you'd like to customize the Multus installation, you should change the arguments to the Multus pod
-  # change the "args" line below from
-  # - "--multus-conf-file=auto"
-  # to:
-  # "--multus-conf-file=/tmp/multus-conf/70-multus.conf"
-  # Additionally -- you should ensure that the name "70-multus.conf" is the alphabetically first name in the
-  # /etc/cni/net.d/ directory on each node, otherwise, it will not be used by the Kubelet.
-  cni-conf.json: |
+  daemon-config.json: |
     {
-      "name": "multus-cni-network",
-      "type": "multus",
+      "chrootDir": "/hostroot",
       "cniVersion": "0.3.1",
-      "confDir": "/etc/cni/net.d",
-      "cniDir": "/var/lib/cni/multus",
-      "binDir": "/var/opt/cni/bin",
       "logFile": "/var/log/multus.log",
       "logLevel": "debug",
-      "capabilities": {
-        "portMappings": true
-      },
-      "delegates": [
-        {
-          "cniVersion": "0.3.1",
-          "name": "chain",
-          "plugins": [
-            {
-              "cniVersion": "0.3.1",
-              "name": "k8s-pod-network",
-              "type": "calico",
-              "masterplugin": true,
-              "log_level": "info",
-              "datastore_type": "kubernetes",
-              "nodename": "__KUBERNETES_NODE_NAME__",
-              "mtu": 1500,
-              "ipam": {
-                  "type": "calico-ipam",
-                  "assign_ipv4": "{{ "true" if cluster_network_ipv4 else "false" }}",
-                  "assign_ipv6": "{{ "true" if cluster_network_ipv6 else "false" }}"
-              },
-              "policy": {
-                  "type": "k8s"
-              },
-              "kubernetes": {
-                  "kubeconfig": "/etc/cni/net.d/calico-kubeconfig"
-              }
-            },
-            {
-              "name": "sysctl-tuning",
-              "type": "tuning",
-              "sysctl": {
-                "net.ipv4.tcp_keepalive_intvl": "1",
-                "net.ipv4.tcp_keepalive_probes": "5",
-                "net.ipv4.tcp_keepalive_time": "5"
-                }
-              },
-              {
-                "type": "portmap",
-                "snat": true,
-                "capabilities": {
-                  "portMappings": true
-                }
-              }
-          ]
-        }
-      ],
-      "kubeconfig": "/etc/cni/net.d/multus.d/multus.kubeconfig"
+      "logToStderr": true,
+      "binDir": "/var/opt/cni/bin",
+      "cniDir": "/var/lib/cni/multus",
+      "cniConfigDir": "/host/etc/cni/net.d",
+      "multusAutoconfigDir": "/host/etc/cni/net.d",
+      "multusConfigFile": "auto",
+      "socketDir": "/host/run/multus/"
     }
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: multus-watcher-script
-  namespace: kube-system
-  labels:
-    app: kube-multus
-data:
-  watcher-script.sh: |
-    #!/bin/bash
-    mkdir -p /etc/cni/net.d/multus.d
-    MULTUS_KUBECONFIG=/etc/cni/net.d/multus.d/multus.kubeconfig
-    MULTUS_TEMP_KUBECONFIG="$MULTUS_KUBECONFIG.tmp"
-    SERVICE_ACCOUNT_PATH=/var/run/secrets/kubernetes.io/serviceaccount
-    echo "$(date) - Monitoring token and CA for changes"
-    while true; do
-        kube_token_md5=$(grep "token:" "/host$MULTUS_KUBECONFIG" | awk '{gsub(/"/, "", $2); print $2}' | tr -d '\n' | md5sum | awk '{print $1}')
-        kube_ca_md5=$(grep "certificate-authority-data:" "/host$MULTUS_KUBECONFIG" | awk '{print $2}' | base64 -d | md5sum | awk '{print $1}')
-        token_md5=$(md5sum "$SERVICE_ACCOUNT_PATH/token" | awk '{print $1}')
-        ca_md5=$(md5sum "$SERVICE_ACCOUNT_PATH/ca.crt" | awk '{print $1}')
-        if [ "$token_md5" != "$kube_token_md5" ] || [ "$ca_md5" != "$kube_ca_md5" ]; then
-            echo "$(date) - Detected change in service account token or CA. Regenerating kubeconfig..."
-            touch "$MULTUS_TEMP_KUBECONFIG"
-            chmod 600 "$MULTUS_TEMP_KUBECONFIG"
-            SERVICEACCOUNT_TOKEN=$(cat "$SERVICE_ACCOUNT_PATH/token")
-            TLS_CFG="certificate-authority-data: $(cat $SERVICE_ACCOUNT_PATH/ca.crt | base64 | tr -d '\n')"
-            cat > "$MULTUS_TEMP_KUBECONFIG" <<EOF
-    # Kubeconfig file for Multus CNI plugin.
-    apiVersion: v1
-    kind: Config
-    clusters:
-    - name: local
-      cluster:
-        server: ${KUBERNETES_SERVICE_PROTOCOL:-https}://[${KUBERNETES_SERVICE_HOST}]:${KUBERNETES_SERVICE_PORT}
-        ${TLS_CFG}
-    users:
-    - name: multus
-      user:
-        token: "${SERVICEACCOUNT_TOKEN}"
-    contexts:
-    - name: multus-context
-      context:
-        cluster: local
-        user: multus
-    current-context: multus-context
-    EOF
-            if mv -f "$MULTUS_TEMP_KUBECONFIG" "/host$MULTUS_KUBECONFIG"; then
-                echo "$(date) - Successfully updated kubeconfig"
-            else
-                echo "$(date) - Failed to move temporary kubeconfig to /host$MULTUS_KUBECONFIG." >&2
-            fi
-        fi
-        sleep 60
-    done
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -283,6 +166,7 @@ spec:
         name: multus
     spec:
       hostNetwork: true
+      hostPID: true
       nodeSelector:
         kubernetes.io/arch: amd64
       tolerations:
@@ -296,22 +180,19 @@ spec:
       containers:
       - name: kube-multus
         image: "{{ local_registry }}/{{ multus_img }}"
+        command: ["/usr/src/multus-cni/bin/multus-daemon"]
         env:
-          - name: KUBERNETES_NODE_NAME
+          - name: MULTUS_NODE_NAME
             valueFrom:
               fieldRef:
                 fieldPath: spec.nodeName
-        command:
-          - sh
-          - -cex
-        args:
-          - |
-            sed "s|__KUBERNETES_NODE_NAME__|${KUBERNETES_NODE_NAME}|g" /tmp/multus-conf/05-multus.conf > /usr/src/multus-cni/05-multus.conf
-            chmod 0600 /usr/src/multus-cni/05-multus.conf
-            {% if cluster_network_ipv6 -%}
-            sed -i 's#//\${KUBERNETES_SERVICE_HOST}#//\[\${KUBERNETES_SERVICE_HOST}\]#' /thin_entrypoint
-            {% endif -%}
-            /thin_entrypoint --multus-conf-file=/usr/src/multus-cni/05-multus.conf
+        resources:
+          requests:
+            cpu: "0"
+            memory: "0"
+          limits:
+            cpu: "0"
+            memory: "0"
         securityContext:
           privileged: true
         terminationMessagePolicy: FallbackToLogsOnError
@@ -319,34 +200,38 @@ spec:
         - name: cni
           mountPath: /host/etc/cni/net.d
         - name: cnibin
-          mountPath: /host/opt/cni/bin
-        - name: multus-cfg
-          mountPath: /tmp/multus-conf
-      - name: multus-watcher
-        image: "{{ local_registry }}/{{ multus_img }}"
-        command:
-          - sh
-          - -cex
-        args:
-          - |
-            echo "$(date) - Watcher Script Starting"
-            cp /scripts/watcher-script.sh /tmp/watcher-script.sh
-            chmod +x /tmp/watcher-script.sh
-            sh /tmp/watcher-script.sh
-        volumeMounts:
-        - name: watcher-script
-          mountPath: /scripts
+          mountPath: /var/opt/cni/bin
+        - name: host-run
+          mountPath: /host/run
+        - name: host-var-lib-cni-multus
+          mountPath: /var/lib/cni/multus
+        - name: host-var-lib-kubelet
+          mountPath: /var/lib/kubelet
+          mountPropagation: HostToContainer
+        - name: host-run-k8s-cni-cncf-io
+          mountPath: /run/k8s.cni.cncf.io
+        - name: host-run-netns
+          mountPath: /run/netns
+          mountPropagation: HostToContainer
+        - name: multus-daemon-config
+          mountPath: /etc/cni/net.d/multus.d
           readOnly: true
-        - name: cni
-          mountPath: /host/etc/cni/net.d
-          readOnly: false
+        - name: hostroot
+          mountPath: /hostroot
+          mountPropagation: HostToContainer
+        - name: multus-cni-dir
+          mountPath: /etc/cni/multus/net.d
       initContainers:
         - name: install-multus-binary
           image: "{{ local_registry }}/{{ multus_img }}"
-          command: ["/install_multus"]
-          args:
-            - "--type"
-            - "thin"
+          command:
+            - "cp"
+            - "/usr/src/multus-cni/bin/multus-shim"
+            - "/host/opt/cni/bin/multus-shim"
+          resources:
+            requests:
+              cpu: "0"
+              memory: "15Mi"
           securityContext:
             privileged: true
           terminationMessagePolicy: FallbackToLogsOnError
@@ -362,16 +247,30 @@ spec:
         - name: cnibin
           hostPath:
             path: {{ kubelet_cni_bin_dir }}
-        - name: multus-cfg
+        - name: hostroot
+          hostPath:
+            path: /
+        - name: multus-daemon-config
           configMap:
-            name: multus-cni-config.v1
+            name: multus-daemon-config
             items:
-            - key: cni-conf.json
-              path: 05-multus.conf
-        - name: watcher-script
-          configMap:
-            name: multus-watcher-script
-            items:
-            - key: watcher-script.sh
-              path: watcher-script.sh
-
+            - key: daemon-config.json
+              path: daemon-config.json
+        - name: host-run
+          hostPath:
+            path: /run
+        - name: host-var-lib-cni-multus
+          hostPath:
+            path: /var/lib/cni/multus
+        - name: host-var-lib-kubelet
+          hostPath:
+            path: /var/lib/kubelet
+        - name: host-run-k8s-cni-cncf-io
+          hostPath:
+            path: /run/k8s.cni.cncf.io
+        - name: host-run-netns
+          hostPath:
+            path: /run/netns/
+        - name: multus-cni-dir
+          hostPath:
+            path: /etc/cni/multus/net.d

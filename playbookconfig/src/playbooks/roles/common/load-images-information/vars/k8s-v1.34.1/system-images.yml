@@ -5,7 +5,7 @@ kubernetes_entrypoint_img: quay.io/airshipit/kubernetes-entrypoint:9ff5d2e488ad1
 calico_cni_img: quay.io/calico/cni:v3.31.2
 calico_node_img: quay.io/calico/node:v3.31.2
 calico_kube_controllers_img: quay.io/calico/kube-controllers:v3.31.2
-multus_img: ghcr.io/k8snetworkplumbingwg/multus-cni:v4.2.3-debug
+multus_img: ghcr.io/k8snetworkplumbingwg/multus-cni:v4.2.3-thick
 sriov_cni_img: ghcr.io/k8snetworkplumbingwg/sriov-cni:v2.10.0
 sriov_network_device_img: ghcr.io/k8snetworkplumbingwg/sriov-network-device-plugin:v3.10.0
 # Nginx images
