@@ -287,6 +287,8 @@
       set_fact:
         async_timeout: 120
         async_retries: 40
+        deploy_async_timeout: 180
+        deploy_async_retries: 60
 
     - name: Wait for 30 seconds to ensure deployments have time to scale back up
       wait_for:
@@ -344,8 +346,9 @@
     # Check the deployment status rather than the pod status in case some pods are down on other nodes
     command: >-
       kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --namespace={{ item.namespace }}
-      --for=condition=Available deployment {{ item.deployment }} --timeout={{ async_timeout }}s
-    async: "{{ async_timeout }}"
+      --for=condition=Available deployment {{ item.deployment }}
+      --timeout={{ deploy_async_timeout | default(async_timeout) }}s
+    async: "{{ deploy_async_timeout | default(async_timeout) }}"
     poll: 0
     loop:
       - { namespace: "{{ calico_namespace }}", deployment: calico-kube-controllers }
@@ -389,9 +392,9 @@
       jid: "{{ item.ansible_job_id }}"
     register: deployment_wait_result
     until: deployment_wait_result.finished | bool
-    # The retry length should be x2 the length of the async_timeout
-    # eg async_retries = async_timeout * 2 / delay
-    retries: "{{ async_retries }}"
+    # The retry length should be x2 the length of the deploy_async_timeout
+    # eg deploy_async_retries = deploy_async_timeout * 2 / delay
+    retries: "{{ deploy_async_retries | default(async_retries) }}"
     delay: 6
     failed_when: false
     loop: "{{ wait_for_deployments.results }}"
