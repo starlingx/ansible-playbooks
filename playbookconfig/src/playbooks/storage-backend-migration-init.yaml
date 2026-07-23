@@ -42,7 +42,7 @@
 
   tasks:
     - name: Run init-system role
-      include_role:
+      import_role:
         name: init-system
       tags: always
       when: execute_init | default(true) | bool
