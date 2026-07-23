@@ -140,21 +140,6 @@
           state=started
           msg="Timeout waiting for {{ enroll_reconfigured_oam }}:{{ sysinv_port }}. Err_code=wait_enroll_init"
 
-    - name: Check if the subcloud has a cloned install flag
-      stat:
-        path: /etc/platform/.cloned_install
-      register: cloned_install_flag
-
-    - name: Fail if the subcloud is cloned but does not support the feature
-      fail:
-        msg: >-
-          The subcloud was installed from a cloned image but its software
-          version ({{ install_release_version }}) does not support enrollment of
-          cloned subclouds. Minimum required version is 26.10.
-      when:
-        - cloned_install_flag.stat.exists
-        - install_release_version is version('26.10', '<')
-
     # The seed ISO must be ejected to prevent it from being reapplied on reboot.
     # This is necessary because cloud-config is set to run always and cloud-init services
     # remain enabled until enrollment is complete (allowing for the possibility
