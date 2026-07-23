@@ -478,11 +478,19 @@
     dest: /etc/profile.d/kubeconfig.sh
     remote_src: yes
 
+- name: Find all .crt files in /etc/kubernetes/pki
+  find:
+    paths: "{{ kubeadm_pki_dir }}"
+    patterns: "*.crt"
+  register: pki_crt_files
+
 - name: Set permissions to 600 for all .crt files in /etc/kubernetes/pki
   file:
-    path: "{{ item }}"
+    path: "{{ item.path }}"
     mode: '0600'
-  loop: "{{ query('fileglob', kubeadm_pki_dir ~ '/*.crt') }}"
+  loop: "{{ pki_crt_files.files }}"
+  loop_control:
+    label: "{{ item.path }}"
 
 - name: Patch pull secret into kube-proxy service account
   command: >
