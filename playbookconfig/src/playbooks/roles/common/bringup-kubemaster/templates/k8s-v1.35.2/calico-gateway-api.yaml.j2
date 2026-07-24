@@ -15,16 +15,48 @@ spec:
       template:
         spec:
           tolerations:
-            - effect: NoSchedule
+            - key: node-role.kubernetes.io/control-plane
+              effect: NoSchedule
               operator: Exists
-            - effect: NoExecute
+            - key: node-role.kubernetes.io/master
+              effect: NoSchedule
               operator: Exists
+            - key: node.kubernetes.io/not-ready
+              effect: NoSchedule
+              operator: Exists
+            - key: node.kubernetes.io/unreachable
+              effect: NoSchedule
+              operator: Exists
+            - key: node.kubernetes.io/not-ready
+              effect: NoExecute
+              operator: Exists
+              tolerationSeconds: 0
+            - key: node.kubernetes.io/unreachable
+              effect: NoExecute
+              operator: Exists
+              tolerationSeconds: 0
   gatewayCertgenJob:
     spec:
       template:
         spec:
           tolerations:
-            - effect: NoSchedule
+            - key: node-role.kubernetes.io/control-plane
+              effect: NoSchedule
               operator: Exists
-            - effect: NoExecute
+            - key: node-role.kubernetes.io/master
+              effect: NoSchedule
               operator: Exists
+            - key: node.kubernetes.io/not-ready
+              effect: NoSchedule
+              operator: Exists
+            - key: node.kubernetes.io/unreachable
+              effect: NoSchedule
+              operator: Exists
+            - key: node.kubernetes.io/not-ready
+              effect: NoExecute
+              operator: Exists
+              tolerationSeconds: 0
+            - key: node.kubernetes.io/unreachable
+              effect: NoExecute
+              operator: Exists
+              tolerationSeconds: 0
