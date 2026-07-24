@@ -4,18 +4,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: Remove pmon.d SM file
-  shell: rm -vrf /etc/pmon.d/sm.conf
-  register: cleanup_pmon_files_output
-  changed_when: cleanup_pmon_files_output.stdout_lines | length > 0
-
-- name: Give pmon a few extra seconds to identify the changes
-  pause:
-    seconds: 12
-  run_once: true
-  delegate_to: "{{ system.active_controller }}"
-  changed_when: false
-
 - name: Cleanup ceph services
   include_tasks: cleanup_ceph_services.yaml
 
@@ -144,11 +132,4 @@
 
 - name: Deprovision Services
   include_tasks: deprovision_services.yaml
-  when: inventory_hostname in groups.controllers
-
-- name: Create symbolic link for sm.conf
-  file:
-    dest: /etc/pmon.d/sm.conf
-    src: /usr/share/starlingx/pmon.d/sm.conf
-    state: link
   when: inventory_hostname in groups.controllers
