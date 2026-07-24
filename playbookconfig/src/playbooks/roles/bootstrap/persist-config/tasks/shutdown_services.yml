@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2025 Wind River Systems, Inc.
+# Copyright (c) 2019-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -191,7 +191,7 @@
     set_fact:
       prev_admin_subnet_prefix: "{{ prev_network_params.prev_admin_subnet_primary | ipaddr('prefix') }}"
       prev_admin_floating_address:
-        "{{ default_prev_admin_floating_address_primary
+        "{{ default_prev_admin_start_address_primary
         if prev_admin_floating_address == 'derived' else prev_network_params.prev_admin_floating_address_primary }}"
       prev_admin_broadcast: "{{ prev_network_params.prev_admin_subnet_primary | ipaddr('broadcast') }}"
     when: (prev_admin_network|bool == true) and is_bullseye
@@ -200,14 +200,14 @@
     set_fact:
       prev_admin_subnet_prefix: "{{ prev_network_params.prev_admin_subnet_primary | ansible.utils.ipaddr('prefix') }}"
       prev_admin_floating_address:
-        "{{ default_prev_admin_floating_address_primary
+        "{{ default_prev_admin_start_address_primary
         if prev_admin_floating_address == 'derived' else prev_network_params.prev_admin_floating_address_primary }}"
       prev_admin_broadcast: "{{ prev_network_params.prev_admin_subnet_primary | ansible.utils.ipaddr('broadcast') }}"
     when: (prev_admin_network|bool == true) and is_trixie
 
   - name: Set CIDR fact derived from previous admin network configuration
     set_fact:
-      prev_admin_floating_virtual: "{{ prev_controller_admin_floating_address }}/{{ prev_admin_subnet_prefix }}"
+      prev_admin_floating_virtual: "{{ prev_admin_floating_address }}/{{ prev_admin_subnet_prefix }}"
     when: (prev_admin_network|bool == true)
 
   # set facts for secondary if defined/exists
@@ -216,7 +216,7 @@
       set_fact:
         prev_admin_subnet_prefix_secondary: "{{ prev_network_params.prev_admin_subnet_secondary | ipaddr('prefix') }}"
         prev_controller_admin_floating_address_secondary:
-          "{{ default_prev_admin_floating_address_secondary
+          "{{ default_prev_admin_start_address_secondary
           if prev_admin_floating_address == 'derived' else prev_network_params.prev_admin_floating_address_secondary }}"
         prev_admin_broadcast_secondary: "{{ prev_network_params.prev_admin_subnet_secondary | ipaddr('broadcast') }}"
       when: ((prev_admin_network|bool == true) and
@@ -227,7 +227,7 @@
         prev_admin_subnet_prefix_secondary: "{{ prev_network_params.prev_admin_subnet_secondary |
                                                 ansible.utils.ipaddr('prefix') }}"
         prev_controller_admin_floating_address_secondary:
-          "{{ default_prev_admin_floating_address_secondary
+          "{{ default_prev_admin_start_address_secondary
           if prev_admin_floating_address == 'derived' else prev_network_params.prev_admin_floating_address_secondary }}"
         prev_admin_broadcast_secondary: "{{ prev_network_params.prev_admin_subnet_secondary |
                                             ansible.utils.ipaddr('broadcast') }}"
