@@ -223,6 +223,21 @@
   shell: psql -c "update kube_app set status='restore-requested' where status='applied'" sysinv
   become_user: postgres
 
+# On factory restore, storage apps (rook-ceph, platform-integ-apps) are
+# already deployed and functional on the live system.  The bulk update above
+# marks them as restore-requested, which would cause conductor to remove and
+# reapply them on unlock — disrupting the running storage backend.
+# This only affects apps that were 'applied' at backup time (and thus just
+# changed to restore-requested). Apps that were 'uploaded' or in any other
+# state are not touched by either the bulk update or this revert.
+- name: Preserve storage app state for factory restore
+  shell: >-
+    psql -c "UPDATE kube_app SET status='applied'
+    WHERE name IN ('rook-ceph', 'platform-integ-apps')
+    AND status='restore-requested'" sysinv
+  become_user: postgres
+  when: factory_restore | default(false)
+
 - name: Set platform-integ-apps to applied state when set to wipe osds disks to remove the app later
   command: >-
     psql -c "update kube_app set status='applied' where name='platform-integ-apps'
