@@ -199,28 +199,10 @@
       loop: "{{ pvt_keys.stdout_lines }}"
     when: backup_os_release == "centos" and os_release == "debian"
 
-  - block:
-    - name: Gather latest SSH public key
-      command: ssh-keyscan -T 20 -t ecdsa -p {{ ansible_port if ansible_port else 22 }} {{ ansible_host }}
-      register: remote_keyscan
-      until: remote_keyscan.stdout != ""
-      retries: 6
-      delay: "{{ 3 | random }}"
-      become: no
-      delegate_to: localhost
-
-    - name: Update the known_hosts file with collected SSH public keys
-      lineinfile:
-        path: "~/.ssh/known_hosts"
-        create: yes
-        line: "{{ item }}"
-      loop: "{{ remote_keyscan.stdout_lines | list }}"
-      register: add_sshkey
-      until: not add_sshkey.changed
-      retries: 6
-      delay: "{{ 3 | random }}"
-      become: no
-      delegate_to: localhost
+  - name: Check connectivity and add remote SSH public keys to known_hosts
+    include_role:
+      name: common/check-connectivity
+    become: no
     when: inventory_hostname != 'localhost'
   when: check_ssh_dir.rc is defined and check_ssh_dir.rc == 0
 
