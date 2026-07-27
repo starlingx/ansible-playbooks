@@ -96,8 +96,15 @@ scheduler:
 controlPlaneEndpoint: {{ controlplane_endpoint }}
 etcd:
   external:
+    # FR-04: kube-apiserver is configured with every available etcd endpoint so
+    # it can spread reads and fail over if a member is down. At bootstrap only
+    # the floating member exists, so etcd_endpoints defaults to the single
+    # floating endpoint; the fixed members are appended at runtime once they
+    # join the cluster (FR-03), via change_k8s_control_plane_params.py.
     endpoints:
-    - {{ etcd_endpoint }}
+{% for endpoint in etcd_endpoints | default([etcd_endpoint]) %}
+    - {{ endpoint }}
+{% endfor %}
     caFile: /etc/etcd/ca.crt
     certFile: /etc/kubernetes/pki/apiserver-etcd-client.crt
     keyFile: /etc/kubernetes/pki/apiserver-etcd-client.key

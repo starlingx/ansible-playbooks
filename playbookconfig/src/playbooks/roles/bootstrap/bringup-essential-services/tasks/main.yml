@@ -9,16 +9,6 @@
 #   for initial controller unlock.
 #
 
-- name: Set etcd endpoint (Bullseye)
-  set_fact:
-    etcd_endpoint: "https://{{ cluster_floating_address | ipwrap }}:2379"
-  when: is_bullseye
-
-- name: Set etcd endpoint (Trixie)
-  set_fact:
-    etcd_endpoint: "https://{{ cluster_floating_address | ansible.utils.ipwrap }}:2379"
-  when: is_trixie
-
 - block:
   - name: Prepare for adding loopback interface
     set_fact:
@@ -36,7 +26,7 @@
   - name: Fail if adding loopback interface failed
     fail:
       msg: "{{ item.item }} failed for reason: {{ item.stderr }}."
-    when: item.rc != 0 and not incomplete_bootstrap
+    when: item.rc != 0 and not incomplete_bootstrap and "already assigned" not in item.stderr
     loop: "{{ add_loopback.results }}"
 
   - name: Remove previous management floating address if management network config has changed
@@ -121,7 +111,7 @@
   - name: Fail if adding interface addresses failed for reason other than it has been done before
     fail:
       msg: "{{ item.item }} failed for reason: {{ item.stderr }}."
-    when: item.rc != 0 and not incomplete_bootstrap
+    when: item.rc != 0 and not incomplete_bootstrap and "already assigned" not in item.stderr
     loop: "{{ add_addresses.results }}"
 
   - name: Create symlinks for current etcd version
@@ -186,10 +176,11 @@
       state: absent
     when: os_release == "debian"
 
-  - name: Bring up etcd
+  - name: Bring up etcd-fixed
     systemd:
-      name: etcd
+      name: etcd-fixed
       state: started
+      enabled: true
 
   - name: Bring up Kubernetes master
     import_role:

@@ -62,10 +62,17 @@
         force: yes
         mode: '0600'
 
-    - name: Start etcd server
+    - name: Start etcd-fixed server (simplex)
+      systemd:
+        name: etcd-fixed
+        state: started
+      when: system_mode == 'simplex'
+
+    - name: Start etcd server (duplex only)
       systemd:
         name: etcd
         state: started
+      when: system_mode not in ['simplex', 'multiplex']
 
     - name: Get kube-apiserver pod ID
       shell: crictl pods --name kube-apiserver --state Ready --quiet

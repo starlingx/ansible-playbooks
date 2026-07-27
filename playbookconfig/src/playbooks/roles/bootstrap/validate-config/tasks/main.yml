@@ -93,16 +93,23 @@
     - name: Set system mode to duplex for Standard system
       set_fact:
         system_mode: duplex
-    when: system_type == 'Standard'
+    when: system_type == 'Standard' and system_mode not in ['duplex', 'multiplex']
 
   - name: Validate system mode if system type is All-in-one
     fail:
-      msg: "Invalid system mode. Valid values are: simplex, duplex or duplex-direct."
-    when: >
-      (system_mode != 'simplex' and
-       system_mode != 'duplex' and
-       system_mode != 'duplex-direct') and
-      (system_type == 'All-in-one')
+      msg: "Invalid system mode. Valid values are: simplex, duplex, duplex-direct or multiplex."
+    when:
+      - system_type == 'All-in-one'
+      - system_mode is defined
+      - system_mode not in ['simplex', 'duplex', 'duplex-direct', 'multiplex']
+
+  - name: Validate system mode if system type is Standard
+    fail:
+      msg: "Invalid system mode for Standard. Valid values are: duplex or multiplex."
+    when:
+      - system_type == 'Standard'
+      - system_mode is defined
+      - system_mode not in ['duplex', 'multiplex']
 
   - name: Validate virtual system setting
     fail:
