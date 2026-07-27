@@ -100,6 +100,14 @@
         # --- END drbd-cephmon deprovision guard ---' /ostree/1/usr/lib/ocf/resource.d/linbit/drbd
       when: guard_check.rc != 0
 
+- name: Remove unmatched PVCs and related K8s resources
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: remove-unmatched-pvcs
+
 - name: Turn off Ceph bare-metal on Nodes (Except Active Controller)
   hosts: storages, workers, standby_controller
   serial: 1
@@ -107,7 +115,6 @@
   become: true
 
   roles:
-    - role: remove-unmatched-pvcs
     - role: remove-baremetal
 
 - name: Turn off Ceph bare-metal on Active Controller
@@ -116,7 +123,6 @@
   become: true
 
   roles:
-    - role: remove-unmatched-pvcs
     - role: remove-baremetal
 
 - name: Wipe disks on hosts with OSDs
