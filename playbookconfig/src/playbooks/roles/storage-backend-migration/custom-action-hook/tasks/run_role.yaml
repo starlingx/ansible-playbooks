@@ -24,6 +24,8 @@
     - name: "Execute {{ phase }}-migration hook script"
       become_user: sysadmin
       command: "{{ tmp_workspace }}/hook-script"
+      args:
+        chdir: "/home/sysadmin"
       register: hook_result
       environment:
         # KUBECONFIG is not set in non-interactive shells (see /etc/profile.d/kubeconfig.sh),

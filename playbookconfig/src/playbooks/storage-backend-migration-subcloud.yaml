@@ -291,6 +291,8 @@
         path: "{{ hook_tmp_dir }}"
         state: directory
         mode: "0755"
+      delegate_to: localhost
+      run_once: true
       when: pre_migration_hook is defined or post_migration_hook is defined
 
     - name: Download pre_migration_hook script to SystemController
@@ -299,6 +301,8 @@
         dest: "{{ hook_tmp_dir }}/pre_migration_hook"
         mode: "0755"
         force: true
+      delegate_to: localhost
+      run_once: true
       when: pre_migration_hook is defined
 
     - name: Download post_migration_hook script to SystemController
@@ -307,12 +311,9 @@
         dest: "{{ hook_tmp_dir }}/post_migration_hook"
         mode: "0755"
         force: true
+      delegate_to: localhost
+      run_once: true
       when: post_migration_hook is defined
-
-    - name: Persist hook_tmp_dir as host fact for cross-play access
-      set_fact:
-        hook_tmp_dir: "{{ hook_tmp_dir }}"
-      when: pre_migration_hook is defined or post_migration_hook is defined
 
     - name: Build extra vars for inner playbook
       vars:
@@ -358,14 +359,14 @@
 
         - name: Copy pre_migration_hook script to subcloud
           copy:
-            src: "{{ hostvars.localhost.hook_tmp_dir }}/pre_migration_hook"
+            src: "{{ hook_tmp_dir }}/pre_migration_hook"
             dest: "{{ hook_tmp_dir }}/pre_migration_hook"
             mode: "0755"
           when: pre_migration_hook is defined
 
         - name: Copy post_migration_hook script to subcloud
           copy:
-            src: "{{ hostvars.localhost.hook_tmp_dir }}/post_migration_hook"
+            src: "{{ hook_tmp_dir }}/post_migration_hook"
             dest: "{{ hook_tmp_dir }}/post_migration_hook"
             mode: "0755"
           when: post_migration_hook is defined
@@ -382,9 +383,9 @@
             - migration_result.rc != 0
             - '"Discovery complete. Failed automatically; the playbook was triggered remotely." not in migration_result.stdout'
 
-        - name: "Explain how to continue to the migration"
+        - name: Confirm matched PVCs to proceed with migration
           debug:
-            msg: 'Use -e "confirm_pvcs_regex=true" to continue to the migration'
+            msg: "Review the matched PVCs on the subclouds. To confirm and proceed with the migration, re-run adding: -e confirm_pvcs_regex=true"
           when: '"Discovery complete. Failed automatically; the playbook was triggered remotely." in migration_result.stdout'
 
       always:
@@ -396,7 +397,7 @@
 
         - name: Cleanup hook scripts from SystemController
           file:
-            path: "{{ hostvars.localhost.hook_tmp_dir }}"
+            path: "{{ hook_tmp_dir }}"
             state: absent
           delegate_to: localhost
           run_once: true
