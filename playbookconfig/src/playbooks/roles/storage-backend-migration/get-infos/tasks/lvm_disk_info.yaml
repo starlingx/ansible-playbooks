@@ -4,6 +4,18 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+- name: Persist lvm_mode_cached
+  set_fact:
+    lvm_mode_cached: "{{ lvm_mode }}"
+    cacheable: true
+  when: lvm_mode_cached is undefined
+
+- name: Persist lvm_thin_disk_cached
+  set_fact:
+    lvm_thin_disk_cached: "{{ lvm_thin_disk }}"
+    cacheable: true
+  when: lvm_thin_disk_cached is undefined
+
 - name: Validate and persist lvm_devices
   block:
     - name: Validate lvm_devices
@@ -21,7 +33,7 @@
       vars:
         ceph_devices: "{{ ceph_disks_by_host_db[inventory_hostname] | map(attribute='disk_device_path') | list }}"
   when:
-    - lvm_mode == 'thick' or (lvm_mode == 'thin' and lvm_thin_disk == 'dedicated')
+    - lvm_mode_cached == 'thick' or (lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'dedicated')
     - lvm_devices_cached is undefined
 
 - name: Show lvm_devices_cached
@@ -58,7 +70,7 @@
     - name: Set all_disks_db fact
       set_fact:
         all_disks_db: "{{ all_disks_query.stdout | from_json }}"
-  when: lvm_mode == 'thick' or (lvm_mode == 'thin' and lvm_thin_disk == 'dedicated')
+  when: lvm_mode_cached == 'thick' or (lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'dedicated')
 
 - name: Get CGTS-VG available space
   block:
@@ -110,7 +122,7 @@
 - name: Check if VG resize is needed after migration
   set_fact:
     resize_vg_after_migration: "{{ (create_migration_lv | default(false)) | bool and migration_type == 'export_import' and
-      lvm_mode == 'thin' and lvm_thin_disk == 'root' and
+      lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'root' and
       (lvm_volume_size_gb_max | int < backups_required_gb | int + lvm_volume_size_gb_normalized | int) }}"
     cacheable: true
   when: resize_vg_after_migration is undefined

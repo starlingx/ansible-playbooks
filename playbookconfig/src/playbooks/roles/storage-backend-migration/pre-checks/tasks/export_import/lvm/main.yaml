@@ -4,5 +4,5 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: "Check LVM {{ lvm_mode }} export-import cases"
-  include_tasks: "{{ lvm_mode }}/main.yaml"
+- name: "Check LVM {{ lvm_mode_cached }} export-import cases"
+  include_tasks: "{{ lvm_mode_cached }}/main.yaml"

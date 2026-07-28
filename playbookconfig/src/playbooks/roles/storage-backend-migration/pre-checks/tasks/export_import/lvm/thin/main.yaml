@@ -4,5 +4,5 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: "LVM {{ lvm_thin_disk }} disk specific checks"
-  include_tasks: "{{ lvm_thin_disk }}/main.yaml"
+- name: "LVM {{ lvm_thin_disk_cached }} disk specific checks"
+  include_tasks: "{{ lvm_thin_disk_cached }}/main.yaml"
