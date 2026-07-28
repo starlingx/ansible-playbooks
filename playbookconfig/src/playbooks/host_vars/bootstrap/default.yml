@@ -567,7 +567,7 @@ k8s_plugins:
 applications: []
 
 # Flag to indicate if docker.io prefix should be prepended to a image which does not contain
-# any registry configured in sysinv e.g. fluxcd/helm-controller, ubuntu, starlingx/n3000-opae
+# any registry configured in sysinv e.g. fluxcd/helm-controller, ubuntu
 add_docker_prefix: False
 
 # Kernel Configurations ( only applies to AIO systems)

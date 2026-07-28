@@ -126,7 +126,6 @@
       static_images: >-
         {{
           [
-            n3000_opae_img,
             kubernetes_entrypoint_img,
             pause_img,
             nginx_ingress_controller_img,
