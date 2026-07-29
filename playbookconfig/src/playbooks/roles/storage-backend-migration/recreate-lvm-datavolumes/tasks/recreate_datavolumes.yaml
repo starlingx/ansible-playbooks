@@ -56,10 +56,10 @@
     -o jsonpath='{.spec.dataVolumeTemplates}' > {{ tmp_workspace }}/{{ data_volume_name.key }}_dvt.json
   environment:
     KUBECONFIG: "{{ kubeconfig }}"
-  when: has_dv_templates
+  when: has_dv_templates | bool
 
 - name: "Remove dataVolumeTemplates and recreate DataVolume {{ data_volume_name.key }}"
-  when: has_dv_templates
+  when: has_dv_templates | bool
   block:
     - name: "Remove dataVolumeTemplates from VM {{ dv_owner_vm.stdout | default('') }}"
       command: >-
@@ -91,4 +91,4 @@
 
 - name: "Delete and recreate DataVolume {{ data_volume_name.key }} when there are no dataVolumeTemplates"
   include_tasks: delete_and_recreate_datavolume.yaml
-  when: not has_dv_templates
+  when: not has_dv_templates | bool

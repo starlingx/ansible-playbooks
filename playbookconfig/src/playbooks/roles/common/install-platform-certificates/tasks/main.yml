@@ -28,12 +28,12 @@
 - name: Define whether 'system-local-ca' secret should be created in the subcloud
   set_fact:
     subcloud_local_ca_should_be_altered: >-
-      "{{ mode == 'bootstrap' or mode == 'rehoming' or mode == 'enroll' or upgrade_in_progress }}"
+      {{ mode == 'bootstrap' or mode == 'rehoming' or mode == 'enroll' or upgrade_in_progress }}
   when: distributed_cloud_role == 'subcloud'
 
 - name: Retrieve local CA data
   include_tasks: retrieve-system-local-ca-data.yml
-  when: distributed_cloud_role != 'subcloud' or subcloud_local_ca_should_be_altered
+  when: distributed_cloud_role != 'subcloud' or subcloud_local_ca_should_be_altered | bool
 
 - name: Define the platform certificates that should be created by the local issuer
   include_tasks: define-certs-to-create.yml
@@ -86,4 +86,4 @@
       state: touch
     become: yes
 
-  when: distributed_cloud_role != 'subcloud' or subcloud_local_ca_should_be_altered
+  when: distributed_cloud_role != 'subcloud' or subcloud_local_ca_should_be_altered | bool

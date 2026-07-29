@@ -29,8 +29,8 @@
           All three CA parameters (system_root_ca_cert, system_local_ca_cert,
           system_local_ca_key) must be provided together, or all omitted.
       when: >-
-        (system_root_ca_cert | default('') | length > 0) != (system_local_ca_cert | default('') | length > 0) or
-        (system_root_ca_cert | default('') | length > 0) != (system_local_ca_key | default('') | length > 0)
+        (system_root_ca_cert | default('', true) | length > 0) != (system_local_ca_cert | default('', true) | length > 0) or
+        (system_root_ca_cert | default('', true) | length > 0) != (system_local_ca_key | default('', true) | length > 0)
 
     - name: Check for management affecting alarms
       include_tasks: check-for-management-alarms.yml
@@ -39,7 +39,7 @@
     - name: Verify CA overrides provided for 'system-local-ca' issuer
       include_role:
         name: common/verify-system-local-ca-overrides
-      when: system_local_ca_cert | default('') | length > 0
+      when: system_local_ca_cert | default('', true) | length > 0
   when: mode == 'update'
 
 - name: Install / Update cert-manager certificate
@@ -82,7 +82,7 @@
         name: common/generate-platform-certificates-template
       vars:
         destination: "{{ cert_manager_spec_file }}"
-        include_system_local_ca: "{{ system_local_ca_cert | default('') | length > 0 }}"
+        include_system_local_ca: "{{ system_local_ca_cert | default('', true) | length > 0 }}"
 
     - name: Retrieve certificates that may own system-local-ca secret
       shell: >-
@@ -116,7 +116,7 @@
         loop:
           - { name: system-local-ca, namespace: cert-manager, type: clusterissuer }
           - { name: system-local-ca, namespace: cert-manager, type: secret }
-      when: system_local_ca_cert | default('') | length > 0
+      when: system_local_ca_cert | default('', true) | length > 0
 
     - name: Remove default leaf certificates
       include_role:
@@ -175,7 +175,7 @@
         name: common/install-rca-as-trusted
       vars:
         rca_cert: "{{ system_root_ca_cert }}"
-      when: system_local_ca_cert | default('') | length > 0
+      when: system_local_ca_cert | default('', true) | length > 0
 
     - name: Restart kube-apiserver to pick the new certificate
       include_role:
@@ -271,7 +271,7 @@
           vars:
             action: 'fail'
       when:
-        - system_local_ca_cert | default('') | length > 0
+        - system_local_ca_cert | default('', true) | length > 0
         - system_mode_result.stdout != 'simplex'
 
     - name: Signal that user provided the CA data for system-local-ca
@@ -290,7 +290,7 @@
           mode: 0644
           state: touch
         become: yes
-      when: system_local_ca_cert | default('') | length > 0
+      when: system_local_ca_cert | default('', true) | length > 0
 
   rescue:
     - name: Check if system-local-ca is in place

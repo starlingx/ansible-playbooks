@@ -49,7 +49,7 @@
 
 - name: Force ostree dir sync
   include_tasks: perform_full_ostree_dir_sync.yml
-  when: force_ostree_dir_sync
+  when: force_ostree_dir_sync | bool
 
 # These tasks are common to use in the following tasks:
 #   Sync patches to USM enabled subcloud
@@ -111,8 +111,8 @@
 
 - name: Sync patches to USM enabled subcloud
   include_tasks: sync_patches_to_usm_subcloud.yml
-  when: usm_enabled_on_subcloud
+  when: usm_enabled_on_subcloud | bool
 
 - name: Sync patches to non USM enabled subcloud
   include_tasks: sync_patches_to_non_usm_subcloud.yml
-  when: not usm_enabled_on_subcloud
+  when: not usm_enabled_on_subcloud | bool

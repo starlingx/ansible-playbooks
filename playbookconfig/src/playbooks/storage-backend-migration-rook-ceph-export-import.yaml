@@ -64,12 +64,12 @@
     - role: manage-lv
       lv_action: create
       checkpoint_name: manage-lv-create
-      when: create_migration_lv
+      when: create_migration_lv | bool
 
     - role: migrate-pool-with-backup
       original_pool: kube-rbdkube-system
       new_pool: kube-rbd
-      when: old_pool_exist
+      when: old_pool_exist | bool
 
     - role: remove-unmatched-pvcs
     - role: export
@@ -96,7 +96,7 @@
     - role: manage-lv
       lv_action: remove
       checkpoint_name: manage-lv-remove
-      when: create_migration_lv
+      when: create_migration_lv | bool
 
 - name: Update rook-ceph PVC annotations
   hosts: active_controller

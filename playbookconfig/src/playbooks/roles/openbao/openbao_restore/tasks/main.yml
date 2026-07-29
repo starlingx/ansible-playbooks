@@ -40,13 +40,13 @@
   block:
     - name: Restore openbao snapshot with default encryption
       script: openbao_restore.sh {{ backup_snapshot_file.stdout }}
-      when: not openbao_encrypt
+      when: not openbao_encrypt | bool
       register: openbao_restore_script
       failed_when: openbao_restore_script.rc != 0
 
     - name: Restore openbao snapshot with custom encryption
       script: openbao_restore.sh {{ backup_snapshot_file.stdout }} '--decrypt' "custom_var"
-      when: openbao_encrypt
+      when: openbao_encrypt | bool
       register: openbao_restore_script
       failed_when: openbao_restore_script.rc != 0
   environment:

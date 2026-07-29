@@ -30,10 +30,10 @@
 - name: Pass if atleast one certificate is installed
   debug:
     msg: "{{ install_cert_output.stdout }}"
-  when: cert_installed
+  when: cert_installed | bool
 
 - name: Fail if not one certificate is installed
   fail:
     msg: "Failed to install ssl_ca_certificate_file.
           {{ install_cert_output.stdout }}"
-  when: not cert_installed
+  when: not cert_installed | bool

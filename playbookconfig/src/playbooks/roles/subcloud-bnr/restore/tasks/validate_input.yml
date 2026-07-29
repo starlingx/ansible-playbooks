@@ -96,7 +96,7 @@
         set_fact:
           images_backup_dir: "{{ backup_dir }}"
           images_backup_filename: "{{ find_backup.files[0].path|basename }}"
-      when: restore_registry_images
+      when: restore_registry_images | bool
 
   when: backup_filename is undefined
 
@@ -182,7 +182,7 @@
             images_backup_filename: "{{ images_backup_filename|basename }}"
         when: images_backup_filename is defined
 
-      when: restore_registry_images
+      when: restore_registry_images | bool
   when: backup_filename is defined
 
 - name: Set platform backup file facts
@@ -224,7 +224,7 @@
   loop:
     - "^registry_backup_filename(.*)$"
     - "^user_images_backup_filename(.*)$"
-  when: not restore_registry_images
+  when: not restore_registry_images | bool
   connection: local
 
 - name: Write platform backup directory and file name to overrides file

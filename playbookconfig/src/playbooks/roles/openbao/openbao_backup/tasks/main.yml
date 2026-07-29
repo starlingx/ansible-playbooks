@@ -18,13 +18,13 @@
   block:
     - name: Create openbao snapshot with default encryption
       script: openbao_snapshot.sh {{ openbao_backup_dir }}
-      when: not openbao_encrypt
+      when: not openbao_encrypt | bool
       register: openbao_snapshot_script
       failed_when: openbao_snapshot_script.rc != 0
 
     - name: Create openbao snapshot with custom encryption
       script: openbao_snapshot.sh {{ openbao_backup_dir }} '--encrypt' "custom_var"
-      when: openbao_encrypt
+      when: openbao_encrypt | bool
       register: openbao_snapshot_script
       failed_when: openbao_snapshot_script.rc != 0
   environment:

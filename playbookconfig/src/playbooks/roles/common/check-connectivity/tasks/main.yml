@@ -26,7 +26,7 @@
         ansible_host: "{{ ansible_host | ansible.utils.ipaddr }}"
       when:
         - is_trixie | default(false)
-        - ansible_host | ansible.utils.ipaddr
+        - (ansible_host | ansible.utils.ipaddr) | default('') | length > 0
 
     - name: Check connectivity
       wait_for:

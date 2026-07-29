@@ -19,7 +19,7 @@
 - name: Fail if custom images backup is requested for centralized backup
   fail:
     msg: "Custom images backup is not supported for centralized backup request."
-  when: not local and backup_registry_images
+  when: not local | bool and backup_registry_images | bool
 
 - name: Fail if storage location is not specified for centralized backup
   fail:
@@ -149,4 +149,4 @@
 - name: Update central_backup_dir fact
   set_fact:
     central_backup_dir: "{{ central_backup_dir }}/{{ inventory_hostname }}/{{ software_version }}"
-  when: not local
+  when: not local | bool

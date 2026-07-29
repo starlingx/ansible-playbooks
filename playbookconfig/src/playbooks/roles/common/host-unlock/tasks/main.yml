@@ -69,4 +69,4 @@
       timeout: 300
       msg: Timeout waiting for vim recovery to complete
 
-  when: wait_for_unlock
+  when: wait_for_unlock | bool

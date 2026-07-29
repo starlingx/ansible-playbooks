@@ -89,7 +89,7 @@
     existing_strategy: >-
       {{ result.results |
       json_query('[?rc==`0`].{type: item, status: stdout}') |
-      first | default(None)}}
+      first | default({})}}
 
 - name: Fail if existing strategy is in an aborted state
   fail:
@@ -97,5 +97,6 @@
       The subcloud currently has an aborted {{ existing_strategy.type}}.
       Please resolve the strategy condition then try again.
   when: >
-    existing_strategy and existing_strategy.status in
+    existing_strategy | length > 0 and
+    (existing_strategy.status | default('')) in
     ["abort-failed", "abort-timeout", "aborted"]

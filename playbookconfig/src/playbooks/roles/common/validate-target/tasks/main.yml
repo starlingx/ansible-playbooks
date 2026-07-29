@@ -60,7 +60,7 @@
   delay: 40
   until: check_active.rc == 0
   no_log: true
-  when: check_system
+  when: check_system | bool
 
 # check_load validation, e.g. prior to subcloud upgrade/restore of non-Redfish subcloud
 - block:

@@ -162,7 +162,7 @@
         Timed out waiting 250.001 alarm to clear out. Check sysinv and puppet logs
         for more information and solve any 250.001 alarms before retrying.
     when: alarm_subcloud.stdout != ""
-  when: new_cert_installed and not ignore_alarms
+  when: new_cert_installed | bool and not ignore_alarms
 
 # Also, when RCA is installed as trusted during subcloud's bootstrap, we have issues
 # to pull images from 'registry.central' after puppet changes /etc/hosts file, since

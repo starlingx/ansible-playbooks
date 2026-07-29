@@ -71,7 +71,7 @@
     - role: migrate-pool-with-backup
       original_pool: kube-rbdkube-system
       new_pool: kube-rbd
-      when: old_pool_exist
+      when: old_pool_exist | bool
 
     - role: manage-lv
       lv_action: remove

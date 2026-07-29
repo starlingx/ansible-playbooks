@@ -1170,7 +1170,7 @@
     - name: Set secondary OAM address list
       set_fact:
         OAM_addresses_secondary: "{{ [network_params.external_oam_floating_address_secondary] }}"
-      when: network_params.external_oam_floating_address_secondary
+      when: network_params.external_oam_floating_address_secondary | default("", true) | length > 0
 
     - name: Update secondary OAM address list for duplex
       set_fact:
@@ -1497,7 +1497,7 @@
                                             if cluster_service_start_address != 'derived'
                                             else default_cluster_service_start_address_secondary
                         ]}}"
-    when: network_params.cluster_service_subnet_secondary
+    when: network_params.cluster_service_subnet_secondary | default("", true) | length > 0
 
   - set_fact:
       default_no_proxy: "{{ default_no_proxy + [controller_floating_address_secondary]}}"
@@ -1509,7 +1509,7 @@
 
   - set_fact:
       default_no_proxy: "{{ default_no_proxy + [network_params.external_oam_floating_address_secondary]}}"
-    when: network_params.external_oam_floating_address_secondary
+    when: network_params.external_oam_floating_address_secondary | default("", true) | length > 0
 
   - set_fact:
       default_no_proxy: "{{ default_no_proxy + [address_pairs_secondary['oam_node']['start'] ]}}"
@@ -1542,7 +1542,7 @@
       default_no_proxy: "{{ default_no_proxy + non_sx_proxy_addons }}"
     when: system_mode != 'simplex'
 
-  when: use_docker_proxy
+  when: use_docker_proxy | bool
 
 - name: Validate registries
   import_role:
@@ -1578,7 +1578,7 @@
     set_fact:
       user_dns_host_records_lines: "{{ result.stdout_lines }}"
 
-  when: user_dns_host_records
+  when: user_dns_host_records is not none
 
 # System applications validation
 - name: Validate applications
@@ -1684,8 +1684,8 @@
   - name: Verify that either both etcd root ca cert and key are defined or not at all
     fail:
       msg: "etcd_root_ca_cert and etcd_root_ca_key must be provided as a pair"
-    when: (etcd_root_ca_cert and not etcd_root_ca_key) or
-          (not etcd_root_ca_cert and etcd_root_ca_key)
+    when: (etcd_root_ca_cert | default('', true) | length > 0 and not etcd_root_ca_key | default('', true) | length > 0) or
+          (not etcd_root_ca_cert | default('', true) | length > 0 and etcd_root_ca_key | default('', true) | length > 0)
 
   - name: Check if external CA files exist
     stat:
@@ -1710,12 +1710,12 @@
   - name: Check for etcd_root_ca_cert file
     fail:
       msg: "etcd_root_ca_cert file not found. ({{ etcd_root_ca_cert }})"
-    when: etcd_root_ca_cert and not ca_file_exist['etcd_root_ca_cert']
+    when: etcd_root_ca_cert | default('', true) | length > 0 and not ca_file_exist['etcd_root_ca_cert']
 
   - name: Check for etcd_root_ca_key file
     fail:
       msg: "etcd_root_ca_key file not found. ({{ etcd_root_ca_key }})"
-    when: etcd_root_ca_key and not ca_file_exist['etcd_root_ca_key']
+    when: etcd_root_ca_key | default('', true) | length > 0 and not ca_file_exist['etcd_root_ca_key']
   when: mode != 'restore'
 
 - name: Verify 'system-local-ca' overrides

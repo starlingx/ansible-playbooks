@@ -14,7 +14,7 @@
 - name: Prepare remote execution environment
   include_role:
     name: common/prepare-env
-  when: local
+  when: local | bool
 
 - name: Check if the specified backup directory exists
   stat:
