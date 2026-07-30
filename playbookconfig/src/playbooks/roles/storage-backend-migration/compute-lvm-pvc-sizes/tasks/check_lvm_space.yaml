@@ -13,18 +13,18 @@
   set_fact:
     lvm_total_raw: "{{ total_raw }}"
     lvm_metadata_overhead: "{{ selected_disks | length * lvm_overhead_per_pv_bytes | int }}"
-    lvm_thin_vg_reserved: "{{ (total_raw | int * lvm_thin_vg_reserved_percent | int / 100) | int if lvm_mode == 'thin' else 0 }}"
-    lvm_thin_metadata: "{{ (total_raw | int * lvm_thin_metadata_percent | float / 100) | int if lvm_mode == 'thin' else 0 }}"
+    lvm_thin_vg_reserved: "{{ (total_raw | int * lvm_thin_vg_reserved_percent | int / 100) | int if lvm_mode_cached == 'thin' else 0 }}"
+    lvm_thin_metadata: "{{ (total_raw | int * lvm_thin_metadata_percent | float / 100) | int if lvm_mode_cached == 'thin' else 0 }}"
     lvm_usable_bytes: >-
       {{ (total_raw | int)
          - (selected_disks | length * lvm_overhead_per_pv_bytes | int)
          - (lvm_spare | int)
-         - (((total_raw | int * lvm_thin_vg_reserved_percent | int / 100) | int) if lvm_mode == 'thin' else 0)
-         - (((total_raw | int * lvm_thin_metadata_percent | float / 100) | int) if lvm_mode == 'thin' else 0) }}
+         - (((total_raw | int * lvm_thin_vg_reserved_percent | int / 100) | int) if lvm_mode_cached == 'thin' else 0)
+         - (((total_raw | int * lvm_thin_metadata_percent | float / 100) | int) if lvm_mode_cached == 'thin' else 0) }}
   vars:
     selected_disks: "{{ all_disks_db | selectattr('device_path', 'in', lvm_devices_cached) | list }}"
     total_raw: "{{ selected_disks | map(attribute='size_mib') | map('int') | sum * 1024 * 1024 }}"
-  when: lvm_mode == 'thick' or (lvm_mode == 'thin' and lvm_thin_disk == 'dedicated')
+  when: lvm_mode_cached == 'thick' or (lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'dedicated')
 
 - name: Compute LVM space from thin/root pool
   set_fact:
@@ -35,7 +35,7 @@
     lvm_usable_bytes: "{{ lvm_volume_initial_size_bytes | int - (lvm_spare | int) - ((lvm_volume_initial_size_bytes | int * lvm_thin_metadata_percent | float / 100) | int) }}"
   vars:
     lvm_volume_initial_size_bytes: "{{ lvm_volume_initial_size_gb | int * 1024 * 1024 * 1024 }}"
-  when: lvm_mode == 'thin' and lvm_thin_disk == 'root'
+  when: lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'root'
 
 - name: Build PVC details table (prettytable)
   set_fact:
@@ -76,13 +76,13 @@
       #jinja2: trim_blocks: True, lstrip_blocks: True
       === Migration Sizing Report ===
       LVM Space Breakdown:
-        {% if lvm_mode == 'thin' and lvm_thin_disk == 'root' %}
+        {% if lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'root' %}
         Thin pool size:     {{ lvm_total_raw | int | human_readable }}
         Thin metadata:      - {{ lvm_thin_metadata | int | human_readable }}
         {% else %}
         Selected disks raw: {{ lvm_total_raw | int | human_readable }}
         LVM PV metadata:    - {{ lvm_metadata_overhead | int | human_readable }}
-        {% if lvm_mode == 'thin' %}
+        {% if lvm_mode_cached == 'thin' %}
         VG reserved (1%):   - {{ lvm_thin_vg_reserved | int | human_readable }}
         Thin metadata:      - {{ lvm_thin_metadata | int | human_readable }}
         {% endif %}
@@ -109,7 +109,7 @@
       Total target size: {{ pvc_total_target_bytes | int | human_readable(unit='G') }}.
       Available LVM space: {{ lvm_usable_bytes | int | human_readable(unit='G') }}.
       Deficit: {{ (pvc_total_target_bytes | int - lvm_usable_bytes | int) | human_readable(unit='G') }}.
-      {%- if lvm_mode == 'thin' and lvm_thin_disk == 'root' %}
+      {%- if lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'root' %}
       Consider using a custom backup path (-e "backups_path=/path/to/backups") if not already,
       freeing space in cgts-vg, or reducing PVC data before migration.
       {%- else %}

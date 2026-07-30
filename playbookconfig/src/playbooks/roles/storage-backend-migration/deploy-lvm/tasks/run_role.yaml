@@ -7,11 +7,11 @@
 - name: Set LVM VG name
   set_fact:
     lvm_vg_name_cacheable: >-
-      {%- if lvm_mode == 'thin' and lvm_thin_disk == 'dedicated' -%}
+      {%- if lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'dedicated' -%}
         {{ lvm_vg_name }}
-      {%- elif lvm_mode == 'thin' and lvm_thin_disk == 'root' -%}
+      {%- elif lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'root' -%}
         cgts-vg
-      {%- elif lvm_mode == 'thick' -%}
+      {%- elif lvm_mode_cached == 'thick' -%}
         {{ lvm_vg_name }}
       {%- endif -%}
     cacheable: true
@@ -20,8 +20,8 @@
   debug:
     var: lvm_vg_name_cacheable
 
-- name: "Configure {{ lvm_mode }} provisioning for {{ lvm_vg_name_cacheable }}"
-  include_tasks: "{{ lvm_mode }}/main.yaml"
+- name: "Configure {{ lvm_mode_cached }} provisioning for {{ lvm_vg_name_cacheable }}"
+  include_tasks: "{{ lvm_mode_cached }}/main.yaml"
 
 - name: Apply lvm-csi application
   command: system application-apply lvm-csi

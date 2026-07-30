@@ -136,36 +136,41 @@ done
 
 # Restore original reclaimPolicy on new PVs
 echo "Restoring original reclaimPolicy on recreated PVs..."
-while read -r NS PVC_NAME POLICY; do
-    [ -z "${NS}" ] && continue
+if [ ! -f "${RECLAIM_POLICY_MAP}" ]; then
+    echo "  No reclaimPolicy entries found, nothing to restore."
+else
+    while read -r NS PVC_NAME POLICY; do
+        [ -z "${NS}" ] && continue
 
-    # Get the StorageClass binding mode to decide if we should wait
-    SC_NAME=$(kubectl -n "${NS}" get pvc "${PVC_NAME}" -o jsonpath='{.spec.storageClassName}' 2>/dev/null)
-    BIND_MODE=$(kubectl get sc "${SC_NAME}" -o jsonpath='{.volumeBindingMode}' 2>/dev/null)
+        # Get the StorageClass binding mode to decide if we should wait
+        SC_NAME=$(kubectl -n "${NS}" get pvc "${PVC_NAME}" -o jsonpath='{.spec.storageClassName}' 2>/dev/null)
+        BIND_MODE=$(kubectl get sc "${SC_NAME}" -o jsonpath='{.volumeBindingMode}' 2>/dev/null)
 
-    if [ "${BIND_MODE}" = "WaitForFirstConsumer" ]; then
-        echo "  Skipping ${NS}/${PVC_NAME}: StorageClass ${SC_NAME} uses WaitForFirstConsumer"
-        continue
-    fi
+        if [ "${BIND_MODE}" = "WaitForFirstConsumer" ]; then
+            # For export-import, the import-lvm role restores the original
+            # reclaimPolicy after binding. For redeploy, the PVC remains Pending
+            # since no pod mounts it, so the PV uses the SC default reclaimPolicy.
+            echo "  Skipping ${NS}/${PVC_NAME}: StorageClass ${SC_NAME} uses WaitForFirstConsumer"
+            continue
+        fi
 
-    # Wait for PVC to be Bound (up to 150s)
-    for i in {1..30}; do
-        PHASE=$(kubectl -n "${NS}" get pvc "${PVC_NAME}" -o jsonpath='{.status.phase}' 2>/dev/null)
-        [ "${PHASE}" = "Bound" ] && break
-        echo "  Waiting 5 seconds to check bound again for PVC ${PVC_NAME}"
-        sleep 5
-    done
+        # Wait for PVC to be Bound (up to 150s)
+        for i in {1..30}; do
+            PHASE=$(kubectl -n "${NS}" get pvc "${PVC_NAME}" -o jsonpath='{.status.phase}' 2>/dev/null)
+            [ "${PHASE}" = "Bound" ] && break
+            echo "  Waiting 5 seconds to check bound again for PVC ${PVC_NAME}"
+            sleep 5
+        done
 
-    if [ "${PHASE}" != "Bound" ]; then
-        echo "  WARNING: PVC ${NS}/${PVC_NAME} not Bound after timeout, skipping reclaimPolicy restore"
-        continue
-    fi
+        if [ "${PHASE}" != "Bound" ]; then
+            echo "  WARNING: PVC ${NS}/${PVC_NAME} not Bound after timeout, skipping reclaimPolicy restore"
+            continue
+        fi
 
-    NEW_PV=$(kubectl -n "${NS}" get pvc "${PVC_NAME}" -o jsonpath='{.spec.volumeName}')
-    if [ -n "${NEW_PV}" ]; then
-        kubectl patch pv "${NEW_PV}" -p "{\"spec\":{\"persistentVolumeReclaimPolicy\":\"${POLICY}\"}}"
-        echo "  ${NEW_PV} -> reclaimPolicy=${POLICY}"
-    fi
-done < "${RECLAIM_POLICY_MAP}"
-
-rm -f "${RECLAIM_POLICY_MAP}"
+        NEW_PV=$(kubectl -n "${NS}" get pvc "${PVC_NAME}" -o jsonpath='{.spec.volumeName}')
+        if [ -n "${NEW_PV}" ]; then
+            kubectl patch pv "${NEW_PV}" -p "{\"spec\":{\"persistentVolumeReclaimPolicy\":\"${POLICY}\"}}"
+            echo "  ${NEW_PV} -> reclaimPolicy=${POLICY}"
+        fi
+    done < "${RECLAIM_POLICY_MAP}"
+fi

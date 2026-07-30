@@ -4,5 +4,5 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: "Configure thin {{ lvm_thin_disk }} provisioning for {{ lvm_vg_name_cacheable }}"
-  include_tasks: "{{ lvm_thin_disk }}/main.yaml"
+- name: "Configure thin {{ lvm_thin_disk_cached }} provisioning for {{ lvm_vg_name_cacheable }}"
+  include_tasks: "{{ lvm_thin_disk_cached }}/main.yaml"

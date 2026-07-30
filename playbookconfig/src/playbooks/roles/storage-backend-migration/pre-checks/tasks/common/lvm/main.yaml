@@ -7,13 +7,13 @@
 - name: Ensure lvm_mode is defined and valid
   assert:
     that:
-      - lvm_mode is defined
-      - lvm_mode in valid_lvm_modes
+      - lvm_mode_cached is defined
+      - lvm_mode_cached in valid_lvm_modes
     fail_msg: >-
       Invalid or missing lvm_mode.
       Must be one of: {{ valid_lvm_modes | join(', ') }}.
-      Current value: {{ lvm_mode | default('undefined') }}
-    success_msg: "LVM mode validated: {{ lvm_mode }}"
+      Current value: {{ lvm_mode_cached | default('undefined') }}
+    success_msg: "LVM mode validated: {{ lvm_mode_cached }}"
 
 - name: Check if an LVM storage-backend already exists
   become: true
@@ -31,5 +31,5 @@
       and conflicts with the LVM migration.
   when: lvm_backend_check.stdout_lines | length > 0
 
-- name: "Check LVM {{ lvm_mode }} common cases"
-  include_tasks: "{{ lvm_mode }}/main.yaml"
+- name: "Check LVM {{ lvm_mode_cached }} common cases"
+  include_tasks: "{{ lvm_mode_cached }}/main.yaml"

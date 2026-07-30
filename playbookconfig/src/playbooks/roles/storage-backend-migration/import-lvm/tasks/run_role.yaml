@@ -49,3 +49,44 @@
       file:
         path: "{{ tmp_workspace }}"
         state: absent
+
+- name: Restore deferred reclaimPolicy on WaitForFirstConsumer PVs
+  shell: |
+    RECLAIM_POLICY_MAP="/tmp/reclaim-policy-map.txt"
+    if [ ! -f "${RECLAIM_POLICY_MAP}" ]; then
+      echo "No deferred reclaimPolicy entries found, nothing to restore."
+      exit 0
+    fi
+
+    echo "Restoring deferred reclaimPolicy entries..."
+    while read -r NS PVC_NAME POLICY; do
+      [ -z "${NS}" ] && continue
+
+      # Wait for PVC to be Bound (up to 150s)
+      for i in {1..30}; do
+        PHASE=$(kubectl -n "${NS}" get pvc "${PVC_NAME}" -o jsonpath='{.status.phase}' 2>/dev/null)
+        [ "${PHASE}" = "Bound" ] && break
+        echo "  Waiting 5 seconds to check bound again for PVC ${PVC_NAME}"
+        sleep 5
+      done
+
+      if [ "${PHASE}" != "Bound" ]; then
+        echo "  WARNING: PVC ${NS}/${PVC_NAME} not Bound after timeout, skipping reclaimPolicy restore"
+        continue
+      fi
+
+      NEW_PV=$(kubectl -n "${NS}" get pvc "${PVC_NAME}" -o jsonpath='{.spec.volumeName}')
+      if [ -n "${NEW_PV}" ]; then
+        kubectl patch pv "${NEW_PV}" -p "{\"spec\":{\"persistentVolumeReclaimPolicy\":\"${POLICY}\"}}"
+        echo "  ${NEW_PV} -> reclaimPolicy=${POLICY}"
+      fi
+    done < "${RECLAIM_POLICY_MAP}"
+
+    rm -f "${RECLAIM_POLICY_MAP}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: deferred_reclaim_policy_output
+
+- name: Show deferred reclaimPolicy restoration output
+  debug:
+    msg: "{{ deferred_reclaim_policy_output.stdout_lines }}"
