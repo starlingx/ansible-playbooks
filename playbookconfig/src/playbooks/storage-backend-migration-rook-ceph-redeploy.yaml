@@ -54,52 +54,6 @@
       tags: pull-images
       when: execute_pull_images | default(true)
 
-- name: Change drbd and ceph-storage-network scripts to always return OK
-  hosts: all
-  gather_facts: false
-  become: true
-
-  tasks:
-    - name: Force ceph-storage-network script to always return OK
-      replace:
-        path: /etc/init.d/ceph-storage-network
-        regexp: '^exit \$\{RETVAL\}$'
-        replace: 'exit 0'
-      register: ceph_script_patch
-
-    - name: Confirm patch was applied
-      debug:
-        msg: "Script patched successfully"
-      when: ceph_script_patch.changed
-
-    - name: Check if drbd-cephmon guard is already applied
-      ansible.builtin.command:
-        cmd: grep -q "drbd-cephmon deprovision guard" /ostree/1/usr/lib/ocf/resource.d/linbit/drbd
-      register: guard_check
-      failed_when: false
-      changed_when: false
-
-    - name: Apply drbd-cephmon guard patch
-      ansible.builtin.shell: |
-        sed -i '/^case $__OCF_ACTION in$/i \
-        # --- BEGIN drbd-cephmon deprovision guard ---\
-        if [ "${OCF_RESKEY_drbd_resource}" = "drbd-cephmon" ]; then\
-            if ! grep -qr "resource drbd-cephmon" /etc/drbd.d/ 2>/dev/null; then\
-                case $__OCF_ACTION in\
-                    monitor|status)\
-                        ocf_log info "drbd-cephmon: resource not configured, returning NOT_RUNNING"\
-                        exit 7\
-                        ;;\
-                    *)\
-                        ocf_log info "drbd-cephmon: resource not configured, returning SUCCESS for $__OCF_ACTION"\
-                        exit 0\
-                        ;;\
-                esac\
-            fi\
-        fi\
-        # --- END drbd-cephmon deprovision guard ---' /ostree/1/usr/lib/ocf/resource.d/linbit/drbd
-      when: guard_check.rc != 0
-
 - name: Remove unmatched PVCs and related K8s resources
   hosts: active_controller
   gather_facts: false
@@ -154,36 +108,6 @@
 
   roles:
     - role: update-puppet
-
-- name: Revert drbd and ceph-storage-network scripts to original behavior
-  hosts: storages, workers, standby_controller, active_controller
-  gather_facts: false
-  become: true
-
-  tasks:
-    - name: Check if drbd-cephmon guard is present
-      ansible.builtin.command:
-        cmd: grep -q "drbd-cephmon deprovision guard" /ostree/1/usr/lib/ocf/resource.d/linbit/drbd
-      register: guard_check
-      failed_when: false
-      changed_when: false
-
-    - name: Remove drbd-cephmon guard patch
-      ansible.builtin.shell: |
-        sed -i '/^# --- BEGIN drbd-cephmon deprovision guard ---$/,/^# --- END drbd-cephmon deprovision guard ---$/d' /ostree/1/usr/lib/ocf/resource.d/linbit/drbd
-      when: guard_check.rc == 0
-
-    - name: Restore original exit code in ceph-storage-network script
-      replace:
-        path: /etc/init.d/ceph-storage-network
-        regexp: '^exit 0$'
-        replace: 'exit ${RETVAL}'
-      register: ceph_script_revert
-
-    - name: Confirm revert was applied
-      debug:
-        msg: "Script reverted successfully"
-      when: ceph_script_revert.changed
 
 - name: Reinstall Storage nodes as Workers
   hosts: active_controller
