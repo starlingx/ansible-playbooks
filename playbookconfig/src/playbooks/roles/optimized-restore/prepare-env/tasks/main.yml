@@ -403,14 +403,89 @@
         backup_has_rook_user_overrides: "{{ backup_storage_metadata.rook_ceph_overrides.has_user_overrides }}"
         backup_rook_user_overrides_data: "{{ backup_storage_metadata.rook_ceph_overrides.user_overrides_data }}"
 
-    - name: Fail if factory and backup storage backends do not match
+  when: factory_restore
+
+# Analyze conflicts between backup storage metadata and the factory system.
+# This replaces simple binary checks with a structured classification:
+#   - block:   Incompatible condition that prevents restore (e.g., backend
+#              type mismatch, backup filesystem exceeds factory capacity).
+#   - warning: Non-fatal mismatch requiring operator awareness (e.g.,
+#              filesystem not present on factory, backend in unexpected state).
+#   - ignore:  Expected difference handled automatically (e.g., factory FS
+#              larger than backup — DB is updated with factory size).
+# The analysis uses backup_storage_metadata (from detection script)
+# and compares it against the factory's live DB state, providing full
+# visibility into every detected difference and its resolution.
+- name: Analyze storage metadata conflicts
+  block:
+    # The analysis script compares backup metadata against the factory state
+    # and returns a JSON structure with every conflict classified by severity.
+    # It checks: backend type, override compatibility, and storage service
+    # expectations. Filesystem size comparison is handled upstream by
+    # check_backup_factory_data.py.
+    - name: Run storage conflict analysis
+      script: >-
+        analyze_storage_conflicts.py
+        '{{ backup_storage_metadata | to_json }}'
+        '{{ factory_storage_backend }}'
+      register: conflict_analysis_raw
+
+    - name: Parse conflict analysis result
+      set_fact:
+        storage_conflicts: "{{ conflict_analysis_raw.stdout | from_json }}"
+
+    # Log the full summary so operators can see at a glance whether
+    # the restore will proceed and what issues were found.
+    - name: Log conflict analysis summary
+      debug:
+        msg:
+          - "Storage conflict analysis complete."
+          - "Total conflicts: {{ storage_conflicts.summary.total }}"
+          - "Blocking: {{ storage_conflicts.summary.blocking }}"
+          - "Warnings: {{ storage_conflicts.summary.warnings }}"
+          - "Ignored: {{ storage_conflicts.summary.ignored }}"
+          - "Restore allowed: {{ storage_conflicts.restore_allowed }}"
+
+    # Log each severity level separately for clear operator visibility.
+    # Blocking conflicts are the most critical — they explain why restore
+    # will fail. Warnings indicate non-fatal issues that may need post-restore
+    # attention. Ignored items confirm expected differences are handled.
+    - name: Log blocking conflicts
+      debug:
+        msg: "BLOCK [{{ item.id }}]: {{ item.description }}"
+      loop: "{{ storage_conflicts.conflicts | selectattr('severity', 'equalto', 'block') | list }}"
+      loop_control:
+        label: "{{ item.id }}"
+      when: storage_conflicts.summary.blocking > 0
+
+    - name: Log warning conflicts
+      debug:
+        msg: "WARNING [{{ item.id }}]: {{ item.description }}"
+      loop: "{{ storage_conflicts.conflicts | selectattr('severity', 'equalto', 'warning') | list }}"
+      loop_control:
+        label: "{{ item.id }}"
+      when: storage_conflicts.summary.warnings > 0
+
+    - name: Log ignored conflicts
+      debug:
+        msg: "IGNORE [{{ item.id }}]: {{ item.description }}"
+      loop: "{{ storage_conflicts.conflicts | selectattr('severity', 'equalto', 'ignore') | list }}"
+      loop_control:
+        label: "{{ item.id }}"
+      when: storage_conflicts.summary.ignored > 0
+
+    # Only fail when at least one blocking conflict exists.
+    # Warnings and ignored items allow restore to proceed.
+    - name: Fail if blocking storage conflicts detected
       fail:
         msg: >-
-          Storage backend mismatch. Factory system has
-          '{{ factory_storage_backend }}' but backup expects
-          '{{ backup_storage_metadata.primary_backend }}'.
-          Cross-backend restore is not supported.
-      when: factory_storage_backend != backup_storage_metadata.primary_backend
+          Factory restore cannot proceed due to blocking storage conflicts.
+          {{ storage_conflicts.conflicts
+             | selectattr('severity', 'equalto', 'block')
+             | map(attribute='description')
+             | list
+             | join(' | ') }}
+      when: not storage_conflicts.restore_allowed
 
   when: factory_restore
 
