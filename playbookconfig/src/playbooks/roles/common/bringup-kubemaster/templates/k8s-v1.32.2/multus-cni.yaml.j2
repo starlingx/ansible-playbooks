@@ -203,6 +203,7 @@ spec:
           mountPath: /var/opt/cni/bin
         - name: host-run
           mountPath: /host/run
+          mountPropagation: HostToContainer
         - name: host-var-lib-cni-multus
           mountPath: /var/lib/cni/multus
         - name: host-var-lib-kubelet
