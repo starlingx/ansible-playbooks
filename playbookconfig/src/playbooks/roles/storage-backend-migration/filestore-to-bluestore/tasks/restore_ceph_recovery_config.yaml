@@ -1,0 +1,19 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# Restore original Ceph recovery configuration.
+# Uses both methods:
+#   - ceph config rm: removes override from monitor DB (clean state)
+#   - ceph tell osd.* config unset: reverts running OSDs to defaults
+
+- name: Restore recovery config (remove DB overrides + revert runtime)
+  shell: |
+    set -e
+    {% for key in ceph_recovery_tuning_profile %}
+    ceph config rm osd {{ key }}
+    ceph tell 'osd.*' config unset {{ key }}
+    {% endfor %}
+  delegate_to: "{{ system.active_controller }}"
