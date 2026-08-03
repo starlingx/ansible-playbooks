@@ -40,6 +40,12 @@ apiserver_extra_args_defaults:
   encryption-provider-config: "{{ encryption_provider_config }}"
   default-not-ready-toleration-seconds: "30"
   default-unreachable-toleration-seconds: "30"
+  # Workaround for upstream k8s issue #140102: disable WebSocket streaming
+  # for exec/attach/port-forward to avoid spurious ERROR logs in kube-apiserver.
+  # Falls back to SPDY protocol which works identically.
+  # These are Beta feature gates (GA target: K8s 1.37).
+  # REMOVE this once upstream fix (PR#140794) is picked up.
+  feature-gates: "TranslateStreamCloseWebsocketRequests=false,PortForwardWebsockets=false"
   event-ttl: "24h"
   audit-log-path: "{{ audit_log_root }}{{audit_log_filename}}"
   audit-log-maxage: "3"

@@ -330,7 +330,8 @@
 - name: Combine k8s user overrides and default config parameters
   set_fact:
     apiserver_extra_args: "{{ apiserver_extra_args_defaults \
-                          | combine({ 'feature-gates': apiserver_feature_gates|default(omit) }, \
+                          | combine({ 'feature-gates': apiserver_feature_gates } \
+                          if apiserver_feature_gates is defined else {}, \
                           apiserver_extra_args|default({})) }}"
     apiserver_extra_volumes: "{{ apiserver_extra_volumes_defaults + apiserver_extra_volumes }}"
     controllermanager_extra_args: "{{ controllermanager_extra_args_defaults \
