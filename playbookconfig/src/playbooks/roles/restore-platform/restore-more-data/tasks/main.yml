@@ -202,7 +202,6 @@
   - name: Check connectivity and add remote SSH public keys to known_hosts
     include_role:
       name: common/check-connectivity
-    become: no
     when: inventory_hostname != 'localhost'
   when: check_ssh_dir.rc is defined and check_ssh_dir.rc == 0
 
