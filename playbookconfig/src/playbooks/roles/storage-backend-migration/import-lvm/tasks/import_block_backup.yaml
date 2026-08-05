@@ -10,12 +10,22 @@
     namespace: "{{ generic_pvc_namespace }}"
 
 - name: Import block backups
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  vars:
+    batch_pod_label: "migration-import-block-batch"
   block:
+    - name: Delete any previous {{ batch_pod_label }} pods before starting
+      command: "kubectl delete pods -n {{ generic_pvc_namespace }} -l app={{ batch_pod_label }} --ignore-not-found=true"
+
     - name: Import block backups for namespace {{ generic_pvc_namespace }} in batches
       include_tasks: import_block_backup_batch.yaml
       loop: "{{ generic_pvc_list | batch(pvc_batch_size | int) | list }}"
       loop_control:
         loop_var: batch_pvcs
+
+    - name: Ensure all {{ batch_pod_label }} pods are terminated
+      command: "kubectl delete pods --all-namespaces -l app={{ batch_pod_label }} --ignore-not-found=true"
   always:
     - name: Delete registry secret
       command: "kubectl delete -f {{ tmp_workspace }}/secret-migration-registry-local.yaml --ignore-not-found=true"

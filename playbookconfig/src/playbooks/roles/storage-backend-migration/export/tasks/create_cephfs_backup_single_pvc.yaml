@@ -12,10 +12,10 @@
     BKP_FILE_HOST="${CEPHFS_BACKUP_DIR}/${BACKUP_NAME}"
 
     echo "Starting backup of /data/{{ pvc.name }}/..."
-    kubectl exec -n {{ cephfs_pvc_namespace }} {{ batch_pod_name }} -- dar -c "$BKP_FILE_POD" -R "/data/{{ pvc.name }}/" -z -ah -Q || { echo "ERROR: dar backup failed, possibly out of space"; exit 1; }
+    kubectl exec -n {{ cephfs_pvc_namespace }} {{ batch_pod_name }} -- dar -c "$BKP_FILE_POD" -R "/data/{{ pvc.name }}/" -z -ah -Q -wa || { echo "ERROR: dar backup failed, possibly out of space"; exit 1; }
 
     echo "Verifying backup integrity..."
-    kubectl exec -n {{ cephfs_pvc_namespace }} {{ batch_pod_name }} -- dar -t "$BKP_FILE_POD" -Q || { echo "ERROR: dar integrity check failed"; exit 1; }
+    kubectl exec -n {{ cephfs_pvc_namespace }} {{ batch_pod_name }} -- dar -t "$BKP_FILE_POD" -Q -wa || { echo "ERROR: dar integrity check failed"; exit 1; }
   environment:
     KUBECONFIG: "{{ kubeconfig }}"
     PVC_NAME: "{{ cephfs_pvc_namespace }}-{{ pvc.name }}"
