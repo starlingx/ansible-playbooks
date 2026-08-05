@@ -45,6 +45,22 @@ import json
 import sys
 
 
+# The database stores the rook-ceph backend type as 'ceph-rook',
+# while the playbook fact factory_storage_backend uses 'rook-ceph'
+# (derived from flag file .node_rook_configured). Normalize both
+# to a canonical form for comparison.
+BACKEND_ALIASES = {
+    'ceph-rook': 'rook-ceph',
+}
+
+
+def normalize_backend(value):
+    """Normalize backend name to canonical form."""
+    if value is None:
+        return None
+    return BACKEND_ALIASES.get(value, value)
+
+
 def analyze_backend_conflicts(backup_metadata, factory_backend):
     """Check backend type compatibility.
 
@@ -54,7 +70,8 @@ def analyze_backend_conflicts(backup_metadata, factory_backend):
       - backup backend state is not 'configured' -> warning
     """
     conflicts = []
-    primary = backup_metadata.get('primary_backend')
+    primary = normalize_backend(backup_metadata.get('primary_backend'))
+    factory_backend = normalize_backend(factory_backend)
 
     if primary is None:
         conflicts.append({
@@ -111,6 +128,7 @@ def analyze_override_conflicts(backup_metadata, factory_backend):
         (covered by backend mismatch, but explicit for clarity)
     """
     conflicts = []
+    factory_backend = normalize_backend(factory_backend)
     rook_ov = backup_metadata.get('rook_ceph_overrides', {})
 
     if rook_ov.get('has_user_overrides') and factory_backend == 'lvm':
@@ -149,6 +167,7 @@ def analyze_services_conflicts(backup_metadata, factory_backend):
         factory backend type -> warning
     """
     conflicts = []
+    factory_backend = normalize_backend(factory_backend)
     expected_services = {
         'rook-ceph': 'ceph',
         'lvm': 'block-storage',
