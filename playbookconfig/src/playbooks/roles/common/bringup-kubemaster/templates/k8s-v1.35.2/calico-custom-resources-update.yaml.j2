@@ -1,7 +1,7 @@
 ---
-# Migration-friendly Installation CR.
-# The operator auto-detects existing Calico settings from kube-system
-# and migrates resources to calico-system namespace.
+# Installation CR for Calico upgrade/migration.
+# Provides explicit nodeAddressAutodetection to prevent the operator
+# from defaulting to firstFound on IPv6-only systems.
 # For more information, see: https://docs.tigera.io/calico/3.31/operations/operator-migration
 apiVersion: operator.tigera.io/v1
 kind: Installation
@@ -12,3 +12,12 @@ spec:
   registry: {{ local_registry }}/quay.io
   imagePullSecrets:
     - name: {{ registry_local_secret_name | default('registry-local-secret') }}
+  calicoNetwork:
+{% if cluster_network_ipv4 %}
+    nodeAddressAutodetectionV4:
+      canReach: {{ calico_ip4_autodetect_host }}
+{% endif %}
+{% if cluster_network_ipv6 %}
+    nodeAddressAutodetectionV6:
+      canReach: {{ calico_ip6_autodetect_host }}
+{% endif %}
