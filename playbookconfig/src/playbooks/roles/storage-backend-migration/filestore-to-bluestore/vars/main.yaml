@@ -21,3 +21,16 @@ script_files:
   - wait_ceph_pg_states.py
   - wait_ceph_drain.py
   - wait_ceph_recovery.py
+
+# Ceph recovery tuning parameters.
+# These are applied during OSD migration to speed up drain and recovery,
+# then restored to their original values afterward.
+ceph_recovery_tuning_profile:
+  osd_recovery_sleep_hdd: "0"
+  osd_recovery_sleep_hybrid: "0"
+  osd_recovery_op_priority: "63"
+  osd_max_backfills: "8"
+  osd_recovery_max_active: "8"
+  osd_recovery_max_single_start: "8"
+  osd_backfill_scan_min: "128"
+  osd_backfill_scan_max: "1024"

@@ -1,0 +1,19 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# Apply optimized Ceph recovery tuning profile.
+# Uses both methods to ensure coverage:
+#   - ceph config set: persistent in monitor DB (restarted OSDs pick it up)
+#   - ceph tell osd.*: immediate effect on currently running OSDs
+
+- name: Apply recovery tuning profile (persistent + runtime)
+  shell: |
+    set -e
+    {% for key, value in ceph_recovery_tuning_profile.items() %}
+    ceph config set osd {{ key }} {{ value }}
+    ceph tell 'osd.*' config set {{ key }} {{ value }}
+    {% endfor %}
+  delegate_to: "{{ system.active_controller }}"

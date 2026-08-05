@@ -42,20 +42,28 @@
 - name: Remove pmon.d files
   include_tasks: "{{ role_path_common }}/tasks/remove_pmon_files.yaml"
 
-- name: Migrate one OSD at a time
-  include_tasks: migrate_one_by_one_osd.yaml
-  loop: "{{ hostvars[system.active_controller]['ceph_disks_by_host'][inventory_hostname] }}"
-  loop_control:
-    label: "Host {{ inventory_hostname }} OSD id = {{ item.osd_id }}"
-  when:
-    - system.system_deployment == "AIO-SX"
-    - item.osd_objectstore == "filestore"
+- name: Apply optimized Ceph recovery tuning
+  include_tasks: apply_ceph_recovery_tuning.yaml
 
-- name: Migrate all OSDs from a host at a time
-  include_tasks: migrate_multi_osds.yaml
-  vars:
-    host_osd_info: "{{ hostvars[system.active_controller]['ceph_disks_by_host'][inventory_hostname] }}"
-  when: system.system_deployment != "AIO-SX"
+- name: Migrate OSDs to bluestore
+  block:
+    - name: Migrate one OSD at a time
+      include_tasks: migrate_one_by_one_osd.yaml
+      loop: "{{ hostvars[system.active_controller]['ceph_disks_by_host'][inventory_hostname] }}"
+      loop_control:
+        label: "Host {{ inventory_hostname }} OSD id = {{ item.osd_id }}"
+      when:
+        - system.system_deployment == "AIO-SX"
+        - item.osd_objectstore == "filestore"
+
+    - name: Migrate all OSDs from a host at a time
+      include_tasks: migrate_multi_osds.yaml
+      vars:
+        host_osd_info: "{{ hostvars[system.active_controller]['ceph_disks_by_host'][inventory_hostname] }}"
+      when: system.system_deployment != "AIO-SX"
+  always:
+    - name: Restore original Ceph recovery config
+      include_tasks: restore_ceph_recovery_config.yaml
 
 - name: Fix ceph runtime directory for root user
   file:
