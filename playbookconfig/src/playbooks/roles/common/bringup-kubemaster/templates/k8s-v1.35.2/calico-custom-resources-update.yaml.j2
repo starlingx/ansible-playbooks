@@ -21,3 +21,9 @@ spec:
     nodeAddressAutodetectionV6:
       canReach: {{ calico_ip6_autodetect_host }}
 {% endif %}
+  cni:
+    type: Calico
+    ipam:
+      type: Calico
+    binDir: {{ kubelet_cni_bin_dir | default('/var/opt/cni/bin') }}
+    confDir: /etc/cni/net.d
