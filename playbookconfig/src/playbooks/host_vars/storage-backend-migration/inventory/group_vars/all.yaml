@@ -13,6 +13,7 @@ common_images:
   dar_backup: registry.local:9001/docker.io/per2jensen/dar-backup:0.5.26-2
 
 rook_specific_images:
+  ceph_csi_operator: registry.local:9001/quay.io/cephcsi/ceph-csi-operator:v0.4.1
   csi_attacher: registry.local:9001/registry.k8s.io/sig-storage/csi-attacher:v4.8.1
   cephcsi: registry.local:9001/quay.io/cephcsi/cephcsi:v3.15.0
   csi_provisioner: registry.local:9001/registry.k8s.io/sig-storage/csi-provisioner:v5.2.0
