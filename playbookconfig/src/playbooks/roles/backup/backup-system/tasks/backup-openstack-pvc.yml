@@ -1,0 +1,158 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role exists to make a snapshot of a persistent volume claim and save its handle.
+#
+
+- name: Perform OpenStack PVC snapshot
+  block:
+    - name: Get PVC storage provisioner
+      shell: >-
+        kubectl -n openstack get pvc {{ pvc_name }}
+        -o jsonpath='{.metadata.annotations.volume\.kubernetes\.io/storage-provisioner}'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: storage_provisioner
+
+    - name: Get PVC access modes
+      shell: kubectl -n openstack get pvc {{ pvc_name }} -o jsonpath='{.spec.accessModes}'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: access_modes_json
+
+    - name: Build access mode list
+      set_fact:
+        access_modes: "{{ access_modes_json.stdout | from_json }}"
+
+    - name: Get PVC snapshot class
+      shell: >-
+        kubectl get volumesnapshotclass
+        -o jsonpath='{.items[?(@.driver=="{{ storage_provisioner.stdout }}")].metadata.name}'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: snapshot_class
+
+    - name: Fail if no snapshot class found for provisioner
+      fail:
+        msg: >-
+          No VolumeSnapshotClass found for storage provisioner
+          '{{ storage_provisioner.stdout }}'. Cannot snapshot PVC '{{ pvc_name }}'.
+      when: snapshot_class.stdout | length == 0
+
+    - name: Get current date/time
+      set_fact:
+        snap_ts: "{{ now(fmt='%Y%m%d%H%M%S') }}"
+
+    - name: Compile snapshot name
+      set_fact:
+        snapshot_name: "{{ pvc_name }}-snap-{{ snap_ts }}"
+
+    - name: Create tmp file for volume snapshot
+      tempfile:
+        state: file
+        prefix: tmp_volume_snapshot_
+        suffix: .yml
+        path: /tmp/
+      register: tmp_volume_snapshot
+
+    - name: Save volume snapshot manifest to file
+      copy:
+        dest: "{{ tmp_volume_snapshot.path }}"
+        content: |
+          apiVersion: snapshot.storage.k8s.io/v1
+          kind: VolumeSnapshot
+          metadata:
+            name: "{{ snapshot_name }}"
+            namespace: openstack
+          spec:
+            volumeSnapshotClassName: "{{ snapshot_class.stdout }}"
+            source:
+              persistentVolumeClaimName: {{ pvc_name }}
+        mode: 0640
+
+    - name: Create volume snapshot
+      command: kubectl apply -f {{ tmp_volume_snapshot.path }}
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Wait for snapshot to be ready
+      command: >-
+        kubectl wait volumesnapshot/"{{ snapshot_name }}" -n openstack
+        --for=jsonpath='{.status.readyToUse}'=true
+        --timeout={{ pvc_snapshot_timeout | default('300') }}s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Get VSC
+      shell: >-
+        kubectl get volumesnapshot "{{ snapshot_name }}" -n openstack
+        -o jsonpath='{.status.boundVolumeSnapshotContentName}'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: snapshot_vsc
+
+    - name: Capture snapshot handle
+      shell: >-
+        kubectl get volumesnapshotcontent "{{ snapshot_vsc.stdout }}"
+        -o jsonpath='{.status.snapshotHandle}'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: snapshot_handle
+
+    - name: Capture storage class
+      shell: >-
+        kubectl get pvc {{ pvc_name }} -n openstack
+        -o jsonpath='{.spec.storageClassName}'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: pvc_storage_class
+
+    - name: Capture PVC size
+      shell: >-
+        kubectl get pvc {{ pvc_name }} -n openstack
+        -o jsonpath='{.spec.resources.requests.storage}'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: pvc_size
+
+    - name: Patch VSC to retain snapshot data
+      command: >-
+        kubectl patch volumesnapshotcontent "{{ snapshot_vsc.stdout }}"
+        --type=merge -p '{"spec":{"deletionPolicy":"Retain"}}'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Create PVC info dict
+      set_fact:
+        pvc_info:
+          snapshot_name: "{{ snapshot_name }}"
+          snapshot_handle: "{{ snapshot_handle.stdout }}"
+          snapshot_class: "{{ snapshot_class.stdout }}"
+          storage_provisioner: "{{ storage_provisioner.stdout }}"
+          pvc_size: "{{ pvc_size.stdout }}"
+          pvc_storage_class: "{{ pvc_storage_class.stdout }}"
+          access_modes: "{{ access_modes }}"
+
+    - name: Record PVC info for {{ pvc_name }}
+      set_fact:
+        pvc_info_dict: "{{ pvc_info_dict | combine({ pvc_name: pvc_info }) }}"
+
+  rescue:
+    - name: Warn about OpenStack PVC snapshot failure
+      debug:
+        msg: >-
+          [WARNING] Failed to snapshot OpenStack PVC '{{ pvc_name }}'.
+          This PVC will NOT be included in the backup and its data
+          will be lost on restore.
+
+  always:
+    - name: Delete temporary files
+      file:
+        path: "{{ tmp_volume_snapshot.path }}"
+        state: absent
+      become: yes
+      when: tmp_volume_snapshot is defined and tmp_volume_snapshot.path is defined

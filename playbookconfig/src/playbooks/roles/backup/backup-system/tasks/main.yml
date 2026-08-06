@@ -421,6 +421,49 @@
         when: openstack_status.stdout == "applied"
       when: check_mariadb_pod.rc != 0
 
+    - name: Perform OpenStack PVC snapshots
+      block:
+        - name: Get OpenStack PVCs with keep resource policy
+          shell: |-
+            FILTER='{range .items[?(@.metadata.annotations'
+            FILTER+='\.helm\.sh/resource-policy=="keep")]}'
+            FILTER+='{.metadata.name}{"\n"}{end}'
+            kubectl -n openstack get pvc -o jsonpath="${FILTER}"
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          register: pvc_keep_lines
+
+        - name: Build OpenStack PVC list from keep-annotated PVCs
+          set_fact:
+            pvc_list: >-
+              {{ pvc_keep_lines.stdout_lines
+                 | reject('eq', '') | list }}
+
+        - name: Create variable to store PVC info
+          set_fact:
+            pvc_info_dict: { }
+
+        - name: Iterate over PVCs
+          include_tasks: backup-openstack-pvc.yml
+          loop: "{{ pvc_list }}"
+          loop_control:
+            loop_var: pvc_name
+
+        - name: Set PVC info dict file path
+          set_fact:
+            pvc_info_dict_file: "{{ tempdir.path }}/pvc_info.yml"
+
+        - name: Create PVC info dict file
+          file:
+            path: "{{ pvc_info_dict_file }}"
+            state: touch
+
+        - name: Save PVC info dict to file {{ pvc_info_dict_file }}
+          copy:
+            dest: "{{ pvc_info_dict_file }}"
+            content: "{{ pvc_info_dict | to_nice_yaml(indent=2) }}"
+            mode: 0640
+
     # In order to restore only the OpenStack application, the user needs to manually
     # remove, delete and upload the application.
     # This procedure will make the helm overrides data that is
@@ -593,6 +636,7 @@
           - "{{ helm_overrides_sqldump_dir.path }}"
           - "{{ fluxcd_permdir }}/{{ openstack_app_name }}"
           - "{{ helm_charts_permdir }}/starlingx"
+          - "{{ pvc_info_dict_file }}"
         register: size_output_openstack
 
       # Estimate the OpenStack backup size.
@@ -958,6 +1002,7 @@
         {{ helm_charts_permdir }}/starlingx
         {{ mariadb_dir.path }}
         {{ helm_overrides_sqldump_dir.path }}
+        {{ pvc_info_dict_file }}
         2> /dev/null)
       # Changing the failed_when behavior to prevent the backup to fail on "file changed as we read it", which
       # makes tar return 1
