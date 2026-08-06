@@ -196,9 +196,9 @@
       pgsql_size: 10
       platform_size: 10
       etcd_size: 5
-      dockerdistribution_size: 16
+      dockerdistribution_size: "{{ docker_distribution_fs_size | default(16) }}"
       backup_size: 20
-      docker_size: 40
+      docker_size: "{{ docker_fs_size | default(40) }}"
       kubelet_size: 10
       scratch_size: 16
     when: root_disk_size|int >= minimum_small_root_disk_size
