@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023, 2025 Wind River Systems, Inc.
+# Copyright (c) 2022-2023, 2025-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -31,7 +31,7 @@
         restore_failed_backup_missing_ipmi_data: "{{ restore_failed_backup_missing_ipmi_data | default('cc10f3') }}"
         restore_failed_images_missing_ipmi_data: "{{ restore_failed_images_missing_ipmi_data | default('cc10f4') }}"
         restore_failed_both_missing_ipmi_data: "{{ restore_failed_both_missing_ipmi_data | default('cc10f5') }}"
-        ipmi_monitor_enabled: "{{ ipmi_sel_event_monitoring | default(true) }}"
+        ipmi_monitor_enabled: "{{ ipmi_sel_event_monitoring | default(true) | bool }}"
 
     # Auto or factory restore are triggered automatically inside the subcloud, so we just
     # need to monitor the IPMI SEL logs and wait for the restore to complete or fail
