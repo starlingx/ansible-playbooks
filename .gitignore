@@ -31,3 +31,5 @@ releasenotes/build
 
 # Api Ref documentation
 api-ref/build/
+UTCoverage/
+DEVELOPER_ACTION_REPORT.md

@@ -1,0 +1,13 @@
+- hosts: all
+  tasks:
+    - name: Check security report exists
+      stat:
+        path: "{{ zuul.project.src_dir }}/UTCoverage/security_report.txt"
+      register: security_report_stat
+
+    - name: Upload security report
+      synchronize:
+        src: "{{ zuul.project.src_dir }}/UTCoverage/security_report.txt"
+        dest: "{{ zuul.executor.log_root }}/security_report.txt"
+        mode: pull
+      when: security_report_stat.stat.exists

@@ -1,0 +1,25 @@
+[run]
+omit =
+    */tests/*
+    */test_*
+    */.tox/*
+    */conftest.py
+    */__init__.py
+    # Hardware/system dependent - requires real devices/mounts
+    */check_root_disk_size.py
+    */prepare_ceph_partitions.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__
+    raise NotImplementedError
+    # System I/O - requires real hardware/devices
+    os\.readlink
+    os\.path\.exists
+    open\(.*\/proc
+    open\(.*\/dev
+    subprocess\.check_output
+    subprocess\.run
+    subprocess\.call
+fail_under = 85
