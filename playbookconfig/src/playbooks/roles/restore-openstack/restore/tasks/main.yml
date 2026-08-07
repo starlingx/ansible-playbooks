@@ -202,13 +202,13 @@
   - name: Create MariaDB database
     shell: >-
       {{ kube_cmd_prefix }}
-      'exec mysql -uroot -p"$MYSQL_DBADMIN_PASSWORD" -e"create database {{ (item|basename).split('.')[0] }}"'
+      'exec mariadb -uroot -p"$MYSQL_DBADMIN_PASSWORD" -e"create database {{ (item|basename).split('.')[0] }}"'
     loop: "{{ mariadb_files.stdout_lines }}"
 
   - name: Restore MariaDB data
     shell: >-
       {{ kube_cmd_prefix }}
-      'exec mysql -uroot -p"$MYSQL_DBADMIN_PASSWORD" {{ (item|basename).split('.')[0] }}'
+      'exec mariadb -uroot -p"$MYSQL_DBADMIN_PASSWORD" {{ (item|basename).split('.')[0] }}'
       < {{ item }}
     loop: "{{ mariadb_files.stdout_lines }}"
 
