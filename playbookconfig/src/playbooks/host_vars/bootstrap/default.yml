@@ -570,6 +570,13 @@ applications: []
 # any registry configured in sysinv e.g. fluxcd/helm-controller, ubuntu
 add_docker_prefix: False
 
+# Docker filesystem sizes (in GiB)
+# These values can be overridden to accommodate larger container image sets.
+# docker_fs_size: size of /var/lib/docker filesystem (default: 40)
+# docker_distribution_fs_size: size of /var/lib/docker-distribution filesystem (default: 16)
+# docker_fs_size: 40
+# docker_distribution_fs_size: 16
+
 # Kernel Configurations ( only applies to AIO systems)
 # Support for the following kernels: 'standard' (default) or 'lowlatency'
 kernel: standard
