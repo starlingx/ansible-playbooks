@@ -20,3 +20,5 @@ staging_dir: /opt/backups
 # Flag file to indicate if ceph or rook backend is present
 ceph_backend_flag: "{{ platform_conf_path }}/.node_ceph_configured"
 rook_backend_flag: "{{ platform_conf_path }}/.node_rook_configured"
+
+lvm_csi_backend_flag: "{{ platform_conf_path }}/.node_lvm_csi_configured"
