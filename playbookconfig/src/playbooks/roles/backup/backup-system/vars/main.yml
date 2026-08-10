@@ -1,6 +1,11 @@
 ---
 kube_config_dir: /etc/kubernetes/admin.conf
 
+# Resolved through the 'current' symlink so the application version does not
+# need to be known here. When absent, the inline backup logic runs instead.
+app_backup_playbook: >-
+  /opt/platform/ansible/{{ software_version }}/{{ openstack_app_name }}/current/backup-restore/backup_openstack.yml
+
 skip_os_dbs:
   - 'Database'
   - 'information_schema'

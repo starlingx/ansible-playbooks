@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -12,8 +12,41 @@
   vars_files:
     - host_vars/backup-restore/default.yml
 
-  # Main play
+  vars:
+    app_restore_playbook: >-
+      /opt/platform/ansible/{{ software_version }}/{{ openstack_app_name }}/current/backup-restore/restore_openstack.yml
+
+  pre_tasks:
+    - name: Prepare the environment
+      import_role:
+        name: common/prepare-env
+
+    # Required before the delegation check below: this role sets
+    # software_version, which the application playbook path depends on.
+    # It is idempotent and is imported again by restore-openstack/prepare-env
+    # in the fallback path.
+    - name: Perform generic B&R environment validation
+      import_role:
+        name: backup-restore/prepare-env
+
+    - name: Locate application-owned restore playbook
+      stat:
+        path: "{{ app_restore_playbook }}"
+      register: app_restore_playbook_stat
+
+    # include_tasks, not import_tasks: the path must be resolved at runtime.
+    # import_tasks resolves it at parse time, before the when condition is
+    # evaluated, so the fallback below would never be reachable when the
+    # application does not ship its own playbooks.
+    - name: Delegate to application-owned restore playbook
+      include_tasks: "{{ app_restore_playbook }}"
+      when: app_restore_playbook_stat.stat.exists
+
+  # Main play. Skipped entirely when the restore was delegated above.
   roles:
-    - { role: common/prepare-env }
-    - { role: restore-openstack/prepare-env, when: not restore_openstack_continue|bool }
-    - { role: restore-openstack/restore, become: yes }
+    - role: restore-openstack/prepare-env
+      when: not app_restore_playbook_stat.stat.exists and
+            not restore_openstack_continue|bool
+    - role: restore-openstack/restore
+      become: yes
+      when: not app_restore_playbook_stat.stat.exists
