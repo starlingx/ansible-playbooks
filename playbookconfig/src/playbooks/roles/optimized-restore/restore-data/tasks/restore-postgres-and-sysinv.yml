@@ -302,33 +302,27 @@
 
   when: not (factory_restore | default(false))
 
-# Start SM, then use sm-start to bring up
-# services, during factory restore
-- name: Start up SM and services during factory restore
+# Start SM after removing unmanaged flags during backup restore on
+# factory installed system (restore without reinstall). Removing them
+# before SM starts ensures go-active runs real enable actions for all
+# services in dependency order.
+- name: Start up SM and services during restore on factory installed system
   block:
-    - name: Start SM services
-      command: pmon-start sm
-
-    # pmon-start SM but its API socket
-    # takes a few seconds to be ready. sm-start silently fails with
-    # rc=0 and "socket error" in stdout if sent before the socket
-    # is listening. Retry until the message is actually delivered.
-    - name: Start/ manage postgres via SM
-      command: sm-start service postgres
-      register: sm_start_postgres
-      retries: 10
-      delay: 2
-      until: "'socket error' not in sm_start_postgres.stdout"
-
-    - name: Start services via SM
-      command: "sm-start service {{ item }}"
+    - name: Remove unmanaged flags for stopped services
+      file:
+        path: "/var/run/sm/services/{{ item }}.unmanaged"
+        state: absent
       loop:
+        - postgres
         - rabbit
         - sysinv-conductor
         - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
         - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
         - haproxy
         - mtc-agent
+
+    - name: Start SM services
+      command: pmon-start sm
 
     # During factory restore without reinstall Keystone caches user
     # lookups and token validation results in memcached via oslo_cache.
