@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2025 Wind River Systems, Inc.
+# Copyright (c) 2019-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -396,12 +396,12 @@
           kube_cmd_prefix: "kubectl --kubeconfig={{ kube_config_dir }} exec -i {{ mariadb_pod }} -n openstack -- bash -c "
 
       - name: Show databases
-        shell: "{{ kube_cmd_prefix }} 'exec mysql -uroot -p\"$MYSQL_DBADMIN_PASSWORD\" -e\"show databases\"'"
+        shell: "{{ kube_cmd_prefix }} 'exec mariadb -uroot -p\"$MYSQL_DBADMIN_PASSWORD\" -e\"show databases\"'"
         register: databases
 
       - name: Backup mariadb
         shell: >-
-          {{ kube_cmd_prefix }} 'exec mysqldump -uroot -p"$MYSQL_DBADMIN_PASSWORD" {{ item }}' >
+          {{ kube_cmd_prefix }} 'exec mariadb-dump -uroot -p"$MYSQL_DBADMIN_PASSWORD" {{ item }}' >
           {{ mariadb_dir.path }}/{{ item }}.mariadb.data
         loop: "{{ databases.stdout_lines | difference(skip_os_dbs) }}"
 
