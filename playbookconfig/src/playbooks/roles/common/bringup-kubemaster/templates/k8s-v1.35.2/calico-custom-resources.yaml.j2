@@ -54,6 +54,23 @@ spec:
     nodeAddressAutodetectionV6:
       canReach: {{ calico_ip6_autodetect_host }}
 {% endif %}
+  typhaDeployment:
+    spec:
+      template:
+        spec:
+          nodeSelector:
+            kubernetes.io/os: linux
+            node-role.kubernetes.io/control-plane: ""
+          tolerations:
+            - key: node-role.kubernetes.io/control-plane
+              effect: NoSchedule
+              operator: Exists
+            - key: node-role.kubernetes.io/master
+              effect: NoSchedule
+              operator: Exists
+            - key: node.kubernetes.io/not-ready
+              effect: NoSchedule
+              operator: Exists
   calicoNodeDaemonSet:
     spec:
       template:
