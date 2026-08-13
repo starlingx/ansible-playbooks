@@ -35,6 +35,8 @@
     {% for v in restore_exclude_items %}
     --exclude {{ v | quote }}
     {% endfor %}
+    --exclude etc/shadow
+    --exclude etc/shadow-
 
 - name: Set lvm-csi backend flag path
   set_fact:

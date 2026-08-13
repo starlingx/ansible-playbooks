@@ -43,7 +43,6 @@
 
 - set_fact:
     _restore_remove_items:
-      - "{{ platform_backup_fqpn }}"
       - "{{ registry_backup_fqpn|default('') }}"
   when: initial_backup_dir != target_backup_dir
 
@@ -154,3 +153,17 @@
     - software-agent
   become: yes
   when: factory_restore | default(false)
+
+# On Debian Trixie, sudo invalidates cached credentials when /etc/shadow
+# is modified. If the current system password differs from the backup
+# password (e.g., factory restore, or password changed after install),
+# overwriting shadow mid-restore causes "Duplicate become password prompt"
+# errors. Restore shadow after all become-dependent tasks complete.
+# This task must remain last in the playbook.
+- name: Restore shadow and cleanup backup
+  shell: |
+    tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }} --overwrite \
+      etc/shadow etc/shadow-
+    {% if initial_backup_dir != target_backup_dir %}
+    rm -f {{ platform_backup_fqpn }}
+    {% endif %}
