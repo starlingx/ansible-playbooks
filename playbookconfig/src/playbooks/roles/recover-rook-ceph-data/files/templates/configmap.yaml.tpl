@@ -36,13 +36,18 @@ data:
     TIME_WAIT_FOR_STATUS="30s"
 
     # Checks the k8s API for 15 minutes. After the timeout, rook-ceph recovery will fail.
+    # Uses a real API request to confirm the API server can process operations,
+    # not just respond to lightweight health probes.
+    # Returns 0 if healthy on first try, 1 if it had to wait for recovery.
     check_k8s_health(){
       local cmd_output rc
       for i in {1..180}
       do
-        cmd_output=$(kubectl get --raw='/readyz' 2>&1)
+        cmd_output=$(kubectl get namespace rook-ceph 2>&1)
         rc=$?
-        if [ $rc -eq 0 ] && [ "$cmd_output" == "ok" ]; then
+        if [ $rc -eq 0 ]; then
+          # Return 1 if we had to wait (i > 1), 0 if healthy immediately
+          [ $i -gt 1 ] && return 1
           return 0
         fi
         sleep 5
@@ -59,8 +64,11 @@ data:
         shift
       fi
 
-      # Try running the command 3 times
-      for i in {1..3}; do
+      # Try running the command up to 3 times. If a failure is due to API server
+      # unavailability (detected by check_k8s_health needing to wait), reset the
+      # retry counter since the failure was not caused by the command itself.
+      local retries=0
+      while [ $retries -lt 3 ]; do
         cmd_output=$("$@" 2>&1)
         rc=$?
         echo "$cmd_output"
@@ -77,7 +85,12 @@ data:
         elif [[ "$cmd_output" =~ "no objects passed" ]]; then
           return 0
         fi
-        check_k8s_health
+        if ! check_k8s_health; then
+          # API server was unavailable, reset retries
+          retries=0
+        else
+          retries=$((retries + 1))
+        fi
       done
       fail "command '$@' failed (rc=${rc}): ${cmd_output}"
     }
