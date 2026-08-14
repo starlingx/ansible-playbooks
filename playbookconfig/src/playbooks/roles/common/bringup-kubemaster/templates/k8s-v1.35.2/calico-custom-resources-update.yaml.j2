@@ -27,3 +27,20 @@ spec:
       type: Calico
     binDir: {{ kubelet_cni_bin_dir | default('/var/opt/cni/bin') }}
     confDir: /etc/cni/net.d
+  typhaDeployment:
+    spec:
+      template:
+        spec:
+          nodeSelector:
+            kubernetes.io/os: linux
+            node-role.kubernetes.io/control-plane: ""
+          tolerations:
+            - key: node-role.kubernetes.io/control-plane
+              effect: NoSchedule
+              operator: Exists
+            - key: node-role.kubernetes.io/master
+              effect: NoSchedule
+              operator: Exists
+            - key: node.kubernetes.io/not-ready
+              effect: NoSchedule
+              operator: Exists
