@@ -263,7 +263,7 @@
       become: yes
       when:
         - factory_restore | default(false)
-        - factory_storage_backend | default('') == 'rook-ceph'
+        - factory_storage_backend | default('') == 'ceph-rook'
   when: not upgrade_in_progress
 
 # During an upgrade, do a full bringup of Kubernetes to pick up changes. E.g. audit config.

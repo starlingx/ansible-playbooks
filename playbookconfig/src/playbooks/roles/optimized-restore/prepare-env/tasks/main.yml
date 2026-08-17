@@ -99,9 +99,9 @@
         factory_storage_backend: "lvm"
       when: factory_lvm_flag.stat.exists
 
-    - name: Set factory_storage_backend to rook-ceph
+    - name: Set factory_storage_backend to ceph-rook
       set_fact:
-        factory_storage_backend: "rook-ceph"
+        factory_storage_backend: "ceph-rook"
       when:
         - not factory_lvm_flag.stat.exists
         - factory_rook_flag.stat.exists
@@ -377,7 +377,7 @@
       become: yes
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
-      when: factory_storage_backend | default('') == 'rook-ceph'
+      when: factory_storage_backend | default('') == 'ceph-rook'
 
   when: factory_restore
 

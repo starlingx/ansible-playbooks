@@ -18,7 +18,7 @@
 #
 # Arguments:
 #   backup_metadata_json    - JSON string from detect_backup_storage_metadata.py
-#   factory_storage_backend - 'rook-ceph' or 'lvm' (detected from flag files)
+#   factory_storage_backend - 'ceph-rook' or 'lvm' (detected from flag files)
 #
 # Outputs JSON to stdout:
 # {
@@ -45,22 +45,6 @@ import json
 import sys
 
 
-# The database stores the rook-ceph backend type as 'ceph-rook',
-# while the playbook fact factory_storage_backend uses 'rook-ceph'
-# (derived from flag file .node_rook_configured). Normalize both
-# to a canonical form for comparison.
-BACKEND_ALIASES = {
-    'ceph-rook': 'rook-ceph',
-}
-
-
-def normalize_backend(value):
-    """Normalize backend name to canonical form."""
-    if value is None:
-        return None
-    return BACKEND_ALIASES.get(value, value)
-
-
 def analyze_backend_conflicts(backup_metadata, factory_backend):
     """Check backend type compatibility.
 
@@ -70,8 +54,7 @@ def analyze_backend_conflicts(backup_metadata, factory_backend):
       - backup backend state is not 'configured' -> warning
     """
     conflicts = []
-    primary = normalize_backend(backup_metadata.get('primary_backend'))
-    factory_backend = normalize_backend(factory_backend)
+    primary = backup_metadata.get('primary_backend')
 
     if primary is None:
         conflicts.append({
@@ -128,7 +111,6 @@ def analyze_override_conflicts(backup_metadata, factory_backend):
         (covered by backend mismatch, but explicit for clarity)
     """
     conflicts = []
-    factory_backend = normalize_backend(factory_backend)
     rook_ov = backup_metadata.get('rook_ceph_overrides', {})
 
     if rook_ov.get('has_user_overrides') and factory_backend == 'lvm':
@@ -142,7 +124,7 @@ def analyze_override_conflicts(backup_metadata, factory_backend):
             'backup_value': 'rook-ceph user-overrides present',
             'factory_value': 'lvm',
         })
-    elif rook_ov.get('has_user_overrides') and factory_backend == 'rook-ceph':
+    elif rook_ov.get('has_user_overrides') and factory_backend == 'ceph-rook':
         charts = rook_ov.get('charts_with_user_overrides', [])
         conflicts.append({
             'id': 'rook-overrides-preserved',
@@ -153,7 +135,7 @@ def analyze_override_conflicts(backup_metadata, factory_backend):
                 '%s. They will be preserved through DB restore.'
                 % ', '.join(charts)),
             'backup_value': '%d charts with overrides' % len(charts),
-            'factory_value': 'rook-ceph (compatible)',
+            'factory_value': 'ceph-rook (compatible)',
         })
 
     return conflicts
@@ -167,9 +149,8 @@ def analyze_services_conflicts(backup_metadata, factory_backend):
         factory backend type -> warning
     """
     conflicts = []
-    factory_backend = normalize_backend(factory_backend)
     expected_services = {
-        'rook-ceph': 'ceph',
+        'ceph-rook': 'ceph',
         'lvm': 'block-storage',
     }
 
