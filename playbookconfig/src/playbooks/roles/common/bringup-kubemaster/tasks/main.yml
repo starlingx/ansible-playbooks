@@ -579,9 +579,9 @@
     - name: Wait for Calico Operator to be ready
       command: >-
         kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --namespace=tigera-operator
-        --for=condition=Ready pods --selector=name=tigera-operator --timeout=120s
-      retries: 3
-      delay: 10
+        --for=condition=Ready pods --selector=name=tigera-operator --timeout=180s
+      retries: 2
+      delay: 3
       register: tigera_ready
       until: tigera_ready.rc == 0
 
@@ -596,9 +596,9 @@
       command: >-
         kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --namespace=calico-system
         --for=condition=Ready pods --selector=k8s-app=calico-node
-        --field-selector spec.nodeName=controller-0 --timeout=180s
-      retries: 3
-      delay: 10
+        --field-selector spec.nodeName=controller-0 --timeout=300s
+      retries: 2
+      delay: 3
       register: calico_ready
       until: calico_ready.rc == 0
       failed_when: false
