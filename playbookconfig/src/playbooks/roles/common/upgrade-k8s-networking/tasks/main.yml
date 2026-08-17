@@ -219,34 +219,38 @@
 
   when: kubernetes_long_version is version('v1.35.2', '>=')
 
-# During the transition from thin to thick multus plugin mode, the old
-# thin-mode CNI config file and ConfigMaps must be removed BEFORE applying
-# the new DaemonSet. The thick daemon's auto-config reads /etc/cni/net.d/
-# to find the cluster network; if 05-multus.conf (thin) is still present,
-# the daemon references it in its generated shim config (00-multus.conf),
-# causing kubelet to spawn thousands of stuck multus-shim processes.
-- name: Check for legacy thin-mode multus CNI config
-  stat:
-    path: /etc/cni/net.d/05-multus.conf
-  register: legacy_multus_conf
+# During the transition from thin to thick multus plugin mode,
+# the old thin-mode CNI config file (05-multus.conf) must be removed from ALL
+# cluster nodes BEFORE applying the new DaemonSet. The thick daemon's
+# auto-config reads /etc/cni/net.d/ to find the cluster network.
+- name: Get list of kubernetes nodes for legacy multus cleanup
+  command: >-
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes
+    --no-headers -o custom-columns=NAME:.metadata.name
+  register: k8s_nodes_result
 
-- name: Remove legacy thin-mode multus CNI config from host
+- name: Set kubernetes node list
+  set_fact:
+    k8s_node_list: "{{ k8s_nodes_result.stdout_lines }}"
+
+- name: Remove legacy thin-mode multus CNI config from all nodes
   file:
     path: /etc/cni/net.d/05-multus.conf
     state: absent
-  when: legacy_multus_conf.stat.exists
+  delegate_to: "{{ item }}"
+  loop: "{{ k8s_node_list }}"
+  failed_when: false
 
 - name: Remove legacy thin-mode multus ConfigMap
   command: >-
     kubectl --kubeconfig=/etc/kubernetes/admin.conf delete configmap
     multus-cni-config.v1 --namespace=kube-system --ignore-not-found=true
-  when: legacy_multus_conf.stat.exists
 
 - name: Remove legacy multus watcher ConfigMap
   command: >-
     kubectl --kubeconfig=/etc/kubernetes/admin.conf delete configmap
     multus-watcher-script --namespace=kube-system --ignore-not-found=true
-  when: legacy_multus_conf.stat.exists
+
 
 - name: Create Multus config file
   template:
