@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2025 Wind River Systems, Inc.
+# Copyright (c) 2025-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -25,7 +25,7 @@
     --sensor-number "{{ ipmi_sensor_number }}"
     --success-codes "{{ all_success_codes | join(',') }}"
     --failure-codes "{{ all_failure_codes | join(',') }}"
-    {% if current_event_id is defined and current_event_id | length > 0 %}
+    {% if current_event_id is defined and current_event_id | int >= 0 %}
     --initial-event-id "{{ current_event_id }}"
     {% endif %}
     --interval {{ ipmi_check_interval }}
