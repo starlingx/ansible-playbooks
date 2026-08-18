@@ -238,7 +238,7 @@
       path: "{{ hieradata_workdir }}/runtime.yaml"
       regexp: "^platform::config::hosts::host_records: "
       line: "platform::config::hosts::host_records: {{ user_dns_host_records_lines }}"
-    when: user_dns_host_records
+    when: user_dns_host_records is not none
 
   - name: Getting supported disk devices from udev
     shell: |

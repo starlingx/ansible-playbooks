@@ -39,7 +39,7 @@
     msg: "IPMI monitoring script failed: {{ monitoring_result.stderr | default('Unknown error') }}"
   when:
     - monitoring_result.rc != 0
-    - (monitoring_result.stdout | default('') | length == 0)
+    - (monitoring_result.stdout | default('', true) | length == 0)
 
 - name: Parse monitoring result
   block:

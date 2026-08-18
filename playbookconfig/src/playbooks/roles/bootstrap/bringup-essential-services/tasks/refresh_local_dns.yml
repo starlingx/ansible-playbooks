@@ -53,7 +53,7 @@
           loop: "{{ user_dns_host_records_lines }}"
           when: is_dnsmasq_running.stdout == ""
 
-        when: user_dns_host_records
+        when: user_dns_host_records is not none
 
       - block:
         - name: Set central registry for subcloud

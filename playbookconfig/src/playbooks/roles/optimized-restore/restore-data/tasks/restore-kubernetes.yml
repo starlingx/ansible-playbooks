@@ -39,7 +39,7 @@
     path: /etc/hosts
     insertafter: EOF
     line: "{{ sc_oam_vip }} registry.central"
-  when: sc_oam_vip
+  when: sc_oam_vip | default('') | length > 0
 
 - name: Get Kubernetes version
   import_role:

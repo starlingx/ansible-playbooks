@@ -831,7 +831,7 @@
               not incomplete_bootstrap
 
       when: last_config_file.stat.exists
-    when: initial_db_populated
+    when: initial_db_populated | bool
   when: replayed  # bootstrap manifest has been applied
 
 - name: Check volume groups
@@ -969,7 +969,7 @@
 - name: Enable populating registry filesystem
   set_fact:
     bootstrap_registry_filesystem: true
-  when: bootstrap_registry_filesystem_fqpn
+  when: bootstrap_registry_filesystem_fqpn | default('', true) | length > 0
 
 - name: Mark environment as Ansible bootstrap
   file:

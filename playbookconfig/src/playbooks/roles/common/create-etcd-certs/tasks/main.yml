@@ -63,8 +63,8 @@
   set_fact:
     etcd_ca_files: { ca.crt: "{{etcd_root_ca_cert}}", ca.key: "{{etcd_root_ca_key}}" }
   when:
-    - (etcd_root_ca_cert)
-    - (etcd_root_ca_key)
+    - etcd_root_ca_cert | default('', true) | length > 0
+    - etcd_root_ca_key | default('', true) | length > 0
 
 - name: Copy etcd root ca certificates
   copy:
@@ -91,7 +91,7 @@
       basic_constraints:
         - CA:TRUE
         - pathlen:1
-      basic_constraints_critical: True
+      basic_constraints_critical: true
       key_usage:
         - keyCertSign
         - digitalSignature

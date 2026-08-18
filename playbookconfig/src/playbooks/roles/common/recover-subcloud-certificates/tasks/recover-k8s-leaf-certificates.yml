@@ -37,7 +37,7 @@
     until: kube_cert_rotation_out is not failed
     when: k8s_certs_expiration.rc != 0
 
-  when: is_controller
+  when: is_controller | bool
 
 - name: Renew kubelet leaf certificates
   import_tasks: recover-kubelet-certificates.yml

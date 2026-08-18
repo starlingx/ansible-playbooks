@@ -20,7 +20,7 @@
       sysinv_user_dns_host_records: "{{ sysinv_user_dns_host_records }}{{ item }}={{ user_dns_host_records[item] }}\n"
     loop: "{{ user_dns_host_records.keys() }}"
 
-  when: user_dns_host_records
+  when: user_dns_host_records is not none
 
 - name: Lock controller-0 for network update
   include_role:

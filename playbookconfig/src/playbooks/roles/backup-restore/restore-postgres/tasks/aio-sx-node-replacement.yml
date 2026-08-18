@@ -48,4 +48,4 @@
         RETURNING *;"
     become_user: postgres
 
-  when: replacement_mgmt_mac_required
+  when: replacement_mgmt_mac_required | bool

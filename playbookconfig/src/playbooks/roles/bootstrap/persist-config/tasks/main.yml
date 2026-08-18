@@ -104,7 +104,7 @@
 # moved to a separate file as they don't need to be executed again once the
 # controller-0 host has been created.
 - include_tasks: one_time_config_tasks.yml
-  when: not initial_db_populated
+  when: not initial_db_populated | bool
 
 - name: Find etcd certs files
   find:
@@ -385,7 +385,7 @@
       sysinv_user_dns_host_records: "{{ sysinv_user_dns_host_records }}{{ item }}={{ user_dns_host_records[item] }}\n"
     loop: "{{ user_dns_host_records.keys() }}"
 
-  when: user_dns_host_records
+  when: user_dns_host_records is not none
 
 - block:
   - name: Generate config ini file for python sysinv db population script
@@ -530,7 +530,7 @@
       path: "{{ temp_ssl_ca }}"
       state: absent
 
-  when: ssl_ca_cert is defined and ssl_ca_cert
+  when: ssl_ca_cert is defined and ssl_ca_cert | length > 0
 
 # PXE boot files
 - name: Set pxeboot files source if address allocation is dynamic

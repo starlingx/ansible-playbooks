@@ -56,7 +56,7 @@
       delay: 2
       become: false
 
-    when: not local
+    when: not local | bool
 
   - name: Run {{ inventory_hostname }} platform restore playbook
     command: >
@@ -171,4 +171,4 @@
       file:
         path: "{{ default_local_staging_dir }}"
         state: absent
-      when: not local
+      when: not local | bool

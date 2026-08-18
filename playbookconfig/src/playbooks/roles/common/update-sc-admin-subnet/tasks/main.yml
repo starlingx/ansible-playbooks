@@ -82,7 +82,7 @@
     shell: >-
       source /etc/platform/openrc; system network-addrpool-assign {{ add_subcloud_admin_network_uuid.stdout }}
       {{ add_subcloud_admin_secondary_pool_uuid.stdout }}
-  when: network_params.admin_subnet_secondary
+  when: network_params.admin_subnet_secondary | default("", true) | length > 0
 
 - name: Add new subcloud admin interface network association on controller-0
   shell: >-

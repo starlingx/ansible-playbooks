@@ -415,7 +415,7 @@
                                         if external_oam_node_1_address != 'derived'
                                         else network_params.external_oam_floating_address_secondary | ipmath(2)
         }) }}
-    when: network_params.external_oam_subnet_secondary and is_bullseye
+    when: network_params.external_oam_subnet_secondary | default("", true) | length > 0 and is_bullseye
 
   - name: Set secondary oam node address in derived facts for subsequent tasks/roles (Trixie)
     set_fact:
@@ -429,7 +429,7 @@
                                         if external_oam_node_1_address != 'derived'
                                         else network_params.external_oam_floating_address_secondary | ansible.utils.ipmath(2)
         }) }}
-    when: network_params.external_oam_subnet_secondary and is_trixie
+    when: network_params.external_oam_subnet_secondary | default("", true) | length > 0 and is_trixie
 
 - name: Set subcloud floating address
   set_fact:
@@ -470,7 +470,7 @@
                                             if cluster_service_start_address != 'derived'
                                             else default_cluster_service_start_address_secondary
                         ]}}"
-    when: network_params.cluster_service_subnet_secondary
+    when: network_params.cluster_service_subnet_secondary | default("", true) | length > 0
 
   - set_fact:
       default_no_proxy: "{{ default_no_proxy + [ controller_floating_address_secondary ]}}"
@@ -482,11 +482,11 @@
 
   - set_fact:
       default_no_proxy: "{{ default_no_proxy + [ network_params.external_oam_floating_address_secondary ]}}"
-    when: network_params.external_oam_floating_address_secondary
+    when: network_params.external_oam_floating_address_secondary | default("", true) | length > 0
 
   - set_fact:
       default_no_proxy: "{{ default_no_proxy + [ derived_network_params.oam_node_0_address_secondary ]}}"
-    when: network_params.external_oam_subnet_secondary
+    when: network_params.external_oam_subnet_secondary | default("", true) | length > 0
 
 # Add respective secondary when defined in non_sx_proxy_addons
 - block:
@@ -498,7 +498,7 @@
   - set_fact:
       non_sx_proxy_addons: "{{ non_sx_proxy_addons + [ derived_network_params.oam_node_1_address_secondary
                         ]}}"
-    when: network_params.external_oam_subnet_secondary
+    when: network_params.external_oam_subnet_secondary | default("", true) | length > 0
 
 - name: Set default no-proxy address list (non simplex)
   set_fact:

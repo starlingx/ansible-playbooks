@@ -39,12 +39,12 @@
 - name: Update local_backup_dir fact
   set_fact:
     local_backup_dir: "{{ local_backup_dir }}/{{ software_version }}"
-  when: local
+  when: local | bool
 
 - name: Update central_backup_dir fact
   set_fact:
     central_backup_dir: "{{ central_backup_dir }}/{{ inventory_hostname }}/{{ software_version }}"
-  when: not local
+  when: not local | bool
 
 - name: Set delete path and target connection
   set_fact:

@@ -40,13 +40,13 @@
   block:
     - name: Restore vault snapshot with default encryption
       script: vault_restore.sh {{ backup_snapshot_file.stdout }}
-      when: not vault_encrypt
+      when: not vault_encrypt | bool
       register: vault_restore_script
       failed_when: vault_restore_script.rc != 0
 
     - name: Restore vault snapshot with custom encryption
       script: vault_restore.sh {{ backup_snapshot_file.stdout }} '--decrypt' "custom_var"
-      when: vault_encrypt
+      when: vault_encrypt | bool
       register: vault_restore_script
       failed_when: vault_restore_script.rc != 0
   environment:

@@ -127,4 +127,4 @@
         retries: 10
         delay: 10
 
-      when: mode == 'update' and (system_root_ca_cert | default('') | length > 0)
+      when: mode == 'update' and (system_root_ca_cert | default('', true) | length > 0)

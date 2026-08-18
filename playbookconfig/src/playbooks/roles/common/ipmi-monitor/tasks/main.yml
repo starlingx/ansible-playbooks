@@ -53,7 +53,7 @@
           }}
       when:
         - monitoring_json.success
-        - detected_event_data | default('') | length > 0
+        - detected_event_data | default('', true) | length > 0
         - ipmi_success_values is defined or ipmi_failure_values is defined
 
     - name: Fail if a failure event was detected

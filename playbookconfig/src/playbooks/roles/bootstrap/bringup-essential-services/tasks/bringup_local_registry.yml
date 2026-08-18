@@ -26,7 +26,7 @@
     - name: Set secondary network info for docker registry
       set_fact:
         docker_registry_public_ip_secondary: "{{ network_params.external_oam_floating_address_secondary }}"
-      when: network_params.external_oam_floating_address_secondary
+      when: network_params.external_oam_floating_address_secondary | default("", true) | length > 0
 
   - name: Generate cnf file from template
     template:

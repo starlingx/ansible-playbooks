@@ -62,7 +62,7 @@
              | selectattr('name', 'equalto', 'kube-rbdkube-system')
              | map (attribute='stats.stored')
              | sum }}
-      when: old_pool_exist
+      when: old_pool_exist | bool
 
     - name: Register backups required space for export_import
       set_fact:

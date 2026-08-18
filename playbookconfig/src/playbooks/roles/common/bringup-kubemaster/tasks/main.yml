@@ -505,7 +505,7 @@
 
   - name: Delete old local registry secret
     shell: "kubectl --kubeconfig=/etc/kubernetes/admin.conf delete secret -n kube-system registry-local-secret"
-    when: old_local_registry_secret.stdout
+    when: old_local_registry_secret.stdout | length > 0
 
   - name: Create local registry pull secret
     command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf create secret docker-registry registry-local-secret
@@ -665,7 +665,7 @@
       dest: "{{ config_permdir }}/enabled_kube_plugins"
       mode: 0640
       group: sys_protected
-  when: k8s_plugins and mode == 'bootstrap'
+  when: k8s_plugins is not none and k8s_plugins | length > 0 and mode == 'bootstrap'
 
 - name: Add kubelet service override
   copy:

@@ -63,7 +63,7 @@
       - etcd_root_ca_info.expired
       - frontproxy_ca_info.expired
 
-  when: is_controller
+  when: is_controller | bool
 
 - block:
   # When kubelet certificates are expired, copying the K8s Root CA is necessary

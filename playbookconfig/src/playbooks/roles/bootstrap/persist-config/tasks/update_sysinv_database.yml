@@ -37,7 +37,7 @@
       script_input: "{{ script_input + ' --system --network --service' }}"
       reconfigure_endpoints: true
     when: not last_config_file_exists
-  when: initial_db_populated
+  when: initial_db_populated | bool
 
 - debug: var=script_input
 
@@ -163,7 +163,7 @@
     failed_when: dns_host_record_add.rc != 0
     when:
       - is_bullseye
-      - system_controller_floating_address | ipaddr
+      - (system_controller_floating_address | ipaddr) | length > 0
 
   - name: Create DNS host record for registry central (Trixie)
     shell: >-
@@ -174,7 +174,7 @@
     failed_when: dns_host_record_add.rc != 0
     when:
       - is_trixie
-      - system_controller_floating_address | ansible.utils.ipaddr
+      - (system_controller_floating_address | ansible.utils.ipaddr) | length > 0
 
   - name: Create DNS host record for registry local (Bullseye)
     shell: >-
@@ -186,7 +186,7 @@
     when:
       - is_bullseye
       - virtual_system is defined and virtual_system|bool
-      - system_controller_floating_address | ipaddr
+      - (system_controller_floating_address | ipaddr) | length > 0
 
   - name: Create DNS host record for registry local (Trixie)
     shell: >-
@@ -198,7 +198,7 @@
     when:
       - is_trixie
       - virtual_system is defined and virtual_system|bool
-      - system_controller_floating_address | ansible.utils.ipaddr
+      - (system_controller_floating_address | ansible.utils.ipaddr) | length > 0
 
   - block:
     - name: Get existing DNS local domain for registry.central if exists
@@ -316,4 +316,4 @@
   file:
     path: "{{ initial_db_populated_flag }}"
     state: touch
-  when: not initial_db_populated
+  when: not initial_db_populated | bool

@@ -21,4 +21,4 @@
 
 - name: Transfer subcloud backup to the system controller
   include_tasks: transfer_backup.yml
-  when: not local
+  when: not local | bool

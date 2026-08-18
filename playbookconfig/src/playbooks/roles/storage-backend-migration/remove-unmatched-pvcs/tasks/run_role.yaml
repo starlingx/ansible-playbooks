@@ -36,7 +36,7 @@
   loop: "{{ cephfs_pv_names | default([]) }}"
   when:
     - cephfs_pv_names is defined
-    - item | default('') | length > 0
+    - item | default('', true) | length > 0
     - cephfs_subvolume_names is undefined
   ignore_errors: true
 
@@ -100,7 +100,7 @@
   loop: "{{ cephfs_pv_names | default([]) }}"
   when:
     - cephfs_pv_names is defined
-    - item | default('') | length > 0
+    - item | default('', true) | length > 0
 
 - name: List current Ceph subvolumes after cleanup
   command: >
@@ -154,7 +154,7 @@
   loop: "{{ rbd_pv_names | default([]) }}"
   when:
     - rbd_pv_names is defined
-    - item | default('') | length > 0
+    - item | default('', true) | length > 0
     - rbd_image_names is undefined
   ignore_errors: true
 
@@ -220,4 +220,4 @@
   loop: "{{ rbd_pv_names | default([]) }}"
   when:
     - rbd_pv_names is defined
-    - item | default('') | length > 0
+    - item | default('', true) | length > 0

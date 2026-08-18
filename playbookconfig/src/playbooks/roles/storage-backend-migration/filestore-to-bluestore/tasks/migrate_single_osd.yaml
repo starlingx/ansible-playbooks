@@ -29,7 +29,7 @@
 - name: Determine if OSD is filestore or bluestore
   set_fact:
     osd_type: "{{ (osd_metadata_output.stdout | from_json).osd_objectstore }}"
-  when: not is_osd_purged
+  when: not is_osd_purged | bool
 
 - name: Purge OSD if its type is filestore
   when:
