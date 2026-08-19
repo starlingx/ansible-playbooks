@@ -1,0 +1,181 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   This role exists to restore persistent volume claims.
+#
+
+- name: Check if OpenStack PVC already exists and is Bound
+  shell: >-
+    kubectl -n openstack get pvc {{ pvc_name }}
+    -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound"
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: existing_pvc_phase
+
+- name: Skip restore if OpenStack PVC already exists and is Bound
+  debug:
+    msg: >-
+      PVC '{{ pvc_name }}' already exists with phase '{{ existing_pvc_phase.stdout }}'.
+      Skipping restore from snapshot.
+  when: existing_pvc_phase.stdout == "Bound"
+
+- name: Restore OpenStack PVC from snapshot
+  when: existing_pvc_phase.stdout != "Bound"
+  block:
+    - name: Set volume snapshot content resource name
+      set_fact:
+        vsc_restore: snapcontent-restore-{{ pvc_name }}
+
+    - name: Create tmp file for volume snapshot content
+      tempfile:
+        state: file
+        prefix: tmp_volume_snapshot_content_
+        suffix: .yml
+        path: /tmp/
+      register: tmp_volume_snapshot_content
+
+    - name: Save volume snapshot content manifest
+      copy:
+        dest: "{{ tmp_volume_snapshot_content.path }}"
+        content: |
+          apiVersion: snapshot.storage.k8s.io/v1
+          kind: VolumeSnapshotContent
+          metadata:
+            name: {{ vsc_restore }}
+          spec:
+            deletionPolicy: Retain
+            driver: {{ pvc_info.storage_provisioner }}
+            source:
+              snapshotHandle: {{ pvc_info.snapshot_handle }}
+            sourceVolumeMode: Filesystem
+            volumeSnapshotClassName: {{ pvc_info.snapshot_class }}
+            volumeSnapshotRef:
+              name: {{ pvc_info.snapshot_name }}
+              namespace: openstack
+        mode: 0640
+
+    - name: Create pre-provisioned VSC pointing to existing snapshot
+      command: kubectl apply -f {{ tmp_volume_snapshot_content.path }}
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Wait for VSC to be ready
+      command: >-
+        kubectl wait volumesnapshotcontent/"{{ vsc_restore }}"
+        --for=jsonpath='{.status.readyToUse}'=true
+        --timeout={{ pvc_snapshot_timeout | default('300') }}s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Create tmp file for volume snapshot
+      tempfile:
+        state: file
+        prefix: tmp_volume_snapshot_
+        suffix: .yml
+        path: /tmp/
+      register: tmp_volume_snapshot
+
+    - name: Save volume snapshot manifest
+      copy:
+        dest: "{{ tmp_volume_snapshot.path }}"
+        content: |
+          apiVersion: snapshot.storage.k8s.io/v1
+          kind: VolumeSnapshot
+          metadata:
+            name: {{ pvc_info.snapshot_name }}
+            namespace: openstack
+          spec:
+            volumeSnapshotClassName: {{ pvc_info.snapshot_class }}
+            source:
+              volumeSnapshotContentName: {{ vsc_restore }}
+        mode: 0640
+
+    - name: Create pre-provisioned volume snapshot pointing to VSC
+      command: kubectl apply -f {{ tmp_volume_snapshot.path }}
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Wait for volume snapshot to be ready
+      command: >-
+        kubectl wait volumesnapshot/"{{ pvc_info.snapshot_name }}" -n openstack
+        --for=jsonpath='{.status.readyToUse}'=true
+        --timeout={{ pvc_snapshot_timeout | default('300') }}s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Create tmp file for PVC
+      tempfile:
+        state: file
+        prefix: tmp_pvc_
+        suffix: .yml
+        path: /tmp/
+      register: tmp_pvc
+
+    - name: Save PVC manifest
+      copy:
+        dest: "{{ tmp_pvc.path }}"
+        content: |
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: {{ pvc_name }}
+            namespace: openstack
+            annotations:
+              helm.sh/resource-policy: keep
+          spec:
+            accessModes: {{ pvc_info.access_modes | to_yaml }}
+            resources:
+              requests:
+                storage: {{ pvc_info.pvc_size }}
+            storageClassName: {{ pvc_info.pvc_storage_class }}
+            dataSource:
+              name: {{ pvc_info.snapshot_name }}
+              kind: VolumeSnapshot
+              apiGroup: snapshot.storage.k8s.io
+        mode: 0640
+
+    - name: Create PVC pointing to snapshot
+      command: kubectl apply -f {{ tmp_pvc.path }}
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Wait for PVC to be ready
+      command: >-
+        kubectl wait pvc/"{{ pvc_name }}" -n openstack
+        --for=jsonpath='{.status.phase}'=Bound
+        --timeout={{ pvc_snapshot_timeout | default('300') }}s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Delete volume snapshot
+      command: kubectl delete volumesnapshot {{ pvc_info.snapshot_name }} -n openstack
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Patch VSC to remove finalizers
+      command: >-
+        kubectl patch volumesnapshotcontent {{ vsc_restore }}
+        --type=merge -p '{"metadata":{"finalizers":[]}}'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Delete VSC
+      command: kubectl delete volumesnapshotcontent {{ vsc_restore }}
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+  always:
+    - name: Delete temporary files
+      file:
+        path: "{{ item }}"
+        state: absent
+      become: yes
+      loop:
+        - "{{ tmp_volume_snapshot_content.path | default('') }}"
+        - "{{ tmp_volume_snapshot.path | default('') }}"
+        - "{{ tmp_pvc.path | default('') }}"
+      when: item | length > 0

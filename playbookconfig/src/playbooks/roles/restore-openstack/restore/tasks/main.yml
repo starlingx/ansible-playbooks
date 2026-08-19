@@ -72,6 +72,43 @@
     set_fact:
       backup_software_version: "{{ backup_version_output.stdout }}"
 
+  - name: Restore OpenStack PVCs
+    block:
+      - name: Extract OpenStack PVC info file from backup archive
+        command: >-
+          tar -C {{ backup_dir }} -xpf {{ target_backup_dir }}/{{ backup_filename }}
+          --wildcards --transform='s,.*/,,' '*/pvc_info.yml'
+        register: extract_pvc_info
+        failed_when: false
+
+      - name: Check if OpenStack PVC info file was extracted
+        stat:
+          path: "{{ backup_dir }}/pvc_info.yml"
+        register: pvc_info_file_stat
+
+      - name: Restore OpenStack PVCs from snapshot info
+        when: pvc_info_file_stat.stat.exists
+        block:
+          - name: Retrieve OpenStack PVC info from the file
+            set_fact:
+              pvc_info_dict: "{{ lookup('file', backup_dir + '/pvc_info.yml') | from_yaml }}"
+
+          - name: Create 'openstack' namespace if it does not exist
+            shell: kubectl create namespace openstack --dry-run=client -o yaml | kubectl apply -f -
+            environment:
+              KUBECONFIG: /etc/kubernetes/admin.conf
+            when: pvc_info_dict | length > 0
+
+          - name: Restore OpenStack PVCs
+            include_tasks: restore-openstack-pvc.yml
+            loop: "{{ pvc_info_dict | dict2items }}"
+            loop_control:
+              loop_var: pvc_item
+            vars:
+              pvc_name: "{{ pvc_item.key }}"
+              pvc_info: "{{ pvc_item.value }}"
+            when: pvc_info_dict | length > 0
+
   - name: Set config path facts
     set_fact:
       fluxcd_permdir: "{{ platform_path }}/fluxcd/{{ backup_software_version }}"
@@ -271,6 +308,11 @@
       msg: Restore OpenStack application is successful!
 
   always:
+    - name: Remove PVC info file
+      file:
+        path: "{{ backup_dir }}/pvc_info.yml"
+        state: absent
+
     - name: Remove restore_openstack_in_progress flag file
       file:
         path: "{{ restore_openstack_in_progress_flag }}"
