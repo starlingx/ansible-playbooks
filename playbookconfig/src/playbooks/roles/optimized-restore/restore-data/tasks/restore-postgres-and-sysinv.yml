@@ -337,11 +337,10 @@
 
     # Confirm Keystone can issue tokens after memcached flush.
     - name: Wait for Keystone to be ready after memcached flush
-      shell: "source /etc/platform/openrc; openstack token issue"
+      shell: "source /etc/platform/openrc; timeout 30 openstack token issue"
       register: keystone_check
       retries: 30
       delay: 5
-      timeout: 30
       until: keystone_check.rc == 0
 
     - name: Start pmon-managed flock services
