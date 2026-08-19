@@ -1,0 +1,1314 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Synchronize DEX RedirectURIs for OpenStack subclouds in a Distributed Cloud
+# deployment. Registers each qualifying subcloud's Horizon and Keystone
+# WebSSO callback URLs into the central DEX staticClients configuration on
+# the System Controller.
+#
+# DESIGN: declarative sync with per-subcloud ownership tracking.
+#   The desired URI set is recomputed from live system state on every run.
+#   Ownership is recorded per subcloud in a state file, which yields four
+#   distinct behaviours instead of a blunt add/remove:
+#
+#     re-derived - subcloud qualifies now: URIs rebuilt from its live
+#                  keystone helm overrides.
+#     retained   - subcloud still exists in dcmanager but was not evaluated
+#                  or did not qualify (offline, unmanaged, unreachable, or
+#                  outside target_list): its recorded URIs are carried
+#                  forward untouched. A transient condition never breaks SSO.
+#     pruned     - subcloud is genuinely absent from dcmanager, i.e. deleted:
+#                  its URIs are removed. This is the ONLY case that removes.
+#     preserved  - URI is not owned by this playbook at all (System
+#                  Controller SSO, operator-added entries, other
+#                  staticClients): never modified.
+#
+#   Consequence: running with an explicit target_list is non-destructive to
+#   subclouds outside that list.
+#
+# IDEMPOTENCY: safe to re-run and safe to retry after a failure at any
+#   phase. Nothing is mutated until every pre-flight check has passed.
+#   Accumulator variables are explicitly reset before each loop so partial
+#   re-entry (--start-at-task) cannot produce duplicates. A no-op run makes
+#   no API calls that change state. The state file is written only after the
+#   applied config has been verified, so a failed run never claims ownership
+#   of URIs it did not apply.
+#
+# Run from the System Controller as sysadmin.
+#
+# Examples:
+#   # sync all online/managed subclouds
+#   ansible-playbook configure_dex_dc_federation.yml
+#
+#   # preview changes without touching the system
+#   ansible-playbook configure_dex_dc_federation.yml -e "dry_run=true"
+#
+#   # target specific subclouds
+#   ansible-playbook configure_dex_dc_federation.yml -e "target_list=subcloud1,subcloud2"
+#
+#   # first run only: opt into pruning pre-existing manually-added subcloud
+#   # URIs instead of adopting them as-is
+#   ansible-playbook configure_dex_dc_federation.yml -e "force_prune_heuristic=true"
+#
+- name: Synchronize DEX RedirectURIs for OpenStack subclouds
+  hosts: localhost
+  gather_facts: false
+  become: true
+  vars:
+    # Pinned because the shell tasks rely on `set -o pipefail`, which is a
+    # bash builtin. Without this, a /bin/sh linked to dash would error out.
+    ansible_shell_executable: /bin/bash
+
+    # --- target application -------------------------------------------------
+    dex_app_name: oidc-auth-apps
+    dex_chart_name: dex
+    dex_namespace: kube-system
+    dex_secret_name: oidc-dex
+    openstack_app_name: stx-openstack
+
+    # --- scope --------------------------------------------------------------
+    target_list: all_online_subclouds
+    # Empty means "the first staticClient". Set explicitly when the DEX
+    # config carries more than one client and the STX OIDC client is not
+    # first in the list.
+    target_client_id: ""
+
+    # --- behaviour ----------------------------------------------------------
+    dry_run: false
+    # First run only. When true, pre-existing subcloud-looking URIs that are
+    # not attributable to the System Controller are treated as owned by this
+    # playbook and therefore prunable. Default false = adopt, never prune on
+    # the first run.
+    force_prune_heuristic: false
+    # set true once the sysinv helm-override-update re-eval /
+    # reapply API enhancement is available.
+    use_reapply_api: false
+
+    # --- timing -------------------------------------------------------------
+    reapply_retries: 30
+    reapply_delay: 10
+    pre_apply_state_retries: 10
+    pre_apply_state_delay: 30
+
+    # --- subcloud API access ------------------------------------------------
+    validate_subcloud_certs: true
+    subcloud_ca_path: /etc/ssl/certs/ca-certificates.crt
+    subcloud_api_port: 6386
+    subcloud_api_timeout: 10
+    subcloud_connect_timeout: 5
+
+    # --- state --------------------------------------------------------------
+    managed_state_file: /etc/platform/dex_dc_managed_uris.json
+    lock_file: /var/run/dex_dc_sync.lock
+    lock_stale_seconds: 3600
+    override_file: /tmp/dex_redirect_override.yaml
+
+    # --- WebSSO callback paths ---------------------------------------------
+    websso_keystone_path: /v3/auth/OS-FEDERATION/identity_providers/dex/protocols/openid/websso/redirect
+    websso_horizon_path: /auth/websso/
+
+  tasks:
+    # =========================================================================
+    # PHASE 0: PRE-FLIGHT VALIDATION
+    #
+    # Every check in this phase is read-only. The system state is not
+    # modified until Phase 6, and only after all of these pass. This is what
+    # makes a failed run safe to retry.
+    # =========================================================================
+    - name: Verify platform openrc is present
+      ansible.builtin.stat:
+        path: /etc/platform/openrc
+      register: openrc_stat
+
+    - name: Fail if platform openrc is missing
+      ansible.builtin.fail:
+        msg: >-
+          /etc/platform/openrc not found. This playbook must run on a
+          StarlingX controller.
+      when: not openrc_stat.stat.exists
+
+    - name: Verify kube admin config is present
+      ansible.builtin.stat:
+        path: /etc/kubernetes/admin.conf
+      register: kubeconfig_stat
+
+    - name: Fail if kube admin config is missing
+      ansible.builtin.fail:
+        msg: >-
+          /etc/kubernetes/admin.conf not found. Kubernetes access is required
+          to read the DEX configuration secret.
+      when: not kubeconfig_stat.stat.exists
+
+    - name: Verify Kubernetes API is reachable
+      ansible.builtin.shell: |
+        export KUBECONFIG=/etc/kubernetes/admin.conf
+        kubectl get --raw='/readyz'
+      register: kube_ready
+      changed_when: false
+      failed_when: false
+
+    - name: Fail if Kubernetes API is not ready
+      ansible.builtin.fail:
+        msg: >-
+          Kubernetes API is not ready (rc={{ kube_ready.rc }}).
+          Resolve cluster health before running this playbook.
+          Output: {{ kube_ready.stderr | default('') | trim }}
+      when: kube_ready.rc != 0
+
+    - name: Verify running on System Controller
+      ansible.builtin.shell: |
+        set -o pipefail
+        source /etc/platform/openrc
+        system show | awk -F'|' '/distributed_cloud_role/ {gsub(/ /, "", $3); print $3}'
+      register: dc_role
+      changed_when: false
+      failed_when: false
+
+    - name: Fail if sysinv is not responding
+      ansible.builtin.fail:
+        msg: >-
+          Unable to query sysinv (rc={{ dc_role.rc }}). Confirm platform
+          services are healthy.
+          Output: {{ dc_role.stderr | default('') | trim }}
+      when: dc_role.rc != 0
+
+    - name: Fail if not System Controller
+      ansible.builtin.fail:
+        msg: >-
+          This playbook must run on the System Controller.
+          Current distributed_cloud_role: '{{ dc_role.stdout | trim }}'
+      when: dc_role.stdout | trim != 'systemcontroller'
+
+    - name: Verify dcmanager is available
+      ansible.builtin.shell: |
+        source /etc/platform/openrc
+        dcmanager subcloud list --format json
+      register: subcloud_list_result
+      changed_when: false
+      failed_when: false
+
+    - name: Fail if dcmanager is not available
+      ansible.builtin.fail:
+        msg: >-
+          dcmanager subcloud list failed (rc={{ subcloud_list_result.rc }}).
+          Confirm the dcmanager service is running.
+          Output: {{ subcloud_list_result.stderr | default('') | trim }}
+      when: subcloud_list_result.rc != 0
+
+    - name: Check oidc-auth-apps status
+      ansible.builtin.shell: |
+        set -o pipefail
+        source /etc/platform/openrc
+        system application-show {{ dex_app_name }} | awk -F'|' '/ status / {gsub(/ /, "", $3); print $3}'
+      register: oidc_status
+      changed_when: false
+      failed_when: false
+
+    - name: Fail if oidc-auth-apps is not present
+      ansible.builtin.fail:
+        msg: >-
+          Unable to read status for '{{ dex_app_name }}'
+          (rc={{ oidc_status.rc }}). The application must be uploaded and
+          applied on the System Controller before running this playbook.
+          Output: {{ oidc_status.stderr | default('') | trim }}
+      when: oidc_status.rc != 0 or (oidc_status.stdout | trim) | length == 0
+
+    - name: Fail if oidc-auth-apps not in applied state
+      ansible.builtin.fail:
+        msg: >-
+          {{ dex_app_name }} is in '{{ oidc_status.stdout | trim }}' state.
+          Must be 'applied' before running this playbook. States such as
+          'applying', 'updating' or 'apply-failed' will cause
+          helm-override-update / application-apply to be rejected.
+      when: oidc_status.stdout | trim != 'applied'
+
+    - name: Acquire sync lock
+      # Guards the staticClients read-modify-write against concurrent runs,
+      # which is a known concurrency risk. Age-based
+      # staleness reclaim prevents a crashed run from blocking forever.
+      ansible.builtin.shell: |
+        set -o pipefail
+        set -e
+        LOCK="{{ lock_file }}"
+        if [ -e "$LOCK" ]; then
+          NOW=$(date +%s)
+          MTIME=$(stat -c %Y "$LOCK" 2>/dev/null || echo 0)
+          AGE=$(( NOW - MTIME ))
+          if [ "$AGE" -lt {{ lock_stale_seconds }} ]; then
+            echo "HELD age=${AGE}s owner=$(cat "$LOCK" 2>/dev/null)"
+            exit 1
+          fi
+          echo "RECLAIMED_STALE age=${AGE}s"
+        fi
+        printf '%s pid=%s\n' "$(date -Is)" "$$" > "$LOCK"
+        echo ACQUIRED
+      register: lock_result
+      changed_when: "'ACQUIRED' in lock_result.stdout"
+      # Deliberately not failed_when: the next task reports the contention
+      # with actionable guidance instead of a bare non-zero exit.
+      failed_when: false
+
+    - name: Fail with guidance if lock is held
+      ansible.builtin.fail:
+        msg: >-
+          Another sync appears to be in progress
+          ({{ lock_result.stdout | default('') | trim }}).
+          Wait for it to finish, or remove {{ lock_file }} if you are certain
+          no other run is active.
+      when: lock_result.rc != 0
+
+    - name: Report stale lock reclaim
+      ansible.builtin.debug:
+        msg: >-
+          Reclaimed a stale lock ({{ lock_result.stdout | trim }}). A previous
+          run did not exit cleanly; re-running is safe because no state is
+          mutated until all validation passes.
+      when: "'RECLAIMED_STALE' in (lock_result.stdout | default(''))"
+
+    # Everything past this point runs inside a block so the lock and the
+    # secret-bearing temp file are always cleaned up, including on failure.
+    - name: Read state, compute desired config, and apply
+      block:
+        # =====================================================================
+        # PHASE 1: Read and validate current DEX configuration
+        # =====================================================================
+        - name: Read current DEX config from secret
+          ansible.builtin.shell: |
+            set -o pipefail
+            export KUBECONFIG=/etc/kubernetes/admin.conf
+            kubectl get secret -n {{ dex_namespace }} {{ dex_secret_name }} \
+              -o jsonpath='{.data.config\.yaml}' | base64 -d
+          register: dex_config_raw
+          changed_when: false
+          no_log: true
+
+        - name: Fail if DEX config is empty
+          ansible.builtin.fail:
+            msg: >-
+              Secret '{{ dex_secret_name }}' in namespace
+              '{{ dex_namespace }}' returned no config.yaml data.
+          when: (dex_config_raw.stdout | default('') | trim) | length == 0
+
+        - name: Parse current DEX config
+          ansible.builtin.set_fact:
+            dex_config: "{{ dex_config_raw.stdout | from_yaml }}"
+          no_log: true
+
+        - name: Validate DEX config structure
+          ansible.builtin.assert:
+            that:
+              - dex_config is mapping
+              - dex_config.staticClients is defined
+              - dex_config.staticClients | type_debug == 'list'
+              - dex_config.staticClients | length > 0
+            fail_msg: >-
+              DEX config does not contain a usable staticClients list.
+              Refusing to modify an unrecognised configuration.
+
+        - name: Match target staticClient
+          # Resolved as a list rather than via `first` so an unmatched
+          # target_client_id produces a precise assertion instead of an
+          # undefined-value error.
+          ansible.builtin.set_fact:
+            target_client_matches: >-
+              {{ (dex_config.staticClients
+                  | selectattr('id', 'equalto', target_client_id) | list)
+                 if (target_client_id | length > 0)
+                 else [dex_config.staticClients[0]] }}
+          no_log: true
+
+        - name: Validate target staticClient was matched
+          ansible.builtin.assert:
+            that:
+              - (target_client_matches | length) == 1
+            fail_msg: >-
+              Expected exactly one staticClient to match, found
+              {{ target_client_matches | length }}.
+              {{ ("No client has id '" ~ target_client_id ~ "'. Available ids: "
+                  ~ (dex_config.staticClients | map(attribute='id') | list) | string)
+                 if (target_client_id | length > 0) else "" }}
+
+        - name: Resolve target staticClient
+          ansible.builtin.set_fact:
+            target_client: "{{ target_client_matches[0] }}"
+          no_log: true
+
+        - name: Validate target staticClient
+          ansible.builtin.assert:
+            that:
+              - target_client is mapping
+              - target_client.id is defined
+              - (target_client.id | string | length) > 0
+              - target_client.secret is defined
+              - (target_client.secret | string | length) > 0
+              - target_client.redirectURIs is defined
+              - target_client.redirectURIs | type_debug == 'list'
+            fail_msg: >-
+              Target staticClient '{{ target_client.id | default('?') }}' is
+              missing id, secret or redirectURIs. Refusing to write a
+              configuration that would drop client credentials.
+
+        - name: Record resolved client and current URIs
+          ansible.builtin.set_fact:
+            resolved_client_id: "{{ target_client.id }}"
+            current_uris: "{{ target_client.redirectURIs | unique | list }}"
+
+        - name: Warn when additional staticClients are present
+          ansible.builtin.debug:
+            msg: >-
+              DEX config contains {{ dex_config.staticClients | length }}
+              staticClients. Only '{{ resolved_client_id }}' will be modified;
+              the others are preserved verbatim.
+          when: dex_config.staticClients | length > 1
+
+        - name: Display current URIs
+          ansible.builtin.debug:
+            msg: "Current RedirectURIs ({{ current_uris | length }}): {{ current_uris }}"
+
+        # =====================================================================
+        # PHASE 2: Load ownership state
+        #
+        # The state file records which URIs this playbook previously wrote.
+        # Anything in the live config that is NOT in that set is owned by
+        # someone else (System Controller SSO, operator, other tooling) and
+        # is preserved. This is what makes prune-on-subcloud-removal safe.
+        # =====================================================================
+        - name: Check for managed URI state file
+          ansible.builtin.stat:
+            path: "{{ managed_state_file }}"
+          register: state_file_stat
+
+        - name: Read managed URI state file
+          ansible.builtin.slurp:
+            src: "{{ managed_state_file }}"
+          register: state_file_raw
+          when: state_file_stat.stat.exists
+
+        - name: Parse managed URI state file
+          ansible.builtin.set_fact:
+            state_doc: "{{ state_file_raw.content | b64decode | from_json }}"
+          when: state_file_stat.stat.exists
+
+        # Attribution is what makes safe pruning possible: a URI can only be
+        # removed when its owning subcloud is genuinely gone from dcmanager,
+        # not merely offline, unmanaged, or outside this run's target_list.
+        - name: Load per-subcloud attribution (state v2)
+          ansible.builtin.set_fact:
+            state_subclouds: "{{ state_doc.subclouds | default({}) }}"
+            # Carried forward so migrated-but-still-unattributed URIs stay
+            # classified as managed rather than drifting into the
+            # externally-owned bucket, where they would never be reconciled.
+            legacy_managed_uris: >-
+              {{ (state_doc.unattributed_uris | default([])) | unique | list }}
+            legacy_retain: true
+          when:
+            - state_file_stat.stat.exists
+            - (state_doc.version | default(1) | int) >= 2
+
+        - name: Load unattributed managed URIs (state v1 migration)
+          # A v1 state file records a flat list with no owner information.
+          # Those URIs are retained rather than pruned, because guessing an
+          # owner could silently disable SSO on a healthy subcloud. They gain
+          # attribution as soon as their subcloud qualifies in a later run.
+          ansible.builtin.set_fact:
+            state_subclouds: { }
+            legacy_managed_uris: >-
+              {{ (state_doc.managed_uris | default([])) | unique | list }}
+            legacy_retain: true
+          when:
+            - state_file_stat.stat.exists
+            - (state_doc.version | default(1) | int) < 2
+
+        - name: Warn about state file migration
+          ansible.builtin.debug:
+            msg: >-
+              Migrating state file from v1 to v2.
+              {{ legacy_managed_uris | length }} URIs have no owner recorded and
+              will be retained until their subcloud is re-evaluated. Pruning of
+              those entries begins once attribution is established.
+          when:
+            - state_file_stat.stat.exists
+            - (state_doc.version | default(1) | int) < 2
+            - (legacy_managed_uris | length) > 0
+
+        - name: Initialise ownership on first run
+          ansible.builtin.set_fact:
+            state_subclouds: { }
+            legacy_managed_uris: []
+            legacy_retain: false
+          when: not state_file_stat.stat.exists
+
+        - name: Get System Controller auth URL
+          ansible.builtin.shell: |
+            source /etc/platform/openrc
+            echo "$OS_AUTH_URL"
+          register: cc_auth_url
+          changed_when: false
+          when:
+            - not state_file_stat.stat.exists
+            - force_prune_heuristic | bool
+
+        - name: Derive System Controller host
+          # Strips scheme, then path, then only a trailing :port. Stripping the
+          # port last and anchored to digits keeps bracketed IPv6 literals
+          # intact, e.g. https://[fd01::1]:5000/v3 -> [fd01::1]
+          ansible.builtin.set_fact:
+            cc_host: >-
+              {{ cc_auth_url.stdout | trim
+                 | regex_replace('^https?://', '')
+                 | regex_replace('/.*$', '')
+                 | regex_replace(':[0-9]+$', '') }}
+          when:
+            - not state_file_stat.stat.exists
+            - force_prune_heuristic | bool
+
+        - name: Fail if System Controller host could not be determined
+          # Without a reliable self-host the heuristic could classify the
+          # System Controller's own SSO URIs as prunable, breaking local login.
+          ansible.builtin.fail:
+            msg: >-
+              force_prune_heuristic=true was requested but OS_AUTH_URL could
+              not be resolved to a host, so System Controller URIs cannot be
+              safely excluded. Re-run without force_prune_heuristic.
+          when:
+            - not state_file_stat.stat.exists
+            - force_prune_heuristic | bool
+            - (cc_host | default('') | length) == 0
+
+        - name: Derive heuristic ownership set on first run
+          # Opt-in only. Claims pre-existing subcloud-looking URIs as managed
+          # AND prunable (legacy_retain false), which is the point of the
+          # heuristic: clean up leftovers from the old manual process. Anything
+          # pointing at the System Controller is excluded. cc_host is
+          # regex-escaped because a bracketed IPv6 literal would otherwise be
+          # read as a character class.
+          ansible.builtin.set_fact:
+            legacy_managed_uris: >-
+              {{ current_uris
+                 | select('search', 'websso')
+                 | reject('search', cc_host | regex_escape)
+                 | list }}
+            legacy_retain: false
+          when:
+            - not state_file_stat.stat.exists
+            - force_prune_heuristic | bool
+
+        - name: Compute previously managed URI set
+          ansible.builtin.set_fact:
+            previous_managed_uris: >-
+              {{ ((state_subclouds.values() | list | flatten) + legacy_managed_uris)
+                 | unique | list }}
+
+        - name: Report ownership baseline
+          ansible.builtin.debug:
+            msg: |
+              Ownership baseline:
+                subclouds with recorded URIs: {{ state_subclouds | length }}
+                unattributed managed URIs:    {{ legacy_managed_uris | length
+                  }}{{ ' (retained)' if legacy_retain else ' (prunable)' }}
+                total previously managed:     {{ previous_managed_uris | length }}
+              {{ 'First run: adopting existing config, nothing will be pruned.'
+                 if (not state_file_stat.stat.exists and not (force_prune_heuristic | bool)) else '' }}
+
+        - name: Compute externally-owned URIs to preserve
+          ansible.builtin.set_fact:
+            preserved_uris: >-
+              {{ current_uris | difference(previous_managed_uris) | list }}
+
+        - name: Display preserved URIs
+          ansible.builtin.debug:
+            msg: "Preserved (not managed by this playbook): {{ preserved_uris }}"
+
+        # =====================================================================
+        # PHASE 3: Discover target subclouds
+        # =====================================================================
+        - name: Parse subclouds list
+          ansible.builtin.set_fact:
+            all_subclouds: "{{ subcloud_list_result.stdout | from_json }}"
+
+        - name: Select target subclouds (all online and managed)
+          ansible.builtin.set_fact:
+            target_subclouds: >-
+              {{ all_subclouds
+                 | selectattr('availability', 'equalto', 'online')
+                 | selectattr('management', 'equalto', 'managed')
+                 | list }}
+          when: "'all_online_subclouds' in target_list"
+
+        - name: Normalise explicitly requested subcloud names
+          # Tolerates whitespace and trailing separators in target_list so a
+          # value like "sub1, sub2," does not produce a phantom entry.
+          ansible.builtin.set_fact:
+            requested_names: >-
+              {{ target_list.split(',') | map('trim')
+                 | reject('equalto', '') | unique | list }}
+          when: "'all_online_subclouds' not in target_list"
+
+        - name: Select target subclouds (explicit list)
+          ansible.builtin.set_fact:
+            target_subclouds: >-
+              {{ all_subclouds | selectattr('name', 'in', requested_names) | list }}
+          when: "'all_online_subclouds' not in target_list"
+
+        - name: Fail if an explicitly named subcloud was not found
+          ansible.builtin.assert:
+            that:
+              - (requested_names
+                 | difference(target_subclouds | map(attribute='name') | list)
+                 | length) == 0
+            fail_msg: >-
+              Requested subclouds do not exist:
+              {{ requested_names
+                 | difference(target_subclouds | map(attribute='name') | list) | list }}
+              Known subclouds: {{ all_subclouds | map(attribute='name') | list }}
+          when: "'all_online_subclouds' not in target_list"
+
+        - name: Report when no target subclouds are selected
+          ansible.builtin.debug:
+            msg: >-
+              No subclouds selected by target_list='{{ target_list }}'.
+              Any previously managed URIs will be pruned.
+          when: target_subclouds | length == 0
+
+        - name: Get details for each target subcloud
+          ansible.builtin.shell: |
+            set -o pipefail
+            source /etc/platform/openrc
+            dcmanager subcloud show {{ item.name | quote }} --detail --format json
+          register: subcloud_details
+          loop: "{{ target_subclouds }}"
+          loop_control:
+            label: "{{ item.name }}"
+          changed_when: false
+          failed_when: false
+
+        - name: Reset subcloud info accumulator
+          # Explicit reset makes the accumulation loop below safe to re-enter.
+          ansible.builtin.set_fact:
+            subcloud_info: []
+
+        - name: Build subcloud info list
+          ansible.builtin.set_fact:
+            subcloud_info: >-
+              {{ subcloud_info + [{
+                   'name': (item.stdout | from_json).name,
+                   'oam_ip': (item.stdout | from_json).oam_floating_ip | default(''),
+                   'mgmt_ip': (item.stdout | from_json).management_start_ip | default('')
+                 }] }}
+          loop: "{{ subcloud_details.results }}"
+          when:
+            - item.rc == 0
+            - (item.stdout | default('') | trim) | length > 0
+          loop_control:
+            label: "{{ item.item.name }}"
+
+        - name: Warn about subclouds whose details could not be read
+          ansible.builtin.debug:
+            msg: >-
+              Skipping '{{ item.item.name }}': dcmanager subcloud show failed
+              (rc={{ item.rc }}). It will not be added, and any existing URI
+              for it will be pruned.
+          loop: "{{ subcloud_details.results }}"
+          when: item.rc != 0
+          loop_control:
+            label: "{{ item.item.name }}"
+
+        - name: Validate each subcloud has a management IP
+          ansible.builtin.assert:
+            that:
+              - (item.mgmt_ip | length) > 0
+            fail_msg: >-
+              Subcloud '{{ item.name }}' has no management_start_ip.
+          loop: "{{ subcloud_info }}"
+          loop_control:
+            label: "{{ item.name }}"
+
+        # =====================================================================
+        # PHASE 4: Filter to qualifying subclouds
+        #
+        # Reachability is probed first so an unreachable subcloud fails in
+        # seconds rather than blocking each subsequent uri call for the full
+        # API timeout.
+        # =====================================================================
+        - name: Probe subcloud sysinv API reachability
+          ansible.builtin.wait_for:
+            host: "{{ item.mgmt_ip }}"
+            port: "{{ subcloud_api_port }}"
+            timeout: "{{ subcloud_connect_timeout }}"
+          register: reach_results
+          loop: "{{ subcloud_info }}"
+          loop_control:
+            label: "{{ item.name }}"
+          failed_when: false
+
+        - name: Reset reachable subclouds accumulator
+          ansible.builtin.set_fact:
+            reachable_subclouds: []
+
+        - name: Build reachable subcloud list
+          ansible.builtin.set_fact:
+            reachable_subclouds: "{{ reachable_subclouds + [item.item] }}"
+          loop: "{{ reach_results.results }}"
+          when: not (item.failed | default(false))
+          loop_control:
+            label: "{{ item.item.name }}"
+
+        - name: Warn about unreachable subclouds
+          ansible.builtin.debug:
+            msg: >-
+              Skipping '{{ item.item.name }}'
+              ({{ item.item.mgmt_ip }}:{{ subcloud_api_port }} unreachable).
+          loop: "{{ reach_results.results }}"
+          when: item.failed | default(false)
+          loop_control:
+            label: "{{ item.item.name }}"
+
+        - name: Get platform Keystone token for subcloud queries
+          # Re-issued at the start of each API batch so long runs over many
+          # subclouds cannot fail midway on an expired token.
+          ansible.builtin.shell: |
+            source /etc/platform/openrc
+            openstack token issue -f value -c id
+          register: token_dex_check
+          changed_when: false
+          no_log: true
+          when: reachable_subclouds | length > 0
+
+        - name: Read keystone helm overrides from each subcloud
+          vars:
+            api_host: >-
+              {% if ':' in item.mgmt_ip %}[{{ item.mgmt_ip }}]{% else %}{{ item.mgmt_ip }}{% endif %}
+            api_url: >-
+              https://{{ api_host | trim }}:{{ subcloud_api_port
+              }}/v1/helm_charts/{{ openstack_app_name
+              }}?name=keystone&namespace=openstack
+          ansible.builtin.uri:
+            url: "{{ api_url | trim }}"
+            method: GET
+            headers:
+              X-Auth-Token: "{{ token_dex_check.stdout | trim }}"
+            validate_certs: "{{ validate_subcloud_certs }}"
+            ca_path: "{{ subcloud_ca_path }}"
+            timeout: "{{ subcloud_api_timeout }}"
+            status_code: [200, 400, 401, 404]
+          register: helm_results
+          loop: "{{ reachable_subclouds }}"
+          loop_control:
+            label: "{{ item.name }}"
+          failed_when: false
+
+        - name: Fail if subcloud API rejected the token
+          ansible.builtin.fail:
+            msg: >-
+              Subcloud '{{ item.item.name }}' returned 401 Unauthorized.
+              The platform Keystone token was rejected; check DC token
+              federation between System Controller and subcloud.
+          loop: "{{ helm_results.results }}"
+          when: item.status | default(0) == 401
+          loop_control:
+            label: "{{ item.item.name }}"
+
+        - name: Reset DEX-enabled accumulator
+          ansible.builtin.set_fact:
+            dex_enabled_subclouds: []
+
+        - name: Filter subclouds with DEX federation enabled
+          ansible.builtin.set_fact:
+            dex_enabled_subclouds: "{{ dex_enabled_subclouds + [item.item] }}"
+          loop: "{{ helm_results.results }}"
+          when:
+            - item.status | default(0) == 200
+            - item.json is defined
+            - item.json.system_overrides is defined
+            - (item.json.system_overrides | from_yaml).conf is defined
+            - (item.json.system_overrides | from_yaml).conf.federation is defined
+            - ((item.json.system_overrides | from_yaml).conf.federation.dex_idp.enabled
+               | default(false)) | bool
+          loop_control:
+            label: "{{ item.item.name }}"
+
+        - name: Get platform Keystone token for application queries
+          ansible.builtin.shell: |
+            source /etc/platform/openrc
+            openstack token issue -f value -c id
+          register: token_app_check
+          changed_when: false
+          no_log: true
+          when: dex_enabled_subclouds | length > 0
+
+        - name: Check OpenStack applied on DEX-enabled subclouds
+          vars:
+            api_host: >-
+              {% if ':' in item.mgmt_ip %}[{{ item.mgmt_ip }}]{% else %}{{ item.mgmt_ip }}{% endif %}
+          ansible.builtin.uri:
+            url: "https://{{ api_host | trim }}:{{ subcloud_api_port }}/v1/apps"
+            method: GET
+            headers:
+              X-Auth-Token: "{{ token_app_check.stdout | trim }}"
+            validate_certs: "{{ validate_subcloud_certs }}"
+            ca_path: "{{ subcloud_ca_path }}"
+            timeout: "{{ subcloud_api_timeout }}"
+            status_code: [200, 400, 401, 404]
+          register: app_results
+          loop: "{{ dex_enabled_subclouds }}"
+          loop_control:
+            label: "{{ item.name }}"
+          failed_when: false
+
+        - name: Reset qualified accumulator
+          ansible.builtin.set_fact:
+            qualified_subclouds: []
+
+        - name: Filter subclouds with OpenStack applied
+          ansible.builtin.set_fact:
+            qualified_subclouds: "{{ qualified_subclouds + [item.item] }}"
+          loop: "{{ app_results.results }}"
+          when:
+            - item.status | default(0) == 200
+            - item.json is defined
+            - item.json.apps is defined
+            - >-
+              item.json.apps
+              | selectattr('name', 'equalto', openstack_app_name)
+              | selectattr('status', 'equalto', 'applied')
+              | list | length > 0
+          loop_control:
+            label: "{{ item.item.name }}"
+
+        - name: Display qualified subclouds
+          ansible.builtin.debug:
+            msg: >-
+              Qualified (DEX federation enabled + OpenStack applied):
+              {{ qualified_subclouds | map(attribute='name') | list }}
+
+        # A zero-qualified result is a legitimate sync outcome (for example
+        # the last OpenStack subcloud was decommissioned), not an error. It leads
+        # to pruning rather than a failure.
+        - name: Report empty qualified set
+          ansible.builtin.debug:
+            msg: >-
+              No subclouds currently qualify. Previously managed URIs will be
+              pruned; externally-owned URIs are untouched.
+          when: qualified_subclouds | length == 0
+
+        # =====================================================================
+        # PHASE 5: Derive desired URI set
+        #
+        # The callback URI DEX receives is built by the subcloud from its own
+        # external keystone/horizon URLs (conf.federation.external.*). Those
+        # already encode the correct host form AND scheme for the subcloud's
+        # mode:
+        #   HTTPS (TLS FQDN ingress): dashed host, https
+        #   HTTP  (cluster internal): dotted host, http
+        # DEX matches redirect_uri as an exact string, so we register exactly
+        # what the subcloud sends rather than guessing separator or scheme.
+        # =====================================================================
+        - name: Reset externals accumulator
+          ansible.builtin.set_fact:
+            subcloud_externals: []
+
+        - name: Extract external keystone/horizon URLs
+          ansible.builtin.set_fact:
+            subcloud_externals: >-
+              {{ subcloud_externals + [{
+                   'name': item.item.name,
+                   'keystone_url': ((item.json.system_overrides | from_yaml).conf.federation.external.keystone
+                                    | default('') | trim),
+                   'horizon_url': ((item.json.system_overrides | from_yaml).conf.federation.external.horizon
+                                   | default('') | trim)
+                 }] }}
+          loop: "{{ helm_results.results }}"
+          when:
+            - item.status | default(0) == 200
+            - item.json is defined
+            - item.json.system_overrides is defined
+            - item.item.name in (qualified_subclouds | map(attribute='name') | list)
+            - (item.json.system_overrides | from_yaml).conf.federation.external is defined
+          loop_control:
+            label: "{{ item.item.name }}"
+
+        - name: Display discovered external URLs
+          ansible.builtin.debug:
+            msg: >-
+              {{ item.name }}: keystone={{ item.keystone_url }}
+              horizon={{ item.horizon_url }}
+          loop: "{{ subcloud_externals }}"
+          loop_control:
+            label: "{{ item.name }}"
+
+        - name: Fail if a qualified subcloud is missing external URLs
+          ansible.builtin.assert:
+            that:
+              - (item.keystone_url | length) > 0
+              - (item.horizon_url | length) > 0
+            fail_msg: >-
+              Subcloud '{{ item.name }}' qualifies but does not publish
+              conf.federation.external.keystone / .horizon in its keystone
+              helm overrides. Refusing to guess the callback URL.
+          loop: "{{ subcloud_externals }}"
+          loop_control:
+            label: "{{ item.name }}"
+
+        - name: Fail if a qualified subcloud produced no external URL entry
+          ansible.builtin.assert:
+            that:
+              - (qualified_subclouds | length) == (subcloud_externals | length)
+            fail_msg: >-
+              External URL discovery is incomplete.
+              Qualified: {{ qualified_subclouds | map(attribute='name') | list }}
+              Resolved: {{ subcloud_externals | map(attribute='name') | list }}
+
+        - name: Reset subcloud URI accumulators
+          ansible.builtin.set_fact:
+            subcloud_uris: []
+            desired_by_subcloud: { }
+
+        - name: Build subcloud redirect URIs from external URLs
+          # Keyed by subcloud name so ownership is recorded per subcloud.
+          # regex_replace strips a trailing slash so we never emit a double
+          # slash before the callback path.
+          ansible.builtin.set_fact:
+            desired_by_subcloud: >-
+              {{ desired_by_subcloud | combine({
+                   item.name: [
+                     (item.keystone_url | regex_replace('/$', '')) ~ websso_keystone_path,
+                     (item.horizon_url | regex_replace('/$', '')) ~ websso_horizon_path
+                   ]
+                 }) }}
+          loop: "{{ subcloud_externals }}"
+          loop_control:
+            label: "{{ item.name }}"
+
+        - name: Flatten derived URIs
+          ansible.builtin.set_fact:
+            subcloud_uris: >-
+              {{ desired_by_subcloud.values() | list | flatten | list }}
+
+        - name: Validate derived URIs are well-formed
+          ansible.builtin.assert:
+            that:
+              - item is match('^https?://[^/]+/.+$')
+              - "' ' not in item"
+              - "'//' not in (item | regex_replace('^https?://', ''))"
+            fail_msg: >-
+              Malformed redirect URI derived from subcloud overrides: '{{ item }}'
+          loop: "{{ subcloud_uris }}"
+          loop_control:
+            label: "{{ item }}"
+
+        - name: Fail on colliding subcloud endpoint URLs
+          # Two subclouds sharing an endpoint domain would collapse into one
+          # redirect URI, silently leaving one subcloud without SSO. Assert at
+          # the subcloud level so the failure names the offenders.
+          ansible.builtin.assert:
+            that:
+              - (subcloud_externals | map(attribute='keystone_url') | unique | list | length)
+                == (subcloud_externals | length)
+              - (subcloud_externals | map(attribute='horizon_url') | unique | list | length)
+                == (subcloud_externals | length)
+            fail_msg: >-
+              Two or more subclouds resolve to the same external endpoint URL,
+              so their redirect URIs would collide and one subcloud would be
+              left without working SSO. Correct the duplicated endpoint domain.
+              Discovered mapping: {{ subcloud_externals }}
+
+        # =====================================================================
+        # PHASE 5b: Classify previously managed subclouds
+        #
+        # Three distinct outcomes, which the flat-list model could not express:
+        #   qualified - re-derived from live state this run
+        #   retained  - still exists in dcmanager but was not evaluated or did
+        #               not qualify (offline, unmanaged, unreachable, or simply
+        #               outside target_list). Its URIs are carried forward
+        #               untouched so a transient condition never breaks SSO.
+        #   pruned    - genuinely absent from dcmanager, i.e. deleted. Only
+        #               this case removes URIs.
+        # =====================================================================
+        - name: Classify previously managed subclouds
+          ansible.builtin.set_fact:
+            known_subcloud_names: "{{ all_subclouds | map(attribute='name') | list }}"
+            qualified_names: "{{ qualified_subclouds | map(attribute='name') | list }}"
+
+        - name: Determine retained and pruned subclouds
+          ansible.builtin.set_fact:
+            retained_names: >-
+              {{ (state_subclouds.keys() | list)
+                 | intersect(known_subcloud_names)
+                 | difference(qualified_names) | list }}
+            pruned_names: >-
+              {{ (state_subclouds.keys() | list)
+                 | difference(known_subcloud_names) | list }}
+
+        - name: Collect retained URIs
+          ansible.builtin.set_fact:
+            retained_uris: >-
+              {{ (retained_names | map('extract', state_subclouds) | list | flatten)
+                 | unique | list }}
+
+        - name: Report retained subclouds
+          ansible.builtin.debug:
+            msg: >-
+              Retaining URIs for subclouds that still exist but were not
+              re-evaluated this run (offline, unmanaged, unreachable, or not
+              targeted): {{ retained_names }}
+          when: retained_names | length > 0
+
+        - name: Report pruned subclouds
+          ansible.builtin.debug:
+            msg: >-
+              Pruning URIs for subclouds no longer present in dcmanager:
+              {{ pruned_names }}
+          when: pruned_names | length > 0
+
+        - name: Reset new ownership map
+          ansible.builtin.set_fact:
+            new_state_subclouds: "{{ desired_by_subcloud }}"
+
+        - name: Carry forward retained subcloud ownership
+          ansible.builtin.set_fact:
+            new_state_subclouds: >-
+              {{ new_state_subclouds | combine({item: state_subclouds[item]}) }}
+          loop: "{{ retained_names }}"
+          loop_control:
+            label: "{{ item }}"
+
+        - name: Build desired URI list
+          ansible.builtin.set_fact:
+            desired_managed_uris: >-
+              {{ (subcloud_uris + retained_uris
+                  + (legacy_managed_uris if legacy_retain else []))
+                 | unique | list }}
+
+        - name: Build final URI list
+          ansible.builtin.set_fact:
+            final_uris: "{{ (preserved_uris + desired_managed_uris) | unique | list }}"
+
+        # =====================================================================
+        # PHASE 6: Diff and apply
+        # =====================================================================
+        - name: Compute change set
+          ansible.builtin.set_fact:
+            uris_to_add: "{{ final_uris | difference(current_uris) | list }}"
+            uris_to_remove: "{{ current_uris | difference(final_uris) | list }}"
+
+        - name: Determine whether a change is required
+          ansible.builtin.set_fact:
+            uris_changed: >-
+              {{ (final_uris | sort) != (current_uris | sort) }}
+
+        - name: Report change set
+          ansible.builtin.debug:
+            msg: |
+              ────────────────────────────────────────────────────────────
+              DEX RedirectURI change set for client '{{ resolved_client_id }}'
+              ────────────────────────────────────────────────────────────
+              Add    ({{ uris_to_add | length }}):
+              {{ uris_to_add | to_nice_yaml | indent(2) }}
+              Remove ({{ uris_to_remove | length }}):
+              {{ uris_to_remove | to_nice_yaml | indent(2) }}
+              ────────────────────────────────────────────────────────────
+              Subclouds re-derived:  {{ qualified_names }}
+              Subclouds retained:    {{ retained_names }}
+              Subclouds pruned:      {{ pruned_names }}
+              ────────────────────────────────────────────────────────────
+              Preserved (externally owned): {{ preserved_uris | length }}
+              Managed after sync:           {{ desired_managed_uris | length }}
+              Total after sync:             {{ final_uris | length }}
+              ────────────────────────────────────────────────────────────
+
+        - name: Report no changes needed
+          ansible.builtin.debug:
+            msg: >-
+              Config already in sync. No helm-override-update or
+              application-apply will be performed.
+          when: not uris_changed
+
+        - name: Report dry-run stop
+          ansible.builtin.debug:
+            msg: >-
+              dry_run=true. Stopping before any state change. Re-run without
+              dry_run to apply the change set above.
+          when:
+            - uris_changed
+            - dry_run | bool
+
+        - name: Reset updated client list accumulator
+          ansible.builtin.set_fact:
+            new_static_clients: []
+
+        - name: Build updated staticClients list
+          # Every existing client is carried through verbatim; only the
+          # target client's redirectURIs are replaced.
+          ansible.builtin.set_fact:
+            new_static_clients: >-
+              {{ new_static_clients + [
+                   (item | combine({'redirectURIs': final_uris}))
+                   if item.id == resolved_client_id else item
+                 ] }}
+          loop: "{{ dex_config.staticClients }}"
+          loop_control:
+            label: "{{ item.id }}"
+          no_log: true
+          when:
+            - uris_changed
+            - not (dry_run | bool)
+
+        - name: Generate override file
+          # Rendered via to_nice_yaml rather than a hand-indented template so
+          # the output is always valid YAML with correct quoting.
+          ansible.builtin.copy:
+            dest: "{{ override_file }}"
+            mode: '0600'
+            content: >-
+              {{ {'config': {'staticClients': new_static_clients}}
+                 | to_nice_yaml(indent=2) }}
+          no_log: true
+          when:
+            - uris_changed
+            - not (dry_run | bool)
+
+        - name: Re-verify oidc-auth-apps is applied before mutating
+          # The app state can change between pre-flight and here. sysinv
+          # rejects override updates while the app is applying/updating, so
+          # confirm immediately before the write.
+          ansible.builtin.shell: |
+            set -o pipefail
+            source /etc/platform/openrc
+            system application-show {{ dex_app_name }} | awk -F'|' '/ status / {gsub(/ /, "", $3); print $3}'
+          register: pre_apply_status
+          until: pre_apply_status.stdout | trim == 'applied'
+          retries: "{{ pre_apply_state_retries }}"
+          delay: "{{ pre_apply_state_delay }}"
+          changed_when: false
+          failed_when: false
+          when:
+            - uris_changed
+            - not (dry_run | bool)
+
+        - name: Fail if oidc-auth-apps did not settle into applied state
+          ansible.builtin.fail:
+            msg: >-
+              {{ dex_app_name }} is in
+              '{{ pre_apply_status.stdout | default('unknown') | trim }}' state
+              and did not reach 'applied' within
+              {{ pre_apply_state_retries | int * pre_apply_state_delay | int }}s.
+              No changes were made. Resolve the application state and re-run.
+          when:
+            - uris_changed
+            - not (dry_run | bool)
+            - pre_apply_status.stdout | default('') | trim != 'applied'
+
+        - name: Apply updated DEX helm overrides
+          ansible.builtin.shell: |
+            source /etc/platform/openrc
+            system helm-override-update {{ dex_app_name }} {{ dex_chart_name }} {{ dex_namespace }} \
+              --reuse-values --values {{ override_file }}
+          register: helm_update
+          until: helm_update is not failed
+          retries: 3
+          delay: 30
+          # Reached only when uris_changed, so this always alters state.
+          changed_when: true
+          when:
+            - uris_changed
+            - not (dry_run | bool)
+
+        # Preferred path once the sysinv re-eval/reapply API
+        # enhancement is available: the override update itself
+        # triggers the reapply, so no separate application-apply is needed.
+        - name: Reapply via helm-override re-eval API
+          ansible.builtin.shell: |
+            source /etc/platform/openrc
+            system application-apply {{ dex_app_name }} --reapply
+          register: app_reeval
+          until: app_reeval is not failed
+          retries: 3
+          delay: 30
+          changed_when: true
+          when:
+            - uris_changed
+            - not (dry_run | bool)
+            - use_reapply_api | bool
+
+        - name: Trigger reapply of oidc-auth-apps
+          ansible.builtin.shell: |
+            source /etc/platform/openrc
+            system application-apply {{ dex_app_name }}
+          register: app_apply
+          until: app_apply is not failed
+          retries: 3
+          delay: 30
+          changed_when: true
+          when:
+            - uris_changed
+            - not (dry_run | bool)
+            - not (use_reapply_api | bool)
+
+        - name: Wait for oidc-auth-apps to reach applied state
+          ansible.builtin.shell: |
+            set -o pipefail
+            source /etc/platform/openrc
+            system application-show {{ dex_app_name }} | awk -F'|' '/ status / {gsub(/ /, "", $3); print $3}'
+          register: app_status
+          until: app_status.stdout | trim in ['applied', 'apply-failed']
+          retries: "{{ reapply_retries }}"
+          delay: "{{ reapply_delay }}"
+          changed_when: false
+          failed_when: false
+          when:
+            - uris_changed
+            - not (dry_run | bool)
+
+        - name: Fail if reapply did not succeed
+          ansible.builtin.fail:
+            msg: >-
+              {{ dex_app_name }} reapply ended in
+              '{{ app_status.stdout | default('unknown') | trim }}'.
+              The overrides were written but the application is not applied.
+              Re-running this playbook after resolving the failure is safe.
+          when:
+            - uris_changed
+            - not (dry_run | bool)
+            - app_status.stdout | default('') | trim != 'applied'
+
+        # =====================================================================
+        # PHASE 7: Verify against ground truth and persist ownership state
+        #
+        # Verification re-reads the DEX secret and compares parsed structure.
+        # Substring matching on helm-override-show output can false-positive
+        # when one URI is a prefix of another.
+        # =====================================================================
+        - name: Re-read DEX config after apply
+          ansible.builtin.shell: |
+            set -o pipefail
+            export KUBECONFIG=/etc/kubernetes/admin.conf
+            kubectl get secret -n {{ dex_namespace }} {{ dex_secret_name }} \
+              -o jsonpath='{.data.config\.yaml}' | base64 -d
+          register: dex_config_verify_raw
+          changed_when: false
+          no_log: true
+          until: dex_config_verify_raw.rc == 0
+          retries: 6
+          delay: 10
+          when:
+            - uris_changed
+            - not (dry_run | bool)
+
+        - name: Match effective staticClient
+          ansible.builtin.set_fact:
+            effective_matches: >-
+              {{ (dex_config_verify_raw.stdout | from_yaml).staticClients
+                 | default([]) | selectattr('id', 'equalto', resolved_client_id)
+                 | list }}
+          no_log: true
+          when:
+            - uris_changed
+            - not (dry_run | bool)
+
+        - name: Verify target client survived the apply
+          ansible.builtin.assert:
+            that:
+              - (effective_matches | length) == 1
+            fail_msg: >-
+              Client '{{ resolved_client_id }}' is not present exactly once in
+              the applied DEX config ({{ effective_matches | length }} matches).
+              The apply may have rewritten staticClients unexpectedly.
+          when:
+            - uris_changed
+            - not (dry_run | bool)
+
+        - name: Parse effective URIs
+          ansible.builtin.set_fact:
+            effective_uris: >-
+              {{ effective_matches[0].redirectURIs | default([]) | unique | list }}
+          no_log: true
+          when:
+            - uris_changed
+            - not (dry_run | bool)
+
+        - name: Verify effective config matches desired state
+          ansible.builtin.assert:
+            that:
+              - (effective_uris | sort) == (final_uris | sort)
+            fail_msg: >-
+              Effective DEX config does not match the desired state.
+              Missing: {{ final_uris | difference(effective_uris) | list }}
+              Unexpected: {{ effective_uris | difference(final_uris) | list }}
+            success_msg: >-
+              Verified {{ effective_uris | length }} RedirectURIs in the
+              effective DEX configuration.
+          when:
+            - uris_changed
+            - not (dry_run | bool)
+
+        - name: Verify externally-owned URIs survived
+          ansible.builtin.assert:
+            that:
+              - item in effective_uris
+            fail_msg: "Externally-owned URI was lost: {{ item }}"
+          loop: "{{ preserved_uris }}"
+          when:
+            - uris_changed
+            - not (dry_run | bool)
+          loop_control:
+            label: "{{ item }}"
+
+        - name: Persist managed URI ownership state
+          # Written only after successful verification so a failed run does not
+          # claim ownership of URIs that were never applied. Per-subcloud
+          # attribution is what lets a later run distinguish a deleted subcloud
+          # from one that is merely offline or outside target_list.
+          ansible.builtin.copy:
+            dest: "{{ managed_state_file }}"
+            mode: '0600'
+            content: >-
+              {{ {'version': 2,
+                  'client_id': resolved_client_id,
+                  'subclouds': new_state_subclouds,
+                  'unattributed_uris': (legacy_managed_uris if legacy_retain else [])}
+                 | to_nice_json }}
+          when: not (dry_run | bool)
+
+        - name: Summary
+          ansible.builtin.debug:
+            msg: |
+              ════════════════════════════════════════════════════════════
+              DEX RedirectURI Sync {{ 'PREVIEW' if (dry_run | bool) else 'Complete' }}
+              ════════════════════════════════════════════════════════════
+              Target client:        {{ resolved_client_id }}
+              Subclouds targeted:   {{ target_subclouds | length }}
+              Reachable:            {{ reachable_subclouds | length }}
+              DEX federation on:    {{ dex_enabled_subclouds | length }}
+              Qualified (DEX+OpenStack):  {{ qualified_subclouds | length }}
+              ────────────────────────────────────────────────────────────
+              Re-derived:           {{ qualified_names | length }} {{ qualified_names }}
+              Retained (untouched): {{ retained_names | length }} {{ retained_names }}
+              Pruned (deleted):     {{ pruned_names | length }} {{ pruned_names }}
+              ────────────────────────────────────────────────────────────
+              URIs added:           {{ uris_to_add | length }}
+              URIs removed:         {{ uris_to_remove | length }}
+              Externally preserved: {{ preserved_uris | length }}
+              Managed by playbook:  {{ desired_managed_uris | length }}
+              Total in config:      {{ final_uris | length }}
+              ────────────────────────────────────────────────────────────
+              Changes applied:      {{ (uris_changed and not (dry_run | bool)) | bool }}
+              App status:           {{ (app_status.stdout | default('') | trim)
+                                        if (uris_changed and not (dry_run | bool))
+                                        else 'applied (unchanged)' }}
+              ════════════════════════════════════════════════════════════
+
+      always:
+        - name: Remove override file
+          # Contains the OIDC client secret, so it is removed on every exit
+          # path rather than only on success.
+          ansible.builtin.file:
+            path: "{{ override_file }}"
+            state: absent
+
+        - name: Release sync lock
+          ansible.builtin.file:
+            path: "{{ lock_file }}"
+            state: absent
