@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2025 Wind River Systems, Inc.
+# Copyright (c) 2022-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -59,9 +59,13 @@
     when: not local | bool
 
   - name: Run {{ inventory_hostname }} platform restore playbook
-    command: >
+    shell: >
+      set -o pipefail &&
       ansible-playbook /usr/share/ansible/stx-ansible/playbooks/restore_platform.yml -e
       "@{{ subcloud_overrides }}"
+      2>&1 | tee /tmp/restore_platform_output.log
+    args:
+      executable: /bin/bash
     register: platform_restore_output
     async: "{{ restore_timeout | default(5400) | int }}"
     poll: 0
@@ -141,6 +145,16 @@
       state: present
 
   rescue:
+    - name: Fetch restore playbook output from subcloud
+      command: cat /tmp/restore_platform_output.log
+      register: subcloud_restore_log
+      failed_when: false
+
+    - name: Print subcloud restore playbook output
+      debug:
+        msg: "{{ subcloud_restore_log.stdout_lines }}"
+      when: subcloud_restore_log.stdout | default('') | length > 0
+
     - name: Fail with error message for password-related failures
       fail:
         msg: >-
@@ -161,6 +175,11 @@
           {{ ansible_failed_result.msg | default('unknown') }}
 
   always:
+    - name: Remove restore playbook output log
+      file:
+        path: /tmp/restore_platform_output.log
+        state: absent
+
     - name: Remove subcloud overrides file on {{ inventory_hostname }}
       file:
         path: "{{ subcloud_overrides }}"
