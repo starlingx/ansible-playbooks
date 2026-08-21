@@ -9,6 +9,8 @@ kind: Pod
 metadata:
   name: {{ pod_name }}
   namespace: {{ pod_namespace }}
+  labels:
+    app: {{ pod_app_label }}
 spec:
   tolerations:
     - key: "node-role.kubernetes.io/control-plane"

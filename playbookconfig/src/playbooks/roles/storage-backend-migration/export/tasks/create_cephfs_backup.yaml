@@ -10,12 +10,22 @@
     namespace: "{{ cephfs_pvc_namespace }}"
 
 - name: Create cephfs backups
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  vars:
+    batch_pod_label: "migration-export-cephfs-batch"
   block:
+    - name: Delete any previous {{ batch_pod_label }} pods before starting
+      command: "kubectl delete pods --all-namespaces -l app={{ batch_pod_label }} --ignore-not-found=true"
+
     - name: Create cephfs backups for namespace {{ cephfs_pvc_namespace }} in batches
       include_tasks: create_cephfs_backup_batch.yaml
       loop: "{{ cephfs_pvc_list | batch(pvc_batch_size | int) | list }}"
       loop_control:
         loop_var: batch_pvcs
+
+    - name: Ensure all {{ batch_pod_label }} pods are terminated
+      command: "kubectl delete pods --all-namespaces -l app={{ batch_pod_label }} --ignore-not-found=true"
   always:
     - name: Delete registry secret
       command: "kubectl delete -f {{ tmp_workspace }}/secret-migration-registry-local.yaml --ignore-not-found=true"
