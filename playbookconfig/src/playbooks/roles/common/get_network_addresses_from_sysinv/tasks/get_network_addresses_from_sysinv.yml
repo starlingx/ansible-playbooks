@@ -57,6 +57,6 @@
         parsed_json if (parsed_json | length > 1)
         else (parsed_json.values() | list)[0]
         | to_json
-        | replace(': null', ': false')
+        | replace(': null', ': ""')
         | from_json
       }}
