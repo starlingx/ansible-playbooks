@@ -330,17 +330,26 @@
     # password hashes. Authentication fails because Keystone validates
     # passwords against the cached (stale) hash instead of querying
     # the restored DB. Flushing memcached forces fresh DB lookups.
+    # Use 'command' instead of 'systemd' module because:
+    # 1. The systemd module's 'systemctl show' status collection adds ~15s overhead.
+    # 2. The systemd module has been observed to skip the actual restart when the
+    #    service is already running and was never explicitly stopped during the flow
+    #    (returns state=started with unchanged ActiveEnterTimestamp), leaving stale
+    #    auth cache (TTL 600s) that causes Keystone token issue to fail for up to
+    #    10 minutes. This pattern only affects services that are already running
+    #    and not stopped earlier in the restore — memcached is the only such case.
     - name: Restart memcached to clear stale auth cache
-      systemd:
-        name: memcached
-        state: restarted
+      command: systemctl restart memcached
 
     # Confirm Keystone can issue tokens after memcached flush.
+    # timeout -k 5 15: SIGTERM after 15s, SIGKILL after 20s. Without -k,
+    # the openstack CLI can ignore SIGTERM when stuck in internal retries,
+    # causing each attempt to hang for 2+ minutes instead of the expected 15s.
     - name: Wait for Keystone to be ready after memcached flush
-      shell: "source /etc/platform/openrc; timeout 30 openstack token issue"
+      shell: "source /etc/platform/openrc; timeout -k 5 15 openstack token issue"
       register: keystone_check
-      retries: 30
-      delay: 5
+      retries: 25
+      delay: 2
       until: keystone_check.rc == 0
 
     - name: Start pmon-managed flock services
