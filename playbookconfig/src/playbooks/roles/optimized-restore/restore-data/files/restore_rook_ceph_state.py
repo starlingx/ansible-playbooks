@@ -15,6 +15,7 @@ import sys
 
 NAMESPACE = "rook-ceph"
 TEMP_DIR = "/tmp/factory_rook_ceph_restore"
+SKIP_PATTERNS = ["-system-overrides", "-static-overrides"]
 
 
 def kubectl(*args, input_data=None):
@@ -28,6 +29,9 @@ def restore_secrets():
     failures = []
     for s in data["items"]:
         name = s["metadata"]["name"]
+        if any(p in name for p in SKIP_PATTERNS):
+            print(f"Skipping override secret: {name}")
+            continue
         patch = json.dumps({"data": s["data"]})
         r = kubectl("patch", "secret", "-n", NAMESPACE,
                     name, "--type", "merge", "-p", patch)
