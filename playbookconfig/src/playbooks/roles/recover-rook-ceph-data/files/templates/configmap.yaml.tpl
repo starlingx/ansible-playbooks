@@ -43,7 +43,7 @@ data:
       local cmd_output rc
       for i in {1..180}
       do
-        cmd_output=$(kubectl get namespace rook-ceph 2>&1)
+        cmd_output=$(kubectl get pods -n rook-ceph 2>&1)
         rc=$?
         if [ $rc -eq 0 ]; then
           # Return 1 if we had to wait (i > 1), 0 if healthy immediately
