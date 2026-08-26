@@ -83,6 +83,7 @@ backup:
     - "{{ rootdir }}/*/.cache"
     - "{{ rootdir }}/*/.kube/**"
     - "{{ rootdir }}/*/.kube"
+    - "{{ rootdir }}/.docker/config.json"
 
 # What to include when also backing up software deployments
 sw_deployments_backup_targets:
