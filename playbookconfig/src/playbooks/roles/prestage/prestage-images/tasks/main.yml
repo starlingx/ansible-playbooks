@@ -60,7 +60,7 @@
       when: item.value.username is defined
       no_log: true
 
-    when: image_list
+    when: image_list | default([]) | length > 0
 
   - name: Take a snapshot of the local registry filesystem
     import_role:

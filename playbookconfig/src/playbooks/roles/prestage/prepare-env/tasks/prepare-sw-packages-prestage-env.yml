@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023-2025 Wind River Systems, Inc.
+# Copyright (c) 2023-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -58,8 +58,8 @@
 #   - The subcloud sw version must be lower than the sw version to be prestaged.
 - name: Set flag to indicate if the ostree directory should be copied to the subcloud
   set_fact:
-    force_ostree_dir_sync: "{{ 'true' if (prestage_source == 'remote' and
-                                host_software_version < software_version) else 'false' }}"
+    force_ostree_dir_sync: "{{ (prestage_source == 'remote' and
+                               host_software_version < software_version) | bool }}"
 
 - debug:
     msg: |
