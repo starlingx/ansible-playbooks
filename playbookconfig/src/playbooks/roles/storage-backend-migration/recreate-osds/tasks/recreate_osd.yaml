@@ -42,3 +42,24 @@
   register: disk_istor_ref_result
   delegate_to: "{{ system.active_controller }}"
   changed_when: disk_istor_ref_result.stdout | length > 0
+
+- name: Create collocated journal entry for recreated OSD
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -q -c
+    "INSERT INTO journal (uuid, device_path, size_mib, onistor_uuid, foristorid, created_at)
+      SELECT
+        gen_random_uuid()::varchar,
+        '{{ item.disk_device_path }}-part2',
+        1024,
+        '{{ item.osd_uuid }}',
+        i.id,
+        '{{ now(fmt='%Y-%m-%d %H:%M:%S.%f') }}'
+      FROM i_istor i
+      WHERE i.uuid = '{{ item.osd_uuid }}'
+      ON CONFLICT (foristorid) DO NOTHING
+      RETURNING id;"
+  register: journal_insert_result
+  delegate_to: "{{ system.active_controller }}"
+  changed_when: journal_insert_result.stdout | length > 0
