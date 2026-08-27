@@ -111,3 +111,9 @@ backup_registry_filesystem: false
 image_backup:
   targets:
     - "/var/lib/docker-distribution"
+
+# Repeated on every etcdctl invocation in this role.
+etcdctl_tls_args: >-
+  --cert=/etc/etcd/etcd-client.crt
+  --key=/etc/etcd/etcd-client.key
+  --cacert=/etc/etcd/ca.crt

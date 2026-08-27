@@ -32,9 +32,16 @@
     extended_key_usage:
       - serverAuth
       - clientAuth
-    subject_alt_name:
-      - IP:{{ cluster_floating_address }}
-      - IP:127.0.0.1
+    # The fixed etcd instances bind the cluster-host unit addresses, so the
+    # certificates must carry them alongside the floating address. The unit
+    # addresses come from validate-config, which already collapses them to
+    # the floating address on simplex; unique() drops the resulting duplicate.
+    subject_alt_name: >-
+      {{ (['IP:' + cluster_floating_address,
+           'IP:' + controller_0_cluster_host]
+          + (['IP:' + controller_1_cluster_host]
+             if system_mode != 'simplex' else [])
+          + ['IP:127.0.0.1', 'IP:::1']) | unique }}
     force: true
   loop:
     - "etcd-server"

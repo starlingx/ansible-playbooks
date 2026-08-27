@@ -167,6 +167,98 @@
     when: upgrade_in_progress|default(false)|bool
 
 
+  # The restore manifest includes platform::etcd::bootstrap, which starts
+  # etcd-fixed as the cluster seed. That service can only come up if two
+  # prerequisites are already satisfied:
+  #
+  #   1. Its bind address is present on an interface. The unit file waits for
+  #      the address parsed out of ETCD_LISTEN_PEER_URLS, and at this point in
+  #      an optimized restore no platform interface has been configured yet.
+  #   2. The etcd TLS material exists in /etc/etcd. The membership helper that
+  #      runs as ExecStartPre needs ca.crt and the client certificate.
+  #
+  # Neither holds this early in the restore, so etcd-fixed fails and the whole
+  # manifest returns non-zero. Satisfy both here. The certificates come out of
+  # the backup rather than being regenerated, so the restored keyspace stays
+  # verifiable by the same CA. See platform::etcd::bootstrap in stx-puppet.
+  # The prefix follows the family: a host route is /32 on IPv4 and /128 on
+  # IPv6. 'ip addr add <v6>/32' does not fail, it installs a /32 prefix on an
+  # IPv6 address, so the wrong value is accepted silently rather than caught.
+  - name: Add cluster-host addresses to loopback so etcd-fixed can bind
+    command: ip addr add {{ item }}/{{ 128 if ':' in item else 32 }} dev lo
+    loop: "{{ etcd_bind_addresses }}"
+    register: _etcd_lo_add
+    changed_when: _etcd_lo_add.rc == 0
+    # Tolerate the address already being present. iproute2 words this
+    # differently across versions ("Address already assigned",
+    # "RTNETLINK answers: File exists"), so match either.
+    failed_when:
+      - _etcd_lo_add.rc != 0
+      - not (_etcd_lo_add.stderr is search('(?i)already assigned|File exists'))
+    vars:
+      etcd_bind_addresses: "{{ [derived_network_params.controller_0_cluster_host,
+                               system_values[c0_cluster_host_unit_key] | default('', true)]
+                              | reject('equalto', '')
+                              | reject('equalto', None)
+                              | unique | list }}"
+      c0_cluster_host_unit_key: "platform::network::cluster_host::params::controller0_address"
+
+  - name: Restore etcd certificates from the backup before puppet starts etcd
+    command: >-
+      tar --use-compress-program=pigz -C /
+      -xpf {{ platform_backup_fqpn | quote }}
+      --overwrite etc/etcd
+
+  - name: Check which etcd certificates were recovered
+    find:
+      paths: /etc/etcd
+      patterns:
+        - '*.crt'
+        - '*.key'
+    register: etcd_certs_found
+
+  - name: Fail if the backup carried no etcd certificates
+    fail:
+      msg: >-
+        No certificates were recovered into /etc/etcd from
+        {{ platform_backup_fqpn }}. etcd-fixed cannot start without them, so the
+        restore manifest would fail. Confirm the backup contains etc/etcd.
+    when: etcd_certs_found.matched | int == 0
+
+  # Older backups kept the apiserver etcd client pair only under
+  # /etc/kubernetes/pki. Recover it from there when it is not already in place.
+  - name: Recover the apiserver etcd client pair from the kubernetes pki
+    command: >-
+      tar --use-compress-program=pigz -C /etc/etcd
+      -xpf {{ platform_backup_fqpn | quote }}
+      --overwrite --strip-components 3
+      {{ kubeadm_pki_dir | regex_replace('^/', '') }}/{{ item }}
+    loop:
+      - apiserver-etcd-client.crt
+      - apiserver-etcd-client.key
+    failed_when: false
+    vars:
+      kubeadm_pki_dir: /etc/kubernetes/pki
+    when: >-
+      etcd_certs_found.files
+      | map(attribute='path')
+      | select('search', 'apiserver-etcd-client')
+      | list | length == 0
+
+  # etcd-fixed is about to be started against an empty data directory. The
+  # restored keyspace is loaded later by optimized-restore/restore-data, which
+  # stops the service, replaces the database and restarts it. Any database left
+  # behind from an earlier attempt would make this seed start refuse to come up
+  # with initial-cluster-state=new, so clear it first.
+  - name: Clear any stale etcd-fixed database before the seed start
+    file:
+      path: /opt/etcd-fixed/db
+      state: "{{ item }}"
+      mode: 0700
+    loop:
+      - absent
+      - directory
+
   - name: Applying puppet restore manifest
     command: >-
       /usr/local/bin/puppet-manifest-apply.sh

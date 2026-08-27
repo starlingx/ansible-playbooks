@@ -865,35 +865,119 @@
       set_fact:
         etcd_version_file: "{{ etcd_snapshot_dir.path }}/etcd-binary-version"
 
-    - block:
-      - name: Get etcd endpoints -- primary cluster-host floating ip address
-        include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
-        vars:
-          network_type: cluster-host
-          network_stack: primary
-
-      - debug:
-          msg: primary cluster-host addresses {{ addresses }}
-
-      - name: Assign primary cluster-host ip addresses
-        set_fact:
-          etcd_endpoint: "{{ addresses.floating_address }}"
-
-    - name: Wrap etcd_endpoint in [] brackets if it's an ipv6 address (Bullseye)
+    - name: Name the etcd cluster membership record
       set_fact:
-        etcd_endpoint_parsed: "{{ etcd_endpoint | ipwrap }}"
-      when: is_bullseye
+        etcd_members_file: "{{ etcd_snapshot_dir.path }}/etcd-members.json"
 
-    - name: Wrap etcd_endpoint in [] brackets if it's an ipv6 address (Trixie)
+    - name: Get etcd endpoints -- controller cluster-host addresses
+      include_tasks: roles/common/get_network_addresses_from_sysinv/tasks/get_network_addresses_from_sysinv.yml
+      vars:
+        network_type: cluster-host
+        network_stack: primary
+
+    - debug:
+        msg: primary cluster-host addresses {{ addresses }}
+
+    # The snapshot is addressed to the fixed members on their cluster-host unit
+    # addresses rather than to the floating address: the fixed members are the
+    # authoritative local-disk copies and are present on every system type.
+    #
+    # On a single-controller system the cluster-host address pool carries no
+    # per-controller addresses at all -- controller-0's cluster-host address is
+    # the floating address -- so controller0_address comes back false and has to
+    # fall back to it. A Jinja default() does not help: the value is defined and
+    # falsy rather than undefined, so default() never fires and the endpoint
+    # renders as the literal string "False".
+    #
+    # controller1_address is included only when it holds a value, for the same
+    # reason.
+    - name: Build the fixed etcd member addresses
       set_fact:
-        etcd_endpoint_parsed: "{{ etcd_endpoint | ansible.utils.ipwrap }}"
-      when: is_trixie
+        etcd_fixed_addresses: >-
+          {{ [addresses.controller0_address if addresses.controller0_address
+              else addresses.floating_address]
+             + ([addresses.controller1_address]
+                if addresses.controller1_address else []) }}
 
-    - name: Create etcd snapshot
-      command: "etcdctl --endpoints https://{{ etcd_endpoint_parsed }}:2379 --cert=/etc/etcd/etcd-client.crt
-                --key=/etc/etcd/etcd-client.key --cacert=/etc/etcd/ca.crt snapshot save {{ etcd_snapshot_file }}"
-      environment:
-        ETCDCTL_API: 3
+    # RFC 2732: an IPv6 literal in a URL is bracketed. The negative lookahead
+    # leaves an already-bracketed literal alone rather than nesting brackets,
+    # and an IPv4 address, having no colon, is not matched at all. Plain Jinja is
+    # used rather than the ipwrap filter because that filter lives in a different
+    # collection on Bullseye and Trixie, and because it cannot be reached through
+    # map(), which resolves only built-in filter names.
+    - name: Define the etcd URL address formatter
+      set_fact:
+        etcd_url_bracket_pattern: '^(?!\[)(.*:.*)$'
+        etcd_url_bracket_replace: '[\1]'
+
+    - name: Build the fixed etcd endpoints
+      set_fact:
+        etcd_fixed_endpoints: >-
+          {{ etcd_fixed_addresses
+             | map('regex_replace', etcd_url_bracket_pattern,
+                   etcd_url_bracket_replace)
+             | map('regex_replace', '^(.*)$', 'https://\1:2379')
+             | list }}
+
+    - name: Build the etcd endpoint list for the calls that accept one
+      set_fact:
+        etcd_endpoint: "{{ etcd_fixed_endpoints | join(',') }}"
+
+    - debug:
+        msg: fixed etcd endpoints {{ etcd_fixed_endpoints }}
+
+    # etcdctl rejects more than one endpoint for a snapshot on the count alone,
+    # before reachability is ever considered:
+    #   "snapshot must be requested to one selected node, not multiple"
+    # so the endpoints are tried one at a time and the first that answers is
+    # used. A failed attempt can leave a partial file behind, which the next
+    # snapshot save would refuse to overwrite, so it is removed before each
+    # attempt. Only the failure of every endpoint is fatal, which is what lets
+    # the backup succeed with one fixed member down.
+    - name: Create the etcd snapshot from the first fixed member that answers
+      shell: |
+        rc=1
+        for endpoint in {{ etcd_fixed_endpoints | join(' ') }}; do
+          /bin/rm -f {{ etcd_snapshot_file }}
+          if etcdctl --endpoints "$endpoint" \
+               {{ etcdctl_tls_args }} \
+               snapshot save {{ etcd_snapshot_file }}; then
+            echo "etcd snapshot taken from $endpoint"
+            rc=0
+            break
+          fi
+          echo "etcd snapshot from $endpoint failed; trying the next endpoint"
+        done
+        exit $rc
+      args:
+        executable: /bin/bash
+      register: etcd_snapshot_result
+
+    - name: Show which endpoint produced the etcd snapshot
+      debug:
+        var: etcd_snapshot_result.stdout_lines
+
+    # Captured alongside the snapshot so a support bundle can show the
+    # cluster's shape at backup time: member count, names, addresses, and
+    # learner status.
+    #
+    # Unlike snapshot save, member list accepts a list of endpoints and
+    # tolerates those that are unreachable.
+    - name: List the etcd cluster membership alongside the snapshot
+      shell: |
+        etcdctl --endpoints {{ etcd_fixed_endpoints | join(',') }} \
+          {{ etcdctl_tls_args }} \
+          member list -w json > {{ etcd_members_file }}
+      args:
+        executable: /bin/bash
+      register: etcd_members_result
+
+    - name: Fail if we cannot list etcd members
+      fail:
+        msg: >-
+          Could not list etcd cluster membership:
+          {{ etcd_members_result.stderr }}.
+      when: etcd_members_result.rc != 0
 
     - name: Create etcd binary version file
       shell: |
@@ -994,6 +1078,7 @@
         final_backup_targets: "{{ (backup_targets + [
           etcd_snapshot_file,
           etcd_version_file,
+          etcd_members_file,
           override_backup_file,
           ldap_db_backup_,
           monmap_file_,
