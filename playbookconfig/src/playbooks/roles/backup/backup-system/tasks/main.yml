@@ -378,34 +378,35 @@
 
       when: check_dc_controller.rc == 0
 
+    # Created here, before delegation, so the paths are known whichever side
+    # writes the dumps. Both are consumed by the OpenStack size estimation and
+    # tarball creation below.
     - name: Create mariadb temp dir
       file:
         path: "{{ tempdir.path }}/mariadb"
         state: directory
       register: mariadb_dir
 
+    # In order to restore only the OpenStack application, the user needs to manually
+    # remove, delete and upload the application.
+    # This procedure will make the helm overrides data that is
+    # present in the sysinv DB and the OpenStack application DB to be inconsistent.
+    # A dump file containing the overrides data is used here to solve this inconsistency issue.
+    # Note that this file will contain only 'update' sql commands because the
+    # overrides are already created when we uploaded the application.
+    - name: Create Helm overrides temp dir
+      file:
+        path: "{{ tempdir.path }}/helm_overrides_sqldump_dir"
+        state: directory
+      register: helm_overrides_sqldump_dir
+
+    # Stays here even when the dumps are delegated: gates the OpenStack size
+    # estimation, tarball creation and transfer.
     - name: Check if mariadb pod is running
       shell: >-
         kubectl --kubeconfig={{ kube_config_dir }} get pods -n openstack | grep {{ mariadb_pod }} | grep -i 'running'
       failed_when: false
       register: check_mariadb_pod
-
-    - block:
-      - name: Set k8s cmd prefix
-        set_fact:
-          kube_cmd_prefix: "kubectl --kubeconfig={{ kube_config_dir }} exec -i {{ mariadb_pod }} -n openstack -- bash -c "
-
-      - name: Show databases
-        shell: "{{ kube_cmd_prefix }} 'exec mariadb -uroot -p\"$MYSQL_DBADMIN_PASSWORD\" -e\"show databases\"'"
-        register: databases
-
-      - name: Backup mariadb
-        shell: >-
-          {{ kube_cmd_prefix }} 'exec mariadb-dump -uroot -p"$MYSQL_DBADMIN_PASSWORD" {{ item }}' >
-          {{ mariadb_dir.path }}/{{ item }}.mariadb.data
-        loop: "{{ databases.stdout_lines | difference(skip_os_dbs) }}"
-
-      when: check_mariadb_pod.rc == 0
 
     - block:
 
@@ -464,42 +465,64 @@
             content: "{{ pvc_info_dict | to_nice_yaml(indent=2) }}"
             mode: 0640
 
-    # In order to restore only the OpenStack application, the user needs to manually
-    # remove, delete and upload the application.
-    # This procedure will make the helm overrides data that is
-    # present in the sysinv DB and the OpenStack application DB to be inconsistent.
-    # A dump file containing the overrides data is used here to solve this inconsistency issue.
-    # Note that this file will contain only 'update' sql commands because the
-    # overrides are already created when we uploaded the application.
-    - name: Create Helm overrides temp dir
-      file:
-        path: "{{ tempdir.path }}/helm_overrides_sqldump_dir"
-        state: directory
-      register: helm_overrides_sqldump_dir
+    - name: Locate application-owned backup playbook
+      stat:
+        path: "{{ app_backup_playbook }}"
+      register: app_backup_playbook_stat
 
-    - name: Get the openstack Helm overrides from the from the database
-      shell: >-
-        psql -c "copy(select row_to_json(t) from (select name, user_overrides, system_overrides
-        from helm_overrides where namespace='openstack') as t) to stdout" sysinv | sed -e 's/\\\\/\\/g'
-      become_user: postgres
-      register: helm_overrides_list
+    # include_tasks, not import_tasks: the path must be resolved at runtime.
+    # import_tasks resolves it at parse time, before the when condition is
+    # evaluated, so the fallback below would never be reachable when the
+    # application does not ship its own playbooks.
+    - name: Delegate OpenStack data backup to application-owned playbook
+      include_tasks: "{{ app_backup_playbook }}"
+      when: app_backup_playbook_stat.stat.exists
 
-    - name: Generate postgres update commands for Helm overrides
-      set_fact:
-        updates_list: >-
-          {{ updates_list | default('') }}update helm_overrides set
-          system_overrides={{ item.system_overrides
-          | ternary("'" ~ (item.system_overrides | replace("'", "''")) ~ "'", "NULL") }},
-          user_overrides={{ item.user_overrides
-          | ternary("'" ~ (item.user_overrides | replace("'", "''")) ~ "'", "NULL") }}
-          where name='{{ item.name }}' and namespace='openstack';
-      loop: "{{ helm_overrides_list.stdout_lines | map('from_json') | list }}"
+    - name: Backup mariadb data (fallback for older application versions)
+      block:
+      - name: Set k8s cmd prefix
+        set_fact:
+          kube_cmd_prefix: "kubectl --kubeconfig={{ kube_config_dir }} exec -i {{ mariadb_pod }} -n openstack -- bash -c "
 
-    - name: Backup Helm overrides
-      copy:
-        dest: "{{ helm_overrides_sqldump_dir.path }}/helm_overrides_dump.sql"
-        mode: 0755
-        content: '{{ updates_list | default("") }}'
+      - name: Show databases
+        shell: "{{ kube_cmd_prefix }} 'exec mariadb -uroot -p\"$MYSQL_DBADMIN_PASSWORD\" -e\"show databases\"'"
+        register: databases
+
+      - name: Backup mariadb
+        shell: >-
+          {{ kube_cmd_prefix }} 'exec mariadb-dump -uroot -p"$MYSQL_DBADMIN_PASSWORD" {{ item }}' >
+          {{ mariadb_dir.path }}/{{ item }}.mariadb.data
+        loop: "{{ databases.stdout_lines | difference(skip_os_dbs) }}"
+
+      when: not app_backup_playbook_stat.stat.exists and check_mariadb_pod.rc == 0
+
+    - name: Backup Helm overrides (fallback for older application versions)
+      block:
+      - name: Get the openstack Helm overrides from the from the database
+        shell: >-
+          psql -c "copy(select row_to_json(t) from (select name, user_overrides, system_overrides
+          from helm_overrides where namespace='openstack') as t) to stdout" sysinv | sed -e 's/\\\\/\\/g'
+        become_user: postgres
+        register: helm_overrides_list
+
+      - name: Generate postgres update commands for Helm overrides
+        set_fact:
+          updates_list: >-
+            {{ updates_list | default('') }}update helm_overrides set
+            system_overrides={{ item.system_overrides
+            | ternary("'" ~ (item.system_overrides | replace("'", "''")) ~ "'", "NULL") }},
+            user_overrides={{ item.user_overrides
+            | ternary("'" ~ (item.user_overrides | replace("'", "''")) ~ "'", "NULL") }}
+            where name='{{ item.name }}' and namespace='openstack';
+        loop: "{{ helm_overrides_list.stdout_lines | map('from_json') | list }}"
+
+      - name: Backup Helm overrides
+        copy:
+          dest: "{{ helm_overrides_sqldump_dir.path }}/helm_overrides_dump.sql"
+          mode: 0755
+          content: '{{ updates_list | default("") }}'
+
+      when: not app_backup_playbook_stat.stat.exists
 
     - name: Normalize backup items
       set_fact:
@@ -944,7 +967,6 @@
         final_backup_targets: "{{ (backup_targets + [
           etcd_snapshot_file,
           etcd_version_file,
-          helm_overrides_sqldump_dir.path,
           override_backup_file,
           ldap_db_backup_,
           monmap_file_,
