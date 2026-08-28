@@ -1,0 +1,33 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Get helm user_overrides for rook-ceph and topolvm-system namespaces
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A
+    -c "SELECT name, namespace FROM helm_overrides
+    WHERE namespace IN ('rook-ceph', 'topolvm-system')
+    AND user_overrides IS NOT NULL
+    AND user_overrides != '';"
+  register: helm_user_overrides_output
+  changed_when: false
+
+- name: Debug helm user_overrides found
+  debug:
+    var: helm_user_overrides_output.stdout_lines
+
+- name: Fail if helm user_overrides are set for rook-ceph or topolvm-system
+  fail:
+    msg: |
+      Found helm user_overrides set for the following charts:
+      {% for line in helm_user_overrides_output.stdout_lines %}
+      {% set parts = line.split('|') %}
+      - Chart '{{ parts[0] }}' in namespace '{{ parts[1] }}'
+      {% endfor %}
+      Please remove user_overrides before proceeding with the migration.
+      Use: system helm-override-delete <app_name> <chart_name> <namespace>
+  when: helm_user_overrides_output.stdout_lines | length > 0
