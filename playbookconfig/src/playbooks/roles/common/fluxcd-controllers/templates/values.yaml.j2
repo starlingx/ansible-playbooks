@@ -28,6 +28,11 @@ imagePullSecrets:
 
 helmController:
   create: true
+  # Single replica on StarlingX (no HA): disable leader election so a new pod
+  # does not have to wait for the old pod's lease to expire during a rolling
+  # upgrade. Requires the flux2-charts leaderElection toggle (integ patch).
+  leaderElection:
+    enabled: false
   image: "{{ local_registry }}/{{ flux_helm_controller_image }}"
   tag: {{ flux_helm_controller_tag }}
   resources:
@@ -184,6 +189,11 @@ notificationController:
 
 sourceController:
   create: true
+  # Single replica on StarlingX (no HA): disable leader election so a new pod
+  # does not have to wait for the old pod's lease to expire during a rolling
+  # upgrade. Requires the flux2-charts leaderElection toggle (integ patch).
+  leaderElection:
+    enabled: false
   image: "{{ local_registry }}/{{ flux_source_controller_image }}"
   tag: {{ flux_source_controller_tag }}
   resources:
