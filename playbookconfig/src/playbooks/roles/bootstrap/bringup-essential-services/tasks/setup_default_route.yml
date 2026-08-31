@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2024,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -123,7 +123,7 @@
   - name: Ignore if setting secondary oam interface failed
     debug:
       msg: Ignoring "{{ set_secondary_oam.stderr_lines }}"
-    when: set_secondary_oam.rc != 0 or set_secondary_oam.stderr
+    when: set_secondary_oam.rc != 0 or set_secondary_oam.stderr | default('') | length > 0
 
   - name: Send Gratuitous ARP for IPv4 secondary OAM floating IP
     shell: "arping -c 3 -U -I {{ oam_interface }} {{ network_params.external_oam_floating_address_secondary }}"

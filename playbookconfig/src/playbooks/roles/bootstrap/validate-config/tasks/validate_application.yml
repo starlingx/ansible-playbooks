@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2020 Wind River Systems, Inc.
+# Copyright (c) 2020,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -55,8 +55,8 @@
   loop: "{{ application[application.keys()|list|first]['overrides'] }}"
   loop_control:
     loop_var: override_item
-  when: (application[application.keys()|list|first]) and
-        ("overrides" in application[application.keys()|list|first])
+  when: application[application.keys()|list|first] is not none and
+        "overrides" in application[application.keys()|list|first]
 
 - name: Fail if overrides file does not exist
   stat:
@@ -66,5 +66,5 @@
   loop: "{{ application[application.keys()|list|first]['overrides'] }}"
   loop_control:
     loop_var: override_item
-  when: (application[application.keys()|list|first]) and
-        ("overrides" in application[application.keys()|list|first])
+  when: application[application.keys()|list|first] is not none and
+        "overrides" in application[application.keys()|list|first]

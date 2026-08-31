@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2025 Wind River Systems, Inc.
+# Copyright (c) 2019-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -1586,7 +1586,7 @@
   vars:
     application: "{{ item }}"
   loop: "{{ applications }}"
-  when: applications
+  when: applications | length > 0
 
 - name: Build application list
   set_fact:
