@@ -427,7 +427,7 @@
         - name: Get OpenStack PVCs with keep resource policy
           shell: |-
             FILTER='{range .items[?(@.metadata.annotations'
-            FILTER+='\.helm\.sh/resource-policy=="keep")]}'
+            FILTER+='.helm\.sh/resource-policy=="keep")]}'
             FILTER+='{.metadata.name}{"\n"}{end}'
             kubectl -n openstack get pvc -o jsonpath="${FILTER}"
           environment:
