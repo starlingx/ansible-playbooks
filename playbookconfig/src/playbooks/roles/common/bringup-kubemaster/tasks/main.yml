@@ -585,9 +585,22 @@
       register: tigera_ready
       until: tigera_ready.rc == 0
 
+    - name: Wait for Tigera CRDs to be established
+      command: >-
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --for=condition=Established
+        crd/installations.operator.tigera.io
+        crd/apiservers.operator.tigera.io
+        crd/goldmanes.operator.tigera.io
+        crd/whiskers.operator.tigera.io
+        --timeout=120s
+      retries: 5
+      delay: 10
+      register: tigera_crds_ready
+      until: tigera_crds_ready.rc == 0
+
     - name: Apply Calico custom resources
       command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /etc/kubernetes/calico-custom-resources.yaml"
-      retries: 5
+      retries: 10
       delay: 3
       register: result
       until: result.rc == 0
