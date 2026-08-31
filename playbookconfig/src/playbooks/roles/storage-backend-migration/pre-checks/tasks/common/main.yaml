@@ -69,6 +69,9 @@
   include_tasks: "check_no_pvcs_found.yaml"
   when: migration_type != "redeploy"
 
+- name: Check if helm user_overrides are set for rook-ceph or topolvm-system
+  include_tasks: "check_helm_user_overrides.yaml"
+
 - name: Check if any pods are using Ceph PVCs
   include_tasks: "check_ceph_pvcs.yaml"
 
