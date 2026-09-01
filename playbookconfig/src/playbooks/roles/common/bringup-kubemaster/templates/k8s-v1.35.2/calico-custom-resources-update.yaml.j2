@@ -33,6 +33,8 @@ spec:
         spec:
           nodeSelector:
             kubernetes.io/os: linux
+          # NOTE: setting tolerations here overrides the operator defaults, so
+          # the control-plane/master NoSchedule tolerations must be kept.
           tolerations:
             - key: node-role.kubernetes.io/control-plane
               effect: NoSchedule
@@ -43,3 +45,38 @@ spec:
             - key: node.kubernetes.io/not-ready
               effect: NoSchedule
               operator: Exists
+            # Ride through a brief NotReady window (e.g. kubelet restart during
+            # the k8s upgrade/migration) instead of being evicted after the 30s
+            # default not-ready toleration. Kept consistent with the bootstrap
+            # template (calico-custom-resources.yaml.j2).
+            - key: node.kubernetes.io/not-ready
+              effect: NoExecute
+              operator: Exists
+              tolerationSeconds: {{ calico_not_ready_toleration_seconds | default(300) }}
+            - key: node.kubernetes.io/unreachable
+              effect: NoExecute
+              operator: Exists
+              tolerationSeconds: {{ calico_not_ready_toleration_seconds | default(300) }}
+  # Give calico-kube-controllers the same protection. It has no dedicated
+  # toleration by default, so it inherits the 30s not-ready toleration and is
+  # the first pod evicted, then crash-loops against the apiserver VIP until the
+  # datapath is back. Kept consistent with the bootstrap template.
+  calicoKubeControllersDeployment:
+    spec:
+      template:
+        spec:
+          tolerations:
+            - key: node-role.kubernetes.io/control-plane
+              effect: NoSchedule
+              operator: Exists
+            - key: node-role.kubernetes.io/master
+              effect: NoSchedule
+              operator: Exists
+            - key: node.kubernetes.io/not-ready
+              effect: NoExecute
+              operator: Exists
+              tolerationSeconds: {{ calico_not_ready_toleration_seconds | default(300) }}
+            - key: node.kubernetes.io/unreachable
+              effect: NoExecute
+              operator: Exists
+              tolerationSeconds: {{ calico_not_ready_toleration_seconds | default(300) }}
