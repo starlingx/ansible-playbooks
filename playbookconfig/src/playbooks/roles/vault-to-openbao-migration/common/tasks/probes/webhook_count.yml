@@ -1,0 +1,39 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Probe: set probe_webhook_count (int) — configs whose inner .webhooks[*].name
+# matches the target (default {{ injector_webhook_name }}). Vault and OpenBao
+# injectors reuse the name, giving the {0,1} invariant. Read-only.
+
+- name: "Probe webhook_count: list inner webhook names per config"
+  # The jsonpath contains spaces. Pass argv as a list so the whole jsonpath stays
+  # one argument; a single command string would be split on those spaces.
+  command:
+    argv:
+      - kubectl
+      - get
+      - mutatingwebhookconfigurations
+      - -o
+      - 'jsonpath={range .items[*]}{range .webhooks[*]}{.name}{" "}{end}{"\n"}{end}'
+  environment: "{{ openrc_env }}"
+  register: probe_webhook_raw
+  failed_when: false
+  check_mode: false
+
+- name: "Probe webhook_count: set result fact"
+  # Count configs whose output line contains the target name, matched on word
+  # boundaries. The \b pattern is built in the var below; a literal \b written
+  # inline in this expression does not parse reliably.
+  set_fact:
+    probe_webhook_count: >-
+      {{
+        (probe_webhook_raw.stdout | default('')
+         | regex_findall(_probe_webhook_pattern)
+         | length)
+        if (probe_webhook_raw.rc | default(1)) == 0 else 0
+      }}
+  vars:
+    _probe_webhook_pattern: "{{ '\\b' ~ ((probe_webhook_name | default(injector_webhook_name)) | regex_escape) ~ '\\b' }}"

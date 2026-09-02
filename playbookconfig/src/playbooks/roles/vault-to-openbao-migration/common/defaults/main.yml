@@ -1,0 +1,125 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Default variables for the Vault-to-OpenBao migration role. The migration runs
+# as five phases:
+#   1. Verify prerequisites (Vault version, system state).
+#   2. Gather the source Vault inventory and record it as the reference the
+#      post-migration check compares against.
+#   3. Copy the Raft data from Vault into OpenBao.
+#   4. Deploy the OpenBao app and verify the migrated secrets.
+#   5. Finalize: hand over the agent injector and dispose of Vault.
+
+# Which StarlingX system layout the migration targets.
+#   auto    - read the real mode from /etc/platform/platform.conf (default)
+#   simplex - force single-controller (AIO-SX) behavior
+#   duplex  - force two-controller (AIO-DX) behavior
+# TODO - subjected to change upon further development of duplex migration
+system_mode: auto
+
+# What to do with the source Vault once its data has been copied, during the
+# finalize phase.
+#   removed   - run `system application-remove vault` (full teardown, default)
+#   suspended - scale the Vault HelmReleases to 0 replicas, leaving the Vault
+#               app applied after the migration completes
+vault_final_state: removed
+
+# How thoroughly the migration compares source Vault secrets against the
+# migrated OpenBao secrets to confirm the migration preserved them.
+#   none      - skip verification entirely. Phase 2 gathers no source inventory
+#               and Phase 5 performs no equivalence check, so the migrated
+#               secrets are not compared against the source. The data copy
+#               itself still runs.
+#   structure - compare only the shape: secret paths, policies, and mount points
+#   values    - also compare secret contents by hash
+verification_level: structure
+
+# Where the StarlingX OpenBao application tarball is discovered, and the glob that
+# matches it.
+openbao_apps_dir: /usr/local/share/applications/helm
+openbao_tarball_glob: "openbao-*.tgz"
+
+# Upstream OpenBao server version the migration expects. The version read from
+# the discovered OpenBao Helm chart is asserted to equal this, guarding against
+# migrating onto an unexpected OpenBao release.
+expected_openbao_version: "2.2.0"
+
+# What happens when the migration fails (the playbook's top-level rescue).
+#   auto   - automatically roll back the changes made so far (default)
+#   manual - stop and print the manual recovery steps, making no changes
+#   off    - do nothing; leave the system in its failed, partially-migrated state
+# TODO - subjected to change upon further development of migration rollback
+rollback_mode: auto
+
+# Optional hint for which migration phase to resume from (1..5), or "" to start
+# at the beginning (default). This is advisory only: each phase still runs its
+# own state probes to decide what work is actually needed, so an incorrect hint
+# cannot skip required work.
+start_phase: ""
+
+# Platform credential/config paths sourced once (see tasks/environment.yml) and
+# reused by every kubectl / system / helm command the role runs.
+kubeconfig_path: /etc/kubernetes/admin.conf
+openrc_path: /etc/platform/openrc
+
+# Kubernetes namespaces for the source (Vault) and target (OpenBao) apps.
+vault_namespace: vault
+openbao_namespace: openbao
+
+# Prefix of the Vault unseal shard secrets. The StarlingX vault application uses
+# "cluster-key" (cluster-key-0..4 plus cluster-key-root). Override only if the
+# source deployment stores its unseal shards under a different name.
+vault_shard_secret_prefix: cluster-key
+
+# StatefulSet names for the source and target server pods. vault_statefulset is
+# also the `app.kubernetes.io/instance` label value used to select the Vault
+# server pods; openbao_statefulset is the base of the OpenBao pod names
+# (e.g. stx-openbao-0).
+vault_statefulset: sva-vault
+openbao_statefulset: stx-openbao
+
+# Name of the agent-injector MutatingWebhookConfiguration. Vault and OpenBao use
+# the same webhook name, so the injector can be handed over without pods losing
+# their secret injection during the cutover.
+injector_webhook_name: vault.hashicorp.com
+
+# Path to the baomon (OpenBao manager) config file inside the
+# stx-openbao-manager pod.
+baomon_config_path: /opt/yaml/baomon-config.yaml
+
+# Minimum source Vault version required to migrate. The running Vault is
+# verified to be at this version and the migration fails early otherwise.
+# Verify-only; the role never changes the Vault version.
+vault_required_version: "1.14.1"
+
+# Policies that OpenBao ships built-in and Vault does not. The secret comparison
+# (verification_level) tolerates these as expected target-only extras so their
+# presence does not flag a mismatch.
+openbao_builtin_policies:
+  - control-group
+
+# Mount paths of the Raft data directory inside the Vault and OpenBao server
+# pods. The data copy reads from the Vault mount and writes to the OpenBao mount.
+vault_data_mount: /vault/data
+openbao_data_mount: /openbao/data
+
+# Transient PVCs created during the data copy, then deleted:
+#   source_clone_pvc  - CSI snapshot/clone of the live Vault data PVC, created in
+#                       the vault namespace so the copy reads a stable snapshot
+#   source_mirror_pvc - PVC in the openbao namespace that rebinds the clone's
+#                       underlying PV so the copy-pod can mount it cross-namespace
+# Both are disposable and removed once the copy completes.
+source_clone_pvc: vault-source-data-clone
+source_mirror_pvc: vault-source-data-mirror
+
+# stx-platform Helm chart repository on the active controller, where the OpenBao
+# chart is served from.
+openbao_chart_path: /var/www/pages/helm_charts/stx-platform
+
+# Directory on the controller where the inventory-gathering step writes its
+# outputs: the gathered source Vault inventory and the data-checksum manifest
+# JSON used to confirm the migration preserved every secret.
+gather_output_dir: /home/sysadmin/vault-migration-inventory

@@ -1,0 +1,28 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Probe: set probe_openbao_unsealed (bool) from `bao status` on a pod (sealed=
+# false => unsealed). Input: probe_openbao_pod (default {{ openbao_statefulset }}-0).
+# Read-only.
+
+- name: "Probe openbao_unsealed: query bao status"
+  command: >-
+    kubectl exec {{ probe_openbao_pod | default(openbao_statefulset ~ '-0') }}
+    -n {{ openbao_namespace }} -c openbao --
+    bao status -format=json
+  environment: "{{ openrc_env }}"
+  register: probe_bao_status_raw
+  failed_when: false
+  check_mode: false
+
+- name: "Probe openbao_unsealed: set result fact"
+  # bao status prints JSON with .sealed even at rc 2 (sealed). Unparseable => not unsealed.
+  set_fact:
+    probe_openbao_unsealed: >-
+      {{
+        (probe_bao_status_raw.stdout | default('') | trim) != ''
+        and not ((probe_bao_status_raw.stdout | from_json).sealed | default(true))
+      }}

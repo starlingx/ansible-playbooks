@@ -1,0 +1,44 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Probe: set probe_raft_leader (leader pod name, '' if none). Inputs (optional):
+# probe_raft_namespace, probe_raft_statefulset, probe_raft_binary,
+# probe_raft_container. Read-only.
+
+- name: "Probe raft_leader: query pods and HA status"
+  check_mode: false
+  block:
+    - name: "Probe raft_leader: list server pods"
+      command: >-
+        kubectl get pods -n {{ probe_raft_namespace | default(vault_namespace) }}
+        -l app.kubernetes.io/instance={{ probe_raft_statefulset | default(vault_statefulset) }},component=server
+        -o jsonpath={.items[*].metadata.name}
+      environment: "{{ openrc_env }}"
+      register: probe_raft_pods_raw
+      failed_when: false
+
+    - name: "Probe raft_leader: query HA status per pod"
+      command: >-
+        kubectl exec {{ item }}
+        -n {{ probe_raft_namespace | default(vault_namespace) }}
+        {{ ('-c ' ~ probe_raft_container) if (probe_raft_container is defined) else '' }} --
+        {{ probe_raft_binary | default('vault') }} status -format=json
+      environment: "{{ openrc_env }}"
+      loop: "{{ (probe_raft_pods_raw.stdout | default('')) | split }}"
+      register: probe_raft_status_raw
+      failed_when: false
+      when: (probe_raft_pods_raw.stdout | default('') | trim) != ''
+
+- name: "Probe raft_leader: select the leader pod"
+  set_fact:
+    probe_raft_leader: >-
+      {{
+        (probe_raft_status_raw.results | default([]))
+        | selectattr('stdout', 'defined')
+        | selectattr('stdout', 'search', '"is_self": true')
+        | map(attribute='item')
+        | list | first | default('')
+      }}

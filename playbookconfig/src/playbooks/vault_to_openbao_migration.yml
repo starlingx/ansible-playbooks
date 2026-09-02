@@ -1,0 +1,22 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Vault-to-OpenBao migration. Runs on the active controller. The migration runs
+# as five phases:
+#   1. Verify prerequisites (Vault version, system state).
+#   2. Gather the source Vault inventory and record it for fidelity comparison.
+#   3. Copy the Raft data from Vault into OpenBao.
+#   4. Deploy the OpenBao app and verify the migrated secrets.
+#   5. Finalize: hand over the agent injector and dispose of Vault.
+- name: Migrate HashiCorp Vault to OpenBao
+  hosts: active_controller
+  gather_facts: true
+
+  roles:
+    - role: vault-to-openbao-migration/common
+      tags: [always]
+
+  tasks: []

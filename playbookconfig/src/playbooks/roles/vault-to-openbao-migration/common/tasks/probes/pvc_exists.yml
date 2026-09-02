@@ -1,0 +1,23 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Probe: set probe_pvc_exists + probe_pvc_bound. Inputs: probe_pvc_namespace,
+# probe_pvc_name. Read-only.
+
+- name: "Probe pvc_exists: query PVC phase"
+  command: >-
+    kubectl get pvc {{ probe_pvc_name }}
+    -n {{ probe_pvc_namespace }}
+    -o jsonpath={.status.phase}
+  environment: "{{ openrc_env }}"
+  register: probe_pvc_raw
+  failed_when: false
+  check_mode: false
+
+- name: "Probe pvc_exists: set result facts"
+  set_fact:
+    probe_pvc_exists: "{{ (probe_pvc_raw.rc | default(1)) == 0 }}"
+    probe_pvc_bound: "{{ (probe_pvc_raw.stdout | default('')) == 'Bound' }}"
