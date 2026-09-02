@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023,2025 Wind River Systems, Inc.
+# Copyright (c) 2023,2025-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -18,4 +18,4 @@
   shell: >-
     source /etc/platform/openrc; system addrpool-delete
     {{ admin_addrpool }} --yes
-  when: admin_addrpool and target_net == mgmt_net
+  when: admin_addrpool | length > 0 and target_net == mgmt_net
