@@ -1,0 +1,70 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Query a set of subclouds, issuing a fresh platform Keystone token for each
+# one. Included by configure_dex_dc_federation.yml once per subcloud API
+# phase, so both phases share this single token-handling path.
+#
+# The token is fetched inside the loop, by a lookup in the request header
+# that is re-evaluated on every iteration, so the token authenticating a
+# call is only ever as old as that call. Sharing a token across a group of
+# subclouds is deliberately not done: a group has no useful time bound,
+# since each member can take up to subcloud_api_timeout, so even a modest
+# group can hold one token long enough to hit a reduced token expiration.
+#
+# Inputs:
+#   dex_subclouds - list of subcloud dicts to query
+#   dex_api_path  - path and query component of the subcloud API URL
+#
+# Output:
+#   dex_query_results - one uri result per subcloud. Each result keeps .item
+#                       as the subcloud dict, matching the shape a single
+#                       registered loop produces, so the filters that consume
+#                       these results are unchanged.
+#
+- name: Query each subcloud with a token issued for that subcloud
+  vars:
+    api_host: >-
+      {% if ':' in item.mgmt_ip %}[{{ item.mgmt_ip }}]{% else %}{{ item.mgmt_ip }}{% endif %}
+  ansible.builtin.uri:
+    url: "https://{{ api_host | trim }}:{{ subcloud_api_port }}{{ dex_api_path }}"
+    method: GET
+    headers:
+      X-Auth-Token: "{{ lookup('pipe', subcloud_token_cmd) | trim }}"
+    validate_certs: "{{ validate_subcloud_certs }}"
+    ca_path: "{{ subcloud_ca_path }}"
+    timeout: "{{ subcloud_api_timeout }}"
+    status_code: [200, 400, 401, 404]
+  register: dex_raw_results
+  loop: "{{ dex_subclouds }}"
+  loop_control:
+    label: "{{ item.name }}"
+  failed_when: false
+  no_log: true
+
+- name: Strip the token out of the results
+  # invocation is dropped from each result because it carries module_args,
+  # including the request headers and therefore the token. Leaving it in
+  # place would defeat the no_log above: these results are read again by
+  # several later tasks, and each of those would print the token at high
+  # verbosity. Stripping it here rather than adding no_log to all of them
+  # keeps those tasks loggable, which matters most for the one that reports
+  # a 401 by subcloud name. Downstream consumes status, json, item, failed.
+  ansible.builtin.set_fact:
+    dex_query_results: >-
+      {{ dex_raw_results.results | map('combine', {'invocation': None}) | list }}
+
+- name: Report the outcome for each subcloud
+  # no_log on the query task censors its per-item loop label as well as its
+  # body, so that task alone would report only censored lines with nothing
+  # to say which subcloud was reached. Tracing is restored here, from the
+  # results the token has already been stripped out of.
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.item.name }}: HTTP {{ item.status | default('no response') }}
+  loop: "{{ dex_query_results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
