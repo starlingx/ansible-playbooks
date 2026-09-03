@@ -347,6 +347,16 @@
     networking_configurations: "{{ networking_configurations_defaults \
                                | combine(networking_configurations|default({})) }}"
 
+# K8s 1.35+ introduces per-pod imagePullSecrets enforcement that requires pods to
+# have credentials even when pulling from node-cached or local registry images.
+# This breaks pods that do not supply imagePullSecrets in their spec.
+# Set imagePullCredentialsVerificationPolicy to NeverVerify as a workaround.
+- name: Set imagePullCredentialsVerificationPolicy to NeverVerify
+  set_fact:
+    kubelet_configurations: "{{ kubelet_configurations \
+                            | combine({'imagePullCredentialsVerificationPolicy': 'NeverVerify'}, recursive=true) }}"
+  when: kubernetes_long_version is defined and kubernetes_long_version is version('v1.35', '>=')
+
 - block:
   - name: Update controller-manager extraArgs to disable leader election
     set_fact:
