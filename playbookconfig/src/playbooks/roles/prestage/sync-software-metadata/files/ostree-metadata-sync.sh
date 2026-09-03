@@ -502,6 +502,10 @@ version_le() {
     [[ "$1" == "$2" || "$(printf '%s\n%s' "$1" "$2" | sort -V | head -n1)" == "$1" ]];
 }
 
+version_ge() {
+    [[ "$1" == "$2" || "$(printf '%s\n%s' "$1" "$2" | sort -V | head -n1)" == "$2" ]];
+}
+
 get_central_metadata_file_for_release() {
     local release="$1"
     find_metadata_file_for_attrib_val "id" "${release}" "${METADATA_SYNC_METADATA_DIR}"
@@ -572,12 +576,24 @@ sync_subcloud_metadata() {
     configure_ostree_repo_for_central_pull
     sync_ostree_repo
 
-    # Determine if the prestage version uses component-based metadata layout
-    local major_prestage_version
-    major_prestage_version=$(get_major_release_version "${sw_version}")
-    local is_component_based=false
-    if ! version_le "${major_prestage_version}" "26.03"; then
-        is_component_based=true
+    # Metadata layout depends on version:
+    #   >= 26.10 (component-based): /opt/software/releases/metadata
+    #   <  26.10 (legacy):          /opt/software/metadata/<state>
+    #
+    # When prestaging a >= 26.10 release onto a < 26.10 subcloud, metadata
+    # must be replicated to the legacy path so the subcloud's software CLI
+    # can find it.
+    local prestage_major_version
+    prestage_major_version=$(get_major_release_version "${sw_version}")
+    local prestage_is_component_based=false
+    if version_ge "${prestage_major_version}" "26.10"; then
+        prestage_is_component_based=true
+    fi
+
+    local subcloud_needs_legacy_metadata=false
+    if [ "${prestage_is_component_based}" = "true" ] && \
+       version_le "${SUBCLOUD_MAJOR_VERSION}" "26.03"; then
+        subcloud_needs_legacy_metadata=true
     fi
 
     # Create a temporary directory to backup the metadata files
@@ -589,13 +605,20 @@ sync_subcloud_metadata() {
     # Remove current files for specified release
     log_info "Removing directories for release ${sw_version}"
     rm -Rf ${SOFTWARE_DIR}/rel-${sw_version}.*
+
+    # Remove prestage release metadata from the subcloud's active metadata dir
     find ${METADATA_DIR} -type f -name "*${sw_version}*" | xargs rm -f
+
+    # Also clean the component-based metadata path when replicating across layouts
+    if [ "${subcloud_needs_legacy_metadata}" = "true" ]; then
+        find ${SOFTWARE_DIR}/releases/metadata -type f -name "*${sw_version}*" | xargs rm -f
+    fi
 
     # --- Get central metadata files ---
     # For component-based releases (>= 26.10), find product release files by
     # filename pattern at the staged metadata root.
     # For legacy releases (< 26.10), find by XML content search.
-    if [ "${is_component_based}" = "true" ]; then
+    if [ "${prestage_is_component_based}" = "true" ]; then
         central_metadata_files=$(find "${METADATA_SYNC_METADATA_DIR}" -maxdepth 1 -type f \
             -name "*-${sw_version}*-metadata.xml" | sort -V)
     else
@@ -672,16 +695,12 @@ sync_subcloud_metadata() {
             "Using ${source}: ${metadata_file}"\
             "${reason}"
 
-        # Determine destination directory based on subcloud version and state.
-        # For component-based releases on a >= 26.10 subcloud:
-        #   - Product releases (available state) go to METADATA_DIR root
-        #   - Other states use METADATA_DIR/${usm_state} as usual
-        # For legacy subclouds (< 26.10): always METADATA_DIR/${usm_state}
-        local dest_dir="${METADATA_DIR}/${usm_state}"
-        if [ "${is_component_based}" = "true" ] && \
-           ! version_le "${SUBCLOUD_MAJOR_VERSION}" "26.03" && \
-           [ "${usm_state}" = "available" ]; then
-            dest_dir="${METADATA_DIR}"
+        # Determine destination directory based on prestage version.
+        #   >= 26.10 (component-based): /opt/software/releases/metadata
+        #   <  26.10 (legacy):          /opt/software/metadata/<state>
+        local dest_dir="${SOFTWARE_DIR}/metadata/${usm_state}"
+        if [ "${prestage_is_component_based}" = "true" ]; then
+            dest_dir="${SOFTWARE_DIR}/releases/metadata"
         fi
 
         # Ensures that the destination directory exists
@@ -689,23 +708,36 @@ sync_subcloud_metadata() {
             log_info "Creating ${dest_dir} directory"
             run_cmd mkdir -p "${dest_dir}"
         fi
+
+        # Copy product release metadata
         run_cmd cp "${metadata_file}" "${dest_dir}"
 
-    done <<< "$all_unique_releases"
+        # Replicate metadata to the legacy path so the subcloud's
+        # software CLI (< 26.10) can find it.
+        if [ "${subcloud_needs_legacy_metadata}" = "true" ]; then
+            legacy_state_dir="${SOFTWARE_DIR}/metadata/${usm_state}"
+            if [ ! -d "${legacy_state_dir}" ]; then
+                log_info "Creating ${legacy_state_dir} directory"
+                run_cmd mkdir -p "${legacy_state_dir}"
+            fi
+            run_cmd cp "${metadata_file}" "${legacy_state_dir}"
+        fi
 
-    # For component-based releases on a >= 26.10 subcloud, also copy
-    # metapackage files to the available directory.
-    if [ "${is_component_based}" = "true" ] && \
-       ! version_le "${SUBCLOUD_MAJOR_VERSION}" "26.03"; then
-        run_cmd mkdir -p "${METADATA_DIR}/available"
-        local metapackage_file
-        while IFS= read -r metapackage_file; do
-            [ -z "${metapackage_file}" ] && continue
-            log_info "Copying metapackage metadata to available: $(basename "${metapackage_file}")"
-            run_cmd cp "${metapackage_file}" "${METADATA_DIR}/available/"
-        done < <(find "${METADATA_SYNC_METADATA_DIR}" -mindepth 2 -type f \
-        -name "*_${sw_version}-metadata.xml")
-    fi
+        # For component-based releases, copy metapackage files to the
+        # state directory under /opt/software/releases/metadata/<state>.
+        if [ "${prestage_is_component_based}" = "true" ]; then
+            state_dir="${SOFTWARE_DIR}/releases/metadata/${usm_state}"
+            run_cmd mkdir -p "${state_dir}"
+            local metapackage_file
+            while IFS= read -r metapackage_file; do
+                [ -z "${metapackage_file}" ] && continue
+                log_info "Copying metapackage metadata to ${usm_state}: $(basename "${metapackage_file}")"
+                run_cmd cp "${metapackage_file}" "${state_dir}"
+            done < <(find "${METADATA_SYNC_METADATA_DIR}" -mindepth 2 -type f \
+            -name "*_${version}-metadata.xml")
+        fi
+
+    done <<< "$all_unique_releases"
 
     rm -Rf "${metadata_tmp_dir}"
 }
