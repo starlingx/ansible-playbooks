@@ -78,6 +78,24 @@
       | reject('equalto', '')
     }}
 
+# The .cloned_install flag is created by the factory install process and is
+# captured in the backup archive under etc/platform/. Detect it there and
+# register it in extra_required_flags so the optimized restore recreates it
+# on the target.
+- name: Look for the clone identity reset flag in the backup
+  shell: >-
+    tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |
+    grep 'etc/platform/.cloned_install'
+  failed_when: false
+  register: cloned_install_flag
+
+- name: Register .cloned_install for clone identity reset restores
+  set_fact:
+    extra_required_flags: "{{ extra_required_flags + ['.cloned_install'] }}"
+  when:
+    - cloned_install_flag.rc == 0
+    - "'.cloned_install' not in extra_required_flags"
+
 - name: Combine required flags
   set_fact:
     all_required_flags: "{{ default_required_flags + extra_required_flags }}"
