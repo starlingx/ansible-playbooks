@@ -38,6 +38,7 @@
         - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
         - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
         - sysinv-conductor
+        - sysinv-inv
         - rabbit
 
     - name: Stop pmon-managed flock services
@@ -316,6 +317,7 @@
         - postgres
         - rabbit
         - sysinv-conductor
+        - sysinv-inv
         - "{{ 'keystone' if os_release == 'debian' else 'openstack-keystone' }}"
         - "{{ 'barbican-api' if os_release == 'debian' else 'openstack-barbican-api' }}"
         - haproxy
