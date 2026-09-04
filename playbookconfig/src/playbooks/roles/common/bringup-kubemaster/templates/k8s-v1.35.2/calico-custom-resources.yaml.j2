@@ -60,6 +60,8 @@ spec:
         spec:
           nodeSelector:
             kubernetes.io/os: linux
+          # NOTE: setting tolerations here overrides the operator defaults, so
+          # the control-plane/master NoSchedule tolerations must be kept.
           tolerations:
             - key: node-role.kubernetes.io/control-plane
               effect: NoSchedule
@@ -70,6 +72,39 @@ spec:
             - key: node.kubernetes.io/not-ready
               effect: NoSchedule
               operator: Exists
+            # ride through the brief bootstrap kubelet-down window
+            # instead of being evicted after the 30s default not-ready toleration.
+            - key: node.kubernetes.io/not-ready
+              effect: NoExecute
+              operator: Exists
+              tolerationSeconds: {{ calico_not_ready_toleration_seconds | default(300) }}
+            - key: node.kubernetes.io/unreachable
+              effect: NoExecute
+              operator: Exists
+              tolerationSeconds: {{ calico_not_ready_toleration_seconds | default(300) }}
+  # give calico-kube-controllers the same protection. It has no
+  # dedicated toleration by default, so it inherits the 30s not-ready toleration
+  # and is the first pod evicted, then crash-loops against the apiserver VIP
+  # until the datapath is back.
+  calicoKubeControllersDeployment:
+    spec:
+      template:
+        spec:
+          tolerations:
+            - key: node-role.kubernetes.io/control-plane
+              effect: NoSchedule
+              operator: Exists
+            - key: node-role.kubernetes.io/master
+              effect: NoSchedule
+              operator: Exists
+            - key: node.kubernetes.io/not-ready
+              effect: NoExecute
+              operator: Exists
+              tolerationSeconds: {{ calico_not_ready_toleration_seconds | default(300) }}
+            - key: node.kubernetes.io/unreachable
+              effect: NoExecute
+              operator: Exists
+              tolerationSeconds: {{ calico_not_ready_toleration_seconds | default(300) }}
   calicoNodeDaemonSet:
     spec:
       template:

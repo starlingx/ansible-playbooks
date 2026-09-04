@@ -570,6 +570,17 @@ spec:
         - key: node.kubernetes.io/not-ready
           effect: NoSchedule
           operator: Exists
+        # keep the operator running through the brief bootstrap
+        # kubelet-down window so it does not get evicted and restarted (which
+        # is part of what delays the Calico stack reconvergence).
+        - key: node.kubernetes.io/not-ready
+          effect: NoExecute
+          operator: Exists
+          tolerationSeconds: {{ calico_not_ready_toleration_seconds | default(300) }}
+        - key: node.kubernetes.io/unreachable
+          effect: NoExecute
+          operator: Exists
+          tolerationSeconds: {{ calico_not_ready_toleration_seconds | default(300) }}
       serviceAccountName: tigera-operator
       imagePullSecrets:
         - name: {{ registry_local_secret_name | default('registry-local-secret') }}
