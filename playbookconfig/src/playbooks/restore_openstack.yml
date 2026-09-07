@@ -21,10 +21,20 @@
       import_role:
         name: common/prepare-env
 
-    # Required before the delegation check below: this role sets
-    # software_version, which the application playbook path depends on.
-    # It is idempotent and is imported again by restore-openstack/prepare-env
-    # in the fallback path.
+    # The application-owned playbook expects the generic B&R roles to have
+    # run before delegation: it does not reimplement them. Import them here
+    # so their results are available whether the restore is delegated or
+    # falls back to the inline roles. They are idempotent and are imported
+    # again by restore-openstack/prepare-env in the fallback path.
+    #
+    # validate-input also sets inspection_target, consumed by a delegate_to
+    # in the same role; without it a delegated restore fails on the
+    # undefined variable.
+    - name: Perform generic user input validation
+      import_role:
+        name: backup-restore/validate-input
+
+    # Sets software_version, which the application playbook path depends on.
     - name: Perform generic B&R environment validation
       import_role:
         name: backup-restore/prepare-env
@@ -33,6 +43,15 @@
       stat:
         path: "{{ app_restore_playbook }}"
       register: app_restore_playbook_stat
+
+    # Off-box tarball transfer is owned by the platform orchestrator. In the
+    # fallback path restore-openstack/prepare-env runs it; when delegating,
+    # that role is skipped, so run it here for the delegated path only.
+    - name: Transfer backup tarball to target if off-box (delegated path)
+      include_role:
+        name: backup-restore/transfer-file
+      when: app_restore_playbook_stat.stat.exists and
+            not on_box_data|bool
 
     # include_tasks, not import_tasks: the path must be resolved at runtime.
     # import_tasks resolves it at parse time, before the when condition is
