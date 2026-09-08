@@ -445,7 +445,7 @@ configure_ostree_repo_for_central_pull() {
     fi
 
     # Configure remote ostree repo via the CLI.
-    ostree remote add --force --no-gpg-verify --set=tls-permissive=true --set=branches="${OSTREE_BRANCH};" "${OSTREE_REMOTE}" "${url}"
+    ostree remote add --force --no-gpg-verify --set=tls-permissive=true --set=tls-ignore-hostname=true --set=branches="${OSTREE_BRANCH};" "${OSTREE_REMOTE}" "${url}"
 
     log_info_l "Configuring ostree repo: "\
         "Remote ostree url: ${url}"\
