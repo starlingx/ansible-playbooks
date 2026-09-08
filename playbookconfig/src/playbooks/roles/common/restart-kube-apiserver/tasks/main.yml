@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2023 Wind River Systems, Inc.
+# Copyright (c) 2023,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -11,8 +11,23 @@
   command: pidof kube-apiserver
   register: kube_apiserver_pid
 
+# A CA renewal can make cert-mon restart containerd at the same time this
+# role runs, and crictl fails while containerd is down. Retry both the lookup
+# and the stop until it comes back.
+- name: Get kube-apiserver container id
+  command: crictl ps --name '^kube-apiserver$' -q
+  register: kube_apiserver_cid
+  until: kube_apiserver_cid.rc == 0 and (kube_apiserver_cid.stdout | trim | length > 0)
+  retries: 10
+  delay: 3
+  changed_when: false
+
 - name: Restart kube-apiserver
-  shell: crictl ps | awk '/kube-apiserver/{print$1}' | xargs crictl stop > /dev/null
+  command: "crictl stop {{ kube_apiserver_cid.stdout | trim }}"
+  register: restart_kube_apiserver
+  until: restart_kube_apiserver.rc == 0
+  retries: 10
+  delay: 3
 
 - name: Wait while kube-apiserver restarts
   command: pidof kube-apiserver || true
