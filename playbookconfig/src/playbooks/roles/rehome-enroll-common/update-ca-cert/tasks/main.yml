@@ -36,6 +36,7 @@
 # For duplex subcloud enrollment, the ipsec certificate must be updated
 - name: Update ipsec certificate
   command: /usr/bin/ipsec-client -o 2 pxecontroller
+  become: yes
   when:
     - system_mode == 'duplex'
     - mode == 'enroll'
