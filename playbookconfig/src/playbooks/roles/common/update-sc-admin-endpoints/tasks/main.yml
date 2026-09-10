@@ -20,7 +20,7 @@
   script: update_admin_endpoints.py {{ sc_region_name.stdout }} {{ sc_floating_address }}
           {{ '--mode enroll' if mode is defined and mode == 'enroll' else '' }}
   register: update_admin_endpoints_result
-  ignore_errors: true
+  failed_when: false
 
 - name: Show update admin endpoints result
   debug: var=update_admin_endpoints_result
