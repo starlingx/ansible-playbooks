@@ -50,6 +50,14 @@
         msg: "ssh-keyscan command is timed out."
       when: remote_keyscan.stdout == ""
 
+    - name: Ensure SSH directory exists
+      file:
+        path: "~/.ssh"
+        state: directory
+        mode: '0700'
+      when: remote_keyscan.stdout != ""
+      delegate_to: localhost
+
     - name: Add remote SSH public keys into the known_hosts
       known_hosts:
         path: "~/.ssh/known_hosts"
