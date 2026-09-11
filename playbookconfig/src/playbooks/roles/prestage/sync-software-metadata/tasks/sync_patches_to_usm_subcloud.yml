@@ -270,6 +270,23 @@
       delay: 2
       until: releases_transfer.rc == 0
 
+    # For component-based releases (>= 26.10), we want to transfer the release data
+    # under /opt/software/releases/{sw_version} to the subcloud. Copy each of these
+    # release directories from the system controller to the subcloud. This task
+    # should not fail; if it fails the playbook should abort.
+    - name: Copy system controller component-based release directory to subcloud
+      synchronize:
+        mode: "push"
+        src: "{{ usm_software_dir }}/releases/{{ item }}"
+        dest: "{{ usm_software_dir }}/releases/"
+        rsync_opts: "--delete"
+      loop: "{{ system_controller_releases }}"
+      register: component_releases_transfer
+      retries: 3
+      delay: 2
+      until: component_releases_transfer.rc == 0
+      when: software_version is version('26.10', '>=')
+
     # We want to check if the software-script directory exists on the system controller
     # to ensure copying to the subcloud. This directory is created when a new patch is
     # deployed, so it does not exist if only the base release is deployed, for example
