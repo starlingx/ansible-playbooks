@@ -1,0 +1,23 @@
+<?xml version="1.0" ?>
+<patch>
+  <id>starlingx-25.09.300</id>
+  <sw_version>25.09.300</sw_version>
+  <component>starlingx</component>
+  <summary>Patch deployed on subcloud, prestaged originally by former system controller SC-A</summary>
+  <description>Test</description>
+  <install_instructions>Sample instructions</install_instructions>
+  <warnings>Sample warning</warnings>
+  <status>REL</status>
+  <unremovable>N</unremovable>
+  <reboot_required>N</reboot_required>
+  <semantics />
+  <requires>
+    <req_patch_id>starlingx-25.09.0</req_patch_id>
+  </requires>
+  <packages>
+    <deb>logmgmt_1.0-1.stx.9_all.deb</deb>
+  </packages>
+  <number_of_commits>1</number_of_commits>
+  <previous_commit>eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee</previous_commit>
+  <commit>ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff</commit>
+</patch>

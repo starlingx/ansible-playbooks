@@ -256,6 +256,93 @@ find_metadata_files_for_release_sorted() {
     done
 }
 
+find_component_metadata_files_for_release_sorted() {
+    # Find product release metadata files for given software release (major,
+    # e.g YY.MM or minor YY.MM.nn), in the component-based layout
+    # (subcloud/prestage major version >= 26.10).
+    # The files are sorted in order of minor release version, ascending.
+    # For minor release we should only find one metadata file.
+    # Searches recursively, like find_metadata_files_for_release_sorted, so
+    # callers do not need to account for any extra nesting under metadata_dir.
+    #
+    # Component-based metadata mixes two kinds of files, distinguished by the
+    # character right before the version:
+    #   product release: starlingx-26.10.0-metadata.xml ('-', returned here)
+    #   metapackage:      base_26.10.0-metadata.xml       ('_')
+    #
+    # Product release files carry no state of their own: they always live at
+    # the metadata root regardless of state (see dest_dir in
+    # sync_subcloud_metadata). Only metapackage files live under a <state>
+    # subdirectory. So when state_dirs is given (e.g. "deployed unavailable"),
+    # a product release is only kept if at least one of its metapackage files
+    # resolves, via get_usm_state_from_path, to one of those states. The
+    # product release file is still what gets returned, so callers keep
+    # parsing names in the "name-version-metadata.xml" form.
+    #
+    local sw_version=${1:-$SW_VERSION}
+    local metadata_dir=${2:-$METADATA_DIR}
+    local state_dirs=${3:-}
+
+    # 1) Get all the sw_version product release files matching the major/minor
+    #    software version we're given.
+    local meta_file
+    local -A metadata_files_map=()  # key: sw_version, value: metadata file
+    local found_sw_version
+    while IFS= read -r meta_file; do
+        found_sw_version=$(xml_attrib_metadata "${meta_file}" "get" "sw_version")
+        [ -z "${found_sw_version}" ] && continue
+        case "${found_sw_version}" in
+            "${sw_version}"*) metadata_files_map[${found_sw_version}]=${meta_file} ;;
+        esac
+    done < <(find "${metadata_dir}" -type f -name "*-${sw_version}*-metadata.xml")
+
+    if [ ${#metadata_files_map[@]} -eq 0 ]; then
+        return
+    fi
+
+    # 2) When state_dirs is given, keep only releases with a metapackage file
+    #    (name uses '_' before the version) whose state, as derived from its
+    #    path via get_usm_state_from_path, is one of state_dirs.
+    if [ -n "${state_dirs}" ]; then
+        local -A found_in_state=()  # set of sw_versions with metapackage evidence
+        local metapackage_file metapackage_sw_version metapackage_state
+        while IFS= read -r metapackage_file; do
+            metapackage_sw_version=$(xml_attrib_metadata "${metapackage_file}" "get" "sw_version")
+            [ -z "${metapackage_sw_version}" ] && continue
+            case "${metapackage_sw_version}" in
+                "${sw_version}"*) : ;;
+                *) continue ;;
+            esac
+            metapackage_state=$(get_usm_state_from_path "${metapackage_file}")
+            case " ${state_dirs} " in
+                *" ${metapackage_state} "*) found_in_state[${metapackage_sw_version}]=1 ;;
+            esac
+        done < <(find "${metadata_dir}" -type f -name "*_${sw_version}*-metadata.xml")
+
+        for found_sw_version in "${!metadata_files_map[@]}"; do
+            if [ -z "${found_in_state[${found_sw_version}]:-}" ]; then
+                unset "metadata_files_map[${found_sw_version}]"
+            fi
+        done
+
+        if [ ${#metadata_files_map[@]} -eq 0 ]; then
+            return
+        fi
+    fi
+
+    # 3) Sort by sw_version tag (regardless of path)
+    local sorted_versions=()
+    while IFS= read -rd '' found_sw_version; do
+        sorted_versions+=("${found_sw_version}")
+    done < <(printf '%s\0' "${!metadata_files_map[@]}" | sort --zero-terminated --version-sort)
+
+    # 4) Return the list of files in sorted order
+    local sorted_version
+    for sorted_version in "${sorted_versions[@]}"; do
+        echo "${metadata_files_map[${sorted_version}]}"
+    done
+}
+
 find_metadata_file_for_attrib_val() {
     local attrib_name=$1
     local attrib_val=$2
@@ -348,6 +435,23 @@ get_commit_hashes_from_metadata() {
     local commit_path="contents/ostree/commit1/commit"
 
     from_metadata_commit_hashes=$(xml_attrib_metadata "${meta_file}" "get" "${commit_path}")
+}
+
+filter_product_release_files() {
+    # Filters a newline-separated list of metadata file paths to
+    # only product release files for a given software release,
+    # i.e. files named "<name>-<sw_version>...-metadata.xml".
+    local sw_version=$1
+    local file
+    while IFS= read -r file; do
+        [ -z "${file}" ] && continue
+        case "$(basename "${file}")" in
+            *-"${sw_version}"*-metadata.xml) echo "${file}" ;;
+            *)
+                log_warn "filter_product_release_files: dropping non-product-release file: ${file}"
+                ;;
+        esac
+    done
 }
 
 get_usm_state_from_path() {
@@ -618,24 +722,46 @@ sync_subcloud_metadata() {
     # For component-based releases (>= 26.10), find product release files by
     # filename pattern at the staged metadata root.
     # For legacy releases (< 26.10), find by XML content search.
+    #
+    # sw_version <= sc_sw_version (N-1): release is settled on central, accept any state.
+    # sw_version >  sc_sw_version (N):   only trust central's "deployed" copy.
     if [ "${prestage_is_component_based}" = "true" ]; then
-        central_metadata_files=$(find "${METADATA_SYNC_METADATA_DIR}" -maxdepth 1 -type f \
-            -name "*-${sw_version}*-metadata.xml" | sort -V)
+        if version_le "${sw_version}" "${sc_sw_version}"; then
+            central_metadata_files=$(find_component_metadata_files_for_release_sorted \
+            "${prestage_major_version}" "${METADATA_SYNC_METADATA_DIR}")
+        else
+            central_metadata_files=$(find_component_metadata_files_for_release_sorted \
+            "${prestage_major_version}" "${METADATA_SYNC_METADATA_DIR}" "deployed")
+        fi
     else
         if version_le "${sw_version}" "${sc_sw_version}"; then
             central_metadata_files=$(find_metadata_files_for_release_sorted \
-            "${sw_version}" "${METADATA_SYNC_METADATA_DIR}")
+            "${prestage_major_version}" "${METADATA_SYNC_METADATA_DIR}")
         else
             central_metadata_files=$(find_metadata_files_for_release_sorted \
-            "${sw_version}" "${METADATA_SYNC_METADATA_DIR}" | grep deployed)
+            "${prestage_major_version}" "${METADATA_SYNC_METADATA_DIR}" | grep deployed)
         fi
     fi
 
-    # Gets metadata files for subcloud in deployed or unavailable state
-    subcloud_metadata_files=$(find_metadata_files_for_release_sorted \
-        "${sw_version}" "${metadata_tmp_dir}" | egrep -E "deployed|unavailable")
+    central_metadata_files=$(echo "${central_metadata_files}" | \
+        filter_product_release_files "${prestage_major_version}")
 
-    # All unique releases from both central and subcloud metadata files
+    # --- Get subcloud metadata files ---
+    # Release lookup depends on subcloud version:
+    #   >= 26.10 (component-based): metapackage metadata files in
+    #                               /opt/software/releases/metadata/
+    #   <  26.10 (legacy): metadata files in /opt/software/metadata/
+    if version_ge "${SUBCLOUD_MAJOR_VERSION}" "26.10"; then
+        subcloud_metadata_files=$(find_component_metadata_files_for_release_sorted \
+            "${prestage_major_version}" "${metadata_tmp_dir}" "deployed unavailable")
+    else
+        subcloud_metadata_files=$(find_metadata_files_for_release_sorted \
+            "${prestage_major_version}" "${metadata_tmp_dir}" | grep -E "deployed|unavailable")
+    fi
+
+    subcloud_metadata_files=$(echo "${subcloud_metadata_files}" | \
+        filter_product_release_files "${prestage_major_version}")
+
     all_unique_releases=$(
         {
             [ -n "$central_metadata_files" ] && basename -a $central_metadata_files || :
@@ -664,6 +790,13 @@ sync_subcloud_metadata() {
         [ -z "${release}" ] && continue
         version="$(echo ${release} | awk -F'-' '{print $2;}')"
 
+        # Defensive guard: release must be a product release id (name-version)
+        # with a non-empty version
+        if [ -z "${version}" ]; then
+            log_error "sync_subcloud_metadata: skipping release with unparsable version: id: ${release}"
+            continue
+        fi
+
         central_metadata_file=$(get_central_metadata_file_for_release "${release}")
 
         if [[ ! -n "${central_metadata_file}" ]]; then
@@ -682,7 +815,7 @@ sync_subcloud_metadata() {
             fi
         fi
 
-        if [[ "${usm_state}" == "unavailable" ]]; then
+        if [[ -z "${central_metadata_file}" ]]; then
             metadata_file=$(get_subcloud_metadata_file_for_release "${release}" "${metadata_tmp_dir}")
             source="subcloud_metadata_file"
         else
