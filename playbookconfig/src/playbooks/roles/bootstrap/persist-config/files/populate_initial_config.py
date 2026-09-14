@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #
-# Copyright (c) 2019-2025 Wind River Systems, Inc.
+# Copyright (c) 2019-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -246,11 +246,20 @@ def populate_system_config(client):
     try:
         client.sysinv.isystem.update(system.uuid, patch)
     except Exception as e:
-        if INCOMPLETE_BOOTSTRAP:
+        # system_type is immutable in sysinv once set. If this script runs
+        # more than once, the second run sends system_type again and sysinv
+        # rejects it with "system_type field cannot be modified". Treat that
+        # as success when the persisted system_type already matches the
+        # desired value, since the previous run went through.
+        isystem = client.sysinv.isystem.list()[0]
+        desired_system_type = CONF.get('BOOTSTRAP_CONFIG', 'SYSTEM_TYPE')
+        if INITIAL_POPULATION and isystem.system_type == desired_system_type:
+            print("System type is already %s, skipping update"
+                  % isystem.system_type)
+        elif INCOMPLETE_BOOTSTRAP:
             # The previous bootstrap might have been interrupted while
             # it was in the middle of persisting the initial system
             # config.
-            isystem = client.sysinv.isystem.list()[0]
             print("System type is %s" % isystem.system_type)
             if isystem.system_type != "None":
                 # System update in previous play went through
@@ -267,6 +276,14 @@ def create_addrpool(client, addrpool_data):
         pool = client.sysinv.address_pool.create(**addrpool_data)
         return pool
     except Exception as e:
+        # The address pool may already exist if this script is re-executed after a
+        # previous run already created it. In that case return the existing pool so the
+        # caller can keep using its uuid, instead of failing with "already exists".
+        for pool in client.sysinv.address_pool.list():
+            if pool.name == addrpool_data['name']:
+                print("Address pool %s already exists, reusing it"
+                      % addrpool_data['name'])
+                return pool
         raise e
 
 
@@ -274,6 +291,15 @@ def create_network(client, network_data, network_name):
     try:
         client.sysinv.network.create(**network_data)
     except Exception as e:
+        # The network may already exist if this script is re-executed after
+        # a previous run already created it. Treat an already-existing network
+        # of the same type as success instead of failing with "already
+        # exists".
+        for network in client.sysinv.network.list():
+            if network.type == network_data['type']:
+                print("Network %s already exists, skipping creation"
+                      % network_data['type'])
+                return
         raise e
 
 
@@ -1714,14 +1740,13 @@ def populate_controller_config(client):
     try:
         controller = client.sysinv.ihost.create(**values)
     except Exception as e:
-        if INCOMPLETE_BOOTSTRAP:
-            # The previous bootstrap might have been interrupted while
-            # it was in the middle of creating the controller-0 host.
-            controller = client.sysinv.ihost.get('controller-0')
-            if controller:
-                pass
-            else:
-                raise e
+        # The controller-0 host may already exist if this script is
+        # re-executed after a previous run already created it, or if the
+        # previous bootstrap was interrupted mid-creation. In either case
+        # reuse the existing host instead of failing.
+        controller = client.sysinv.ihost.get('controller-0')
+        if controller:
+            pass
         else:
             raise e
     print("Host controller-0 created.")
@@ -1794,7 +1819,6 @@ if __name__ == '__main__':
         populate_service_parameter_config(client)
         controller = populate_controller_config(client)
         inventory_config_complete_wait(client, controller)
-        os.remove(config_file)
         if INITIAL_POPULATION:
             print("Successfully updated the initial system config.")
         else:
