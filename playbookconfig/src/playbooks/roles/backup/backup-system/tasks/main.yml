@@ -465,6 +465,15 @@
             content: "{{ pvc_info_dict | to_nice_yaml(indent=2) }}"
             mode: 0640
 
+    # Set before delegation so the application-owned playbook and the
+    # platform archive share one timestamp. The application inherits this
+    # value; with a shared timestamp both sides resolve the same archive
+    # filename, so the platform transfer step below finds the single
+    # archive whichever side created it.
+    - name: Use current timestamp as backups timestamp
+      set_fact:
+        backup_timestamp: "{{ lookup('pipe', 'date +%Y_%m_%d_%H_%M_%S') }}"
+
     - name: Locate application-owned backup playbook
       stat:
         path: "{{ app_backup_playbook }}"
@@ -682,7 +691,10 @@
         set_fact:
           remaining_disk_size_estimation: "{{ remaining_disk_size_estimation|int - total_openstack_size_estimation|int }}"
 
-      when: check_mariadb_pod.rc == 0 or openstack_status.stdout == "uploaded"
+      # Skipped when delegating: the application-owned playbook sizes and
+      # creates its own OpenStack archive.
+      when: not app_backup_playbook_stat.stat.exists and
+            (check_mariadb_pod.rc == 0 or openstack_status.stdout == "uploaded")
 
     - name: Check if ldap LDIF configuration file exists
       stat:
@@ -917,10 +929,6 @@
         marker: ""
         block: "{{ registries|default({}) | to_nice_yaml(indent=2) }}"
 
-    - name: Use current timestamp as backups timestamp
-      set_fact:
-        backup_timestamp: "{{ lookup('pipe', 'date +%Y_%m_%d_%H_%M_%S') }}"
-
     - name: Attach timestamp to backups filename
       set_fact:
         platform_backup_file: "{{ platform_backup_filename_prefix }}_{{ backup_timestamp }}.tgz"
@@ -1030,7 +1038,11 @@
       # makes tar return 1
       register: tar_cmd
       failed_when: tar_cmd.rc >= 2 or tar_cmd.rc < 0
-      when: check_mariadb_pod.rc == 0 or openstack_status.stdout == "uploaded"
+      # Skipped when delegating: the application-owned playbook creates the
+      # OpenStack archive. The transfer step below is not skipped, so it
+      # picks up the single archive whichever side created it.
+      when: not app_backup_playbook_stat.stat.exists and
+            (check_mariadb_pod.rc == 0 or openstack_status.stdout == "uploaded")
 
     - name: Create a tgz archive for Hashicorp vault backup
       shell: >-
