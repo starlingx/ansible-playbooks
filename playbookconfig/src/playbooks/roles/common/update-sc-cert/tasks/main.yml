@@ -65,12 +65,26 @@
     retries: 63
     delay: 10
 
+  - name: Wait for platform haproxy pidfile to exist
+    stat:
+      path: /var/run/haproxy.pid
+    register: haproxy_pidfile
+    until: haproxy_pidfile.stat.exists
+    retries: 6
+    delay: 10
+
+  - name: Fail when platform haproxy pidfile is still missing
+    fail:
+      msg: >-
+        Platform haproxy pidfile /var/run/haproxy.pid was not found after
+        waiting for restart. Check haproxy status before retry.
+    when: not haproxy_pidfile.stat.exists
+
   - name: Check haproxy service restarted
     shell: >-
-      date --date="$(ps -p $(ps -eo pid,cmd | grep haproxy |
-      awk 'NR==1{print $1}') -o lstart=)" '+%s'
+      date --date="$(ps -p "$(cat /var/run/haproxy.pid)" -o lstart=)" '+%s'
     register: haproxy_start_time
-    until: haproxy_start_time.stdout > start_time.stdout
+    until: haproxy_start_time.stdout|int > (start_time.stdout|int + 1)
     retries: 6
     delay: 10
 
