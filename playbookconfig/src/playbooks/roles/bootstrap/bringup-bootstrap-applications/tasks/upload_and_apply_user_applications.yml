@@ -41,21 +41,60 @@
     loop: "{{ _apps }}"
     async: 600
     poll: 0
+    register: app_upload_jobs
 
-  - name: Build application search list
+  # The upload requests are fired asynchronously, so their exit status must be
+  # collected explicitly. Without this the request is silently discarded when
+  # rejected, and the failure is only noticed by the state wait below, which
+  # burns all of its retries before reporting an unrelated error.
+  - name: Get application upload request results
+    async_status:
+      jid: "{{ item.ansible_job_id }}"
+    register: app_upload_results
+    until: app_upload_results.finished
+    # The retry length should cover the async timeout of the request above
+    # eg retries = async timeout / delay
+    retries: 100
+    delay: 6
+    failed_when: false
+    loop: "{{ app_upload_jobs.results }}"
+
+  - name: Fail if any application upload request was rejected
+    fail:
+      msg: >-
+        The application-upload request for {{ item.item.item }} was not accepted
+        (rc={{ item.rc | default('request did not complete') }}).
+        {{ item.stderr | default('') | trim }}
+    when: item.rc is not defined or item.rc != 0
+    loop: "{{ app_upload_results.results }}"
+
+  # Accumulate the names so that every application is watched. Assigning the
+  # name of the current item would leave only the last one in the pattern.
+  - name: Build application name list
     set_fact:
-      app_search_list: "{{ [(item).split('/')[-1].split('-')[0:-2] | join('-')] | join('|') }}"
+      app_name_list: "{{ (app_name_list | default([])) +
+                         [(item).split('/')[-1].split('-')[0:-2] | join('-')] }}"
     loop: "{{ _apps }}"
 
   - name: Wait for all applications to reach uploaded state
-    shell: "source /etc/platform/openrc; system application-list | grep -E {{ app_search_list }} |
-            awk '{print $10}' | sort | uniq"
-    register: app_states
+    shell: "source /etc/platform/openrc; system application-list --nowrap"
+    register: app_list
     retries: 5
     delay: 20
     until:
-      - "app_states.stdout_lines | length == 1"
-      - app_states.stdout_lines[0] == "uploaded"
+      - app_states | length > 0
+      # Every application reported a terminal state, whichever it is
+      - "app_states | difference(['uploaded', 'upload-failed']) | length == 0"
+    # Report the offending state below instead of the bare retry exhaustion
+    failed_when: false
+
+  - name: Fail if any application is not in uploaded state
+    fail:
+      msg: >-
+        User defined applications did not reach the uploaded state.
+        Current state(s): {{ app_states | join(', ') | default('unknown', true) }}.
+        Check the sysinv logs for the failure reason.
+    when: app_states != ['uploaded']
 
   - name: Apply overrides for applications
     shell: "source /etc/platform/openrc; system helm-override-update {{
@@ -75,16 +114,52 @@
     loop: "{{ _apps }}"
     async: 600
     poll: 0
+    register: app_apply_jobs
+
+  # An application-apply can be rejected up front by the application semantic
+  # checks, eg when a user override is malformed. Collecting the request status
+  # surfaces that rejection immediately, instead of waiting for the state loop
+  # below to time out while the application sits in the uploaded state.
+  - name: Get application apply request results
+    async_status:
+      jid: "{{ item.ansible_job_id }}"
+    register: app_apply_results
+    until: app_apply_results.finished
+    # The retry length should cover the async timeout of the request above
+    # eg retries = async timeout / delay
+    retries: 100
+    delay: 6
+    failed_when: false
+    loop: "{{ app_apply_jobs.results }}"
+
+  - name: Fail if any application apply request was rejected
+    fail:
+      msg: >-
+        The application-apply request for {{ item.item.item }} was not accepted
+        (rc={{ item.rc | default('request did not complete') }}).
+        {{ item.stderr | default('') | trim }}
+    when: item.rc is not defined or item.rc != 0
+    loop: "{{ app_apply_results.results }}"
 
   - name: Wait for all applications to reach applied state
-    shell: "source /etc/platform/openrc; system application-list | grep -E {{ app_search_list }} |
-            awk '{print $10}' | sort | uniq"
-    register: app_states
+    shell: "source /etc/platform/openrc; system application-list --nowrap"
+    register: app_list
     retries: 30
     delay: 10
     until:
-      - app_states.stdout_lines | length == 1
-      - app_states.stdout_lines[0] == "applied"
+      - app_states | length > 0
+      # Every application reported a terminal state, whichever it is
+      - "app_states | difference(['applied', 'apply-failed']) | length == 0"
+    # Report the offending state below instead of the bare retry exhaustion
+    failed_when: false
+
+  - name: Fail if any application is not in applied state
+    fail:
+      msg: >-
+        User defined applications did not reach the applied state.
+        Current state(s): {{ app_states | join(', ') | default('unknown', true) }}.
+        Check the sysinv logs for the failure reason.
+    when: app_states != ['applied']
 
   - name: Include applied application in control list
     set_fact:
@@ -94,3 +169,14 @@
   when:
     - _apps is defined
     - _apps | length > 0
+  vars:
+    # The state of every watched application, taken from the application-list
+    # table. Splitting on the column separator keeps this independent of the
+    # field position, which a value holding a space would shift, and matches
+    # the application name exactly instead of as a substring.
+    app_states: >-
+      {{ (app_list.stdout_lines | default([]))
+         | select('match', '^[|]')
+         | map('split', '|') | map('map', 'trim') | map('list')
+         | selectattr(1, 'in', app_name_list | default([]))
+         | map(attribute=5) | unique | list }}
