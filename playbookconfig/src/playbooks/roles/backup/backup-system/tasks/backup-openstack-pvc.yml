@@ -141,6 +141,29 @@
       set_fact:
         pvc_info_dict: "{{ pvc_info_dict | combine({ pvc_name: pvc_info }) }}"
 
+    # The VolumeSnapshot and its VSC are no longer needed on the cluster:
+    # the backend snapshot is retained (deletionPolicy: Retain above) and the
+    # restore rebuilds fresh objects from the captured snapshot_handle. Delete
+    # them so they do not accumulate on each backup run.
+    - name: Delete volume snapshot
+      command: >-
+        kubectl delete volumesnapshot {{ snapshot_name }} -n openstack
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Patch VSC to remove finalizers
+      command: >-
+        kubectl patch volumesnapshotcontent {{ snapshot_vsc.stdout }}
+        --type=merge -p '{"metadata":{"finalizers":[]}}'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Delete VSC
+      command: >-
+        kubectl delete volumesnapshotcontent {{ snapshot_vsc.stdout }}
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
   rescue:
     - name: Warn about OpenStack PVC snapshot failure
       debug:
