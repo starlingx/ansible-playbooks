@@ -7,12 +7,30 @@
 - hosts: localhost
   gather_facts: no
 
-  vars_files:
-    - host_vars/netapp/default.yml
+  # This playbook method for installing and configuring the NetApp Trident
+  # storage backend is DEPRECATED and must not be used. Use the
+  # 'netapp-storage' application instead, which provides standard lifecycle
+  # management through the 'system application-upload',
+  # 'system application-apply' and 'system application-remove' commands, as
+  # well as configuration via Helm overrides.
+  #
+  # The playbook always stops to prevent any use.
+  tasks:
+    - name: Show deprecation notice for the NetApp Ansible playbook method
+      debug:
+        msg:
+          - "================================================================"
+          - "              NetApp Ansible Playbook - NOT SUPPORTED"
+          - "================================================================"
+          - ""
+          - "This Ansible playbook, which was used to install and configure"
+          - "the NetApp Trident storage backend, is NO LONGER SUPPORTED and"
+          - "must not be used for any deployment."
+          - ""
+          - "Use the 'netapp-storage' application instead, which provides"
+          - "application operations commands, as well as configuration via"
+          - "Helm overrides."
+          - "================================================================"
 
-  # Main play
-  roles:
-    - { role: common/prepare-env }
-    - { role: common/get-kube-version, become: yes }
-    - { role: roles/common/push-docker-images, become: yes }
-    - { role: roles/k8s-storage-backends/netapp, become: yes }
+    - name: End the play so nothing is installed
+      meta: end_play
