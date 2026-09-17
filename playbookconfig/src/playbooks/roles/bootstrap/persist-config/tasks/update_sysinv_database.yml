@@ -237,6 +237,11 @@
     msg: "Failed to provision initial system configuration."
   when: populate_result.rc != 0
 
+- name: Remove the config ini file after successful population
+  file:
+    path: "{{ config_permdir + '/' + bootstrap_config_file|basename }}"
+    state: absent
+
 - block:
   - name: Update keystone dcmanager assignment to match system controller
     command: psql -d keystone -c "update public.assignment set
