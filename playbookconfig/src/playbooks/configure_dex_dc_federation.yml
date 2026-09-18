@@ -106,6 +106,16 @@
     lock_stale_seconds: 3600
     override_file: /tmp/dex_redirect_override.yaml
 
+    # A fresh platform Keystone token is issued for every subcloud, inside
+    # the query loop, so the token in use is only ever as old as the single
+    # call it authenticates. Sharing one token across a group of subclouds,
+    # of any size, reintroduces the expiry window this fix exists to close:
+    # a group is not time-bounded in practice, because each member can take
+    # up to subcloud_api_timeout, so a group of 100 can hold one token for
+    # 1000s once subclouds start timing out.
+    subcloud_token_cmd: >-
+      source /etc/platform/openrc && openstack token issue -f value -c id
+
     # --- WebSSO callback paths ---------------------------------------------
     websso_keystone_path: /v3/auth/OS-FEDERATION/identity_providers/dex/protocols/openid/websso/redirect
     websso_horizon_path: /auth/websso/
@@ -227,24 +237,61 @@
 
     - name: Acquire sync lock
       # Guards the staticClients read-modify-write against concurrent runs,
-      # which is a known concurrency risk. Age-based
-      # staleness reclaim prevents a crashed run from blocking forever.
+      # which is a known concurrency risk. The lock is a directory created
+      # with mkdir, which is atomic on POSIX: two concurrent runs cannot both
+      # succeed, closing the check-then-create race a plain -e test would
+      # leave open. Age-based staleness reclaim prevents a crashed run from
+      # blocking forever.
       ansible.builtin.shell: |
         set -o pipefail
         set -e
         LOCK="{{ lock_file }}"
-        if [ -e "$LOCK" ]; then
-          NOW=$(date +%s)
-          MTIME=$(stat -c %Y "$LOCK" 2>/dev/null || echo 0)
-          AGE=$(( NOW - MTIME ))
-          if [ "$AGE" -lt {{ lock_stale_seconds }} ]; then
-            echo "HELD age=${AGE}s owner=$(cat "$LOCK" 2>/dev/null)"
-            exit 1
-          fi
-          echo "RECLAIMED_STALE age=${AGE}s"
+        OWNER="$LOCK/owner"
+        STALE={{ lock_stale_seconds }}
+        # mkdir is the atomic test-and-set. If it succeeds we hold the lock.
+        if mkdir "$LOCK" 2>/dev/null; then
+          printf '%s pid=%s\n' "$(date -Is)" "$$" > "$OWNER"
+          echo ACQUIRED
+          exit 0
         fi
-        printf '%s pid=%s\n' "$(date -Is)" "$$" > "$LOCK"
-        echo ACQUIRED
+        # The lock exists. Age is measured from the owner record rather than
+        # the lock directory, because creating or removing the claim below
+        # bumps the mtime of the directory itself and would make a genuinely
+        # stale lock look fresh.
+        NOW=$(date +%s)
+        MTIME=$(stat -c %Y "$OWNER" 2>/dev/null || echo 0)
+        AGE=$(( NOW - MTIME ))
+        if [ "$AGE" -lt "$STALE" ]; then
+          echo "HELD age=${AGE}s owner=$(cat "$OWNER" 2>/dev/null)"
+          exit 1
+        fi
+        # Stale. Refreshing the owner in place is not safe, because two runs
+        # that both observe the same stale lock would both proceed, reopening
+        # on the reclaim path the very race mkdir closes on the acquire path.
+        # So the reclaim is itself an atomic mkdir, of a claim subdirectory
+        # that exactly one racer can create. The lock directory is never
+        # removed: removing and re-creating it, in either order, leaves a
+        # window in which the lock does not exist, and any run just reaching
+        # the acquire mkdir above then succeeds legitimately, yielding several
+        # concurrent holders.
+        if mkdir "$LOCK/reclaiming" 2>/dev/null; then
+          # Re-check under the claim. A racer can read a stale age above, then
+          # arrive here only after the winner has already reclaimed and
+          # released, so the claim alone does not decide the outcome.
+          NOW=$(date +%s)
+          MTIME=$(stat -c %Y "$OWNER" 2>/dev/null || echo 0)
+          AGE=$(( NOW - MTIME ))
+          if [ "$AGE" -ge "$STALE" ]; then
+            printf '%s pid=%s\n' "$(date -Is)" "$$" > "$OWNER"
+            rmdir "$LOCK/reclaiming"
+            echo "RECLAIMED_STALE age=${AGE}s"
+            exit 0
+          fi
+          rmdir "$LOCK/reclaiming"
+        fi
+        # Another run holds the lock or won the reclaim.
+        echo "HELD age=${AGE}s owner=$(cat "$OWNER" 2>/dev/null)"
+        exit 1
       register: lock_result
       changed_when: "'ACQUIRED' in lock_result.stdout"
       # Deliberately not failed_when: the next task reports the contention
@@ -256,8 +303,9 @@
         msg: >-
           Another sync appears to be in progress
           ({{ lock_result.stdout | default('') | trim }}).
-          Wait for it to finish, or remove {{ lock_file }} if you are certain
-          no other run is active.
+          Wait for it to finish, or run "rm -rf {{ lock_file }}" if you are
+          certain no other run is active. The lock is a directory, so a plain
+          rm will not remove it.
       when: lock_result.rc != 0
 
     - name: Report stale lock reclaim
@@ -666,39 +714,26 @@
           loop_control:
             label: "{{ item.item.name }}"
 
-        - name: Get platform Keystone token for subcloud queries
-          # Re-issued at the start of each API batch so long runs over many
-          # subclouds cannot fail midway on an expired token.
-          ansible.builtin.shell: |
-            source /etc/platform/openrc
-            openstack token issue -f value -c id
-          register: token_dex_check
-          changed_when: false
-          no_log: true
+        # Reset explicitly: the include below is skipped when there is nothing
+        # to query, and both phases write to the same variable, so without
+        # this the applied check could inherit the helm-override results.
+        - name: Reset subcloud query results
+          ansible.builtin.set_fact:
+            dex_query_results: []
+
+        # A fresh token per subcloud, so a long run over many subclouds
+        # (StarlingX supports up to 1000) cannot outlive the token in use.
+        - name: Read keystone helm overrides from each subcloud
+          ansible.builtin.include_tasks: dex_dc_subcloud_query.yml
+          vars:
+            dex_subclouds: "{{ reachable_subclouds }}"
+            dex_api_path: "/v1/helm_charts/{{ openstack_app_name }}?name=keystone&namespace=openstack"
           when: reachable_subclouds | length > 0
 
-        - name: Read keystone helm overrides from each subcloud
-          vars:
-            api_host: >-
-              {% if ':' in item.mgmt_ip %}[{{ item.mgmt_ip }}]{% else %}{{ item.mgmt_ip }}{% endif %}
-            api_url: >-
-              https://{{ api_host | trim }}:{{ subcloud_api_port
-              }}/v1/helm_charts/{{ openstack_app_name
-              }}?name=keystone&namespace=openstack
-          ansible.builtin.uri:
-            url: "{{ api_url | trim }}"
-            method: GET
-            headers:
-              X-Auth-Token: "{{ token_dex_check.stdout | trim }}"
-            validate_certs: "{{ validate_subcloud_certs }}"
-            ca_path: "{{ subcloud_ca_path }}"
-            timeout: "{{ subcloud_api_timeout }}"
-            status_code: [200, 400, 401, 404]
-          register: helm_results
-          loop: "{{ reachable_subclouds }}"
-          loop_control:
-            label: "{{ item.name }}"
-          failed_when: false
+        - name: Capture helm-override results
+          ansible.builtin.set_fact:
+            helm_results:
+              results: "{{ dex_query_results }}"
 
         - name: Fail if subcloud API rejected the token
           ansible.builtin.fail:
@@ -730,33 +765,22 @@
           loop_control:
             label: "{{ item.item.name }}"
 
-        - name: Get platform Keystone token for application queries
-          ansible.builtin.shell: |
-            source /etc/platform/openrc
-            openstack token issue -f value -c id
-          register: token_app_check
-          changed_when: false
-          no_log: true
+        - name: Reset subcloud query results before the applied check
+          ansible.builtin.set_fact:
+            dex_query_results: []
+
+        # Same per-subcloud token refresh for the applied check.
+        - name: Check OpenStack applied on DEX-enabled subclouds
+          ansible.builtin.include_tasks: dex_dc_subcloud_query.yml
+          vars:
+            dex_subclouds: "{{ dex_enabled_subclouds }}"
+            dex_api_path: "/v1/apps"
           when: dex_enabled_subclouds | length > 0
 
-        - name: Check OpenStack applied on DEX-enabled subclouds
-          vars:
-            api_host: >-
-              {% if ':' in item.mgmt_ip %}[{{ item.mgmt_ip }}]{% else %}{{ item.mgmt_ip }}{% endif %}
-          ansible.builtin.uri:
-            url: "https://{{ api_host | trim }}:{{ subcloud_api_port }}/v1/apps"
-            method: GET
-            headers:
-              X-Auth-Token: "{{ token_app_check.stdout | trim }}"
-            validate_certs: "{{ validate_subcloud_certs }}"
-            ca_path: "{{ subcloud_ca_path }}"
-            timeout: "{{ subcloud_api_timeout }}"
-            status_code: [200, 400, 401, 404]
-          register: app_results
-          loop: "{{ dex_enabled_subclouds }}"
-          loop_control:
-            label: "{{ item.name }}"
-          failed_when: false
+        - name: Capture application-check results
+          ansible.builtin.set_fact:
+            app_results:
+              results: "{{ dex_query_results }}"
 
         - name: Reset qualified accumulator
           ansible.builtin.set_fact:
