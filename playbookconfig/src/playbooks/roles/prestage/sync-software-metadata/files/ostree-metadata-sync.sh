@@ -401,7 +401,7 @@ translate_central_metadata_path() {
 sync_ostree_repo() {
     # Synchronizes the remote ostree repository (system controller) to the local subcloud.
     local tmp_ostree_sync_file="/tmp/sync-ostree-commits.log"
-    run_cmd ostree --repo="${OSTREE_REPO}" pull --mirror --depth=-1 --disable-verify-bindings "${OSTREE_REMOTE_REF}" > "${tmp_ostree_sync_file}" 2>&1
+    run_cmd ostree --repo="${OSTREE_REPO}" pull --mirror --depth=-1 --disable-verify-bindings "${OSTREE_REMOTE}" > "${tmp_ostree_sync_file}" 2>&1
     rc=$?
     # To avoid showing all ostree pull progress, which generates a very large output
     # in Ansible, we show only the report line in case of success.
@@ -445,7 +445,7 @@ configure_ostree_repo_for_central_pull() {
     fi
 
     # Configure remote ostree repo via the CLI.
-    ostree remote add --force --no-gpg-verify --set=tls-permissive=true --set=tls-ignore-hostname=true --set=branches="${OSTREE_BRANCH};" "${OSTREE_REMOTE}" "${url}"
+    ostree remote add --force --no-gpg-verify --set=tls-permissive=true --set=tls-ignore-hostname=true "${OSTREE_REMOTE}" "${url}"
 
     log_info_l "Configuring ostree repo: "\
         "Remote ostree url: ${url}"\
