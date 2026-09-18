@@ -71,7 +71,12 @@
       register: reset_info
     when: k8s_admin_conf.stat.exists
 
+  # reset_info is only set when the reset block above runs. On the skip path
+  # it is undefined, so guard the debug to avoid a template error.
   - debug: var=reset_info.stdout_lines
+    when:
+      - k8s_admin_conf.stat.exists
+      - reset_info.stdout_lines is defined
 
   # Cleanup kubelet-lv
   # Due to https://github.com/kubernetes/kubeadm/issues/1294 kubeadm will
