@@ -597,7 +597,10 @@
     # Now Postgres data and MariaDB data are stored in staging dir, we can estimate
     # the disk size requirement for the backup archive.
     - name: Check the size (in KiB) of directories that will be backed up for platform
-      shell: "du -sh -k  {{ item }} --exclude {{ exclude_targets|join(' --exclude ') }} | awk '{print $1}'"
+      shell: >-
+        du -sh -k  {{ item }}
+        --exclude '{{ exclude_targets | join("' --exclude '") }}'
+        | awk 'NR==1{print $1}'
       register: size_output_platform
       loop: "{{ backup_targets }}"
 
@@ -632,7 +635,10 @@
     # Create a separate archive for it
     - block:
         - name: Check the size (in KiB) of directories that will be backed up for dc-vault
-          shell: "du -sh -k  {{ dc_vault_permdir }} | awk '{print $1}'"
+          shell: >-
+            du -sh -k  {{ dc_vault_permdir }}
+            --exclude '{{ exclude_targets|join("' --exclude '") }}'
+            | awk 'NR==1{print $1}'
           register: size_output_dc_vault
 
         - name: Estimate the total required disk size for platform backup archive
