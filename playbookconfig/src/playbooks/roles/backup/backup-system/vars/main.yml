@@ -26,6 +26,11 @@ backup_include_apps: []
 # List of apps on DC system controller whose images will be included in the backup
 backup_include_dc_controller_apps: ["platform-integ-apps", "rook-ceph"]
 
+# backup extra files provided by user
+backup_extra_items: []
+
+platform_backup_temporary_dir: /opt/backups
+
 homedir: "{{ '/home' if os_release == 'centos' else '/var/home' }}"
 rootdir: "/var/rootdirs/root"
 config_permdir: "{{ platform_path }}/config/{{ software_version }}"
