@@ -56,24 +56,28 @@
 # in the "available" state, since it is assumed that this is the state in
 # which the software is left when it is prestaged to the subcloud.
 #
-# For component-based releases, the product release file at the metadata
-# root (*-{version}-metadata.xml) is used to determine the version.
-# If no product release files are found, fallback to the available/ subdir
-# (legacy releases).
+# For a subcloud running component-based release, the metapackage release files
+# (*_{version}-metadata.xml) under available subdir at component-based metadata
+# root are used to determine the version.
+#
+# For a subcloud running legacy release, the release files under available
+# subdir at legacy metadata root are used to determine the version.
 #
 # We print the MM.mm format when the prestaged release has no patches applied.
 # Otherwise, the release is printed in MM.mm.pp format to indicate the patch
 # level of the prestaged release.
-- name: Find product release metadata files at metadata root (component-based path)
+- name: Find metapackage release metadata files in available state (component-based path)
   shell: |
-    find {{ host_software_metadata_dir }}/ -maxdepth 1 -type f \
-    -name '*-*-metadata.xml' | \
-    awk -F'/' '{split($NF, parts, "-"); print parts[2]}' | \
+    find {{ host_software_metadata_dir }}/available/ -type f \
+    -name '*_*-metadata.xml' | \
+    awk -F'/' '{print $NF}' | \
+    sed -E 's/^.*_([0-9]+\.[0-9]+\.[0-9]+)-metadata\.xml$/\1/' | \
     sed 's/\.0$//g' | sort -V | \
     awk -F'.' '{versions[$1"."$2] = $0} END {for (v in versions) print versions[v]}' | \
     grep .
-  register: versions_product
+  register: versions_component_based
   failed_when: false
+  when: host_software_version is version('26.10', '>=')
 
 - name: Find metadata files in available state (legacy path)
   shell: |
@@ -84,12 +88,12 @@
     grep .
   register: versions_legacy
   failed_when: false
-  when: versions_product.stdout_lines | default([]) | length == 0
+  when: host_software_version is version('26.10', '<')
 
 - name: Generate a versions list from metadata files name
   set_fact:
-    versions_list: "{{ versions_product.stdout_lines
-                    if versions_product.stdout_lines | default([]) | length > 0
+    versions_list: "{{ versions_component_based.stdout_lines
+                    if host_software_version is version('26.10', '>=')
                     else versions_legacy.stdout_lines | default([]) }}"
 
 # Add the "for-sw-deploy" label to differentiate the versions list.
