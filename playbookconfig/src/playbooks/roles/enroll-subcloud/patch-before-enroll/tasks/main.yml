@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024-2025 Wind River Systems, Inc.
+# Copyright (c) 2024-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -38,7 +38,33 @@
     {{ source_env_command }}
     software --software-url {{ software_url }} deploy show
   register: check_deploy_show
+  until: >-
+    check_deploy_show.rc == 0 and
+    (check_deploy_show.stdout | trim | length > 0)
+  # The software CLI reaches USM through haproxy (controller.internal:5497).
+  # The enroll-init OAM reconfiguration rewrites haproxy.cfg and reloads
+  # haproxy so the endpoints move to the updated OAM address. Each reload
+  # is brief (sub-second), but a "software deploy show" that lands during
+  # a reload gets a transient failure (non-zero rc and/or empty stdout).
+  # Poll every 3s so enrollment proceeds as soon as haproxy is back up,
+  # with a 60s total budget as margin for slower hardware.
+  retries: 20
+  delay: 3
   failed_when: false
+
+- name: Fail if the software service did not become ready
+  fail:
+    msg: |
+      Unable to determine software deployment status on the subcloud.
+      "software deploy show" did not return successfully after retries
+      (rc={{ check_deploy_show.rc }}).
+      stderr: {{ check_deploy_show.stderr | default('') }}
+      The software (USM) service may not be ready. Verify the
+      software-controller-daemon is running and the subcloud has reached
+      config-complete. For more details, see /var/log/software.log.
+  when: >-
+    check_deploy_show.rc != 0 or
+    (check_deploy_show.stdout | trim | length == 0)
 
 - name: Ensure no deploy in progress
   fail:
