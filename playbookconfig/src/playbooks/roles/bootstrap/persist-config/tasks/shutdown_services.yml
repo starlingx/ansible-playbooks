@@ -116,6 +116,10 @@
   # tree cleared above. Leaving it in place makes the re-bootstrapped
   # etcd-fixed start with initial-cluster-state=new against a populated data
   # directory, which either fails outright or rejoins with stale membership.
+  - name: Stop pmon monitoring of etcd-fixed before reconfiguration
+    command: pmon-stop etcd-fixed
+    failed_when: false
+
   - name: Clear etcd-fixed data cache
     shell: /bin/rm -rf /opt/etcd-fixed/db/*  # noqa 302
 

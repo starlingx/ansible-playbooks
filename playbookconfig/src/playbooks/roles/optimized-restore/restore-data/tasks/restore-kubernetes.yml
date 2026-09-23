@@ -163,6 +163,10 @@
       vars:
         node_ip: "{{ derived_network_params.controller_0_cluster_host }}"
 
+    - name: Stop pmon monitoring of etcd-fixed before restore
+      command: pmon-stop etcd-fixed
+      failed_when: false
+
     - name: Stop etcd-fixed service
       service:
         name: etcd-fixed
@@ -190,6 +194,10 @@
         name: etcd-fixed
         state: started
         enabled: true
+
+    - name: Resume pmon monitoring of etcd-fixed after restore
+      command: pmon-start etcd-fixed
+      failed_when: false
 
     - name: Start floating etcd using sm during factory restore
       command: sm-start service etcd
