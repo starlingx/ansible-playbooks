@@ -367,7 +367,11 @@
   - name: Fail if removing interface addresses failed for reason other than it has been done already
     fail:
       msg: "{{ item.item }} failed for reason: {{ item.stderr }}."
-    when: item.rc != 0 and not incomplete_bootstrap
+    when:
+      - item.rc != 0
+      - not incomplete_bootstrap
+      - '"Address not found" not in item.stderr'
+      - '"Interface not found" not in item.stderr'
     loop: "{{ remove_addresses.results }}"
 
   when: last_config_file_exists
