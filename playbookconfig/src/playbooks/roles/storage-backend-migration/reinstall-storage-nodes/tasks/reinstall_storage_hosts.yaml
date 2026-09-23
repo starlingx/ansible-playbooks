@@ -65,3 +65,22 @@
   retries: 120
   delay: 10
   changed_when: false
+
+# After reinstall, the storage nodes regenerate their SSH host keys.
+# The stale entries in the active controller's ~/.ssh/known_hosts become
+# invalid, causing the next SSH connection to fail with
+# "REMOTE HOST IDENTIFICATION HAS CHANGED". Remove the old entries
+# so subsequent SSH connections succeed.
+- name: Remove stale SSH known_hosts entries for reinstalled storage nodes
+  become: true
+  become_user: sysadmin
+  command: ssh-keygen -f "/home/sysadmin/.ssh/known_hosts" -R "{{ item }}"
+  loop: "{{ groups.storages }}"
+  loop_control:
+    label: "{{ item }}"
+  register: known_hosts_cleanup
+  failed_when:
+    - known_hosts_cleanup.rc != 0
+    - "'No such file or directory' not in known_hosts_cleanup.stderr"
+    - "'not found in' not in known_hosts_cleanup.stderr"
+  changed_when: known_hosts_cleanup.rc == 0
