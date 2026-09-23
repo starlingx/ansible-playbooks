@@ -11,6 +11,10 @@
 - name: Restore sysinv and flock services
   import_tasks: restore-postgres-and-sysinv.yml
 
+- name: Check LVM CSI volume groups against host
+  include_role:
+    name: common/check-lvm-vgs
+
 - name: Restore LDAP
   import_role: name=backup-restore/restore-ldap
 

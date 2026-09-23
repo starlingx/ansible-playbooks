@@ -1,0 +1,49 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   Compare LVM CSI volume groups in the restored sysinv database
+#   against the VGs present on the Linux host.  Emits a warning for
+#   each VG that exists in the DB (lvm_function=lvm-csi) but is
+#   missing on the host — it was likely removed manually and will
+#   be recreated on host unlock.
+#
+#   Only runs on AIO-SX (simplex) with LVM CSI backend configured.
+#
+
+- name: Check if LVM CSI backend is configured
+  stat:
+    path: /etc/platform/.node_lvm_csi_configured
+  register: lvm_csi_flag
+
+- name: Compare backup DB volume groups with host VGs
+  block:
+    - name: Run LVM CSI VG comparison script
+      script: check_lvm_vgs.py
+      register: lvm_vg_check_result
+      become: yes
+
+    - name: Parse LVM VG check result
+      set_fact:
+        lvm_vg_check: "{{ lvm_vg_check_result.stdout | from_json }}"
+
+    - name: LVM CSI volume groups missing on host will be recreated
+      debug:
+        msg: >-
+          WARNING: {{ item }}
+      loop: "{{ lvm_vg_check.warnings }}"
+      when: lvm_vg_check.warnings | length > 0
+
+    - name: LVM CSI volume group check summary
+      debug:
+        msg:
+          - "LVM CSI VGs present on host: {{ lvm_vg_check.matched_vgs }}"
+          - "LVM CSI VGs missing (will be recreated on host unlock): \
+            {{ lvm_vg_check.missing_vgs | map(attribute='vg_name') | list }}"
+
+  when:
+    - system_mode | default('') == 'simplex'
+    - lvm_csi_flag.stat.exists
