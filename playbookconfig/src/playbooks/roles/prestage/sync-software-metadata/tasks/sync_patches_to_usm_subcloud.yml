@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024-2025 Wind River Systems, Inc.
+# Copyright (c) 2024-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -216,17 +216,6 @@
         - prestage_source == 'local'
         - system_controller_metadata_empty_commit | length > 0
 
-    # It's necessary to temporarily change the owner to sysadmin so that
-    # the system controller can push the files to the subcloud, since the files
-    # are in the folders only the root can access but the synchronize only
-    # support passwordless sysadmin to execute ssh and rsync.
-    - name: Temporarily change the ownership of {{ usm_software_dir }}
-      file:
-        path: "{{ usm_software_dir }}"
-        state: directory
-        owner: sysadmin
-        recurse: yes
-
     - name: Copy system controller {{ usm_metadata_dir }} to subcloud {{ tmp_metadata_sync_dir }}
       copy:
         src: "{{ usm_metadata_dir }}"
@@ -253,6 +242,22 @@
           - "rc: {{ sync_software_commits.rc }}"
           - "stderr: {{ sync_software_commits.stderr }}"
           - "stdout: {{ sync_software_commits.stdout }}"
+
+    # It's necessary to temporarily change the owner to sysadmin so that
+    # the system controller can push the files to the subcloud, since the files
+    # are in the folders only the root can access but the synchronize only
+    # support passwordless sysadmin to execute ssh and rsync.
+    #
+    # This must run AFTER "Synchronizing system controller ostree commits on
+    # subcloud" above: that task runs ostree-metadata-sync.sh as root, which
+    # creates {{ usm_software_dir }}/releases (component-based, >= 26.10) owned by
+    # root.
+    - name: Temporarily change the ownership of {{ usm_software_dir }}
+      file:
+        path: "{{ usm_software_dir }}"
+        state: directory
+        owner: sysadmin
+        recurse: yes
 
     # We want to transfer the rel-MM-mm directories that may exist in the system
     # controller to the subcloud. Regardless of whether the provided release is an
