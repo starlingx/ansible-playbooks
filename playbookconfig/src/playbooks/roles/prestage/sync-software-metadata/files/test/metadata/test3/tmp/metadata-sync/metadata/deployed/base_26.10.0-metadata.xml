@@ -1,0 +1,23 @@
+<?xml version="1.0" ?>
+<metapackage>
+  <data_migration>Y</data_migration>
+  <deployable>N</deployable>
+  <reboot_required>Y</reboot_required>
+  <contents>
+    <ostree>
+      <number_of_commits>1</number_of_commits>
+      <base>
+        <commit/>
+        <checksum/>
+      </base>
+      <commit1>
+        <commit>eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee</commit>
+        <checksum>555555555555555555555555555555555555555555555555555555555555555</checksum>
+      </commit1>
+    </ostree>
+  </contents>
+  <requires/>
+  <id>base_26.10.0</id>
+  <sw_version>26.10.0</sw_version>
+  <summary>Base StarlingX metapackage</summary>
+</metapackage>

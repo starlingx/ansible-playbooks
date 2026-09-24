@@ -1,0 +1,23 @@
+<?xml version="1.0" ?>
+<metapackage>
+  <data_migration>Y</data_migration>
+  <deployable>N</deployable>
+  <reboot_required>Y</reboot_required>
+  <contents>
+    <ostree>
+      <number_of_commits>1</number_of_commits>
+      <base>
+        <commit/>
+        <checksum/>
+      </base>
+      <commit1>
+        <commit>1111111111111111111111111111111111111111111111111111111111111111</commit>
+        <checksum>2222222222222222222222222222222222222222222222222222222222222222</checksum>
+      </commit1>
+    </ostree>
+  </contents>
+  <requires/>
+  <id>infra_26.10.0</id>
+  <sw_version>26.10.0</sw_version>
+  <summary>Infra StarlingX metapackage</summary>
+</metapackage>

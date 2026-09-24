@@ -1,0 +1,43 @@
+<?xml version="1.0" ?>
+<product>
+  <id>starlingx-26.10.0</id>
+  <sw_version>26.10.0</sw_version>
+  <component>starlingx</component>
+  <summary>STX 26.10 GA release</summary>
+  <description>STX 26.10 major GA release</description>
+  <install_instructions/>
+  <warnings/>
+  <status>REL</status>
+  <unremovable>Y</unremovable>
+  <reboot_required>Y</reboot_required>
+  <prepatched_iso>N</prepatched_iso>
+  <apply_active_release_only/>
+  <contents>
+    <ostree>
+      <number_of_commits>1</number_of_commits>
+      <base>
+        <commit></commit>
+        <checksum></checksum>
+      </base>
+      <commit1>
+        <commit>ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc</commit>
+        <checksum>0000000000000000000000000000000000000000000000000000000000000000</checksum>
+      </commit1>
+    </ostree>
+  </contents>
+  <requires>
+  </requires>
+  <semantics/>
+  <metapackages>
+<pkg>infra</pkg>
+<pkg>k8s-v1.34.1</pkg>
+<pkg>k8s-v1.35.2</pkg>
+<pkg>swmgmt</pkg>
+<pkg>distcloud</pkg>
+<pkg>base</pkg>
+<pkg>k8s-v1.33.0</pkg>
+<pkg>k8s-v1.32.2</pkg>
+<pkg>k8s-common</pkg>
+  </metapackages>
+<packages><deb>foo_amd64.deb</deb><deb>bar_all.deb</deb></packages>
+</product>

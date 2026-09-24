@@ -1,0 +1,23 @@
+<?xml version="1.0" ?>
+<metapackage>
+  <data_migration>Y</data_migration>
+  <deployable>N</deployable>
+  <reboot_required>Y</reboot_required>
+  <contents>
+    <ostree>
+      <number_of_commits>1</number_of_commits>
+      <base>
+        <commit/>
+        <checksum/>
+      </base>
+      <commit1>
+        <commit>6666666666666666666666666666666666666666666666666666666666666666</commit>
+        <checksum>7777777777777777777777777777777777777777777777777777777777777777</checksum>
+      </commit1>
+    </ostree>
+  </contents>
+  <requires/>
+  <id>distcloud_26.10.0</id>
+  <sw_version>26.10.0</sw_version>
+  <summary>Distributed Cloud StarlingX metapackage</summary>
+</metapackage>

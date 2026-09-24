@@ -1,0 +1,23 @@
+<?xml version="1.0" ?>
+<patch>
+  <id>starlingx-25.09.400</id>
+  <sw_version>25.09.400</sw_version>
+  <component>starlingx</component>
+  <summary>Patch offered by new system controller SC-B</summary>
+  <description>Test</description>
+  <install_instructions>Sample instructions</install_instructions>
+  <warnings>Sample warning</warnings>
+  <status>REL</status>
+  <unremovable>N</unremovable>
+  <reboot_required>N</reboot_required>
+  <semantics />
+  <requires>
+    <req_patch_id>starlingx-25.09.0</req_patch_id>
+  </requires>
+  <packages>
+    <deb>logmgmt_1.1-1.stx.9_all.deb</deb>
+  </packages>
+  <number_of_commits>1</number_of_commits>
+  <previous_commit>ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff</previous_commit>
+  <commit>0011001100110011001100110011001100110011001100110011001100110011</commit>
+</patch>
