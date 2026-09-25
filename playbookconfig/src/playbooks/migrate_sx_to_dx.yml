@@ -577,6 +577,13 @@
         delay: 5
         become: yes
 
+      # The pxeboot floating address may reside on a labeled alias rather than
+      # the base interface, where dnsmasq cannot serve controller-1. Re-enable
+      # pxeboot-ipv4 so the address is placed on the base interface.
+      - name: Ensure pxeboot floating address on base interface
+        command: sm-restart-safe service pxeboot-ipv4
+        become: yes
+
       when: current_system_mode.stdout == 'simplex' or
             oam_uuid_ipv4 is defined and
               (current_oam_c0_ipv4 != new_oam_c0_ipv4 or current_oam_c1_ipv4 != new_oam_c1_ipv4) or
