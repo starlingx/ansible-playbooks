@@ -615,6 +615,10 @@
     loop: "{{ ids_and_personalities.stdout_lines }}"
     when: (item.split(' ')[1] | lower) == 'none'
 
+  - name: Check LVM CSI volume groups against host
+    include_role:
+      name: common/check-lvm-vgs
+
   - block:
     - block:
       # Recover procedure for systems with storage nodes is different from
