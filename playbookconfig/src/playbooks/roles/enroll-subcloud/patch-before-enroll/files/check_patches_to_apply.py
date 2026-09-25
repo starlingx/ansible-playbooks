@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 #
-# Copyright (c) 2025 Wind River Systems, Inc.
+# Copyright (c) 2025-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -8,6 +8,7 @@
 #
 
 import os
+import re
 import sys
 import json
 import subprocess
@@ -152,23 +153,51 @@ class PatchChecker:
             self.patch_file_id_dict = self._build_patch_file_mapping()
         return self.patch_file_id_dict
 
+    @staticmethod
+    def _component_from_release_id(release_id: str) -> Tuple[str, str]:
+        """Split a release id into (component, version).
+
+        Release ids follow the "component-MM.mm.pp" convention (e.g.
+        "swmgmt-1.0.3"), where the component name itself may contain
+        hyphens. The version is the trailing dotted numeric token, so split
+        on the last hyphen that precedes it.
+        """
+        if not release_id:
+            return "", ""
+        # Match a trailing version like 1.2 or 1.2.3 after the final hyphen.
+        m = re.match(r"^(?P<component>.+)-(?P<version>\d+(?:\.\d+)+)$", release_id)
+        if m:
+            return m.group("component"), m.group("version")
+        # Fallback: no recognizable trailing version.
+        return release_id, ""
+
     def determine_subcloud_patch_level(
         self, subcloud_releases: List[str] = None
     ) -> Tuple[str, str]:
         """Determine the highest patch level and component from subcloud releases."""
 
         parsed_releases = []
-        for rel in subcloud_releases:
-            parts = rel.split("-")
-            if len(parts) >= 2:
-                component = parts[0]
-                version = parts[1]
+        for rel in subcloud_releases or []:
+            component, version = self._component_from_release_id(rel)
+            if version:
                 parsed_releases.append((version, component))
 
         # Sort by version and get the highest
         parsed_releases.sort(key=lambda x: parse_version(x[0]))
         highest_version, component = parsed_releases[-1]
         return highest_version, component
+
+    def _release_matches_component(self, release: Dict[str, Any],
+                                   subcloud_component: str) -> bool:
+        """Whether a system controller release belongs to subcloud_component.
+
+        Product releases do not carry a component field in their metadata anymore, so
+        the component is always derived from the release id. The subcloud
+        reports its releases using the same ids, so both sides match on the
+        component parsed from the release id.
+        """
+        component, _ = self._component_from_release_id(release.get("release_id", ""))
+        return bool(component) and component == subcloud_component
 
     def filter_system_controller_patches(
         self, subcloud_component: str = None
@@ -180,7 +209,7 @@ class PatchChecker:
                 for r in self.releases
                 if (
                     r.get("state") in ["deployed", "committed", "unavailable"] and
-                    r.get("component") == subcloud_component and
+                    self._release_matches_component(r, subcloud_component) and
                     not r.get("prepatched_iso", False)
                 )
             ]
@@ -188,7 +217,7 @@ class PatchChecker:
             return [
                 r
                 for r in self.releases
-                if r.get("component") == subcloud_component and
+                if self._release_matches_component(r, subcloud_component) and
                 not r.get("prepatched_iso", False)
             ]
 
