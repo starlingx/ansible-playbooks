@@ -9,13 +9,6 @@
     path: "{{ tmp_workspace }}"
     state: directory
 
-- name: Create Rook configured flag
-  file:
-    path: /etc/platform/.node_rook_configured
-    state: touch
-    modification_time: preserve
-    access_time: preserve
-
 - block:
   - name: Create rook-ceph-mon secret if does not exists
     include_tasks: create_mon_secret.yaml
@@ -26,6 +19,16 @@
   - name: Create Rook-Ceph with Pacific Ceph version
     include_tasks: create_pacific_rook.yaml
   when: inventory_hostname in groups.active_controller
+
+# Create the flag only after the toolbox is up. It redirects Ceph CLI
+# wrappers to the rook-ceph-tools pod, so creating it earlier would break
+# host-local tools (e.g. ceph-authtool in create_mon_secret).
+- name: Create Rook configured flag
+  file:
+    path: /etc/platform/.node_rook_configured
+    state: touch
+    modification_time: preserve
+    access_time: preserve
 
 - name: Cleanup temporary rook-ceph folder
   file:

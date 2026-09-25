@@ -12,6 +12,15 @@
 - name: "Uninstall Ceph Pacific"
   include_tasks: uninstall_pacific.yaml
 
+# Remove the flag while no toolbox is running. It redirects Ceph CLI
+# wrappers to the rook-ceph-tools pod, so leaving it would break
+# host-local tools (e.g. ceph-authtool in create_mon_secret). deploy-rook
+# recreates it once Rook/Ceph is back up.
+- name: Remove Rook configured flag while no toolbox is running
+  file:
+    path: /etc/platform/.node_rook_configured
+    state: absent
+
 - name: Create rook-ceph-mon secret if does not exists
   include_tasks: "{{ roles_dir_path }}/nautilus-to-pacific/tasks/create_mon_secret.yaml"
 
