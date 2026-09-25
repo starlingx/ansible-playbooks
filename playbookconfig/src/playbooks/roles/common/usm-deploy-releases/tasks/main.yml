@@ -24,11 +24,47 @@
     {{ source_env_command }}
     software --software-url {{ software_url }} install-local
 
+- name: Build list of patch file paths
+  set_fact:
+    patch_files: >-
+      {% for patch in patches %}"{{ patches_dir }}/{{ patch }}" {% endfor %}
+
+# Upload all patches in a single command instead of looping one upload per
+# patch. USM processes uploads asynchronously and rejects a new upload while a
+# previous one is still in progress.
 - name: Software upload patches
   shell: |
     {{ source_env_command }}
-    software --software-url {{ software_url }} upload "{{ patches_dir }}/{{ item }}"
-  loop: "{{ patches }}"
+    software --software-url {{ software_url }} upload {{ patch_files }}
+
+# Uploads are processed asynchronously by USM: a release stays in the
+# "uploading" state before reaching a terminal state ("available" on
+# success or "upload-failed" on error). During enrollment wait here
+# for every uploaded release to become available before starting the deploy.
+# Otherwise "deploy start" races the upload and fails with
+# "...please wait for it to be available before deploying."
+- name: Wait for uploaded releases to become available
+  shell: |
+    {{ source_env_command }}
+    software --software-url {{ software_url }} list --release {{ target_sw_version }} | \
+    grep "{{ item }}" | awk '{print $6}'
+  loop: "{{ release_ids }}"
+  register: check_release_upload
+  retries: "{{ deploy_retries }}"
+  delay: "{{ deploy_delay }}"
+  until: check_release_upload.stdout in ["available", "upload-failed"]
+  failed_when: false
+
+- name: Fail if any uploaded release did not become available
+  fail:
+    msg: |
+      Release {{ item.item }} did not become available after upload.
+      Current state: {{ item.stdout }}
+      Expected state: available
+  loop: "{{ check_release_upload.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.stdout != "available"
 
 - block:
   - name: Deploy precheck
@@ -64,7 +100,7 @@
   shell: |
     {{ source_env_command }}
     software --software-url {{ software_url }} deploy show | \
-    grep "{{ target_sw_version }}" | awk '{print $8}'
+    grep "{{ target_sw_version }}" | awk '{print $(NF-1)}'
   register: check_deploy_start
   retries: "{{ deploy_start_retries }}"
   delay: "{{ deploy_start_delay }}"
@@ -99,7 +135,7 @@
   shell: |
     {{ source_env_command }}
     software --software-url {{ software_url }} deploy show | \
-    grep "{{ target_sw_version }}" | awk '{print $8}'
+    grep "{{ target_sw_version }}" | awk '{print $(NF-1)}'
   register: check_deploy_host
   retries: "{{ deploy_retries }}"
   delay: "{{ deploy_delay }}"
@@ -146,7 +182,7 @@
   shell: |
     {{ source_env_command }}
     software --software-url {{ software_url }} deploy show | \
-    grep "{{ target_sw_version }}" | awk '{print $8}'
+    grep "{{ target_sw_version }}" | awk '{print $(NF-1)}'
   register: check_deploy_activate
   retries: "{{ deploy_retries }}"
   delay: "{{ deploy_delay }}"
@@ -173,7 +209,7 @@
   shell: |
     {{ source_env_command }}
     software --software-url {{ software_url }} deploy show | \
-    grep "{{ target_sw_version }}" | awk '{print $8}'
+    grep "{{ target_sw_version }}" | awk '{print $(NF-1)}'
   register: check_deploy_complete
   retries: "{{ deploy_retries }}"
   delay: "{{ deploy_delay }}"
