@@ -553,19 +553,27 @@
 
     - name: Copy registry secret to calico-system namespace
       shell: >
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret registry-local-secret
-        -n kube-system -o yaml |
-        sed 's/namespace: kube-system/namespace: calico-system/' |
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf delete secret
+        registry-local-secret -n calico-system --ignore-not-found &&
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf create secret docker-registry
+        registry-local-secret
+        --docker-server={{ local_registry }}
+        --docker-username={{ local_registry_credentials['username'] }}
+        --docker-password={{ local_registry_credentials['password'] }}
+        -n calico-system
       register: copy_secret_calico
       failed_when: copy_secret_calico.rc != 0
 
     - name: Copy registry secret to tigera-operator namespace
       shell: >
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf get secret registry-local-secret
-        -n kube-system -o yaml |
-        sed 's/namespace: kube-system/namespace: tigera-operator/' |
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf delete secret
+        registry-local-secret -n tigera-operator --ignore-not-found &&
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf create secret docker-registry
+        registry-local-secret
+        --docker-server={{ local_registry }}
+        --docker-username={{ local_registry_credentials['username'] }}
+        --docker-password={{ local_registry_credentials['password'] }}
+        -n tigera-operator
       register: copy_secret_tigera
       failed_when: copy_secret_tigera.rc != 0
 
