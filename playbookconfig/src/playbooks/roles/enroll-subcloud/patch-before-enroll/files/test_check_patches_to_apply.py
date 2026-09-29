@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 #
-# Copyright (c) 2025 Wind River Systems, Inc.
+# Copyright (c) 2025-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -243,36 +243,85 @@ class TestPatchChecker(unittest.TestCase):
         self.assertEqual(patch_level, "1.0.2")
         self.assertEqual(component, "starlingx")
 
+    def test_filter_matches_by_release_id_when_component_none(self):
+        """DC case: product releases report component=None on the API.
+
+        Matching must fall back to the component derived from the
+        release id ("component-MM.mm.pp"), otherwise nothing matches and
+        the script wrongly reports no patches to apply.
+        """
+        releases_component_none = [
+            {
+                "release_id": "starlingx-1.0.0",
+                "sw_version": "1.0.0",
+                "state": "deployed",
+                "component": None,
+                "requires": [],
+                "prepatched_iso": False,
+            },
+            {
+                "release_id": "starlingx-1.0.1",
+                "sw_version": "1.0.1",
+                "state": "deployed",
+                "component": None,
+                "requires": ["starlingx-1.0.0"],
+                "prepatched_iso": False,
+            },
+        ]
+        checker = PatchChecker(releases_component_none, "1.0", "1.0")
+        filtered = checker.filter_system_controller_patches("starlingx")
+        self.assertEqual(len(filtered), 2)
+
+    def test_component_from_release_id_with_hyphenated_component(self):
+        """Component names may contain hyphens; version is the trailing token."""
+        comp, ver = PatchChecker._component_from_release_id(
+            "k8s-1.32.13-controlplane_1.0.0"
+        )
+        # underscore-joined ids have no trailing dotted version after a hyphen
+        # so the whole string is treated as the component with empty version.
+        self.assertEqual(ver, "")
+        comp, ver = PatchChecker._component_from_release_id("starlingx-1.0.1")
+        self.assertEqual(comp, "starlingx")
+        self.assertEqual(ver, "1.0.1")
+        comp, ver = PatchChecker._component_from_release_id(
+            "test-test-1.0.1"
+        )
+        self.assertEqual(comp, "test-test")
+        self.assertEqual(ver, "1.0.1")
+
     def test_filter_system_controller_patches(self):
-        """Test filter_system_controller_patches method."""
-        # Add component field to test releases
-        releases_with_component = [
+        """Test filter_system_controller_patches method.
+
+        The component used to match is derived from the product release id
+        ("component-MM.mm.pp"), not from a metadata component field.
+        """
+        releases = [
             {
                 "release_id": "starlingx-1.0.1",
                 "sw_version": "1.0.1",
                 "state": "committed",
-                "component": "starlingx",
+                "component": None,
                 "prepatched_iso": False,
             },
             {
-                "release_id": "starlingx-1.0.2",
+                "release_id": "other-1.0.2",
                 "sw_version": "1.0.2",
                 "state": "deployed",
-                "component": "other",
+                "component": None,
                 "prepatched_iso": False,
             },
         ]
-        checker = PatchChecker(releases_with_component, "1.0.0", "1.0.0")
+        checker = PatchChecker(releases, "1.0.0", "1.0.0")
 
-        # Test filtering by component
+        # Test filtering by component derived from the release id
         filtered = checker.filter_system_controller_patches("starlingx")
         self.assertEqual(len(filtered), 1)
-        self.assertEqual(filtered[0]["component"], "starlingx")
+        self.assertEqual(filtered[0]["release_id"], "starlingx-1.0.1")
 
-        # Test with different component
+        # Test with a different product
         filtered = checker.filter_system_controller_patches("other")
         self.assertEqual(len(filtered), 1)
-        self.assertEqual(filtered[0]["component"], "other")
+        self.assertEqual(filtered[0]["release_id"], "other-1.0.2")
 
     @patch.object(PatchChecker, "_build_patch_file_mapping")
     def test_check_patch_chain_missing_dependency(self, mock_mapping):
@@ -311,10 +360,6 @@ class TestPatchChecker(unittest.TestCase):
         self.assertTrue(success)
         self.assertEqual(error, "")
         self.assertTrue(found)
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TestCompareVersions(unittest.TestCase):
