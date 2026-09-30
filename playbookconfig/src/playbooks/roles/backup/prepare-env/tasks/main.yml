@@ -149,6 +149,14 @@
       source /etc/platform/openrc
       system health-query
     register: final_health_status
+    # Only query again when the health wait above was skipped; otherwise reuse
+    # its result to avoid a second, redundant multi-second health-query call.
+    when: ignore_health|bool
+
+  - name: Reuse health status collected above for reference
+    set_fact:
+      final_health_status: "{{ health_status }}"
+    when: not ignore_health|bool
 
   - name: Display health status
     debug:

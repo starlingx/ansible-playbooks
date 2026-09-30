@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019 Wind River Systems, Inc.
+# Copyright (c) 2019, 2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -8,20 +8,36 @@
 #   Query a registry from Sysinv via Sysinv CLI
 
 - block:
-  - name: Query the {{ registry.name }}
+  # Query all service parameters once and cache them. This task is a no-op on
+  # every call after the first (guarded by the 'is not defined' check), turning
+  # the previous per-registry sysinv CLI call into a single call for all
+  # registries. Each sysinv CLI invocation costs several seconds (openrc source
+  # + client startup + keystone auth), so querying once instead of once per
+  # registry is a significant backup time saving.
+  - name: Query all service parameters once
     shell: source /etc/platform/openrc;
-      system service-parameter-list --section "{{ registry.name | regex_replace('_', '-') }}"
-      --column name --column value --format yaml
-    register: running_registry_output
+      system service-parameter-list --column section --column name --column value
+      --format yaml
+    register: all_service_params_output
+    when: all_service_params is not defined
+
+  - name: Cache all service parameters
+    set_fact:
+      all_service_params: "{{ all_service_params_output.stdout | from_yaml | default([], true) }}"
+    when: all_service_params is not defined
 
   # Make sure variables are empty to allow successive executions
   - set_fact:
       running_registry: { }
       registry_filtered: { }
 
+  # Filter the cached parameters down to this registry's section, mirroring the
+  # previous '--section' server-side filter.
   - set_fact:
       running_registry: "{{ running_registry|default({}) | combine({inner_item.name:inner_item.value}) }}"
-    loop: "{{ running_registry_output.stdout | from_yaml }}"
+    loop: "{{ all_service_params
+              | selectattr('section', 'equalto', registry.name | regex_replace('_', '-'))
+              | list }}"
     no_log: true
     loop_control:
       loop_var: inner_item
