@@ -136,14 +136,14 @@
     registries:
       "{{ (registries|default({})) | combine({item.default_url:item.replaced_url}, recursive=true)}}"
   loop:
-    - { default_url: 'k8s.gcr.io', replaced_url: "{{ k8s_registry.url }}" }
-    - { default_url: 'gcr.io', replaced_url: "{{ gcr_registry.url }}" }
-    - { default_url: 'quay.io', replaced_url: "{{ quay_registry.url }}" }
-    - { default_url: 'docker.io', replaced_url: "{{ docker_registry.url }}" }
-    - { default_url: 'docker.elastic.co', replaced_url: "{{ elastic_registry.url }}" }
-    - { default_url: 'ghcr.io', replaced_url: "{{ ghcr_registry.url }}" }
-    - { default_url: 'registry.k8s.io', replaced_url: "{{ registryk8s_registry.url }}" }
-    - { default_url: 'icr.io', replaced_url: "{{ icr_registry.url }}" }
+    - { default_url: 'k8s.gcr.io', replaced_url: "{{ k8s_registry['url'] }}" }
+    - { default_url: 'gcr.io', replaced_url: "{{ gcr_registry['url'] }}" }
+    - { default_url: 'quay.io', replaced_url: "{{ quay_registry['url'] }}" }
+    - { default_url: 'docker.io', replaced_url: "{{ docker_registry['url'] }}" }
+    - { default_url: 'docker.elastic.co', replaced_url: "{{ elastic_registry['url'] }}" }
+    - { default_url: 'ghcr.io', replaced_url: "{{ ghcr_registry['url'] }}" }
+    - { default_url: 'registry.k8s.io', replaced_url: "{{ registryk8s_registry['url'] }}" }
+    - { default_url: 'icr.io', replaced_url: "{{ icr_registry['url'] }}" }
 
 - block:
   # Disable the log to not expose registry password
