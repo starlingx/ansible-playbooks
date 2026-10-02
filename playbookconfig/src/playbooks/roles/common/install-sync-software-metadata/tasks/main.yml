@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2024-2025 Wind River Systems, Inc.
+# Copyright (c) 2024-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -124,7 +124,7 @@
         - "{{ synced_dir }}"
       become: true
 
-    # Transfer only the metadata files for the subcloud software version
+    # Transfer the metadata files and scripts for the subcloud software version
     - name: Synchronize software dir from system controller to subcloud
       synchronize:
         mode: push
@@ -133,6 +133,7 @@
         rsync_opts:
           - "--include=*/"
           - "--include=*{{ sw_version.stdout }}*-metadata.xml"
+          - "--include=software-scripts/*-{{ sw_version.stdout }}*"
           - "--exclude=*"
           - "--delete"
       register: software_transfer
