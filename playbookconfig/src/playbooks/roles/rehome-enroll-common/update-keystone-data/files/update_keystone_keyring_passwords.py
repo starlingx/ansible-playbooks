@@ -81,6 +81,7 @@ class OpenStackClient:
         self.conf = {}
         self._session = None
         self._keystone = None
+        self._password_override = None
         self.verify_certs = verify_certs
         self._cache = {
             "users": None,
@@ -93,8 +94,15 @@ class OpenStackClient:
         self._load_openrc_config()
 
     def _load_openrc_config(self):
-        """Load credentials and configurations from /etc/platform/openrc."""
+        """Load credentials and configurations from /etc/platform/openrc.
+
+        If a password override has been set (e.g. after changing the admin
+        password in Keystone), it is preserved so that retry loops inside
+        check_if_keystone_is_active() re-authenticate with the new
+        password instead of the stale one in openrc.
+        """
         LOG.info("Loading configuration from /etc/platform/openrc")
+        password_override = self._password_override
         source_command = "source /etc/platform/openrc && env"
         try:
             with open(os.devnull, "w") as fnull:
@@ -109,10 +117,26 @@ class OpenStackClient:
                 if key.startswith("OS_"):
                     self.conf[key[3:].lower()] = value.strip()
             proc.communicate()
+            if password_override:
+                self.conf['password'] = password_override
             LOG.info("Configuration loaded successfully.")
         except Exception as e:
             LOG.error(f"Failed to load openrc config: {e}")
             raise
+
+    def set_password_override(self, password):
+        """Override the admin password used for authentication.
+
+        After updating the admin user's password in Keystone the token
+        backing the current session is invalidated.  Setting an override
+        ensures that every subsequent session creation — including
+        retries inside check_if_keystone_is_active() — uses the *new*
+        password rather than the stale one in /etc/platform/openrc.
+        """
+        self._password_override = password
+        self.conf['password'] = password
+        self._session = None
+        self._keystone = None
 
     def _get_new_keystone_session(self, conf):
         """Create a new keystone session."""
@@ -646,6 +670,18 @@ def main():
             LOG.info(f"### Finished processing user: {username} ###")
 
             if username == ADMIN_USERNAME:
+                # The admin password was just changed in Keystone, which
+                # invalidates the token backing the current session.
+                # Force the client to re-authenticate with the new
+                # password so subsequent user updates don't hit a 401
+                # race (the old token may still pass a liveness check
+                # for a few milliseconds before Keystone fully revokes
+                # it, leaving the session stale).
+                LOG.info(
+                    "Admin password changed — refreshing session with "
+                    "new credentials."
+                )
+                osclient.set_password_override(password)
                 osclient.check_if_keystone_is_active()
 
         if not is_rehoming:

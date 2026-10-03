@@ -171,6 +171,7 @@ class TestUKPLastMile(BaseModuleTestCase):
         mock_os_client.conf = {}
         mock_os_client._session = None
         mock_os_client._keystone = None
+        mock_os_client._password_override = None
         mock_os_client.verify_certs = True
         mock_os_client._cache = {
             "users": None,
@@ -187,6 +188,92 @@ class TestUKPLastMile(BaseModuleTestCase):
             with patch("builtins.open", mock_open()):
                 mock_os_client._load_openrc_config()
         self.assertIn("username", mock_os_client.conf)
+
+    def test_password_override_survives_openrc_reload(self):
+        # After the admin password is changed, the override must survive a
+        # _load_openrc_config() reload so retries re-authenticate with the
+        # new password instead of the stale value from openrc.
+        mock_os_client = self.m.OpenStackClient.__new__(
+            self.m.OpenStackClient
+        )
+        mock_os_client.conf = {}
+        mock_os_client._session = MagicMock()
+        mock_os_client._keystone = MagicMock()
+        mock_os_client._password_override = None
+        mock_os_client.verify_certs = True
+        mock_os_client._cache = {
+            "users": None,
+            "projects": None,
+            "roles": None,
+            "endpoints": None,
+            "services": None,
+        }
+
+        # set the override (simulates admin password just changed)
+        self.m.OpenStackClient.set_password_override(
+            mock_os_client, "new-admin-pw"
+        )
+        self.assertEqual(mock_os_client.conf["password"], "new-admin-pw")
+        # session/keystone are reset so the next use re-authenticates
+        self.assertIsNone(mock_os_client._session)
+        self.assertIsNone(mock_os_client._keystone)
+
+        # a subsequent openrc reload must NOT revert to the stale password
+        proc = MagicMock()
+        proc.stdout = iter(OS_ENV_LINES)
+        proc.communicate = MagicMock()
+        with patch("subprocess.Popen", return_value=proc):
+            with patch("builtins.open", mock_open()):
+                mock_os_client._load_openrc_config()
+        self.assertEqual(mock_os_client.conf["password"], "new-admin-pw")
+
+    def test_keystone_active_recovers_after_unauthorized(self):
+        # Keystone returns Unauthorized once (admin token invalidated by the
+        # password change), then succeeds. check_if_keystone_is_active() must
+        # refresh the session and retry, ending in success.
+        #
+        # keystoneauth1 is mocked in this harness, so define a real Exception
+        # to stand in for its Unauthorized (the code under test catches it).
+        class Unauthorized(Exception):
+            pass
+        self.m.ks_exceptions.http.Unauthorized = Unauthorized
+
+        keystone = MagicMock()
+        keystone.services.list.side_effect = [Unauthorized(), ["svc"]]
+        client = self.m.OpenStackClient.__new__(self.m.OpenStackClient)
+        client._session = MagicMock()
+        client._load_openrc_config = MagicMock()
+
+        # `keystone` is a read-only property; patch it to always return our
+        # mock so the retry (after the 401) re-reads the same mock.
+        with patch.object(type(client), "keystone", keystone), \
+                patch("time.sleep"):
+            result = self.m.OpenStackClient.check_if_keystone_is_active(client)
+
+        self.assertTrue(result)                        # recovered
+        client._load_openrc_config.assert_called()     # session was refreshed
+        self.assertEqual(keystone.services.list.call_count, 2)  # fail, then ok
+
+    def test_keystone_active_retry_exhaustion_returns_false(self):
+        # Every attempt is Unauthorized (wrong override password or Keystone
+        # down). The loop must exhaust its 30 retries and return False
+        # gracefully, without hanging or raising.
+        class Unauthorized(Exception):
+            pass
+        self.m.ks_exceptions.http.Unauthorized = Unauthorized
+
+        keystone = MagicMock()
+        keystone.services.list.side_effect = Unauthorized()
+        client = self.m.OpenStackClient.__new__(self.m.OpenStackClient)
+        client._session = MagicMock()
+        client._load_openrc_config = MagicMock()
+
+        with patch.object(type(client), "keystone", keystone), \
+                patch("time.sleep"):
+            result = self.m.OpenStackClient.check_if_keystone_is_active(client)
+
+        self.assertFalse(result)                            # gave up
+        self.assertEqual(keystone.services.list.call_count, 30)  # all retries
 
     def test_users_property(self):
         mock_os_client = MagicMock(spec=self.m.OpenStackClient)
