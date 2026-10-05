@@ -124,7 +124,7 @@ data:
         if [ "$rc" -eq 0 ]; then
           return 0
         fi
-        sleep 5
+        sleep 10
       done
 
       # Do not fail recovery if it is config or scan command.
@@ -170,6 +170,12 @@ data:
     # because it needs to complete to advance the recovery to the next step.
     wait_job_complete(){
       local label=$1
+      # The job must exist before waiting, so a missing job is not mistaken for completion.
+      local job_count
+      exec_k8s_cmd job_count kubectl -n rook-ceph get job -l "${label}" --no-headers --ignore-not-found -o name
+      if [ -z "${job_count}" ]; then
+        fail "Expected job '${label}' was not found; recovery step cannot be skipped."
+      fi
       while true
       do
         if exec_k8s_cmd kubectl -n rook-ceph wait --for=condition=complete job -l "${label}" --timeout=${TIME_WAIT_JOB_COMPLETE}; then
@@ -555,17 +561,29 @@ data:
 
       kubectl_scale_deployment osd=${osd_id} 1
 
+      # The OSD must reach Running so it rewrites a synced keyring in the data dir.
+      exec_k8s_cmd kubectl -n rook-ceph wait --for=condition=Ready pod -l osd=${osd_id} --timeout=60s
+
+      # Wait until the OSD data dir keyring matches the key imported into the mon;
+      # otherwise update-mon-db authenticates as osd.${osd_id} with a stale key (cephx -13).
       for i in {1..60}
       do
-        if [ -s ${OSD_DIR}/keyring ]; then
+        if grep -qF "${OSD_KEYRING}" ${OSD_DIR}/keyring 2>/dev/null; then
           break
-        elif [ $i -eq 60 ]; then
-          fail "The osd.${osd_id} on ${HOSTNAME} did not become ready."
+        elif [ ! -s ${OSD_DIR}/keyring ]; then
+          echo "osd.${osd_id}: ${OSD_DIR}/keyring not present yet; retrying.."
+          [ $i -eq 60 ] && fail "The osd.${osd_id} on ${HOSTNAME} did not become ready."
+        else
+          echo "osd.${osd_id}: ${OSD_DIR}/keyring does not match the imported key yet; retrying.."
+          [ $i -eq 60 ] && fail "osd.${osd_id} keyring in ${OSD_DIR} did not sync on ${HOSTNAME}."
         fi
         sleep 5
       done
 
       kubectl_scale_deployment osd=${osd_id} 0
+
+      # Give the OSD time to release the BlueStore device before running the tool.
+      sleep 5
 
       # Updates the monitor database with OSD data
       exec_ceph_cmd ceph-objectstore-tool --type bluestore --data-path ${OSD_DIR} --op update-mon-db --mon-store-path /tmp/monstore
