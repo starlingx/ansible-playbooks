@@ -1,0 +1,20 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# USM (software) service endpoint on the subcloud. The software CLI uses
+# SYSTEM_URL by default (shared with sysinv), so the software-url must be
+# provided explicitly. This mirrors common/load-openrc, but this role runs on
+# a fully operational factory-installed subcloud and does not need the token
+# machinery that role sets up.
+software_url: "http://controller.internal:5497/"
+
+# System controller software vault that holds the uploaded .patch files.
+patch_before_restore_vault_base: "/opt/dc-vault/software"
+
+# Subcloud staging directory for transferred patch files. /scratch is used
+# instead of /tmp because patches can be large.
+patch_before_restore_stage_parent: /scratch
