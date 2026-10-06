@@ -537,6 +537,19 @@
       set_fact:
         backup_targets: "{{ backup.targets }}"
 
+    # Optional operator opt-in: extra absolute paths to force into the platform
+    # backup, even when a backup.exclude pattern would normally drop them (for
+    # example a specific /etc/udev/rules.d/*.rules file). Accepts a list, a
+    # single path, or a comma-separated string.
+    - name: Normalize backup_extra_items into a list
+      set_fact:
+        backup_extra_items_list: "{{ (_backup_extra_items
+          if (_backup_extra_items is sequence and _backup_extra_items is not string)
+          else _backup_extra_items | string | split(','))
+          | map('trim') | select('ne', '') | list }}"
+      vars:
+        _backup_extra_items: "{{ backup_extra_items | default([]) }}"
+
     # Check for protected backup directories in exclude_dirs options
     - block:
       - name: Set input exclude dirs list from exclude_dirs option
@@ -998,6 +1011,8 @@
     # This is nasty to understand, but check the -vvv output to see what is going on
     # When we update the community.general collection from 1.3.6 to >=5.2.0, we can use "archive"
     # with exclusion_patterns
+    # Default path: no operator extra items, so keep the original single-pass
+    # create+compress. --exclude applies to every member.
     - name: Create a tgz archive for platform backup
       shell: >-
         tar
@@ -1011,6 +1026,75 @@
       # makes tar return 1
       register: tar_cmd
       failed_when: tar_cmd.rc >= 2 or tar_cmd.rc < 0
+      when: backup_extra_items_list | length == 0
+
+    # Adding additional files provided by the user into the tarball
+
+    - name: Create and augment the platform archive with operator extra items
+      when: backup_extra_items_list | length > 0
+      block:
+        - name: Name the intermediate uncompressed platform archive
+          set_fact:
+            platform_backup_tar_intermediate: >-
+              {{ platform_backup_temporary_dir }}/{{ platform_backup_file_path | basename }}.tar
+
+        - name: Ensure the intermediate archive directory exists
+          file:
+            path: "{{ platform_backup_temporary_dir }}"
+            state: directory
+            mode: 0700
+
+        - name: Check the free space in the intermediate archive dir
+          shell: "df -k {{ platform_backup_temporary_dir }} --output=avail | tail -1"
+          register: intermediate_df_output
+
+        - name: Parse intermediate archive directory free space
+          set_fact:
+            intermediate_available_disk_size: "{{ intermediate_df_output.stdout | int }}"
+
+        - name: Fail if there is not enough free space to stage the intermediate archive
+          fail:
+            msg:
+              Not enough free space in {{ platform_backup_temporary_dir }}.
+              It has {{ intermediate_available_disk_size }}KiB.
+              It needs at least {{ total_platform_size_estimation }}KiB.
+          when: intermediate_available_disk_size|int < total_platform_size_estimation|int
+
+        - name: Build and compress the platform archive
+          block:
+            - name: Create the uncompressed platform archive (excludes applied)
+              shell: >-
+                tar
+                --exclude {{ exclude_targets | map('regex_replace', '^/', '') | list | join(' --exclude ') }}
+                -cf {{ platform_backup_tar_intermediate }}
+                $(ls -d
+                {{ final_backup_targets | join(' ') }}
+                2> /dev/null)
+              register: tar_cmd
+              failed_when: tar_cmd.rc >= 2 or tar_cmd.rc < 0
+
+            - name: Append operator extra items with no exclusions
+              shell: >-
+                tar
+                --append -f {{ platform_backup_tar_intermediate }}
+                -C /
+                $(cd / && ls -d
+                {{ backup_extra_items_list | map('regex_replace', '^/', '') | list | join(' ') }}
+                2> /dev/null)
+              register: tar_append_cmd
+              failed_when: tar_append_cmd.rc >= 2 or tar_append_cmd.rc < 0
+
+            - name: Compress the augmented platform archive into the final tgz
+              shell: >-
+                {{ compress_program }} -c {{ platform_backup_tar_intermediate }}
+                > {{ platform_backup_file_path }}
+              register: compress_cmd
+
+          always:
+            - name: Remove the intermediate uncompressed platform archive
+              file:
+                path: "{{ platform_backup_tar_intermediate }}"
+                state: absent
 
     - name: Create a tgz archive for dc-vault backup
       shell: >-
