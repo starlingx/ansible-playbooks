@@ -132,7 +132,7 @@
     retries: "{{ wait_for_healthy_retries }}"
     delay: "{{ wait_for_healthy_retry_delay }}"
     until: >-
-      health_status.rc != 0 or (
+      health_status.rc == 0 and (
         (health_status.stdout.count('[Fail]') == 0) or (
           health_status.stdout.count('[Fail]') == 1 and
           no_mgmt_alarms in health_status.stdout and
