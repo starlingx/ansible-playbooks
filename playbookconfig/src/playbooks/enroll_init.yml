@@ -31,6 +31,15 @@
         job_retry_delay: "{{ 120 | random }}"
         protocol: "{{ protocol | default('https') }}"
         operation_string: "enroll-init"
+        # After the OAM reconfiguration, enrollment verifies the subcloud
+        # sysinv public endpoint on the OAM floating address, which is served
+        # over HTTPS and protected by the subcloud's REST API/GUI certificate,
+        # to request the subcloud's region. If that endpoint does not respond,
+        # it reissues the certificate. Callers that only need the OAM network
+        # and the sysadmin password reconfigured, such as restoring onto a
+        # factory installed subcloud, do not query that endpoint and set this
+        # to false. Enrollment must leave it enabled.
+        verify_endpoint: "{{ enroll_init_verify_endpoint | default(true) | bool }}"
 
     # Get the last SEL ID before starting the enroll-init process
     - block:
@@ -149,6 +158,13 @@
         name: common/rvmc
       vars:
         eject_image_only: true
+
+    # Callers that only need the OAM network and the sysadmin password
+    # reconfigured do not query the subcloud endpoint, so the play ends here
+    # for them. Everything below unconditionally wants the verification.
+    - name: Complete without endpoint verification
+      meta: end_play
+      when: not verify_endpoint
 
     # During the OAM update, several async operations may trigger one another.
     # Although the endpoints are reconfigured by now, the API and certs may not
