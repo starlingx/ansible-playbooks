@@ -357,6 +357,15 @@
                             | combine({'imagePullCredentialsVerificationPolicy': 'NeverVerify'}, recursive=true) }}"
   when: kubernetes_long_version is defined and kubernetes_long_version is version('v1.35', '>=')
 
+# Override kubelet Graceful Node Shutdown config to disable on simplex, since it
+# interferes with force_pod_drain and becomes redundant.
+- name: Disable kubelet Graceful Node Shutdown config on AIO-SX
+  set_fact:
+    kubelet_configurations: "{{ kubelet_configurations \
+                            | combine({'shutdownGracePeriod': '0s', \
+                                       'shutdownGracePeriodCriticalPods': '0s'}, recursive=true) }}"
+  when: system_mode == 'simplex'
+
 - block:
   - name: Update controller-manager extraArgs to disable leader election
     set_fact:

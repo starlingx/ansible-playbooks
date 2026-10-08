@@ -100,6 +100,9 @@ kubelet_configurations_defaults:
     nodefs.available: '10%'
     nodefs.inodesFree: '5%'
     imagefs.available: '2Gi'
+  # Kubelet Graceful Node Shutdown. Defaults apply to multi-node (duplex/
+  # standard); overridden to "0s" on AIO-SX in tasks/main.yml where the mtce
+  # two-phase force_pod_drain already handles pod eviction + RBD unmap.
   shutdownGracePeriod: "60s"
   shutdownGracePeriodCriticalPods: "20s"
 
