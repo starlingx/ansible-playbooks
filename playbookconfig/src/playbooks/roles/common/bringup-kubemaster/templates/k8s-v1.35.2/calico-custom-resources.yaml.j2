@@ -72,6 +72,9 @@ spec:
             - key: node.kubernetes.io/not-ready
               effect: NoSchedule
               operator: Exists
+            - key: node.kubernetes.io/network-unavailable
+              effect: NoSchedule
+              operator: Exists
             # ride through the brief bootstrap kubelet-down window
             # instead of being evicted after the 30s default not-ready toleration.
             - key: node.kubernetes.io/not-ready
@@ -95,6 +98,9 @@ spec:
               effect: NoSchedule
               operator: Exists
             - key: node-role.kubernetes.io/master
+              effect: NoSchedule
+              operator: Exists
+            - key: node.kubernetes.io/network-unavailable
               effect: NoSchedule
               operator: Exists
             - key: node.kubernetes.io/not-ready
