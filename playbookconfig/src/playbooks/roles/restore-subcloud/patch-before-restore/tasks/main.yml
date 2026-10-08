@@ -18,12 +18,13 @@
 #
 #   Reboot-required (RR) patches are applied with a controller
 #   lock/reboot/unlock cycle BEFORE the restore. Note this is an extra reboot
-#   on top of the one the restore performs at its own host unlock. Because the
-#   RR unlock reboots and reconfigures the network from the sysinv database
-#   (which still holds the factory OAM at this point, since the platform
-#   restore has not run yet), the role first persists the deployed OAM into the
-#   database so the subcloud stays reachable after the patch reboot. The
-#   platform restore later overwrites it with the backup's matching values.
+#   on top of the one the restore performs at its own host unlock. The RR
+#   unlock reboots and reconfigures the network from the sysinv database,
+#   which still holds the factory OAM interface at this point (enroll-init
+#   persisted the deployed OAM addresses, but not the interface they run on),
+#   so usm-deploy-releases is asked to persist it before that unlock
+#   (persist_oam_interface below), keeping the subcloud reachable after the
+#   reboot. The platform restore later applies the backup's configuration.
 #
 #   Patches are deployed with usm-deploy-releases using enrollment_in_progress,
 #   which skips the standalone deploy precheck and passes --force to
@@ -39,12 +40,11 @@
 #       'local' if it is central on the system controller)
 #     - software_version
 #     - subcloud_is_aio_sx
-#     - external_oam_subnet, external_oam_gateway_address,
-#       external_oam_floating_address, bootstrap_interface, and optionally
-#       bootstrap_vlan (only required when a reboot-required patch is applied).
-#       dcmanager injects these into the restore overrides; their presence is
-#       guaranteed by the API's validate_restore_on_factory_install, which runs
-#       for this standard (non-auto) path before the restore is dispatched.
+#     - bootstrap_interface, and optionally bootstrap_vlan (only required
+#       when a reboot-required patch is applied). dcmanager injects these into
+#       the restore overrides; their presence is guaranteed by the API's
+#       validate_restore_on_factory_install, which runs for this standard
+#       (non-auto) path before the restore is dispatched.
 #
 #   This role is a no-op when the subcloud is not AIO-SX or when the backup
 #   carries no patches.
@@ -157,34 +157,6 @@
               vars:
                 ansible_remote_tmp: "{{ patch_before_restore_stage_parent }}"
 
-            # A reboot-required patch locks and unlocks the controller, which
-            # reboots and reconfigures the network from the sysinv database.
-            # The enroll-init seed ISO applied the deployed OAM only at the OS
-            # level (not in the database), and the platform restore that would
-            # persist it has not run yet, so the database still holds the
-            # factory OAM. Persist the deployed OAM into the database first so
-            # the subcloud stays reachable after the patch reboot. The platform
-            # restore later overwrites these with the backup's (matching)
-            # values. Only needed for reboot-required patches.
-            - name: Persist the deployed OAM before a reboot-required patch
-              when: backup_patches.reboot_required | default(false) | bool
-              block:
-                - name: Apply the deployed OAM configuration to the database
-                  shell: >-
-                    {{ source_env_command }}
-                    system oam-modify
-                    oam_subnet={{ external_oam_subnet }}
-                    oam_gateway_ip={{ external_oam_gateway_address }}
-                    oam_ip={{ external_oam_floating_address }}
-                  register: oam_modify_result
-                  retries: 3
-                  delay: 5
-                  until: oam_modify_result.rc == 0
-
-                - name: Persist the OAM interface binding to the database
-                  include_role:
-                    name: enroll-subcloud/update-oam-interface
-
             - name: Deploy the backup patches
               include_role:
                 name: common/usm-deploy-releases
@@ -206,8 +178,12 @@
                 # subcloud from the system controller" operation (see
                 # patch-before-enroll). The enroll-only behaviours in that role
                 # are gated on `mode == "enroll"`, which we never set, so they
-                # do not run; the OAM interface is persisted above instead.
+                # do not run.
                 enrollment_in_progress: true
+                # Persist the OAM interface in the database before a
+                # reboot-required unlock, so the subcloud stays reachable
+                # after the reboot.
+                persist_oam_interface: true
 
           always:
             - name: Clean up the tmp stage directory

@@ -4,7 +4,12 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-#   This role updates the OAM interface on controller-0
+#   This role persists the OAM interface of controller-0 in the sysinv
+#   database, so that a reboot brings the OAM network up on the deployed
+#   interface instead of the factory one.
+#
+#   The host must be locked: sysinv rejects recreating the OAM interface
+#   (VLAN or bond) on an unlocked host.
 #
 
 - name: Update OAM interface
@@ -19,8 +24,9 @@
 - name: Handle update failure
   fail:
     msg: |
-      Failed to update OAM interface. Please manually update the OAM
-      interface, finish the software update, and resume the enrollment.
+      Failed to update OAM interface. The host would lose OAM connectivity
+      after the next reboot. Please manually update the OAM interface,
+      finish the software update, and retry the operation.
       Error output:
       {{ update_result.stdout }}
       {{ update_result.stderr }}

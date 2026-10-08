@@ -26,7 +26,7 @@ _DIRS = [
     "common/get_network_addresses_from_sysinv/files",
     "common/push-docker-images/files",
     "common/update-sc-admin-endpoints/files",
-    "enroll-subcloud/update-oam-interface/files",
+    "common/update-oam-interface/files",
     "recover-ceph-data/files",
     "recover-rook-ceph-data/files",
 ]
