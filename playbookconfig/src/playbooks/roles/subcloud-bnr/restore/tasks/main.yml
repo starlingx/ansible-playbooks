@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022-2023, 2025 Wind River Systems, Inc.
+# Copyright (c) 2022-2023, 2025-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -10,6 +10,23 @@
 #
 - name: Validate user input
   import_tasks: validate_input.yml
+
+# For an on_factory_install restore (factory-installed subcloud, no reinstall),
+# re-apply the patches captured in the backup before the platform restore runs.
+# Subcloud backups carry only patch metadata and the standard restore excludes
+# software deployments, so without this the subcloud would come up at the base
+# patch level. Gated on on_factory_install; the role itself no-ops when the
+# subcloud is not AIO-SX or the backup has no patches.
+#
+# The patch_before_restore override (default true, settable in the
+# restore_values file) lets an operator opt out of re-applying the backup's
+# patches; when false the subcloud is restored at the base patch level
+- name: Patch the subcloud to the backup level before restore
+  include_role:
+    name: restore-subcloud/patch-before-restore
+  when:
+    - on_factory_install | default(false) | bool
+    - patch_before_restore | default(true) | bool
 
 - name: Prepare and transfer restore overrides to {{ inventory_hostname }}
   import_role:

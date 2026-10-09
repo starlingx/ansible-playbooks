@@ -1,0 +1,219 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#   This role re-applies the patches captured in a subcloud platform backup
+#   before an on_factory_install restore runs. Subcloud backups contain only
+#   patch metadata (not the ostree payload), and the standard restore excludes
+#   software deployments, so a factory-installed subcloud would otherwise come
+#   up at the base patch level. The role:
+#     - reads the backup's deployed (non-base) patch release ids from the
+#       backup metadata (works whether the backup is on the system controller
+#       or on the subcloud, via target_connection),
+#     - resolves those release ids to .patch files in the system controller
+#       software vault,
+#     - uploads and deploys them on the subcloud using common/usm-deploy-releases.
+#
+#   Reboot-required (RR) patches are applied with a controller
+#   lock/reboot/unlock cycle BEFORE the restore. Note this is an extra reboot
+#   on top of the one the restore performs at its own host unlock. Because the
+#   RR unlock reboots and reconfigures the network from the sysinv database
+#   (which still holds the factory OAM at this point, since the platform
+#   restore has not run yet), the role first persists the deployed OAM into the
+#   database so the subcloud stays reachable after the patch reboot. The
+#   platform restore later overwrites it with the backup's matching values.
+#
+#   Patches are deployed with usm-deploy-releases using enrollment_in_progress,
+#   which skips the standalone deploy precheck and passes --force to
+#   "deploy start" so minor, non-management-affecting alarms (e.g. NTP
+#   unreachable on a freshly network-reconfigured subcloud) do not abort the
+#   restore. This mirrors the enroll path, which patches an AIO-SX factory
+#   subcloud from the system controller in the same way.
+#
+#   Expected inputs (set by the restore wrapper / validate_input, and by
+#   dcmanager for the OAM values):
+#     - platform_backup_dir, platform_backup_filename
+#     - target_connection ('ssh' if the backup is local on the subcloud,
+#       'local' if it is central on the system controller)
+#     - software_version
+#     - subcloud_is_aio_sx
+#     - external_oam_subnet, external_oam_gateway_address,
+#       external_oam_floating_address, bootstrap_interface, and optionally
+#       bootstrap_vlan (only required when a reboot-required patch is applied).
+#       dcmanager injects these into the restore overrides; their presence is
+#       guaranteed by the API's validate_restore_on_factory_install, which runs
+#       for this standard (non-auto) path before the restore is dispatched.
+#
+#   This role is a no-op when the subcloud is not AIO-SX or when the backup
+#   carries no patches.
+
+- name: Skip patch-before-restore when subcloud is not AIO-SX
+  debug:
+    msg: >-
+      Subcloud is not AIO-SX; skipping patch-before-restore. Patches for
+      non-AIO-SX subclouds are handled by the standard restore flow.
+  when: not (subcloud_is_aio_sx | default(false) | bool)
+
+- name: Apply patches captured in the backup
+  when: subcloud_is_aio_sx | default(false) | bool
+  block:
+    # The software CLI reaches USM through haproxy (controller.internal:5497).
+    # Poll until it responds so a transient failure right after enroll-init
+    # OAM reconfiguration does not abort the restore.
+    - name: Run software deploy show
+      shell: |
+        {{ source_env_command }}
+        software --software-url {{ software_url }} deploy show
+      register: check_deploy_show
+      until: >-
+        check_deploy_show.rc == 0 and
+        (check_deploy_show.stdout | trim | length > 0)
+      retries: 20
+      delay: 3
+      failed_when: false
+
+    - name: Fail if the software service did not become ready
+      fail:
+        msg: |
+          Unable to determine software deployment status on the subcloud.
+          "software deploy show" did not return successfully after retries
+          (rc={{ check_deploy_show.rc }}).
+          stderr: {{ check_deploy_show.stderr | default('') }}
+          The software (USM) service may not be ready. For more details, see
+          /var/log/software.log.
+      when: >-
+        check_deploy_show.rc != 0 or
+        (check_deploy_show.stdout | trim | length == 0)
+
+    - name: Ensure no deploy in progress
+      fail:
+        msg: |
+          Software deployment already in progress:
+          {{ check_deploy_show.stdout }}
+          Resolve or delete the existing deployment before retrying the
+          restore. For more details, see /var/log/software.log.
+      when: '"No deploy in progress" not in check_deploy_show.stdout'
+
+    - name: Read deployed patches captured in the backup
+      script: >
+        get_backup_patches.py
+        "{{ (platform_backup_dir, platform_backup_filename) | path_join }}"
+      register: backup_patches_raw
+      connection: "{{ target_connection }}"
+
+    - name: Parse backup patches
+      set_fact:
+        backup_patches: "{{ backup_patches_raw.stdout | from_json }}"
+
+    - name: Report when the backup carries no patches
+      debug:
+        msg: "Backup has no patches above the base release; nothing to apply."
+      when: not (backup_patches.backup_patched | default(false) | bool)
+
+    - name: Apply the backup patches
+      when: backup_patches.backup_patched | default(false) | bool
+      block:
+        - name: Resolve backup patches to files in the software vault
+          script: >
+            map_vault_patch_files.py
+            "{{ patch_before_restore_vault_base }}/{{ software_version }}"
+            --release-ids "{{ backup_patches.release_ids | join(',') }}"
+          register: vault_map_raw
+          connection: local
+
+        - name: Parse vault mapping
+          set_fact:
+            vault_map: "{{ vault_map_raw.stdout | from_json }}"
+
+        - name: Fail if any backup patch is missing from the software vault
+          fail:
+            msg: |
+              The following patch(es) from the backup were not found in the
+              system controller software vault
+              ({{ patch_before_restore_vault_base }}/{{ software_version }}):
+              {{ vault_map.missing | join(', ') }}
+              Upload the missing patch(es) to the vault before retrying the
+              restore.
+          when: vault_map.missing | default([]) | length > 0
+
+        - name: Upload and deploy the backup patches
+          block:
+            - name: Create a tmp directory to stage patches on the subcloud
+              tempfile:
+                state: directory
+                prefix: restore_patches_
+                path: "{{ patch_before_restore_stage_parent }}"
+              register: patches_stage_dir
+
+            - name: Copy patch files from the system controller to the subcloud
+              copy:
+                src: >-
+                  {{ patch_before_restore_vault_base }}/{{ software_version
+                  }}/{{ item }}
+                dest: "{{ patches_stage_dir.path }}/{{ item }}"
+              loop: "{{ vault_map.patch_files }}"
+              vars:
+                ansible_remote_tmp: "{{ patch_before_restore_stage_parent }}"
+
+            # A reboot-required patch locks and unlocks the controller, which
+            # reboots and reconfigures the network from the sysinv database.
+            # The enroll-init seed ISO applied the deployed OAM only at the OS
+            # level (not in the database), and the platform restore that would
+            # persist it has not run yet, so the database still holds the
+            # factory OAM. Persist the deployed OAM into the database first so
+            # the subcloud stays reachable after the patch reboot. The platform
+            # restore later overwrites these with the backup's (matching)
+            # values. Only needed for reboot-required patches.
+            - name: Persist the deployed OAM before a reboot-required patch
+              when: backup_patches.reboot_required | default(false) | bool
+              block:
+                - name: Apply the deployed OAM configuration to the database
+                  shell: >-
+                    {{ source_env_command }}
+                    system oam-modify
+                    oam_subnet={{ external_oam_subnet }}
+                    oam_gateway_ip={{ external_oam_gateway_address }}
+                    oam_ip={{ external_oam_floating_address }}
+                  register: oam_modify_result
+                  retries: 3
+                  delay: 5
+                  until: oam_modify_result.rc == 0
+
+                - name: Persist the OAM interface binding to the database
+                  include_role:
+                    name: enroll-subcloud/update-oam-interface
+
+            - name: Deploy the backup patches
+              include_role:
+                name: common/usm-deploy-releases
+              vars:
+                patches: "{{ vault_map.patch_files }}"
+                patches_dir: "{{ patches_stage_dir.path }}"
+                release_ids: "{{ backup_patches.release_ids }}"
+                target_release_id: "{{ backup_patches.target_release_id }}"
+                target_sw_version: "{{ backup_patches.target_sw_version }}"
+                reboot_required: "{{ backup_patches.reboot_required | default(false) | bool }}"
+                # enrollment_in_progress drives two behaviours in
+                # usm-deploy-releases: it skips the standalone deploy precheck
+                # and passes --force to "deploy start" (which ignores minor,
+                # non-management-affecting alarms during the precheck). A
+                # factory-installed subcloud can carry transient minor alarms
+                # (e.g. NTP unreachable) that would otherwise fail the precheck
+                # and abort the restore, so we want the same handling the
+                # enroll path uses for the identical "patch an AIO-SX factory
+                # subcloud from the system controller" operation (see
+                # patch-before-enroll). The enroll-only behaviours in that role
+                # are gated on `mode == "enroll"`, which we never set, so they
+                # do not run; the OAM interface is persisted above instead.
+                enrollment_in_progress: true
+
+          always:
+            - name: Clean up the tmp stage directory
+              file:
+                path: "{{ patches_stage_dir.path }}"
+                state: absent
+              when:
+                - patches_stage_dir is defined
+                - patches_stage_dir.path is defined
