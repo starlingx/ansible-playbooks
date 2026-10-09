@@ -370,8 +370,8 @@
     when:
       - item.rc != 0
       - not incomplete_bootstrap
-      - '"Address not found" not in item.stderr'
-      - '"Interface not found" not in item.stderr'
+      - '"address not found" not in (item.stderr | lower)'
+      - '"interface not found" not in (item.stderr | lower)'
     loop: "{{ remove_addresses.results }}"
 
   when: last_config_file_exists
