@@ -163,29 +163,37 @@
       vars:
         node_ip: "{{ derived_network_params.controller_0_cluster_host }}"
 
-    - name: Stop etcd
+    - name: Stop etcd-fixed service
+      service:
+        name: etcd-fixed
+        state: stopped
+      failed_when: false
+
+    - name: Stop floating etcd service (if SM-managed)
+      command: sm-stop service etcd
+      failed_when: false
+      when: factory_restore | default(false)
+
+    - name: Stop floating etcd via systemd (non-factory)
       service:
         name: etcd
         state: stopped
+      failed_when: false
       when: not (factory_restore | default(false))
-
-    - name: Stop etcd using sm during factory restore
-      command: sm-stop service etcd
-      when: factory_restore | default(false)
 
     - name: Restore etcd database
       include_role:
         name: backup-restore/restore-etcd
 
-    - name: Start etcd
+    - name: Start etcd-fixed service
       service:
-        name: etcd
+        name: etcd-fixed
         state: started
-        enabled: false
-      when: not (factory_restore | default(false))
+        enabled: true
 
-    - name: Start etcd using sm during factory restore
+    - name: Start floating etcd using sm during factory restore
       command: sm-start service etcd
+      failed_when: false
       when: factory_restore | default(false)
 
     - name: Skip kubelet configuration during factory restore

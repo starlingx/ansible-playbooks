@@ -57,37 +57,277 @@
     name: common/etcd-symlinks
   when: etcd_staged
 
-- name: Remove old etcd database
+- name: Create fixed etcd data directory
+  file:
+    path: /opt/etcd-fixed/db
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+# The member name, data directory and advertised peer URL are read from the file
+# etcd itself reads, so the restore and the service cannot disagree. fixed-N
+# naming applies only to systems with more than one controller, so the name is
+# never assumed. snapshot restore creates whatever directory it is given and
+# reports no mismatch, so a wrong target starts an empty single-member cluster
+# and the restored data is lost with no error raised.
+#
+# An absent key yields an empty string rather than failing, which the peer URL
+# fallback below relies on: an older environment file predates
+# ETCD_INITIAL_ADVERTISE_PEER_URLS.
+- name: Read the etcd-fixed environment file
+  slurp:
+    src: /etc/default/etcd-fixed
+  register: etcd_env
+
+- name: Set the etcd member name, data directory and advertised peer URL
+  set_fact:
+    etcd_env_name: >-
+      {{ (etcd_env.content | b64decode
+          | regex_search(etcd_env_re_name, etcd_env_re_value) or ['']) | first }}
+    etcd_env_data_dir: >-
+      {{ (etcd_env.content | b64decode
+          | regex_search(etcd_env_re_data_dir, etcd_env_re_value) or ['']) | first }}
+    etcd_env_peer_url: >-
+      {{ (etcd_env.content | b64decode
+          | regex_search(etcd_env_re_peer_url, etcd_env_re_value) or ['']) | first }}
+
+# The cluster-host address is the fallback source for the peer URL, for an
+# environment file that predates ETCD_INITIAL_ADVERTISE_PEER_URLS. Both
+# spellings are accepted because the two callers differ: the legacy restore
+# arrives after bootstrap/validate-config, which sets controller_0_cluster_host
+# as a plain fact, while the optimized restore arrives after
+# optimized-restore/apply-manifest, which sets it only as a key inside
+# derived_network_params -- set_fact creates no top-level name for a dict
+# member, so the plain name is undefined there.
+- name: Resolve this controller's cluster-host address
+  set_fact:
+    etcd_restore_cluster_host: >-
+      {{ controller_0_cluster_host
+         | default(derived_network_params.controller_0_cluster_host
+                   | default(''), true) }}
+
+- name: Set the etcd member name and restore target
+  set_fact:
+    etcd_member_name: "{{ etcd_env_name }}"
+    etcd_member_data_dir: "/opt/etcd-fixed/db/{{ etcd_env_name }}.etcd"
+
+- name: Fail if the etcd-fixed environment file names no member
+  fail:
+    msg: >-
+      Cannot restore etcd-fixed. ETCD_NAME is not set in
+      /etc/default/etcd-fixed, so the restore target cannot be derived.
+  when: etcd_member_name | length == 0
+
+- name: Fail if the environment file and the restore target disagree
+  fail:
+    msg: >-
+      Cannot restore etcd-fixed. Detected mismatch between
+      /etc/default/etcd-fixed ETCD_DATA_DIR '{{ etcd_env_data_dir }}' and the
+      restore target '{{ etcd_member_data_dir }}'.
+  when: etcd_env_data_dir != etcd_member_data_dir
+
+# The service is already running at this point: bootstrap started it and
+# platform::etcd::membership::bootstrap added the floating member to it. It has
+# to be stopped before the data directory is removed, or the running process
+# keeps serving the pre-restore cluster from its open file handles -- the
+# restored database is written to disk but never loaded, and the membership
+# check below reports the old cluster rather than the restored one.
+- name: Stop the etcd-fixed service before replacing its database
+  systemd:
+    name: etcd-fixed
+    state: stopped
+  failed_when: false
+
+# The stop is allowed to fail because the unit does not exist on every restore
+# path, so its result says nothing about whether a member is running. Ask
+# systemd directly. The removal below is destructive and a member that is still
+# up keeps serving from its open file handles, so the restored database would
+# be written to disk and never loaded.
+- name: Check whether etcd-fixed is still running
+  command: systemctl is-active etcd-fixed
+  register: _etcd_fixed_active
+  changed_when: false
+  failed_when: false
+
+- name: Fail if etcd-fixed is still running
+  fail:
+    msg: >-
+      etcd-fixed is still active after the stop. Removing
+      {{ etcd_member_data_dir }} now would delete the database from under a
+      running member, which would leave the restore reporting success while
+      the pre-restore cluster is still being served. Stop etcd-fixed by hand
+      and run the restore again.
+  when: _etcd_fixed_active.stdout | trim == 'active'
+
+- name: Remove old fixed etcd database if present
+  file:
+    path: "{{ etcd_member_data_dir }}"
+    state: absent
+
+- name: Remove old floating etcd database if present
   file:
     path: "/opt/etcd/db/controller.etcd"
     state: absent
+
+# Set the restored etcd member peer URL, considering the address must be a well
+# formed IPv4 or IPv6 literal. Per RFC 2732 an IPv6 literal in a URL is
+# bracketed; plain Jinja is used rather than the ipwrap filter, which lives in a
+# different collection on Bullseye and Trixie.
+#
+# The peer URL and the cluster token must match what puppet writes to
+# /etc/default/etcd-fixed, and etcd requires --name to appear in
+# --initial-cluster, so membership is supplied explicitly on the restore.
+- name: Define the etcd URL address formatter
+  set_fact:
+    etcd_url_bracket_pattern: '^(?!\[)(.*:.*)$'
+    etcd_url_bracket_replace: '[\1]'
+
+- name: Build the restored member peer URL
+  set_fact:
+    etcd_restore_peer_url: >-
+      {{ etcd_env_peer_url
+         if (etcd_env_peer_url | length > 0)
+         else 'https://' ~ (etcd_restore_cluster_host
+                            | regex_replace(etcd_url_bracket_pattern,
+                                            etcd_url_bracket_replace)) ~ ':2380' }}
+
+- name: Fail if no peer URL could be determined
+  fail:
+    msg: >-
+      ETCD_INITIAL_ADVERTISE_PEER_URLS is not set in /etc/default/etcd-fixed and
+      no cluster-host address was available to construct it from. etcd validates
+      that --name appears in --initial-cluster, so the restore would fail with a
+      URL that does not match what the service advertises.
+  when: etcd_restore_peer_url | trim | length == 0 or
+        etcd_restore_peer_url | trim == 'https://:2380'
 
 # The snapshot restore tool depends on the etcd binary installed on the
 # restore target, not on the version the backup was taken from. etcd 3.6
 # removed 'snapshot restore' from etcdctl and moved it to etcdutl, while
 # pre-3.5 targets ship only etcdctl (ETCDCTL_API=3). Prefer etcdutl when it
-# is present and fall back to etcdctl otherwise. Both restore into the flat
-# /opt/etcd/db/controller.etcd data dir, which is used on every release.
+# is present and fall back to etcdctl otherwise.
 - name: Check whether etcdutl is available on the target
   command: which etcdutl
   failed_when: false
   changed_when: false
   register: etcdutl_check
 
-- name: Restore etcd database from snapshot file to temp folder
+# Uses the etcd disaster-recovery-guide options available from 3.5.9 to keep the
+# revision monotonic and invalidate stale Kubernetes informer caches. They are
+# applied on the etcdutl path only; etcdctl does not accept them.
+- name: Restore the etcd database
   command: >-
     {{ 'etcdutl snapshot restore etcd-snapshot.db'
        if etcdutl_check.rc == 0 else
        'etcdctl snapshot restore etcd-snapshot.db --endpoints=controller:2379' }}
-    --data-dir /opt/etcd/db/controller.etcd
+    --data-dir {{ etcd_member_data_dir }}
+    --name {{ etcd_member_name }}
+    --initial-cluster {{ etcd_member_name }}={{ etcd_restore_peer_url }}
+    --initial-cluster-token etcd-cluster
+    --initial-advertise-peer-urls {{ etcd_restore_peer_url }}
+    {{ '--mark-compacted --bump-revision 1000000000'
+       if etcdutl_check.rc == 0 else '' }}
   args:
     chdir: "{{ etcd_tmp_dir }}"
   environment: "{{ {} if etcdutl_check.rc == 0 else {'ETCDCTL_API': '3'} }}"
+  async: "{{ etcd_restore_timeout }}"
+  poll: 5
 
-- name: Enable etcd
+# The restored data carries the membership of the cluster that was backed up,
+# which no longer exists, so it is discarded here. This is the only use of
+# ETCD_INITIAL_CLUSTER_STATE=new outside bootstrap.
+- name: Update the etcd-fixed environment for initial cluster
+  lineinfile:
+    path: /etc/default/etcd-fixed
+    regexp: "^{{ item.key }}="
+    line: '{{ item.key }}="{{ item.value }}"'
+    state: present
+  loop:
+    - key: ETCD_INITIAL_CLUSTER_STATE
+      value: new
+    - key: ETCD_INITIAL_CLUSTER
+      value: "{{ etcd_member_name }}={{ etcd_restore_peer_url }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Enable and restart the etcd-fixed service
   systemd:
-    name: etcd
+    name: etcd-fixed
     enabled: yes
+    state: restarted
+    daemon_reload: yes
+
+- name: Wait for the restored member to answer
+  shell: |
+    etcdctl --endpoints https://127.0.0.1:2379 {{ etcdctl_tls_args }} \
+      endpoint health
+  args:
+    executable: /bin/bash
+  register: etcd_restored_health
+  until: etcd_restored_health.rc == 0
+  retries: 30
+  delay: 5
+  changed_when: false
+
+# -w json rather than the default table: the checks below compare addresses,
+# and any warning etcdctl writes to stdout would corrupt a text parse.
+- name: Read the restored cluster membership
+  shell: |
+    etcdctl --endpoints https://127.0.0.1:2379 {{ etcdctl_tls_args }} \
+      member list -w json
+  args:
+    executable: /bin/bash
+  register: etcd_restored_members
+  changed_when: false
+
+# Every address the restored cluster names, as bare hosts. etcd brackets IPv6
+# literals in URLs, so the port is stripped before the brackets.
+- name: Collect the addresses named by the restored cluster
+  set_fact:
+    etcd_restored_hosts: >-
+      {{ (etcd_restored_members.stdout | from_json).members
+         | map(attribute='peerURLs') | flatten
+         | union((etcd_restored_members.stdout | from_json).members
+                 | map(attribute='clientURLs') | flatten)
+         | map('regex_replace', '^https?://', '')
+         | map('regex_replace', ':[0-9]+$', '')
+         | map('regex_replace', '^\[|\]$', '')
+         | list }}
+    etcd_restored_member_count: >-
+      {{ (etcd_restored_members.stdout | from_json).members | length }}
+
+- name: Show the restored cluster membership
+  debug:
+    var: etcd_restored_hosts
+
+# Validate that the restored etcd cluster has the expected members, checked here
+# before any other member rejoins. There is no recovery aside from wiping the
+# member directory and attempting the restore again.
+- name: Fail if the restored cluster does not hold exactly one member
+  fail:
+    msg: >-
+      The restored cluster reports {{ etcd_restored_member_count }} members
+      where exactly one was expected. Either the restored database was not loaded -- check
+      that etcd-fixed restarted after the restore -- or the prior membership
+      survived, leaving this member waiting for peers that no longer exist.
+      Wipe {{ etcd_member_data_dir }} and restore again.
+  when: etcd_restored_member_count | int != 1
+
+- name: Fail if the restored cluster retains the prior membership
+  fail:
+    msg: >-
+      The restored cluster still names an address belonging to the cluster that
+      was backed up. The prior membership was not discarded. Wipe
+      {{ etcd_member_data_dir }} and restore again.
+  # Membership of the parsed address list, not a substring of raw output:
+  # '192.168.206.3' is contained in '192.168.206.30'.
+  when: >-
+    (controller_1_cluster_host | default('') | length > 0 and
+     controller_1_cluster_host in etcd_restored_hosts) or
+    (cluster_floating_address | default('') | length > 0 and
+     cluster_floating_address != etcd_restore_cluster_host and
+     cluster_floating_address in etcd_restored_hosts)
 
 - name: Remove temporary etcd folder
   file:

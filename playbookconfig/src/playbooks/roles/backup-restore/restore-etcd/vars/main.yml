@@ -1,3 +1,24 @@
 ---
 # The staging area to process the data from the backup tarball
 staging_dir: /opt/backups
+
+# Repeated on every etcdctl invocation in this role.
+etcdctl_tls_args: >-
+  --cert=/etc/etcd/etcd-client.crt
+  --key=/etc/etcd/etcd-client.key
+  --cacert=/etc/etcd/ca.crt
+
+# Values in /etc/default/etcd-fixed may be quoted or bare and may carry trailing
+# whitespace. The patterns are held here as plain strings so that their
+# backslashes reach the regex engine as written: in an inline Jinja literal
+# '\1' is consumed as an escape and arrives as a single control character
+# instead of a group reference.
+etcd_env_re_name: '(?m)^ETCD_NAME=[" \t]*([^"\n]*?)[" \t]*$'
+etcd_env_re_data_dir: '(?m)^ETCD_DATA_DIR=[" \t]*([^"\n]*?)[" \t]*$'
+etcd_env_re_peer_url: '(?m)^ETCD_INITIAL_ADVERTISE_PEER_URLS=[" \t]*([^"\n]*?)[" \t]*$'
+etcd_env_re_value: '\1'
+
+# A snapshot restore is a local operation whose duration scales with the size of
+# the database -- about 26 MB in duplex testing. Bounded so that a restore which
+# has stopped making progress fails the play instead of holding it open.
+etcd_restore_timeout: 600

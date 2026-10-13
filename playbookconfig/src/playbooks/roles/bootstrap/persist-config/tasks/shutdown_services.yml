@@ -35,6 +35,17 @@
     # running. To prevent this, temporarily start etcdserver and delete stale
     # kube-apiserver pod so that new certificates are used when
     # kube-apiserver is restarted.
+    #
+    # The fixed instance is the cluster seed, so it must be serving before the
+    # floating instance is started further down. A floating member configured
+    # with initial-cluster-state=existing never becomes healthy while fixed-0
+    # is down, which puts kubeadm reset back on its slow path.
+    - name: Start etcd-fixed server (cluster seed)
+      systemd:
+        name: etcd-fixed
+        state: started
+      failed_when: false
+
     - name: Copy kube-apiserver etcd client cert file to kubeadm_pki_dir
       copy:
         src: "/etc/etcd/apiserver-etcd-client.crt"
@@ -94,17 +105,40 @@
   - name: Clear etcd data cache
     shell: /bin/rm -rf /opt/etcd/{{ software_version }}/controller.etcd/*  # noqa 302
 
+  # The fixed member keeps its database on local storage, outside the DRBD
+  # tree cleared above. Leaving it in place makes the re-bootstrapped
+  # etcd-fixed start with initial-cluster-state=new against a populated data
+  # directory, which either fails outright or rejoins with stale membership.
+  - name: Clear etcd-fixed data cache
+    shell: /bin/rm -rf /opt/etcd-fixed/db/*  # noqa 302
+
+  # Both etcd instances must be stopped. The floating instance does not exist on
+  # simplex, and etcd-fixed may not yet exist on an older configuration.
   - block:
     - name: Stop etcd
       systemd:
         name: etcd
         state: stopped
+      failed_when: false
+
+    - name: Stop etcd-fixed
+      systemd:
+        name: etcd-fixed
+        state: stopped
+      failed_when: false
 
     rescue:
       - name: Etcd failed to stop, try one more time
         systemd:
           name: etcd
           state: stopped
+        failed_when: false
+
+      - name: Etcd-fixed failed to stop, try one more time
+        systemd:
+          name: etcd-fixed
+          state: stopped
+        failed_when: false
 
   # Mark Kubernetes config as incomplete by removing
   # the .initial_k8s_config_complete file.
