@@ -8,6 +8,15 @@
 # These tasks create static configuration and apply the puppet bootstrap
 # manifest.
 
+- name: Add cluster-host IPs to loopback for etcd binding at bootstrap
+  command: "{{ item }}"
+  failed_when: false
+  loop:
+    - "ip addr add {{ cluster_floating_address }}/{{ cluster_subnet_prefix }} dev lo scope host"
+    - >-
+      ip addr add {{ controller_0_cluster_host }}/{{ cluster_subnet_prefix }}
+      brd {{ cluster_broadcast }} dev lo scope host label lo:5
+
 - name: Create config workdir
   file:
     path: "{{ hieradata_workdir }}"
@@ -141,6 +150,8 @@
   # Add etcd security info to static hieradata so that etcd is configured with security
   # when etc puppet manifest is applied before Kubernetes master is initialized in the later role.
   # Add etcd version info to static hieradata so that etcd version can be dynamically symlinked.
+  # Add system_mode so puppet etcd/sm classes can branch correctly at bootstrap time
+  # (ansible_bootstrap manifest only loads static.yaml, not host.yaml or system.yaml).
 - name: Write security settings to static hieradata
   lineinfile:
     path: "{{ hieradata_workdir }}/static.yaml"
@@ -149,6 +160,8 @@
     - "platform::etcd::params::etcd_version: {{ etcd_version }}"
     - "platform::etcd::params::bind_address: {{ cluster_floating_address }}"
     - "platform::etcd::params::bind_address_version: {{ etcd_listen_address_version }}"
+    - "platform::etcd::params::controller0_address: {{ controller_0_cluster_host }}"
+    - "platform::params::system_mode: {{ system_mode }}"
 
 - name: Create runtime hieradata
   file:

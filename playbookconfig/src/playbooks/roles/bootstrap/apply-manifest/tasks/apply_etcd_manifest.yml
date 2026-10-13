@@ -27,6 +27,7 @@
     content: |
       classes:
         - platform::etcd::init
+  when: system_mode != 'simplex'
 
 - name: Set facts derived from previous network configurations
   set_fact:
