@@ -43,7 +43,7 @@
         port={{ ansible_port }}
         host={{ ansible_host }}
         delay=5
-        timeout={{ shutdown_timeout + 5 }}
+        timeout={{ shutdown_timeout | int + 5 }}
         state=stopped
 
   - name: Wait up to {{ unlock_timeout }} seconds for ssh port to become available for {{ inventory_hostname }}
