@@ -1,0 +1,68 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Fire off (without waiting) the deletion of ALL PVCs of a single namespace and
+# their backing PVs, in as few kubectl calls as possible:
+#   1. Resolve the backing PV name for every PVC of the namespace (one call).
+#   2. Delete every PVC of the namespace (one call).
+#   3. Delete every backing PV (one call).
+#
+# This is the "dispatch" phase of the batch removal: every deletion is issued
+# with wait=false, so force_delete_k8s_resource returns immediately after
+# issuing "kubectl delete --wait=false" + clearing the finalizers, WITHOUT
+# polling until the resource disappears. The caller (run_role.yaml) performs a
+# single batched wait once every namespace has been dispatched.
+#
+# Behaviour:
+#   * Delete flags: --force --grace-period=0 --ignore-not-found=true.
+#   * Finalizers are cleared (patch finalizers=null).
+#   * Idempotent: missing resources never fail.
+#   * Backing PVs are only deleted when remove_pvcs_delete_pvs is set.
+#   * DataVolumes / VolumeSnapshots are left untouched.
+#   * Every PVC of a namespace is batched into a single kubectl invocation.
+#
+# Loop var: pvc_group -> { namespace: <ns>, names: [<pvc-name>, ...] }
+
+- name: "[{{ pvc_group.namespace }}] Resolve backing PV names for all PVCs"
+  shell: >
+    kubectl get pvc -n {{ pvc_group.namespace | quote }}
+    {{ pvc_group.names | map('quote') | join(' ') }}
+    --ignore-not-found -o jsonpath='{range .items[*]}{.spec.volumeName}{"\n"}{end}'
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: remove_pvcs_pv_names
+  changed_when: false
+  failed_when: false
+
+- name: "[{{ pvc_group.namespace }}] Dispatch PVC deletion for all PVCs (no wait)"
+  include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+  vars:
+    kind: PersistentVolumeClaim
+    k8s_namespace: "{{ pvc_group.namespace }}"
+    name: "{{ pvc_group.names | map('quote') | join(' ') }}"
+    wait: false
+
+- name: "[{{ pvc_group.namespace }}] Dispatch backing PV deletion for all PVs (no wait)"
+  include_tasks: "{{ role_path_common }}/tasks/force_delete_k8s_resource.yaml"
+  vars:
+    kind: PersistentVolume
+    name: >-
+      {{ (remove_pvcs_pv_names.stdout_lines | default([]) | select('truthy') | list)
+         | map('quote') | join(' ') }}
+    wait: false
+  when:
+    - remove_pvcs_delete_pvs | bool
+    - remove_pvcs_pv_names.stdout_lines | default([]) | select('truthy') | list | length > 0
+
+- name: "[{{ pvc_group.namespace }}] Record dispatched resources for the final wait"
+  set_fact:
+    remove_pvcs_pending_pvcs: >-
+      {{ remove_pvcs_pending_pvcs | default([])
+         + [{'namespace': pvc_group.namespace, 'names': pvc_group.names}] }}
+    remove_pvcs_pending_pvs: >-
+      {{ remove_pvcs_pending_pvs | default([])
+         + (remove_pvcs_pv_names.stdout_lines | default([]) | select('truthy') | list
+            if remove_pvcs_delete_pvs | bool
+            else []) }}

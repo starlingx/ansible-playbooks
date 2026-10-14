@@ -1,0 +1,35 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Revert DataVolume storageClass and accessModes to Ceph
+  shell: |
+    set -eo pipefail
+    DV_NAME="{{ dv_entry.key }}"
+    DV_NS="{{ dv_entry.value.namespace }}"
+
+    ORIG_SC=$(kubectl get pvc "${DV_NAME}{{ ceph_pvc_rename_suffix }}" -n "${DV_NS}" \
+      -o jsonpath='{.spec.storageClassName}' 2>/dev/null || true)
+    if [ -n "${ORIG_SC}" ]; then
+      kubectl patch datavolume "${DV_NAME}" -n "${DV_NS}" \
+        --type merge \
+        -p "{\"spec\":{\"pvc\":{\"storageClassName\":\"${ORIG_SC}\"}}}"
+    fi
+
+    # Restore original accessModes from the renamed Ceph PVC
+    ORIG_MODES=$(kubectl get pvc "${DV_NAME}{{ ceph_pvc_rename_suffix }}" -n "${DV_NS}" \
+      -o jsonpath='{.spec.accessModes[*]}' 2>/dev/null || true)
+    if echo "${ORIG_MODES}" | grep -q "ReadWriteMany"; then
+      kubectl patch datavolume "${DV_NAME}" -n "${DV_NS}" \
+        --type json \
+        -p '[{"op":"replace","path":"/spec/pvc/accessModes","value":["ReadWriteMany"]}]'
+    fi
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  loop: "{{ dv_map_original | default({}) | dict2items }}"
+  loop_control:
+    loop_var: dv_entry
+    label: "{{ dv_entry.key }}"
+  when: dv_map_original | default({}) | length > 0

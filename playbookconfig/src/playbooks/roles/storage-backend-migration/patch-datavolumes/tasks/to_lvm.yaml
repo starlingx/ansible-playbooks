@@ -1,0 +1,32 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Patch DataVolumes to use LVM storage class
+  shell: |
+    set -eo pipefail
+    DV_NAME="{{ dv_entry.key }}"
+    DV_NS="{{ dv_entry.value.namespace }}"
+
+    kubectl patch datavolume "${DV_NAME}" -n "${DV_NS}" \
+      --type merge \
+      -p '{"spec":{"pvc":{"storageClassName":"{{ lvm_vg_name_cacheable }}"}}}'
+
+    # Patch accessModes: RWX -> RWO (TopoLVM does not support RWX)
+    MODES=$(kubectl get datavolume "${DV_NAME}" -n "${DV_NS}" \
+      -o jsonpath='{.spec.pvc.accessModes[*]}')
+    if echo "${MODES}" | grep -q "ReadWriteMany"; then
+      kubectl patch datavolume "${DV_NAME}" -n "${DV_NS}" \
+        --type json \
+        -p '[{"op":"replace","path":"/spec/pvc/accessModes","value":["ReadWriteOnce"]}]'
+      echo "${DV_NAME} -> accessModes patched to ReadWriteOnce"
+    fi
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  loop: "{{ dv_map_original | default({}) | dict2items }}"
+  loop_control:
+    loop_var: dv_entry
+    label: "{{ dv_entry.key }}"
+  when: dv_map_original | default({}) | length > 0

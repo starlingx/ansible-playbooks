@@ -25,7 +25,6 @@ def update_alarm(entity_uuid, alarm_state, type, alarm_args={}):
             entity_type_id=fm_constants.FM_ENTITY_TYPE_STORAGE_BACKEND,
             entity_instance_id=entity_instance_id,
             alarm_type=fm_constants.FM_ALARM_TYPE_5,
-            service_affecting=True,
             **alarm_args,
         )
         fm.set_fault(fault)
@@ -52,12 +51,12 @@ def parse_args():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
         "--set",
-        choices=["in_progress", "error", "not_reconciled"],
+        choices=["in_progress", "error", "not_reconciled", "rolled_back"],
         help="Set alarm type"
     )
     group.add_argument(
         "--clear",
-        choices=["in_progress", "error", "not_reconciled"],
+        choices=["in_progress", "error", "not_reconciled", "rolled_back"],
         help="Clear alarm"
     )
 
@@ -81,18 +80,33 @@ if __name__ == "__main__":
             reason_text="Storage Backend Migration is in progress",
             probable_cause=fm_constants.ALARM_PROBABLE_CAUSE_8,
             proposed_repair_action="No action required.",
+            service_affecting=True,
         ),
         "error": dict(
             severity=fm_constants.FM_ALARM_SEVERITY_MAJOR,
             reason_text="Error during Storage Backend Migration",
             probable_cause=fm_constants.ALARM_PROBABLE_CAUSE_39,
             proposed_repair_action=f"Check {args.file_name or '<file-name>'}, fix and re-run migration.",
+            service_affecting=True,
         ),
         "not_reconciled": dict(
             severity=fm_constants.FM_ALARM_SEVERITY_WARNING,
             reason_text="Hosts or system not reconciled after Storage Backend migration",
             probable_cause=fm_constants.ALARM_PROBABLE_CAUSE_75,
-            proposed_repair_action=f"Check the hosts and system kubernetes resources. Check the generated DM file in {args.file_name or '<file-name>'}, fix it and re-apply it."
+            proposed_repair_action=f"Check the hosts and system kubernetes resources. Check the generated DM file in {args.file_name or '<file-name>'}, fix it and re-apply it.",
+            service_affecting=True,
+        ),
+        "rolled_back": dict(
+            severity=fm_constants.FM_ALARM_SEVERITY_WARNING,
+            reason_text=(
+                "Storage Backend Migration was rolled back; "
+                "the storage backend remains operational."
+            ),
+            probable_cause=fm_constants.ALARM_PROBABLE_CAUSE_UNKNOWN,
+            proposed_repair_action=(
+                "Review the rollback outcome; the migration may be re-attempted."
+            ),
+            service_affecting=False,
         )
     }
 

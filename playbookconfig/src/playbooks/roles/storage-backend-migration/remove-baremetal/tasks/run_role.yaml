@@ -51,6 +51,7 @@
   when:
     - inventory_hostname in groups.active_controller
     - migration_target == "rook_ceph"
+    - remove_baremetal_mode == "convert"
 
 - name: Convert storage-backend to lvm
   become: true
@@ -86,6 +87,57 @@
   when:
     - inventory_hostname in groups.active_controller
     - migration_target == "lvm"
+    - remove_baremetal_mode == "convert"
+
+# remove_only deletes the Ceph backend; the surviving backend has a different
+# id/uuid. Re-point storage_backend to it before deleting so downstream cleanup
+# targets the correct backend.
+- name: Remove baremetal Ceph (remove_only mode)
+  when:
+    - inventory_hostname in groups.active_controller
+    - remove_baremetal_mode == "remove_only"
+  block:
+    - name: Get new storage_backend for the migration target
+      become: true
+      become_user: postgres
+      command: >
+        psql -d sysinv -t -A -F '|' -c
+        "
+        SELECT JSON_BUILD_OBJECT(
+          'id', id,
+          'uuid', uuid
+        )
+        FROM storage_backend WHERE name='{{ new_backend_name }}'
+        "
+      register: new_storage_backend_result
+      changed_when: false
+      vars:
+        new_backend_name: "{{ {'lvm': 'lvm-store', 'rook_ceph': 'ceph-rook-store'}[migration_target] }}"
+
+    - name: Update storage_backend fact to the new migration-target backend
+      set_fact:
+        storage_backend: "{{ new_storage_backend_result.stdout | from_json }}"
+        cacheable: true
+      when: new_storage_backend_result.stdout | default('') | length > 0
+
+    - name: Show updated storage_backend
+      debug:
+        var: storage_backend
+
+    - name: Remove Ceph storage-backend
+      become: true
+      become_user: postgres
+      command: >
+        psql -d sysinv -c "
+        BEGIN;
+        DELETE FROM storage_ceph;
+        UPDATE i_idisk SET foristorid = NULL WHERE foristorid IN (SELECT id FROM i_istor WHERE function = 'osd');
+        DELETE FROM i_istor WHERE function = 'osd';
+        DELETE FROM storage_tiers WHERE type = 'ceph';
+        DELETE FROM clusters WHERE name = 'ceph_cluster';
+        DELETE FROM storage_backend WHERE backend = 'ceph';
+        COMMIT
+        "
 
 - name: Remove Ceph backends aside from original
   vars:

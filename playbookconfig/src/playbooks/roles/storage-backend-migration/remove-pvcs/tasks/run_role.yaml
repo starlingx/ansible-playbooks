@@ -1,0 +1,190 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Reusable role to remove a list of PVCs and their backing PVs.
+#
+# Input: pvcs_to_remove -> list of PVC objects, each with at least:
+#          - namespace
+#          - name
+#
+# Optional input: remove_pvcs_filter_storage_class -> when set, only the PVCs
+#          in pvcs_to_remove whose LIVE storageClassName matches this value are
+#          actually removed. Used by the rollback path to avoid deleting the
+#          original Ceph PVCs when a target name was never renamed. When unset,
+#          pvcs_to_remove is removed as-is.
+#
+# Used by both migration paths:
+#   * commit   -> remove the Ceph (rook) PVCs
+#   * rollback -> remove the LVM PVCs (inside the rescue block)
+#
+# DataVolumes and VolumeSnapshots are intentionally left untouched (see
+# remove_pvcs_namespace.yaml for the rationale).
+#
+# Idempotent by design: every deletion goes through
+# common/tasks/force_delete_k8s_resource.yaml which uses
+# "--ignore-not-found=true", so missing resources never make the role fail.
+#
+# Batched removal: instead of deleting one PVC and blocking until it (and its
+# PV) disappear before moving to the next, this role now works in two phases:
+#   1. Dispatch phase  -> loop over every NAMESPACE and issue the deletions with
+#                         wait=false (fire-and-forget), passing every PVC of the
+#                         namespace in a single kubectl call. The loop advances
+#                         without waiting for each resource to actually vanish.
+#   2. Wait phase       -> a single batched wait (one kubectl get per namespace)
+#                         that blocks until ALL the dispatched PVCs and PVs are
+#                         gone.
+# This keeps the exact same observable end state (everything removed before the
+# role returns) while removing the per-PVC serialization that made it slow, and
+# collapses N PVCs of the same namespace into one kubectl invocation.
+
+- name: Validate pvcs_to_remove is a list
+  assert:
+    that:
+      - pvcs_to_remove is sequence
+      - pvcs_to_remove is not string
+    fail_msg: "pvcs_to_remove must be a list of PVC objects (each with 'namespace' and 'name')"
+    quiet: true
+
+- name: Normalize pvcs_to_remove entries
+  set_fact:
+    remove_pvcs_targets: >-
+      {{ pvcs_to_remove
+         | selectattr('namespace', 'defined')
+         | selectattr('name', 'defined')
+         | list }}
+
+# Optional storageClass filter (used by the rollback path).
+#
+# A PVC with the original (un-suffixed) name may still be the ORIGINAL Ceph PVC
+# if the failure happened before rename-pvcs ran. When
+# remove_pvcs_filter_storage_class is set we only keep the targets whose LIVE
+# storageClassName matches it; anything else (Ceph originals, or names that do
+# not exist) is filtered out. When the var is unset the caller-supplied list is
+# removed as-is.
+- name: Select only the PVCs backed by the requested storageClass
+  shell: |
+    set -o pipefail
+    kubectl get pvc --all-namespaces \
+      -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{" "}{.spec.storageClassName}{"\n"}{end}' \
+      | awk -v sc="{{ remove_pvcs_filter_storage_class }}" -v targets="{{ remove_pvcs_target_keys }}" '
+          BEGIN {
+            n = split(targets, a, " ")
+            for (i = 1; i <= n; i++) want[a[i]] = 1
+            printf "["
+            sep = ""
+          }
+          $3 == sc && (($1 "/" $2) in want) {
+            printf "%s{\"namespace\":\"%s\",\"name\":\"%s\"}", sep, $1, $2
+            sep = ","
+          }
+          END { print "]" }
+        '
+  args:
+    executable: /bin/bash
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  vars:
+    # "<namespace>/<name>" of every target PVC, space-joined so awk can load it
+    # into an associative array in BEGIN.
+    remove_pvcs_target_keys: >-
+      {{ remove_pvcs_targets
+         | map(attribute='namespace')
+         | zip(remove_pvcs_targets | map(attribute='name'))
+         | map('join', '/')
+         | join(' ') }}
+  register: remove_pvcs_sc_filtered
+  changed_when: false
+  when:
+    - remove_pvcs_filter_storage_class is defined
+    - remove_pvcs_filter_storage_class | length > 0
+
+- name: Keep only the storageClass-matched targets
+  set_fact:
+    # awk already emitted the exact [{namespace, name}] JSON shape we expect;
+    # just parse it back.
+    remove_pvcs_targets: "{{ remove_pvcs_sc_filtered.stdout | from_json }}"
+  when:
+    - remove_pvcs_filter_storage_class is defined
+    - remove_pvcs_filter_storage_class | length > 0
+
+- name: Debug PVCs targeted for removal
+  debug:
+    msg: >-
+      Removing {{ remove_pvcs_targets | length }} PVC(s):
+      {{ remove_pvcs_targets
+         | map(attribute='namespace') | zip(remove_pvcs_targets | map(attribute='name'))
+         | map('join', '/') | list }}
+
+# Collapse the flat list of PVC objects into one entry per namespace:
+#   remove_pvcs_targets = [ {namespace: ns1, name: a}, {namespace: ns1, name: b},
+#                           {namespace: ns2, name: c} ]
+#   ->
+#   remove_pvcs_groups  = [ {namespace: ns1, names: [a, b]},
+#                           {namespace: ns2, names: [c]} ]
+# groupby returns a list of (key, [items]) pairs (grouper, list), so grp.0 is
+# the namespace and grp.1 is the list of PVC objects sharing it. Pure Jinja2, so
+# no community.general dependency is needed.
+# A {% for %} statement cannot live inside a {{ ... }} expression, so we build a
+# JSON array with a pure-statement template and parse it back with from_json.
+# YAML folding adds leading whitespace/newlines around the rendered JSON, hence
+# the trim + from_json instead of relying on set_fact's implicit coercion.
+- name: Group targeted PVCs by namespace
+  set_fact:
+    remove_pvcs_groups: >-
+      {% set _groups = [] %}
+      {% for grp in remove_pvcs_targets | groupby('namespace') %}
+      {%   set _ = _groups.append({'namespace': grp.0,
+                                   'names': grp.1 | map(attribute='name') | list}) %}
+      {% endfor %}
+      {{ _groups | to_json }}
+
+- name: Coerce grouped PVCs into a real list
+  set_fact:
+    remove_pvcs_groups: "{{ remove_pvcs_groups | trim | from_json }}"
+
+- name: Reset the pending-resources accumulators before dispatching
+  set_fact:
+    remove_pvcs_pending_pvcs: []
+    remove_pvcs_pending_pvs: []
+
+- name: Dispatch removal of every PVC of each namespace and related resources (no wait)
+  include_tasks: remove_pvcs_namespace.yaml
+  loop: "{{ remove_pvcs_groups }}"
+  loop_control:
+    loop_var: pvc_group
+    label: "{{ pvc_group.namespace }} ({{ pvc_group.names | length }} PVC(s))"
+  when: remove_pvcs_groups | length > 0
+
+- name: Wait until all dispatched PVCs of each namespace are removed
+  shell: >
+    ! kubectl get pvc -n {{ item.namespace | quote }}
+    {{ item.names | map('quote') | join(' ') }}
+    --ignore-not-found -o name | grep -q .
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  loop: "{{ remove_pvcs_pending_pvcs | default([]) }}"
+  loop_control:
+    label: "{{ item.namespace }} ({{ item.names | length }} PVC(s))"
+  register: remove_pvcs_wait_pvc
+  changed_when: false
+  retries: 10
+  delay: 3
+  until: remove_pvcs_wait_pvc is succeeded
+  when: remove_pvcs_pending_pvcs | default([]) | length > 0
+
+- name: Wait until all dispatched backing PVs are removed
+  shell: >
+    ! kubectl get pv {{ remove_pvcs_pending_pvs | default([]) | unique | map('quote') | join(' ') }}
+    --ignore-not-found -o name | grep -q .
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: remove_pvcs_wait_pv
+  changed_when: false
+  retries: 10
+  delay: 3
+  until: remove_pvcs_wait_pv is succeeded
+  when:
+    - remove_pvcs_delete_pvs | bool
+    - remove_pvcs_pending_pvs | default([]) | length > 0

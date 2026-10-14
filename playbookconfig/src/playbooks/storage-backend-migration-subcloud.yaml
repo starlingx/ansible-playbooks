@@ -8,13 +8,20 @@
 #
 # It provides the capability to migrate the storage backend used.
 #
+# After the migrations complete, a reconciliation pass runs on the system
+# controller and reports the final migration status of each targeted subcloud
+# (success, rolled-back, failed, in-progress, not-started or unknown). For
+# subclouds that failed or became unreachable it reads the storage-backend
+# migration_status capability via sysinv, retrying unreachable subclouds for up
+# to 5 minutes before reporting them as unknown.
+#
 # To run the playbook, the user would define the required variable settings
 # passing this on the ansible command-line as a parameter.
 #
 # Parameters are:
 #
 # - target_list
-# - migration_type: redeploy, export-import or in-service
+# - migration_type: redeploy, export-import, in-service or direct-copy
 # - migration_target: rook-ceph or lvm
 #
 # To run the playbook, the user would define an overrides file that
@@ -50,15 +57,28 @@
 # - lvm_volume_size_gb: half, all, or a positive integer in GB (LVM thin uses half of available space by default)
 # - lvm_vg_name: string
 # - pvcs_to_migrate: list of PVC names to migrate (selective migration)
-# - confirm_pvcs_regex: bool - confirm PVC regex selection and proceed with migration
+# - expected_pvc_count: int - number of PVCs expected to migrate
+# - unreachable_subclouds_percent: 0 <= int <= 100
 # - pre_migration_hook: URI (file://, http://, https://) - must be reachable from the SystemController
 # - post_migration_hook: URI (file://, http://, https://) - must be reachable from the SystemController
+# - validation_hook: URI (file://, http://, https://) - LVM direct-copy only - must be reachable from the SystemController
+# - pre_rollback_hook: URI (file://, http://, https://) - LVM direct-copy only - must be reachable from the SystemController
+# - post_rollback_hook: URI (file://, http://, https://) - LVM direct-copy only - must be reachable from the SystemController
 
 - hosts: localhost
   gather_facts: no
   vars_files:
     - vars/common/main.yml
   tasks:
+    - name: Validate unreachable_subclouds_percent parameter
+      assert:
+        that:
+          - unreachable_subclouds_percent is defined
+          - unreachable_subclouds_percent | int | string == unreachable_subclouds_percent | string
+          - unreachable_subclouds_percent | int >= 0
+          - unreachable_subclouds_percent | int <= 100
+        fail_msg: "unreachable_subclouds_percent must be defined and a positive integer between 0 and 100"
+
     - name: Get all online subclouds in the system
       block:
         - name: Get online subclouds from dcmanager
@@ -88,11 +108,13 @@
 
 - hosts: target_group
   gather_facts: no
+  serial: "{{ ansible_forks | int }}"
   vars:
     valid_migration_types:
       - redeploy
       - export-import
       - in-service
+      - direct-copy
     valid_migration_targets:
       - rook-ceph
       - lvm
@@ -104,6 +126,12 @@
       - dedicated
     tmp_path: "/tmp/{{ migration_target }}-migration"
     hook_tmp_dir: "{{ tmp_path }}/hooks"
+    any_direct_copy_hook: >-
+      {{ (validation_hook is defined or pre_rollback_hook is defined
+          or post_rollback_hook is defined)
+         and migration_target == "lvm" and migration_type == "direct-copy" }}
+    unreachable_hosts_threshold: "{{ (ansible_play_hosts_all | length) * (unreachable_subclouds_percent | int / 100) }}"
+    migration_rc_file: "/run/.storage_backend_migration_status"
   vars_files:
     - vars/common/main.yml
 
@@ -111,294 +139,491 @@
     - common/check-connectivity
 
   tasks:
-
-    - name: Ensure migration_target is defined and valid
-      assert:
-        that:
-          - migration_target is defined
-          - migration_target in valid_migration_targets
-        fail_msg: >-
-          Invalid or missing migration_target.
-          Must be one of: {{ valid_migration_targets | join(', ') }}.
-          Current value: {{ migration_target | default('undefined') }}
-        success_msg: "Migration target validated: {{ migration_target | default('undefined') }}"
-
-    - name: Ensure migration_type is defined and valid
-      assert:
-        that:
-          - migration_type is defined
-          - migration_type in valid_migration_types
-        fail_msg: >-
-          Invalid or missing migration_type.
-          Must be one of: {{ valid_migration_types | join(', ') }}.
-          Current value: {{ migration_type | default('undefined') }}
-        success_msg: "Migration type validated: {{ migration_type | default('undefined') }}"
-
-    - name: Ensure in-service migration is not used with LVM target
-      fail:
-        msg: "In-service migration not supported for LVM target"
-      when:
-        - migration_target == "lvm"
-        - migration_type == "in-service"
-
-    - name: Validate OSD safety margin
-      assert:
-        that:
-          - osd_usage_safety_margin_percent | int >= 0 and osd_usage_safety_margin_percent | int <= 100
-        fail_msg: "osd_usage_safety_margin_percent must be between 0 and 100, got: {{ osd_usage_safety_margin_percent }}"
-      when: osd_usage_safety_margin_percent is defined
-
-    - name: Validate cgts_vg_min_required_free_gib
-      assert:
-        that:
-          - cgts_vg_min_required_free_gib | int >= 1 and cgts_vg_min_required_free_gib | int <= 100
-        fail_msg: "cgts_vg_min_required_free_gib must be between 1 and 100, got: {{ cgts_vg_min_required_free_gib }}"
-      when: cgts_vg_min_required_free_gib is defined
-
-    - name: Validate minimum_platform_mem_workers
-      assert:
-        that:
-          - minimum_platform_mem_workers | int >= 1000 and minimum_platform_mem_workers | int <= 100000
-        fail_msg: "minimum_platform_mem_workers must be between 1000 and 100000, got: {{ minimum_platform_mem_workers }}"
-      when: minimum_platform_mem_workers is defined
-
-    - name: Validate storage_backend_migration_backup_dir
-      assert:
-        that:
-          - storage_backend_migration_backup_dir | length > 0
-        fail_msg: "storage_backend_migration_backup_dir must be a non-empty string"
-      when: storage_backend_migration_backup_dir is defined
-
-    - name: Validate backups_max_safety_margin_percent
-      assert:
-        that:
-          - backups_max_safety_margin_percent | int >= 0 and backups_max_safety_margin_percent | int <= 100
-        fail_msg: >
-          "backups_max_safety_margin_percent must be between 0 and 100,
-          got: {{ backups_max_safety_margin_percent }}"
-      when: backups_max_safety_margin_percent is defined
-
-    - name: Validate backups_min_safety_margin_bytes
-      assert:
-        that:
-          - backups_min_safety_margin_bytes | int is integer
-        fail_msg: >
-          backups_min_safety_margin_bytes must be an integer,
-          got: {{ backups_min_safety_margin_bytes }}
-      when: backups_min_safety_margin_bytes is defined
-
-    - name: Validate backups_path
-      assert:
-        that:
-          - backups_path | length > 0
-        fail_msg: "backups_path must be a non-empty string"
-      when: backups_path is defined
-
-    - name: Validate erase_snapshots
-      assert:
-        that:
-          - erase_snapshots == "true" or erase_snapshots == "false"
-        fail_msg: "erase_snapshots must be a bool"
-      when: erase_snapshots is defined
-
-    - name: Validate allow_out_of_sync
-      assert:
-        that:
-          - allow_out_of_sync == "true" or allow_out_of_sync == "false"
-        fail_msg: "allow_out_of_sync must be a bool"
-      when: allow_out_of_sync is defined
-
-    - name: Validate lvm_mode
-      assert:
-        that:
-          - lvm_mode is defined
-          - lvm_mode in valid_lvm_modes
-        fail_msg: >-
-          Invalid lvm_mode.
-          Must be one of: {{ valid_lvm_modes | join(', ') }}.
-          Current value: {{ lvm_mode | default('undefined') }}
-        success_msg: "LVM mode validated: {{ lvm_mode }}"
-      when: lvm_mode is defined
-
-    - name: Validate lvm_thin_disk
-      assert:
-        that:
-          - lvm_thin_disk is defined
-          - lvm_thin_disk in valid_lvm_thin_disks
-        fail_msg: >-
-          Invalid lvm_thin_disk.
-          Must be one of: {{ valid_lvm_thin_disks | join(', ') }}.
-          Current value: {{ lvm_thin_disk | default('undefined') }}
-        success_msg: "LVM thin disk mode validated: {{ lvm_thin_disk }}"
-      when: lvm_thin_disk is defined
-
-    - name: Validate lvm_devices
-      assert:
-        that:
-          - lvm_devices is sequence and lvm_devices is not string
-        fail_msg: "lvm_devices must be a list"
-      when: lvm_devices is defined
-
-    - name: Validate lvm_volume_size_gb
-      assert:
-        that:
-          - lvm_volume_size_gb == "half" or lvm_volume_size_gb == "all" or (lvm_volume_size_gb is match("^[0-9]+$") and lvm_volume_size_gb | int > 0)
-        fail_msg: "lvm_volume_size_gb must be 'half', 'all', or a positive integer in GB, got: {{ lvm_volume_size_gb }}"
-        success_msg: "LVM volume size validated: {{ lvm_volume_size_gb }}"
-      when: lvm_volume_size_gb is defined
-
-    - name: Validate lvm_vg_name
-      assert:
-        that:
-          - lvm_vg_name | length > 0
-        fail_msg: "lvm_vg_name must be a non-empty string"
-      when: lvm_vg_name is defined
-
-    - name: Validate pre_migration_hook URI scheme
-      assert:
-        that:
-          - pre_migration_hook is match('^(file|https?)://')
-        fail_msg: >-
-          Invalid pre_migration_hook URI: '{{ pre_migration_hook }}'.
-          Must start with file://, http://, or https://.
-      when: pre_migration_hook is defined
-
-    - name: Validate post_migration_hook URI scheme
-      assert:
-        that:
-          - post_migration_hook is match('^(file|https?)://')
-        fail_msg: >-
-          Invalid post_migration_hook URI: '{{ post_migration_hook }}'.
-          Must start with file://, http://, or https://.
-      when: post_migration_hook is defined
-
-    - name: Validate pvcs_to_migrate
-      assert:
-        that:
-          - pvcs_to_migrate is sequence and pvcs_to_migrate is not string
-        fail_msg: "pvcs_to_migrate must be a list"
-      when: pvcs_to_migrate is defined
-
-    - name: Validate confirm_pvcs_regex
-      assert:
-        that:
-          - confirm_pvcs_regex == "true" or confirm_pvcs_regex == "false"
-        fail_msg: "confirm_pvcs_regex must be a bool"
-      when: confirm_pvcs_regex is defined
-
-    - name: Create hook scripts directory on SystemController
-      file:
-        path: "{{ hook_tmp_dir }}"
-        state: directory
-        mode: "0755"
-      delegate_to: localhost
-      run_once: true
-      when: pre_migration_hook is defined or post_migration_hook is defined
-
-    - name: Download pre_migration_hook script to SystemController
-      get_url:
-        url: "{{ pre_migration_hook }}"
-        dest: "{{ hook_tmp_dir }}/pre_migration_hook"
-        mode: "0755"
-        force: true
-      delegate_to: localhost
-      run_once: true
-      when: pre_migration_hook is defined
-
-    - name: Download post_migration_hook script to SystemController
-      get_url:
-        url: "{{ post_migration_hook }}"
-        dest: "{{ hook_tmp_dir }}/post_migration_hook"
-        mode: "0755"
-        force: true
-      delegate_to: localhost
-      run_once: true
-      when: post_migration_hook is defined
-
-    - name: Build extra vars for inner playbook
-      vars:
-        _vars_dict: >-
-          {{
-            {}
-            | combine({'osd_usage_safety_margin_percent': osd_usage_safety_margin_percent} if osd_usage_safety_margin_percent is defined else {})
-            | combine({'cgts_vg_min_required_free_gib': cgts_vg_min_required_free_gib} if cgts_vg_min_required_free_gib is defined else {})
-            | combine({'minimum_platform_mem_workers': minimum_platform_mem_workers} if minimum_platform_mem_workers is defined else {})
-            | combine({'storage_backend_migration_backup_dir': storage_backend_migration_backup_dir} if storage_backend_migration_backup_dir is defined else {})
-            | combine({'backups_path': backups_path} if backups_path is defined else {})
-            | combine({'backups_min_safety_margin_bytes': backups_min_safety_margin_bytes} if backups_min_safety_margin_bytes is defined else {})
-            | combine({'backups_max_safety_margin_percent': backups_max_safety_margin_percent} if backups_max_safety_margin_percent is defined else {})
-            | combine({'erase_snapshots': erase_snapshots} if erase_snapshots is defined else {})
-            | combine({'allow_out_of_sync': allow_out_of_sync} if allow_out_of_sync is defined else {})
-            | combine({'lvm_mode': lvm_mode} if lvm_mode is defined else {})
-            | combine({'lvm_thin_disk': lvm_thin_disk} if lvm_thin_disk is defined else {})
-            | combine({'lvm_devices': lvm_devices} if lvm_devices is defined else {})
-            | combine({'lvm_volume_size_gb': lvm_volume_size_gb} if lvm_volume_size_gb is defined else {})
-            | combine({'lvm_vg_name': lvm_vg_name} if lvm_vg_name is defined else {})
-            | combine({'pvcs_to_migrate': pvcs_to_migrate} if pvcs_to_migrate is defined else {})
-            | combine({'confirm_pvcs_regex': confirm_pvcs_regex} if confirm_pvcs_regex is defined else {})
-            | combine({'abort_discovery_if_not_confirm': true})
-            | combine({'pre_migration_hook': 'file://' + hook_tmp_dir + '/pre_migration_hook'} if pre_migration_hook is defined else {})
-            | combine({'post_migration_hook': 'file://' + hook_tmp_dir + '/post_migration_hook'} if post_migration_hook is defined else {})
-          }}
-      set_fact:
-        extra_vars_arg: >-
-          {{ "--extra-vars '" ~ (_vars_dict | to_json) ~ "'" if _vars_dict | length > 0 else '' }}
-
-    - name: Display extra-vars argument
-      debug:
-        var: extra_vars_arg
-
-    - name: Copy hook scripts, run migration, and cleanup
+    - name: Migration play body
       block:
-        - name: Create hook scripts directory on subcloud
+        - name: Count unreachable hosts
+          set_fact:
+            unreachable_hosts_count: "{{ ansible_play_hosts_all | difference(ansible_play_hosts) | length }}"
+
+        - name: Check the quantity of hosts declared unreachable
+          fail:
+            msg: "Unreachable hosts threshold reached: {{ unreachable_hosts_count }} ({{ unreachable_subclouds_percent }}%). Aborting."
+          when: (unreachable_hosts_count | int) > (unreachable_hosts_threshold | int)
+
+        - name: Ensure migration_target is defined and valid
+          assert:
+            that:
+              - migration_target is defined
+              - migration_target in valid_migration_targets
+            fail_msg: >-
+              Invalid or missing migration_target.
+              Must be one of: {{ valid_migration_targets | join(', ') }}.
+              Current value: {{ migration_target | default('undefined') }}
+            success_msg: "Migration target validated: {{ migration_target | default('undefined') }}"
+
+        - name: Ensure migration_type is defined and valid
+          assert:
+            that:
+              - migration_type is defined
+              - migration_type in valid_migration_types
+            fail_msg: >-
+              Invalid or missing migration_type.
+              Must be one of: {{ valid_migration_types | join(', ') }}.
+              Current value: {{ migration_type | default('undefined') }}
+            success_msg: "Migration type validated: {{ migration_type | default('undefined') }}"
+
+        - name: Ensure in-service migration is not used with LVM target
+          fail:
+            msg: "In-service migration not supported for LVM target"
+          when:
+            - migration_target == "lvm"
+            - migration_type == "in-service"
+
+        - name: Ensure direct-copy migration is not used with Rook Ceph target
+          fail:
+            msg: "Direct-copy migration not supported for Rook Ceph target"
+          when:
+            - migration_target == "rook-ceph"
+            - migration_type == "direct-copy"
+
+        - name: Validate OSD safety margin
+          assert:
+            that:
+              - osd_usage_safety_margin_percent | int >= 0 and osd_usage_safety_margin_percent | int <= 100
+            fail_msg: "osd_usage_safety_margin_percent must be between 0 and 100, got: {{ osd_usage_safety_margin_percent }}"
+          when: osd_usage_safety_margin_percent is defined
+
+        - name: Validate cgts_vg_min_required_free_gib
+          assert:
+            that:
+              - cgts_vg_min_required_free_gib | int >= 1 and cgts_vg_min_required_free_gib | int <= 100
+            fail_msg: "cgts_vg_min_required_free_gib must be between 1 and 100, got: {{ cgts_vg_min_required_free_gib }}"
+          when: cgts_vg_min_required_free_gib is defined
+
+        - name: Validate minimum_platform_mem_workers
+          assert:
+            that:
+              - minimum_platform_mem_workers | int >= 1000 and minimum_platform_mem_workers | int <= 100000
+            fail_msg: "minimum_platform_mem_workers must be between 1000 and 100000, got: {{ minimum_platform_mem_workers }}"
+          when: minimum_platform_mem_workers is defined
+
+        - name: Validate storage_backend_migration_backup_dir
+          assert:
+            that:
+              - storage_backend_migration_backup_dir | length > 0
+            fail_msg: "storage_backend_migration_backup_dir must be a non-empty string"
+          when: storage_backend_migration_backup_dir is defined
+
+        - name: Validate backups_max_safety_margin_percent
+          assert:
+            that:
+              - backups_max_safety_margin_percent | int >= 0 and backups_max_safety_margin_percent | int <= 100
+            fail_msg: >
+              "backups_max_safety_margin_percent must be between 0 and 100,
+              got: {{ backups_max_safety_margin_percent }}"
+          when: backups_max_safety_margin_percent is defined
+
+        - name: Validate backups_min_safety_margin_bytes
+          assert:
+            that:
+              - backups_min_safety_margin_bytes | int is integer
+            fail_msg: >
+              backups_min_safety_margin_bytes must be an integer,
+              got: {{ backups_min_safety_margin_bytes }}
+          when: backups_min_safety_margin_bytes is defined
+
+        - name: Validate backups_path
+          assert:
+            that:
+              - backups_path | length > 0
+            fail_msg: "backups_path must be a non-empty string"
+          when: backups_path is defined
+
+        - name: Validate erase_snapshots
+          assert:
+            that:
+              - erase_snapshots | string | lower in ["true", "false"]
+            fail_msg: "erase_snapshots must be a bool, got: {{ erase_snapshots }}"
+          when: erase_snapshots is defined
+
+        - name: Validate allow_out_of_sync
+          assert:
+            that:
+              - allow_out_of_sync | string | lower in ["true", "false"]
+            fail_msg: "allow_out_of_sync must be a bool, got: {{ allow_out_of_sync }}"
+          when: allow_out_of_sync is defined
+
+        - name: Validate lvm_mode
+          assert:
+            that:
+              - lvm_mode is defined
+              - lvm_mode in valid_lvm_modes
+            fail_msg: >-
+              Invalid lvm_mode.
+              Must be one of: {{ valid_lvm_modes | join(', ') }}.
+              Current value: {{ lvm_mode | default('undefined') }}
+            success_msg: "LVM mode validated: {{ lvm_mode }}"
+          when: lvm_mode is defined
+
+        - name: Validate lvm_thin_disk
+          assert:
+            that:
+              - lvm_thin_disk is defined
+              - lvm_thin_disk in valid_lvm_thin_disks
+            fail_msg: >-
+              Invalid lvm_thin_disk.
+              Must be one of: {{ valid_lvm_thin_disks | join(', ') }}.
+              Current value: {{ lvm_thin_disk | default('undefined') }}
+            success_msg: "LVM thin disk mode validated: {{ lvm_thin_disk }}"
+          when: lvm_thin_disk is defined
+
+        - name: Validate lvm_devices
+          assert:
+            that:
+              - lvm_devices is sequence and lvm_devices is not string
+            fail_msg: "lvm_devices must be a list"
+          when: lvm_devices is defined
+
+        - name: Validate lvm_volume_size_gb
+          assert:
+            that:
+              - lvm_volume_size_gb == "half" or lvm_volume_size_gb == "all" or (lvm_volume_size_gb is match("^[0-9]+$") and lvm_volume_size_gb | int > 0)
+            fail_msg: "lvm_volume_size_gb must be 'half', 'all', or a positive integer in GB, got: {{ lvm_volume_size_gb }}"
+            success_msg: "LVM volume size validated: {{ lvm_volume_size_gb }}"
+          when: lvm_volume_size_gb is defined
+
+        - name: Validate lvm_vg_name
+          assert:
+            that:
+              - lvm_vg_name | length > 0
+            fail_msg: "lvm_vg_name must be a non-empty string"
+          when: lvm_vg_name is defined
+
+        - name: Validate pre_migration_hook URI scheme
+          assert:
+            that:
+              - pre_migration_hook is match('^(file|https?)://')
+            fail_msg: >-
+              Invalid pre_migration_hook URI: '{{ pre_migration_hook }}'.
+              Must start with file://, http://, or https://.
+          when: pre_migration_hook is defined
+
+        - name: Validate post_migration_hook URI scheme
+          assert:
+            that:
+              - post_migration_hook is match('^(file|https?)://')
+            fail_msg: >-
+              Invalid post_migration_hook URI: '{{ post_migration_hook }}'.
+              Must start with file://, http://, or https://.
+          when: post_migration_hook is defined
+
+        - name: Validate direct-copy LVM rollback and validation hook URIs
+          when:
+            - migration_target == "lvm"
+            - migration_type == "direct-copy"
+          block:
+            - name: Validate validation_hook URI scheme
+              assert:
+                that:
+                  - validation_hook is match('^(file|https?)://')
+                fail_msg: >-
+                  Invalid validation_hook URI: '{{ validation_hook }}'.
+                  Must start with file://, http://, or https://.
+              when: validation_hook is defined
+
+            - name: Validate pre_rollback_hook URI scheme
+              assert:
+                that:
+                  - pre_rollback_hook is match('^(file|https?)://')
+                fail_msg: >-
+                  Invalid pre_rollback_hook URI: '{{ pre_rollback_hook }}'.
+                  Must start with file://, http://, or https://.
+              when: pre_rollback_hook is defined
+
+            - name: Validate post_rollback_hook URI scheme
+              assert:
+                that:
+                  - post_rollback_hook is match('^(file|https?)://')
+                fail_msg: >-
+                  Invalid post_rollback_hook URI: '{{ post_rollback_hook }}'.
+                  Must start with file://, http://, or https://.
+              when: post_rollback_hook is defined
+
+        - name: Validate pvcs_to_migrate
+          assert:
+            that:
+              - pvcs_to_migrate is sequence and pvcs_to_migrate is not string
+            fail_msg: "pvcs_to_migrate must be a list"
+          when: pvcs_to_migrate is defined
+
+        - name: Validate expected_pvc_count
+          assert:
+            that:
+              - expected_pvc_count is defined
+              - expected_pvc_count | int | string == expected_pvc_count | string
+              - expected_pvc_count | int > -1
+            fail_msg: "expected_pvc_count must be defined and a positive integer"
+
+        - name: Create hook scripts directory on SystemController
           file:
             path: "{{ hook_tmp_dir }}"
             state: directory
             mode: "0755"
-          when: pre_migration_hook is defined or post_migration_hook is defined
-
-        - name: Copy pre_migration_hook script to subcloud
-          copy:
-            src: "{{ hook_tmp_dir }}/pre_migration_hook"
-            dest: "{{ hook_tmp_dir }}/pre_migration_hook"
-            mode: "0755"
-          when: pre_migration_hook is defined
-
-        - name: Copy post_migration_hook script to subcloud
-          copy:
-            src: "{{ hook_tmp_dir }}/post_migration_hook"
-            dest: "{{ hook_tmp_dir }}/post_migration_hook"
-            mode: "0755"
-          when: post_migration_hook is defined
-
-        - name: "Run migration playbook on subcloud"
-          command: >
-            ansible-playbook
-            /usr/share/ansible/stx-ansible/playbooks/storage-backend-migration-{{ migration_target }}-{{ migration_type }}.yaml -v
-            {{ extra_vars_arg }}
-          environment:
-            ANSIBLE_CONFIG: "/usr/share/ansible/stx-ansible/playbooks/vars/storage-backend-migration/ansible.cfg"
-          register: migration_result
-          failed_when:
-            - migration_result.rc != 0
-            - '"Discovery complete. Failed automatically; the playbook was triggered remotely." not in migration_result.stdout'
-
-        - name: Confirm matched PVCs to proceed with migration
-          debug:
-            msg: "Review the matched PVCs on the subclouds. To confirm and proceed with the migration, re-run adding: -e confirm_pvcs_regex=true"
-          when: '"Discovery complete. Failed automatically; the playbook was triggered remotely." in migration_result.stdout'
-
-      always:
-        - name: Cleanup hook scripts from subcloud
-          file:
-            path: "{{ hook_tmp_dir }}"
-            state: absent
-          when: pre_migration_hook is defined or post_migration_hook is defined
-
-        - name: Cleanup hook scripts from SystemController
-          file:
-            path: "{{ hook_tmp_dir }}"
-            state: absent
           delegate_to: localhost
           run_once: true
           when: pre_migration_hook is defined or post_migration_hook is defined
+            or (any_direct_copy_hook | bool)
+
+        - name: Download pre_migration_hook script to SystemController
+          get_url:
+            url: "{{ pre_migration_hook }}"
+            dest: "{{ hook_tmp_dir }}/pre_migration_hook"
+            mode: "0755"
+            force: true
+          delegate_to: localhost
+          run_once: true
+          when: pre_migration_hook is defined
+
+        - name: Download post_migration_hook script to SystemController
+          get_url:
+            url: "{{ post_migration_hook }}"
+            dest: "{{ hook_tmp_dir }}/post_migration_hook"
+            mode: "0755"
+            force: true
+          delegate_to: localhost
+          run_once: true
+          when: post_migration_hook is defined
+
+        - name: Download validation_hook script to SystemController
+          get_url:
+            url: "{{ validation_hook }}"
+            dest: "{{ hook_tmp_dir }}/validation_hook"
+            mode: "0755"
+            force: true
+          delegate_to: localhost
+          run_once: true
+          when:
+            - validation_hook is defined
+            - migration_target == "lvm"
+            - migration_type == "direct-copy"
+
+        - name: Download pre_rollback_hook script to SystemController
+          get_url:
+            url: "{{ pre_rollback_hook }}"
+            dest: "{{ hook_tmp_dir }}/pre_rollback_hook"
+            mode: "0755"
+            force: true
+          delegate_to: localhost
+          run_once: true
+          when:
+            - pre_rollback_hook is defined
+            - migration_target == "lvm"
+            - migration_type == "direct-copy"
+
+        - name: Download post_rollback_hook script to SystemController
+          get_url:
+            url: "{{ post_rollback_hook }}"
+            dest: "{{ hook_tmp_dir }}/post_rollback_hook"
+            mode: "0755"
+            force: true
+          delegate_to: localhost
+          run_once: true
+          when:
+            - post_rollback_hook is defined
+            - migration_target == "lvm"
+            - migration_type == "direct-copy"
+
+        - name: Build extra vars for inner playbook
+          vars:
+            _vars_dict: >-
+              {{
+                {}
+                | combine({'osd_usage_safety_margin_percent': osd_usage_safety_margin_percent} if osd_usage_safety_margin_percent is defined else {})
+                | combine({'cgts_vg_min_required_free_gib': cgts_vg_min_required_free_gib} if cgts_vg_min_required_free_gib is defined else {})
+                | combine({'minimum_platform_mem_workers': minimum_platform_mem_workers} if minimum_platform_mem_workers is defined else {})
+                | combine({'storage_backend_migration_backup_dir': storage_backend_migration_backup_dir} if storage_backend_migration_backup_dir is defined else {})
+                | combine({'backups_path': backups_path} if backups_path is defined else {})
+                | combine({'backups_min_safety_margin_bytes': backups_min_safety_margin_bytes} if backups_min_safety_margin_bytes is defined else {})
+                | combine({'backups_max_safety_margin_percent': backups_max_safety_margin_percent} if backups_max_safety_margin_percent is defined else {})
+                | combine({'erase_snapshots': erase_snapshots} if erase_snapshots is defined else {})
+                | combine({'allow_out_of_sync': allow_out_of_sync} if allow_out_of_sync is defined else {})
+                | combine({'lvm_mode': lvm_mode} if lvm_mode is defined and migration_type != 'direct-copy' else {})
+                | combine({'lvm_thin_disk': lvm_thin_disk} if lvm_thin_disk is defined and migration_type != 'direct-copy' else {})
+                | combine({'lvm_devices': lvm_devices} if lvm_devices is defined else {})
+                | combine({'lvm_volume_size_gb': lvm_volume_size_gb} if lvm_volume_size_gb is defined else {})
+                | combine({'lvm_vg_name': lvm_vg_name} if lvm_vg_name is defined else {})
+                | combine({'pvcs_to_migrate': pvcs_to_migrate} if pvcs_to_migrate is defined else {})
+                | combine({'expected_pvc_count': expected_pvc_count} if expected_pvc_count is defined else {})
+                | combine({'pre_migration_hook': 'file://' + hook_tmp_dir + '/pre_migration_hook'} if pre_migration_hook is defined else {})
+                | combine({'post_migration_hook': 'file://' + hook_tmp_dir + '/post_migration_hook'} if post_migration_hook is defined else {})
+                | combine({'validation_hook': 'file://' + hook_tmp_dir + '/validation_hook'} if validation_hook is defined else {})
+                | combine({'pre_rollback_hook': 'file://' + hook_tmp_dir + '/pre_rollback_hook'} if pre_rollback_hook is defined else {})
+                | combine({'post_rollback_hook': 'file://' + hook_tmp_dir + '/post_rollback_hook'} if post_rollback_hook is defined else {})
+              }}
+          set_fact:
+            extra_vars_arg: >-
+              {{ "--extra-vars '" ~ (_vars_dict | to_json) ~ "'" if _vars_dict | length > 0 else '' }}
+
+        - name: Display extra-vars argument
+          debug:
+            var: extra_vars_arg
+
+        - name: Copy hook scripts, run migration, and cleanup
+          block:
+            - name: Create hook scripts directory on subcloud
+              file:
+                path: "{{ hook_tmp_dir }}"
+                state: directory
+                mode: "0755"
+              when: pre_migration_hook is defined or post_migration_hook is defined
+                or (any_direct_copy_hook | bool)
+
+            - name: Copy pre_migration_hook script to subcloud
+              copy:
+                src: "{{ hook_tmp_dir }}/pre_migration_hook"
+                dest: "{{ hook_tmp_dir }}/pre_migration_hook"
+                mode: "0755"
+              when: pre_migration_hook is defined
+
+            - name: Copy post_migration_hook script to subcloud
+              copy:
+                src: "{{ hook_tmp_dir }}/post_migration_hook"
+                dest: "{{ hook_tmp_dir }}/post_migration_hook"
+                mode: "0755"
+              when: post_migration_hook is defined
+
+            - name: Copy validation_hook script to subcloud
+              copy:
+                src: "{{ hook_tmp_dir }}/validation_hook"
+                dest: "{{ hook_tmp_dir }}/validation_hook"
+                mode: "0755"
+              when:
+                - validation_hook is defined
+                - migration_target == "lvm"
+                - migration_type == "direct-copy"
+
+            - name: Copy pre_rollback_hook script to subcloud
+              copy:
+                src: "{{ hook_tmp_dir }}/pre_rollback_hook"
+                dest: "{{ hook_tmp_dir }}/pre_rollback_hook"
+                mode: "0755"
+              when:
+                - pre_rollback_hook is defined
+                - migration_target == "lvm"
+                - migration_type == "direct-copy"
+
+            - name: Copy post_rollback_hook script to subcloud
+              copy:
+                src: "{{ hook_tmp_dir }}/post_rollback_hook"
+                dest: "{{ hook_tmp_dir }}/post_rollback_hook"
+                mode: "0755"
+              when:
+                - post_rollback_hook is defined
+                - migration_target == "lvm"
+                - migration_type == "direct-copy"
+
+            - name: Run migration playbook on subcloud
+              shell: |
+                set -e
+                rm -f {{ migration_rc_file }}
+                (
+                  trap '' HUP
+                  set +e
+                  ansible-playbook /usr/share/ansible/stx-ansible/playbooks/storage-backend-migration-{{ migration_target }}-{{ migration_type }}.yaml -v {{ extra_vars_arg }}
+                  echo $? > {{ migration_rc_file }}
+                ) > /dev/null 2>&1 &
+                echo $!
+              environment:
+                ANSIBLE_CONFIG: "/usr/share/ansible/stx-ansible/playbooks/vars/storage-backend-migration/ansible.cfg"
+              register: subcloud_migration_result
+
+            - name: Extract migration process ID
+              set_fact:
+                subcloud_migration_pid: "{{ subcloud_migration_result.stdout }}"
+
+            - name: Wait migration process to end
+              shell: ps --no-headers -o etime= -p {{ subcloud_migration_pid | int }} | cat
+              register: ps_result
+              until: ps_result.stdout | trim | length == 0
+              retries: 2016  # 1 week
+              delay: 300     # 5 minutes
+              vars:
+                ansible_ssh_retries: 10
+
+            - name: Check if the temporary file with migration exit status exists
+              stat:
+                path: "{{ migration_rc_file }}"
+              register: migration_status_file
+
+            - name: Get the final migration status in the subcloud
+              shell: cat "{{ migration_rc_file }}"
+              register: subcloud_migration_status
+              when: migration_status_file.stat.exists
+
+            - name: Persist migration result for reconciliation
+              set_fact:
+                migration_succeeded: >-
+                  {{ subcloud_migration_status.stdout | trim | int == 0 }}
+              when: migration_status_file.stat.exists
+
+            - name: Abort if the migration process failed in the subcloud
+              fail:
+                msg: "Migration failed on the subcloud. Aborting."
+              when: not migration_succeeded | default(false) | bool
+
+          always:
+            - name: Remove the temporary file with migration exit status
+              file:
+                path: "{{ migration_rc_file }}"
+                state: absent
+
+            - name: Cleanup hook scripts from subcloud
+              file:
+                path: "{{ hook_tmp_dir }}"
+                state: absent
+              when: pre_migration_hook is defined or post_migration_hook is defined
+                or (any_direct_copy_hook | bool)
+
+            - name: Cleanup hook scripts from SystemController
+              file:
+                path: "{{ hook_tmp_dir }}"
+                state: absent
+              delegate_to: localhost
+              run_once: true
+              when: pre_migration_hook is defined or post_migration_hook is defined
+                or (any_direct_copy_hook | bool)
+
+      always:
+        - name: Reconcile subcloud migrations, collect logs and report status
+          run_once: true
+          delegate_to: localhost
+          when: >-
+            (not (migration_succeeded | default(false) | bool))
+            or (ansible_play_hosts | length < ansible_play_hosts_all | length)
+            or (ansible_play_hosts_all[-1] in ansible_play_batch)
+          block:
+            - name: Run reconciliation role
+              include_role:
+                name: reconcile-subcloud-migrations
+
+            - name: Record that reconciliation already ran
+              set_fact:
+                reconciliation_done: true
+              delegate_to: localhost
+              delegate_facts: true
+
+- hosts: localhost
+  gather_facts: no
+  vars_files:
+    - vars/common/main.yml
+
+  tasks:
+    # Fallback reconcile for the all-unreachable case: the previous play's always
+    # block never fires when no host is reachable. When it did run, it sets
+    # reconciliation_done on localhost, so the guard below skips this play to
+    # avoid reconciling twice.
+    - name: Reconcile subcloud migrations, collect logs and report status
+      run_once: true
+      when: not (reconciliation_done | default(false) | bool)
+      include_role:
+        name: reconcile-subcloud-migrations

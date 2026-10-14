@@ -1,0 +1,26 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Direct-copy migration does not store backups on disk,
+# so no backup space checks are needed here.
+#
+
+- name: Direct-copy pre-checks (no backup space required)
+  debug:
+    msg: "Direct-copy mode: data is copied directly between PVCs, no disk backups needed."
+
+# Direct-copy is only supported with the shared cgts-vg (thin/root) layout.
+# Abort early if the effective LVM mode was overridden to anything else,
+# to avoid provisioning a dedicated VG or thick volumes for this flow.
+- name: Ensure direct-copy uses thin/root LVM layout
+  assert:
+    that:
+      - lvm_mode_cached == "thin"
+      - lvm_thin_disk_cached == "root"
+    fail_msg: >-
+      Direct-copy migration requires lvm_mode=thin and lvm_thin_disk=root
+      (shared cgts-vg layout). Got lvm_mode={{ lvm_mode_cached | default('undefined') }},
+      lvm_thin_disk={{ lvm_thin_disk_cached | default('undefined') }}.
+      Do not override these for direct-copy.

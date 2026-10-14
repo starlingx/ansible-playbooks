@@ -5,3 +5,8 @@
 #
 
 drbd_ocf_script: /usr/lib/ocf/resource.d/linbit/drbd
+
+# Mode for remove-baremetal:
+#   convert     - (default) Convert the Ceph storage-backend record to the migration target (lvm or rook)
+#   remove_only - Delete the Ceph storage-backend record without converting (used when LVM backend already exists)
+remove_baremetal_mode: convert

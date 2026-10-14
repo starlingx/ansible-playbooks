@@ -4,7 +4,11 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: "Force delete k8s resource {{ name | default(manifest_path) | default('--all') }}"
+- name: >-
+    Force delete k8s resource {{ kind | default('') }}
+    {%- if k8s_namespace is defined %} in namespace {{ k8s_namespace }}
+    {%- elif manifest_path is defined %} from {{ manifest_path }}
+    {%- elif name is not defined %} --all{% endif %}
   shell: |
     {% set wait_delete = wait | default(true) %}
 
@@ -44,7 +48,7 @@
       {% endif %}
 
     {% else %}
-      kubectl patch \
+      patch_err="$(kubectl patch \
       {% if k8s_namespace is defined %}
       -n {{ k8s_namespace }} \
       {% endif %}
@@ -54,7 +58,9 @@
       {{ kind }} {{ name }} \
       {% endif %}
       -p '{"metadata": {"finalizers": null}}' \
-      --type=merge
+      --type=merge 2>&1 1>/dev/null)" || {
+        echo "$patch_err" | grep -q 'NotFound' || { echo "$patch_err" >&2; exit 1; }
+      }
 
       {% if wait_delete == true %}
         ! kubectl get \

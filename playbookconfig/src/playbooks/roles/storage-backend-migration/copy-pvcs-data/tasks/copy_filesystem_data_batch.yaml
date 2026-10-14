@@ -1,0 +1,54 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Batch filesystem copy for namespace {{ generic_pvc_namespace }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  vars:
+    pvc_pairs: >-
+      {% set result = [] -%}
+      {% for pvc in batch_pvcs -%}
+      {%   set _ = result.append({'src_name': pvc.name ~ ceph_pvc_rename_suffix, 'dst_name': pvc.name}) -%}
+      {% endfor -%}
+      {{ result }}
+  block:
+    - name: Set pod name
+      set_fact:
+        batch_pod_name: "{{ batch_pod_label }}-{{ now(fmt='%s') }}"
+
+    - name: Create batch copy pod {{ batch_pod_name }} with {{ batch_pvcs | length }} PVC pairs
+      template:
+        src: "{{ role_path_common }}/templates/pod-migration-copy-batch.yaml.j2"
+        dest: "{{ tmp_workspace }}/pod-migration-copy-filesystem-batch.yaml"
+        mode: "0644"
+      vars:
+        pod_app_label: "{{ batch_pod_label }}"
+        pod_name: "{{ batch_pod_name }}"
+        pod_namespace: "{{ generic_pvc_namespace }}"
+        batch_pvc_pairs: "{{ pvc_pairs }}"
+        pod_image: "{{ images.rsync }}"
+
+    - name: Apply batch copy pod {{ batch_pod_name }}
+      command: "kubectl apply -f {{ tmp_workspace }}/pod-migration-copy-filesystem-batch.yaml"
+
+    - name: Wait for batch copy pod {{ batch_pod_name }} to be running
+      command: >
+        kubectl get pod {{ batch_pod_name }} -n {{ generic_pvc_namespace }}
+        -o jsonpath='{.status.phase}'
+      register: batch_pod_status
+      until: "'Running' in batch_pod_status.stdout"
+      retries: 60
+      delay: 10
+      changed_when: false
+
+    - name: Copy data for each PVC in batch
+      include_tasks: copy_filesystem_data_single_pvc.yaml
+      loop: "{{ batch_pvcs }}"
+      loop_control:
+        loop_var: pvc
+
+    - name: Cleanup batch copy pod {{ batch_pod_name }}
+      command: "kubectl delete -f {{ tmp_workspace }}/pod-migration-copy-filesystem-batch.yaml --ignore-not-found=true --wait=false"

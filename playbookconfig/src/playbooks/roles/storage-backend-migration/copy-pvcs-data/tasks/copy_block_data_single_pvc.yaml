@@ -1,0 +1,23 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "[PVC {{ pvc.name }}] Copy block data from Ceph to LVM"
+  shell: |
+    set -eo pipefail
+    SRC="/dev/src-block-{{ pvc_index }}"
+    DST="/dev/dst-block-{{ pvc_index }}"
+    SRC_SIZE=$(kubectl exec -n {{ generic_pvc_namespace }} {{ batch_pod_name }} -- blockdev --getsize64 "${SRC}")
+    DST_SIZE=$(kubectl exec -n {{ generic_pvc_namespace }} {{ batch_pod_name }} -- blockdev --getsize64 "${DST}")
+    if [ "${DST_SIZE}" -lt "${SRC_SIZE}" ]; then
+      echo "ERROR: destination (${DST_SIZE}) smaller than source (${SRC_SIZE}) for {{ pvc.name }}"
+      exit 1
+    fi
+    echo "Copying ${SRC} to ${DST}..."
+    kubectl exec -n {{ generic_pvc_namespace }} {{ batch_pod_name }} -- \
+      dd if="${SRC}" of="${DST}" bs=4M conv=fsync
+    echo "Block copy complete for {{ pvc.name }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"

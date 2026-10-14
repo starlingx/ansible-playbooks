@@ -1,3 +1,18 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Capture original failure details for later reporting
+  set_fact:
+    migration_failed_task_name: "{{ ansible_failed_task.name | default('unknown') }}"
+    migration_failed_error: >-
+      {{ ansible_failed_result.msg
+         | default(ansible_failed_result.stderr
+         | default('see the failed task output above for details')) }}
+  when: migration_failed_task_name is undefined
+
 - name: Update storage-backend migration_status capability to failed
   become: true
   become_user: postgres

@@ -1,0 +1,65 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Post-rollback finalization tasks. Re-enables host services and finalizes
+# system state after a rollback of the storage backend migration.
+#
+
+- name: Enable host services
+  import_role:
+    name: manage-host-services
+  vars:
+    host_service_action: enable
+    checkpoint_name: manage-host-services-enable
+
+- name: Run post-rollback hook
+  include_role:
+    name: custom-action-hook
+  vars:
+    custom_action_script: "{{ post_rollback_hook }}"
+    phase: post-rollback
+    checkpoint_name: post-rollback-custom-action-hook
+  when: post_rollback_hook is defined
+
+- name: Update storage-backend migration_status capability to rolled-back
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -c "
+    UPDATE storage_backend
+    SET capabilities = (
+      capabilities::jsonb || '{\"migration_status\": \"rolled-back\"}'::jsonb
+    )::text
+    WHERE id = {{ storage_backend.id }};
+    "
+  vars:
+    storage_backend: "{{ hostvars[system.active_controller].storage_backend }}"
+  run_once: true
+  delegate_to: "{{ system.active_controller }}"
+  when: hostvars[system.active_controller].storage_backend is defined
+
+- name: Clear in-progress migration alarm
+  script: "{{ role_path_common }}/files/fm_alarm.py --entity-uuid {{ storage_backend.uuid }} --clear in_progress --file-name /home/sysadmin/storage-backend-migration-ansible.log"
+  vars:
+    storage_backend: "{{ hostvars[system.active_controller].storage_backend }}"
+  run_once: true
+  delegate_to: "{{ system.active_controller }}"
+  when: hostvars[system.active_controller].storage_backend is defined
+
+- name: Raise migration rolled-back alarm
+  script: "{{ role_path_common }}/files/fm_alarm.py --entity-uuid {{ storage_backend.uuid }} --set rolled_back --file-name /home/sysadmin/storage-backend-migration-ansible.log"
+  vars:
+    storage_backend: "{{ hostvars[system.active_controller].storage_backend }}"
+  run_once: true
+  delegate_to: "{{ system.active_controller }}"
+  when: hostvars[system.active_controller].storage_backend is defined
+
+- name: Remove in-progress migration flag
+  file:
+    path: /run/.storage_backend_migration_in_progress
+    state: absent
+
+- name: Clear fact cache after rollback
+  include_tasks: "{{ role_path_common }}/tasks/clear_facts_cache.yaml"

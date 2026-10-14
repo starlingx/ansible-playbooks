@@ -8,6 +8,7 @@ valid_migration_types:
   - export_import
   - in_service
   - redeploy
+  - direct_copy
 
 ceph_allowed_pools:
  - .mgr

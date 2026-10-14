@@ -1,0 +1,15 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "[PVC {{ pvc.name }}] Copy filesystem data from Ceph to LVM"
+  shell: |
+    set -eo pipefail
+    echo "Copying data from /src/{{ pvc.name }}/ to /dst/{{ pvc.name }}/..."
+    kubectl exec -n {{ generic_pvc_namespace }} {{ batch_pod_name }} -- \
+      rsync -aAXS --delete "/src/{{ pvc.name }}/" "/dst/{{ pvc.name }}/"
+    echo "Copy complete for {{ pvc.name }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"

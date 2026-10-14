@@ -1,0 +1,55 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Patch LVM PV reclaimPolicy to match source Ceph PV
+  shell: |
+    set -eo pipefail
+    SUFFIX="{{ ceph_pvc_rename_suffix }}"
+
+    retry() {
+      local n=0
+      local retries=6
+      local interval=10
+      until "$@"; do
+        n=$((n + 1))
+        [ "${n}" -ge "${retries}" ] && return 1
+        sleep "${interval}"
+      done
+    }
+
+    while read -r NS LVM_PVC; do
+      [ -z "${NS}" ] && continue
+      CEPH_PVC="${LVM_PVC}${SUFFIX}"
+
+      # Get reclaim policy from the source Ceph PV
+      CEPH_PV=$(retry kubectl -n "${NS}" get pvc "${CEPH_PVC}" -o jsonpath='{.spec.volumeName}')
+      if [ -z "${CEPH_PV}" ]; then
+        echo "WARNING: Ceph PVC ${NS}/${CEPH_PVC} has no bound PV, skipping"
+        continue
+      fi
+      POLICY=$(retry kubectl get pv "${CEPH_PV}" -o jsonpath='{.spec.persistentVolumeReclaimPolicy}')
+      if [ -z "${POLICY}" ]; then
+        echo "ERROR: could not read reclaimPolicy from PV ${CEPH_PV}"
+        exit 1
+      fi
+
+      LVM_PV=$(retry kubectl -n "${NS}" get pvc "${LVM_PVC}" -o jsonpath='{.spec.volumeName}')
+      if [ -z "${LVM_PV}" ]; then
+        echo "ERROR: LVM PVC ${NS}/${LVM_PVC} has no bound PV"
+        exit 1
+      fi
+
+      # Patch LVM PV reclaimPolicy to match source Ceph PV
+      retry kubectl patch pv "${LVM_PV}" -p "{\"spec\":{\"persistentVolumeReclaimPolicy\":\"${POLICY}\"}}"
+      echo "${LVM_PV} -> reclaimPolicy=${POLICY}"
+    done
+  args:
+    stdin: |
+      {% for item in pvc_target_sizes %}
+      {{ item.namespace }} {{ item.name }}
+      {% endfor %}
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"

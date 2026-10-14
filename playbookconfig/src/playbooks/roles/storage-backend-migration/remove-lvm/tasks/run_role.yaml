@@ -1,0 +1,44 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# Remove thin/root lvm storage provisioning
+
+- name: Remove lvm-csi application
+  vars:
+    app_name: lvm-csi
+    force: true
+  include_tasks: "{{ role_path_common }}/tasks/remove_app.yaml"
+
+- name: Remove LVs from the environment
+  command: sudo lvremove --yes -S 'pool_lv=lvmcsi-pool && vg_name={{ lvm_vg_name_cacheable }}'
+  environment: "{{ system_env }}"
+  register: result
+  until: result.rc == 0
+  retries: 3
+  delay: 30
+  changed_when: "'successfully removed' in result.stdout"
+
+- name: Remove thin provisioning from {{ lvm_vg_name_cacheable }}
+  command: >
+    system host-lvg-modify {{ inventory_hostname }} {{ lvm_vg_name_cacheable }}
+    -f none
+  environment: "{{ system_env }}"
+  register: result
+  until: result.rc == 0 or 'not found' in result.stderr
+  retries: 5
+  delay: 30
+  failed_when:
+    - result.rc != 0
+    - "'not found' not in result.stderr"
+
+- name: Remove lvm-store storage backend
+  command: >
+    system storage-backend-delete --force lvm-store
+  environment: "{{ system_env }}"
+  register: result
+  failed_when:
+    - result.rc != 0
+    - "'not found' not in result.stderr"

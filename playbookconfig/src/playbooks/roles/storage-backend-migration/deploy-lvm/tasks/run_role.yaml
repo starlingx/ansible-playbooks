@@ -4,6 +4,15 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+- name: Add LVM storage backend
+  command: system storage-backend-add lvm
+  environment: "{{ system_env }}"
+  register: storage_backend_add_result
+  failed_when:
+    - storage_backend_add_result.rc != 0
+    - "'Only one lvm backend is allowed' not in (storage_backend_add_result.stderr | default(''))"
+  changed_when: storage_backend_add_result.rc == 0
+
 - name: Ensure /etc/platform/.node_lvm_csi_configured exists
   file:
     path: /etc/platform/.node_lvm_csi_configured
@@ -14,18 +23,7 @@
     group: root
     mode: '0644'
 
-- name: Set LVM VG name
-  set_fact:
-    lvm_vg_name_cacheable: >-
-      {%- if lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'dedicated' -%}
-        {{ lvm_vg_name }}
-      {%- elif lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'root' -%}
-        cgts-vg
-      {%- elif lvm_mode_cached == 'thick' -%}
-        {{ lvm_vg_name }}
-      {%- endif -%}
-    cacheable: true
-
+# lvm_vg_name_cacheable is derived once at discovery (get-infos/lvm_disk_info.yaml).
 - name: Display lvm_vg_name_cacheable
   debug:
     var: lvm_vg_name_cacheable

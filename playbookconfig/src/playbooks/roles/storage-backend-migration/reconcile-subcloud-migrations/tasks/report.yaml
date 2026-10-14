@@ -1,0 +1,41 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Compute reconciliation status counts
+  set_fact:
+    reconcile_counts: >-
+      {{ reconcile_counts | default({})
+         | combine({item: (subcloud_reconciliation | default([])
+                           | selectattr('status', 'equalto', item)
+                           | list | length)}) }}
+  loop:
+    - success
+    - rolled-back
+    - failed
+    - in-progress
+    - not-started
+    - unknown
+
+- name: Build reconciliation totals rows
+  set_fact:
+    reconcile_totals_rows: >-
+      {{ reconcile_counts | default({}) | dict2items(key_name='status', value_name='count')
+         | selectattr('count', 'gt', 0) | list }}
+
+- name: Show subcloud migration reconciliation summary
+  vars:
+    reconcile_report_table: >-
+      {{ subcloud_reconciliation | default([]) | community.general.to_prettytable }}
+    reconcile_totals_table: >-
+      {{ reconcile_totals_rows | community.general.to_prettytable }}
+  debug:
+    msg: |-
+      Subcloud migration reconciliation summary:
+      {{ reconcile_report_table }}
+
+      Totals:
+      {{ reconcile_totals_table }}

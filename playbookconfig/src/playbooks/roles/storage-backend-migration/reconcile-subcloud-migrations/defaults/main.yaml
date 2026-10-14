@@ -1,0 +1,29 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+reconcile_wait_reachable_timeout: 300
+# Source storage-backend being migrated from. Whenever migration_status is
+# empty, its presence disambiguates the outcome: a finished migration removes
+# the source backend and clears the migration_status, so source backend gone
+# means success, while source backend still present means not-started.
+source_storage_backend: ceph
+# Non-empty migration_status values. An empty migration_status means the field
+# was either cleared by a finished migration or never set (see above).
+reconcile_valid_migration_statuses:
+  - in-progress
+  - failed
+  - rolled-back
+# Migration methods supporting rollback. Only for these a failed migration
+# needs its migration_status read, to tell rolled-back apart from failed.
+methods_with_rollback:
+  - direct-copy
+
+# Migration log file produced on each subcloud (see ansible.cfg log_path).
+subcloud_migration_log_name: storage-backend-migration-ansible.log
+subcloud_migration_log_src: "/home/sysadmin/{{ subcloud_migration_log_name }}"
+# Base directory on the SystemController where the collected subcloud logs are
+# stored, with an inner directory per subcloud.
+subcloud_logs_collect_dir: /home/sysadmin/storage-backend-migration-subclouds

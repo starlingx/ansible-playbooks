@@ -7,8 +7,9 @@
 # The pre_migration_hook validation is not needed here because the hook
 # already runs during init, before pre-checks. If the URI is invalid or
 # unreachable, it will fail there immediately.
-# The post_migration_hook validation is needed here to avoid issues later
-# because the post hook only executes at the end of the migration.
+# The post_migration_hook, validation_hook, pre_rollback_hook and
+# post_rollback_hook validations are needed here to avoid late issues because
+# they run later in the migration.
 
 - name: Validate post_migration_hook URI scheme
   assert:
@@ -26,3 +27,59 @@
   check_mode: yes
   changed_when: false
   when: post_migration_hook is defined
+
+- name: Validate direct-copy LVM rollback and validation hook URIs
+  when:
+    - migration_target == "lvm"
+    - migration_type == "direct_copy"
+  block:
+    - name: Validate validation_hook URI scheme
+      assert:
+        that:
+          - validation_hook is match('^(file|https?)://')
+        fail_msg: >-
+          Invalid validation_hook URI: '{{ validation_hook }}'.
+          Must start with file://, http://, or https://.
+      when: validation_hook is defined
+
+    - name: Validate validation_hook URI is reachable
+      get_url:
+        url: "{{ validation_hook }}"
+        dest: /tmp/validation_hook_check
+      check_mode: yes
+      changed_when: false
+      when: validation_hook is defined
+
+    - name: Validate pre_rollback_hook URI scheme
+      assert:
+        that:
+          - pre_rollback_hook is match('^(file|https?)://')
+        fail_msg: >-
+          Invalid pre_rollback_hook URI: '{{ pre_rollback_hook }}'.
+          Must start with file://, http://, or https://.
+      when: pre_rollback_hook is defined
+
+    - name: Validate pre_rollback_hook URI is reachable
+      get_url:
+        url: "{{ pre_rollback_hook }}"
+        dest: /tmp/pre_rollback_hook_check
+      check_mode: yes
+      changed_when: false
+      when: pre_rollback_hook is defined
+
+    - name: Validate post_rollback_hook URI scheme
+      assert:
+        that:
+          - post_rollback_hook is match('^(file|https?)://')
+        fail_msg: >-
+          Invalid post_rollback_hook URI: '{{ post_rollback_hook }}'.
+          Must start with file://, http://, or https://.
+      when: post_rollback_hook is defined
+
+    - name: Validate post_rollback_hook URI is reachable
+      get_url:
+        url: "{{ post_rollback_hook }}"
+        dest: /tmp/post_rollback_hook_check
+      check_mode: yes
+      changed_when: false
+      when: post_rollback_hook is defined

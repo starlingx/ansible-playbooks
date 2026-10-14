@@ -1,0 +1,45 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ pod_name }}
+  namespace: {{ pod_namespace }}
+  labels:
+    app: {{ pod_app_label }}
+spec:
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+  nodeSelector:
+    kubernetes.io/hostname: "{{ inventory_hostname }}"
+  containers:
+    - name: {{ pod_name }}
+      image: {{ pod_image }}
+      imagePullPolicy: IfNotPresent
+      command: [ "sleep", "infinity" ]
+      volumeMounts:
+{% for pvc_pair in batch_pvc_pairs %}
+        - mountPath: "/src/{{ pvc_pair.dst_name }}"
+          name: src-{{ loop.index0 }}
+          readOnly: true
+        - mountPath: "/dst/{{ pvc_pair.dst_name }}"
+          name: dst-{{ loop.index0 }}
+          readOnly: false
+{% endfor %}
+  imagePullSecrets:
+    - name: {{ migration_target | replace('_', '-') }}-migration-registry-local-secret
+  volumes:
+{% for pvc_pair in batch_pvc_pairs %}
+    - name: src-{{ loop.index0 }}
+      persistentVolumeClaim:
+        claimName: {{ pvc_pair.src_name }}
+    - name: dst-{{ loop.index0 }}
+      persistentVolumeClaim:
+        claimName: {{ pvc_pair.dst_name }}
+{% endfor %}

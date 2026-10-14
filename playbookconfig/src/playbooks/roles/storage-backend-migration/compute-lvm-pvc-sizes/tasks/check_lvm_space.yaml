@@ -109,7 +109,9 @@
       Total target size: {{ pvc_total_target_bytes | int | human_readable(unit='G') }}.
       Available LVM space: {{ lvm_usable_bytes | int | human_readable(unit='G') }}.
       Deficit: {{ (pvc_total_target_bytes | int - lvm_usable_bytes | int) | human_readable(unit='G') }}.
-      {%- if lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'root' %}
+      {%- if lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'root' and migration_type == 'direct_copy' %}
+      Consider freeing space in cgts-vg or reducing PVC data before migration.
+      {%- elif lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'root' %}
       Consider using a custom backup path (-e "backups_path=/path/to/backups") if not already,
       freeing space in cgts-vg, or reducing PVC data before migration.
       {%- else %}

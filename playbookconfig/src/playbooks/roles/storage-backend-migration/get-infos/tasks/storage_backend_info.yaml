@@ -21,8 +21,6 @@
   when: storage_backend is undefined
 
 - name: Set storage_backend
-  become: true
-  become_user: postgres
   set_fact:
     storage_backend: "{{ storage_backend_result.stdout | from_json }}"
     cacheable: true

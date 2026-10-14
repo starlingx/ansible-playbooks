@@ -1,0 +1,323 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This playbook is intended to be run on standalone systems.
+#
+# It provides the capability to migrate the storage backend from Ceph baremetal
+# to LVM (thin/root) with rollback capability. Both backends coexist during
+# migration, allowing validation before committing.
+#
+# To run the playbook, the user would define the required variable settings
+# passing this on the ansible command-line as a parameter.
+#
+#
+# Example command:
+#  ANSIBLE_CONFIG='/usr/share/ansible/stx-ansible/playbooks/vars/storage-backend-migration/ansible.cfg' \
+#  ansible-playbook /usr/share/ansible/stx-ansible/playbooks/storage-backend-migration-lvm-direct-copy.yaml -v
+#
+# To test rollback path:
+#  ansible-playbook ... -e migration_validation_passed=false
+#
+# Optional extra variables:
+#
+# - osd_usage_safety_margin_percent: 0 <= int <= 100
+# - lvm_volume_size_gb: half, all, or a positive integer in GB (LVM thin uses half of available space by default)
+
+- import_playbook: storage-backend-migration-init.yaml
+  vars:
+    migration_type: direct_copy
+    migration_target: lvm
+    lvm_mode: thin
+    lvm_thin_disk: root
+
+- import_playbook: storage-backend-migration-discovery.yaml
+
+- name: Execute pre-checks
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: pre-checks
+    - role: compute-lvm-pvc-sizes
+
+- import_playbook: storage-backend-migration-pre-migration.yaml
+
+- name: Execute pull-images
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: pull-images
+      tags: pull-images
+
+- name: Execute LVM migration with rollback on failure
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  tasks:
+    - block:
+        - name: Fail if a previous rollback did not complete
+          fail:
+            msg: >-
+              A previous rollback was started but did not complete.
+              Resuming rollback.
+          when: rollback_in_progress | default(false) | bool
+
+        - name: Deploy LVM
+          include_role:
+            name: deploy-lvm
+
+        - name: Check LVM deploy
+          include_role:
+            name: deploy-lvm-post-checks
+
+        - name: Disable CDI before PVC operations
+          include_role:
+            name: manage-cdi
+          vars:
+            cdi_action: disable
+            checkpoint_name: manage-cdi-disable
+          when: dv_map_original | default({}) | length > 0
+
+        - name: Rename Ceph PVCs
+          include_role:
+            name: rename-pvcs
+          vars:
+            rename_pvcs_list: >-
+              {% set result = [] -%}
+              {% for pvc in pvc_target_sizes -%}
+              {%   set _ = result.append({'namespace': pvc.namespace, 'from': pvc.name, 'to': pvc.name ~ ceph_pvc_rename_suffix}) -%}
+              {% endfor -%}
+              {{ result }}
+
+        - name: Create LVM PVCs
+          include_role:
+            name: create-lvm-pvcs
+          vars:
+            bytes_per_gib: 1073741824
+            create_lvm_pvcs_list: >-
+              {% set result = [] -%}
+              {% for pvc in pvc_target_sizes -%}
+              {%   set entry = {'namespace': pvc.namespace, 'from': pvc.name ~ ceph_pvc_rename_suffix, 'to': pvc.name} -%}
+              {%   if pvc.needs_upsize -%}
+              {%     set _ = entry.update({'size': ((pvc.target_bytes / bytes_per_gib) | int | string) ~ 'Gi'}) -%}
+              {%   endif -%}
+              {%   set _ = result.append(entry) -%}
+              {% endfor -%}
+              {{ result }}
+
+        - name: Copy PVCs data
+          include_role:
+            name: copy-pvcs-data
+
+        - name: Restore original reclaimPolicy on LVM PVs now that PV is Bound
+          include_role:
+            name: restore-lvm-reclaim-policy
+
+        - name: Patch DataVolumes to use LVM storage class
+          include_role:
+            name: patch-datavolumes
+          vars:
+            patch_dv_target: lvm
+          when: dv_map_original | default({}) | length > 0
+
+        - name: Re-enable CDI before validation
+          include_role:
+            name: manage-cdi
+          vars:
+            cdi_action: enable
+            checkpoint_name: manage-cdi-enable
+          when: dv_map_original | default({}) | length > 0
+
+        - name: Run validate-hook
+          include_role:
+            name: custom-action-hook
+          vars:
+            custom_action_script: "{{ validation_hook }}"
+            phase: validate
+            checkpoint_name: validate-custom-action-hook
+          when: validation_hook is defined
+
+      rescue:
+         # Rollback steps:
+         # 1. Pre-rollback hook
+         # 2. Disable CDI
+         # 3. Remove LVM PVCs
+         # 4. Revert DataVolume patches (storageClassName + accessModes back to Ceph)
+         # 5. Rename Ceph PVCs back (remove suffix)
+         # 6. Re-enable CDI (if it was disabled)
+
+        - name: Clear migration error alarm before rollback
+          script: "{{ role_path_common }}/files/fm_alarm.py --entity-uuid {{ storage_backend.uuid }} --clear error --file-name /home/sysadmin/storage-backend-migration-ansible.log"
+          vars:
+            storage_backend: "{{ hostvars[system.active_controller].storage_backend }}"
+          run_once: true
+          delegate_to: "{{ system.active_controller }}"
+          when: hostvars[system.active_controller].storage_backend is defined
+
+        - name: Run pre-rollback hook
+          include_role:
+            name: custom-action-hook
+          vars:
+            custom_action_script: "{{ pre_rollback_hook }}"
+            phase: pre-rollback
+            checkpoint_name: pre-rollback-custom-action-hook
+          when: pre_rollback_hook is defined
+
+        - name: Mark rollback as in progress
+          set_fact:
+            rollback_in_progress: true
+            cacheable: true
+
+        - name: Create in-progress migration flag for rollback procedure
+          file:
+            path: /run/.storage_backend_migration_in_progress
+            state: touch
+            modification_time: preserve
+            access_time: preserve
+
+        - name: Disable CDI before rollback operations
+          include_role:
+            name: manage-cdi
+          vars:
+            cdi_action: disable
+            checkpoint_name: manage-cdi-disable-rollback
+          when: dv_map_original | default({}) | length > 0
+
+        - name: Remove LVM
+          include_role:
+            name: remove-lvm
+          vars:
+            checkpoint_name: remove-lvm-rollback
+
+        # remove-pvcs filters the target list down to the PVCs whose LIVE
+        # storageClass is the LVM one (remove_pvcs_filter_storage_class), so a
+        # target that is still the ORIGINAL Ceph PVC (failure before rename-pvcs
+        # ran) is never deleted here.
+        - name: Remove LVM PVCs created during migration
+          include_role:
+            name: remove-pvcs
+          vars:
+            checkpoint_name: remove-pvcs-rollback
+            remove_pvcs_filter_storage_class: "{{ lvm_vg_name_cacheable | default('') }}"
+            pvcs_to_remove: >-
+              {{ pvc_target_sizes | default([])
+                 | selectattr('namespace', 'defined')
+                 | selectattr('name', 'defined')
+                 | list }}
+
+        - name: Revert DataVolume storageClass and accessModes to Ceph
+          include_role:
+            name: patch-datavolumes
+          vars:
+            patch_dv_target: ceph
+            checkpoint_name: patch-datavolumes-rollback
+          when: dv_map_original | default({}) | length > 0
+
+        - name: Rename Ceph PVCs back to original names
+          include_role:
+            name: rename-pvcs
+          vars:
+            checkpoint_name: rename-pvcs-rollback
+            rename_pvcs_list: >-
+              {% set result = [] -%}
+              {% for pvc in pvc_target_sizes -%}
+              {%   set _ = result.append({'namespace': pvc.namespace, 'from': pvc.name ~ ceph_pvc_rename_suffix, 'to': pvc.name}) -%}
+              {% endfor -%}
+              {{ result }}
+
+        - name: Re-enable CDI after rollback
+          include_role:
+            name: manage-cdi
+          vars:
+            cdi_action: enable
+            checkpoint_name: manage-cdi-enable-rollback
+          when: dv_map_original | default({}) | length > 0
+
+        - name: Run post-rollback finalization tasks
+          include_tasks: "{{ role_path_common }}/tasks/post_rollback.yaml"
+
+        - name: Fail playbook after rollback
+          fail:
+            msg: |-
+              LVM migration failed and rollback was executed.
+              System has been restored to pre-migration state.
+
+              The migration was aborted by this task:
+                "{{ migration_failed_task_name
+                    | default(ansible_failed_task.name | default('unknown')) }}"
+
+              Original error:
+                {{ migration_failed_error
+                   | default(ansible_failed_result.msg
+                   | default(ansible_failed_result.stderr
+                   | default('see the failed task output above for details'))) }}
+
+              Look for the task named above (before "Mark rollback as in
+              progress") in the log to see the full error context.
+
+- name: Remove unmatched and migrated Ceph PVCs
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: remove-unmatched-pvcs
+    - role: remove-pvcs
+      vars:
+        checkpoint_name: remove-pvcs-commit
+        # On the commit path the Ceph PVCs are the ones that were renamed with
+        # ceph_pvc_rename_suffix during migration; remove those now.
+        pvcs_to_remove: >-
+          {% set result = [] -%}
+          {% for pvc in pvc_target_sizes | default([]) -%}
+          {%   set _ = result.append({'namespace': pvc.namespace, 'name': pvc.name ~ ceph_pvc_rename_suffix}) -%}
+          {% endfor -%}
+          {{ result }}
+
+- name: Remove Ceph baremetal
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: remove-baremetal
+      remove_baremetal_mode: remove_only
+
+- name: Wipe disks on hosts with OSDs (success path)
+  hosts: with_osds
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: wipe-disks
+
+- name: Restart sysinv
+  hosts: active_controller
+  serial: 1
+  gather_facts: false
+  become: true
+
+  pre_tasks:
+    - name: Check host connection before proceed
+      import_role:
+        name: check_connection
+
+  roles:
+    - role: restart-sysinv
+
+- name: Update Puppet
+  hosts: active_controller
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: update-puppet
+
+- import_playbook: storage-backend-migration-post-migration.yaml

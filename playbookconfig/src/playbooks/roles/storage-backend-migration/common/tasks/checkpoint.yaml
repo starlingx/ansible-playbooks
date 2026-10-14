@@ -38,7 +38,7 @@
       when: hostvars[system.active_controller].storage_backend is defined
 
     - name: "Run role {{ role_name }}"
-      include_tasks: "{{ roles_dir_path }}/{{ role_name }}/tasks/run_role.yaml"
+      include_tasks: "{{ role_path }}/tasks/run_role.yaml"
 
     - name: Fail if any host became unreachable during the execution of the role
       fail:

@@ -1,0 +1,45 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Retrieve subcloud migration statuses
+  include_tasks: retrieve_status.yaml
+  loop: "{{ groups['target_group'] | default([]) }}"
+  loop_control:
+    loop_var: reconcile_subcloud
+
+# Download subcloud migration logs. This runs AFTER retrieve_status.yaml has
+# classified every subcloud, so subcloud_reconciliation is fully populated, and
+# the target set is derived straight from that reconciliation result rather than
+# re-probing anything.
+#
+# Only subclouds with migration logs worth troubleshooting need a download.
+# Excluded statuses:
+#   - success: nothing to troubleshoot.
+#   - not-started: the migration never began, so there are no migration logs
+#     to pull.
+#   - unknown: the subcloud stayed unreachable for the whole retry window (the
+#     query rescue path), so it is still unreachable now and has no logs to
+#     fetch; it can only be reported.
+# Included statuses (reachable and actually ran a migration that needs review):
+#   - failed / rolled-back / in-progress.
+#
+# collect_logs.yaml receives the target subcloud via reconcile_collect_subcloud
+# and delegates the stat/fetch to it, so it works even though this whole role
+# runs run_once on localhost.
+- name: Download migration logs from subclouds worth troubleshooting
+  include_tasks: collect_logs.yaml
+  loop: >-
+    {{ subcloud_reconciliation | default([])
+       | rejectattr('status', 'equalto', 'success')
+       | rejectattr('status', 'equalto', 'not-started')
+       | rejectattr('status', 'equalto', 'unknown')
+       | map(attribute='name') | list }}
+  loop_control:
+    loop_var: reconcile_collect_subcloud
+
+- name: Report subcloud migration statuses
+  include_tasks: report.yaml

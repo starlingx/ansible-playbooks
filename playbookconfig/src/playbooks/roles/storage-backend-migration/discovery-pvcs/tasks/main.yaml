@@ -4,4 +4,13 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- include_tasks: "{{ role_path_common }}/tasks/checkpoint.yaml"
+- name: Main execution block
+  block:
+    - include_tasks: "{{ role_path_common }}/tasks/checkpoint.yaml"
+
+  rescue:
+    - include_tasks: "{{ role_path_common }}/tasks/clear_facts_cache.yaml"
+
+    - name: Force play failure after cleanup
+      fail:
+        msg: "Final failure after cache cleanup."

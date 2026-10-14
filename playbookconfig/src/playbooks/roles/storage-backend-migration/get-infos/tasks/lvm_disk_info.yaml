@@ -16,6 +16,19 @@
     cacheable: true
   when: lvm_thin_disk_cached is undefined
 
+- name: Persist lvm_vg_name_cacheable
+  set_fact:
+    lvm_vg_name_cacheable: >-
+      {%- if lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'dedicated' -%}
+        {{ lvm_vg_name }}
+      {%- elif lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'root' -%}
+        cgts-vg
+      {%- elif lvm_mode_cached == 'thick' -%}
+        {{ lvm_vg_name }}
+      {%- endif -%}
+    cacheable: true
+  when: lvm_vg_name_cacheable is undefined
+
 - name: Validate and persist lvm_devices
   block:
     - name: Validate lvm_devices

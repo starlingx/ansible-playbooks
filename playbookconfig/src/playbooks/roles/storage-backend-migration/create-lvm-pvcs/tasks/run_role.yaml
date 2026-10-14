@@ -1,0 +1,42 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Validate create_lvm_pvcs_list
+  assert:
+    that:
+      - create_lvm_pvcs_list is defined
+      - create_lvm_pvcs_list is sequence
+      - create_lvm_pvcs_list is not string
+      - create_lvm_pvcs_list | length > 0
+    fail_msg: "create_lvm_pvcs_list must be a non-empty list of {namespace, from, to}"
+
+- name: "Ensure {{ tmp_workspace }} exist"
+  file:
+    path: "{{ tmp_workspace }}"
+    state: directory
+
+- name: Copy create LVM PVCs script to host
+  copy:
+    src: "{{ role_path }}/files/create_lvm_pvcs.py"
+    dest: "{{ tmp_workspace }}/create_lvm_pvcs.py"
+    mode: "0755"
+
+- name: Create LVM PVCs
+  command: "{{ tmp_workspace }}/create_lvm_pvcs.py --storage-class {{ lvm_vg_name_cacheable }}"
+  args:
+    stdin: |
+      {% for item in create_lvm_pvcs_list %}
+      {{ item.namespace }} {{ item.from }} {{ item.to }} {{ item.size | default('') }}
+      {% endfor %}
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  retries: 5
+  delay: 60
+
+- name: Cleanup temporary workspace folder
+  file:
+    path: "{{ tmp_workspace }}"
+    state: absent

@@ -11,6 +11,7 @@
 common_images:
   ceph_config_helper: registry.local:9001/docker.io/openstackhelm/ceph-config-helper:ubuntu_jammy_18.2.2-1-20240312
   dar_backup: registry.local:9001/docker.io/per2jensen/dar-backup:0.5.26-2
+  rsync: registry.local:9001/docker.io/starlingx/stx-debian-dev:stx.9.0-v1.0.0
 
 rook_specific_images:
   ceph_csi_operator: registry.local:9001/quay.io/cephcsi/ceph-csi-operator:v0.4.1
@@ -28,7 +29,6 @@ rook_specific_images:
     reef: registry.local:9001/quay.io/ceph/ceph:v18.2.8
   kubectl: registry.local:9001/docker.io/bitnamilegacy/kubectl:1.33.4
   stx_ceph_manager: registry.local:9001/docker.io/starlingx/stx-ceph-manager:stx.12.0-v18.2.2-0
-  rsync: registry.local:9001/docker.io/starlingx/stx-debian-dev:stx.9.0-v1.0.0
 
 lvm_specific_images:
   topolvm: registry.local:9001/ghcr.io/topolvm/topolvm-with-sidecar:0.40.1
@@ -99,7 +99,15 @@ lvm_thin_disk: root # root or dedicated
 
 lvm_vg_name: lvm-provisioner
 
+ceph_pvc_rename_suffix: "-migration-ceph"
+
 # Thin pool size when using thin/root mode (shared cgts-vg).
 # Controls how much of cgts-vg free space to allocate for the thin pool.
 # Accepted values: "half", "all", or a positive integer in GB.
 lvm_volume_size_gb: half
+
+#####################
+# Subcloud Settings #
+#####################
+
+unreachable_subclouds_percent: 30

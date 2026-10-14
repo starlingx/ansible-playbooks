@@ -1,0 +1,63 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Load migration result for {{ reconcile_subcloud }}"
+  set_fact:
+    # migration_succeeded: true = success, false = failed, undefined = result
+    # could not be determined (probably unreachable), so it is re-queried from
+    # the subcloud.
+    reconcile_have_result: "{{ hostvars[reconcile_subcloud].migration_succeeded is defined }}"
+    reconcile_succeeded: "{{ hostvars[reconcile_subcloud].migration_succeeded | default(false) | bool }}"
+    reconcile_migration_status: ""
+    reconcile_source_present: true
+    reconcile_reported_status: ""
+
+# A failed migration only needs migration_status when the migration method
+# supports rollback, to tell rolled-back apart from failed.
+- name: "Classify {{ reconcile_subcloud }} from the migration result"
+  set_fact:
+    reconcile_reported_status: "{{ 'success' if reconcile_succeeded | bool else 'failed' }}"
+  when:
+    - reconcile_have_result | bool
+    - reconcile_succeeded | bool or migration_type not in methods_with_rollback
+
+- name: "Reconcile {{ reconcile_subcloud }} from its migration_status"
+  when: reconcile_reported_status | length == 0
+  block:
+    - name: "Read migration_status and source presence from {{ reconcile_subcloud }}"
+      include_tasks: read_capability.yaml
+
+    - name: "Map migration_status of failed {{ reconcile_subcloud }}"
+      set_fact:
+        reconcile_reported_status: >-
+          {{ reconcile_migration_status
+             if reconcile_migration_status in reconcile_valid_migration_statuses
+             else 'failed' }}
+      when: reconcile_have_result | bool
+
+    # Empty migration_status is ambiguous:
+    #   source storage_backend gone + migration_status cleared = success
+    #   source storage_backend still present + empty migration_status = not-started
+    - name: "Map migration_status of unknown {{ reconcile_subcloud }}"
+      set_fact:
+        reconcile_reported_status: >-
+          {{ reconcile_migration_status
+             if reconcile_migration_status in reconcile_valid_migration_statuses
+             else ('not-started'
+                   if reconcile_source_present | bool
+                   else 'success') }}
+      when: not reconcile_have_result | bool
+  rescue:
+    # Read failed. A known failure is still a failure; otherwise we know nothing.
+    - name: "Fall back for {{ reconcile_subcloud }} when the read fails"
+      set_fact:
+        reconcile_reported_status: "{{ 'failed' if reconcile_have_result | bool else 'unknown' }}"
+
+- name: "Append reconciliation entry for {{ reconcile_subcloud }}"
+  set_fact:
+    subcloud_reconciliation: >-
+      {{ subcloud_reconciliation | default([])
+         + [{'name': reconcile_subcloud, 'status': reconcile_reported_status}] }}

@@ -1,0 +1,42 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Wait for {{ reconcile_subcloud }} to become reachable"
+  wait_for_connection:
+    timeout: "{{ reconcile_wait_reachable_timeout | int }}"
+  delegate_to: "{{ reconcile_subcloud }}"
+  when: not reconcile_have_result | bool
+
+- name: "Read migration_status and source backend presence from {{ reconcile_subcloud }}"
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -c
+    "SELECT json_build_object(
+       'migration_status', COALESCE(
+         (SELECT capabilities::jsonb ->> 'migration_status'
+            FROM storage_backend
+            WHERE backend IN ('lvm', 'ceph-rook', 'ceph')
+              AND capabilities::jsonb ->> 'migration_status' IS NOT NULL
+              AND capabilities::jsonb ->> 'migration_status' <> ''
+            ORDER BY CASE backend
+                       WHEN 'lvm' THEN 1
+                       WHEN 'ceph-rook' THEN 2
+                       WHEN 'ceph' THEN 3
+                     END
+            LIMIT 1), ''),
+       'source_present', EXISTS (SELECT 1 FROM storage_backend
+                                 WHERE backend = '{{ source_storage_backend }}'))"
+  register: reconcile_capability_result
+  changed_when: false
+  delegate_to: "{{ reconcile_subcloud }}"
+
+- name: "Set migration_status and source presence for {{ reconcile_subcloud }}"
+  set_fact:
+    reconcile_migration_status: "{{ reconcile_capability.migration_status }}"
+    reconcile_source_present: "{{ reconcile_capability.source_present }}"
+  vars:
+    reconcile_capability: "{{ reconcile_capability_result.stdout | from_json }}"

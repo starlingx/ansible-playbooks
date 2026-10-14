@@ -1,0 +1,63 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Downloads the migration log (storage-backend-migration-ansible.log) from a
+# single subcloud into the SystemController, under a per-subcloud directory:
+#
+#   {{ subcloud_logs_collect_dir }}/<subcloud>/<log-name>
+#
+# The target subcloud is reconcile_collect_subcloud. The whole reconciliation
+# pass runs run_once on localhost, so the stat/fetch are delegated to the
+# subcloud, while the collection directory is created locally.
+#
+# If the subcloud is reachable but has no migration log, the download is skipped
+# gracefully. A failure to reach the subcloud is caught so it never aborts the
+# collection on the remaining subclouds.
+
+- name: "Collect migration log from subcloud {{ reconcile_collect_subcloud }}"
+  block:
+    - name: "Ensure the collection directory exists for {{ reconcile_collect_subcloud }}"
+      file:
+        path: "{{ subcloud_logs_collect_dir }}/{{ reconcile_collect_subcloud }}"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+
+    - name: "Check whether the migration log exists on {{ reconcile_collect_subcloud }}"
+      stat:
+        path: "{{ subcloud_migration_log_src }}"
+      register: subcloud_migration_log_stat
+      delegate_to: "{{ reconcile_collect_subcloud }}"
+
+    - name: "Warn that no migration log was found on {{ reconcile_collect_subcloud }}"
+      debug:
+        msg: >-
+          No migration log found at {{ subcloud_migration_log_src }} on
+          {{ reconcile_collect_subcloud }}; nothing to download.
+      when: not subcloud_migration_log_stat.stat.exists
+
+    - name: "Download migration log from {{ reconcile_collect_subcloud }} to the SystemController"
+      fetch:
+        src: "{{ subcloud_migration_log_src }}"
+        dest: "{{ subcloud_logs_collect_dir }}/{{ reconcile_collect_subcloud }}/{{ subcloud_migration_log_name }}"
+        flat: true
+      delegate_to: "{{ reconcile_collect_subcloud }}"
+      when: subcloud_migration_log_stat.stat.exists
+
+    - name: "Report collected log location for {{ reconcile_collect_subcloud }}"
+      debug:
+        msg: >-
+          Migration log for {{ reconcile_collect_subcloud }} downloaded to
+          {{ subcloud_logs_collect_dir }}/{{ reconcile_collect_subcloud }}/{{ subcloud_migration_log_name }}
+      when: subcloud_migration_log_stat.stat.exists
+
+  rescue:
+    - name: "Could not collect migration log from {{ reconcile_collect_subcloud }}"
+      debug:
+        msg: >-
+          Failed to download the migration log from {{ reconcile_collect_subcloud }}:
+          {{ ansible_failed_result.msg | default('unreachable or unknown error') }}.
+          Continuing with the remaining subclouds.
+      delegate_to: localhost

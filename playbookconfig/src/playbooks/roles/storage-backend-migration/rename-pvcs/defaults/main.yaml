@@ -1,0 +1,9 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# List of PVC rename operations to perform.
+# Each item must have: namespace, from, to
+rename_pvcs_list: []

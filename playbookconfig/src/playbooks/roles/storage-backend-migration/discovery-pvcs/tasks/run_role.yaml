@@ -1,3 +1,9 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
 - name: Debug pvcs_to_migrate var
   debug:
     var: pvcs_to_migrate
@@ -80,40 +86,18 @@
   debug:
     var: rbd_pvcs_unmatched
 
-- name: Abort after discovery of PVCs
-  block:
-    - name: Clear Ansible cache on abort
-      meta: clear_facts
+- name: Validate the expected_pvc_count value
+  assert:
+    that:
+      - expected_pvc_count is defined
+      - expected_pvc_count | int | string == expected_pvc_count | string
+      - expected_pvc_count | int > -1
+    fail_msg: "expected_pvc_count must be defined and a positive integer"
 
-    - name: Remove in-progress migration flag
-      file:
-        path: /run/.storage_backend_migration_in_progress
-        state: absent
-
-    - name: Abort
-      fail:
-        msg: "Discovery complete. Failed automatically; the playbook was triggered remotely."
+- name: Check if the count of PVCs matches the 'expected_pvc_count'
+  vars:
+    total_pvcs: "{{ cephfs_pvcs_raw | default([]) | length + rbd_pvcs_raw | default([]) | length }}"
+  fail:
+    msg: "PVC count mismatch - Expected: {{ expected_pvc_count }}, Counted: {{ total_pvcs }}"
   when:
-    - not confirm_pvcs_regex | default(false) | bool
-    - abort_discovery_if_not_confirm | default(false) | bool
-
-- name: Pause after discovery of PVCs
-  block:
-    - name: Wait for user confirmation
-      pause:
-        prompt: "Discovery completed. Use 'confirm_pvcs_regex=true' to skip this check. Press Enter to continue or Ctrl+C then 'A' to abort"
-  rescue:
-    - name: Clear Ansible cache on abort
-      meta: clear_facts
-
-    - name: Remove in-progress migration flag
-      file:
-        path: /run/.storage_backend_migration_in_progress
-        state: absent
-
-    - name: Abort
-      fail:
-        msg: "Discovery completed. User aborted the playbook."
-  when: not confirm_pvcs_regex | default(false) | bool
-
-
+    - expected_pvc_count | int != total_pvcs | int

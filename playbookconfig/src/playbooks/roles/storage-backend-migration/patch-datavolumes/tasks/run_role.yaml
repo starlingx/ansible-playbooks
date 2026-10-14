@@ -1,0 +1,8 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: "Patch DataVolumes towards {{ patch_dv_target }}"
+  include_tasks: "to_{{ patch_dv_target }}.yaml"
