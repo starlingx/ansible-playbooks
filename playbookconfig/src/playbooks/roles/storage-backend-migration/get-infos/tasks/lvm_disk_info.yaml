@@ -29,6 +29,18 @@
     cacheable: true
   when: lvm_vg_name_cacheable is undefined
 
+# lvm_storage_class_name: "general" for non direct-copy, VG name otherwise.
+- name: Persist lvm_storage_class_name
+  set_fact:
+    lvm_storage_class_name: >-
+      {%- if migration_type != 'direct_copy' -%}
+        general
+      {%- else -%}
+        {{ lvm_vg_name_cacheable }}
+      {%- endif -%}
+    cacheable: true
+  when: lvm_storage_class_name is undefined
+
 - name: Validate and persist lvm_devices
   block:
     - name: Validate lvm_devices

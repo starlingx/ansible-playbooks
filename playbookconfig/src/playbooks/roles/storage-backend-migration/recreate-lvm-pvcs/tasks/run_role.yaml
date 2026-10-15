@@ -16,8 +16,8 @@
     mode: "0755"
   loop: "{{ files_to_copy }}"
 
-- name: "Recover Ceph PVCs as LVM PVCs using storageClass {{ lvm_vg_name_cacheable }}"
-  shell: "{{ tmp_workspace }}/recreate_ceph_as_lvm_pvcs.sh {{ lvm_vg_name_cacheable }}"
+- name: "Recover Ceph PVCs as LVM PVCs using storageClass {{ lvm_storage_class_name }}"
+  shell: "{{ tmp_workspace }}/recreate_ceph_as_lvm_pvcs.sh {{ lvm_storage_class_name }}"
   register: recover_ceph_as_lvm_pvcs_output
   environment:
     KUBECONFIG: "{{ kubeconfig }}"

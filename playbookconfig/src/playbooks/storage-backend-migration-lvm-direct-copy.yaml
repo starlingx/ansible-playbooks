@@ -205,7 +205,7 @@
             name: remove-pvcs
           vars:
             checkpoint_name: remove-pvcs-rollback
-            remove_pvcs_filter_storage_class: "{{ lvm_vg_name_cacheable | default('') }}"
+            remove_pvcs_filter_storage_class: "{{ lvm_storage_class_name | default('') }}"
             pvcs_to_remove: >-
               {{ pvc_target_sizes | default([])
                  | selectattr('namespace', 'defined')

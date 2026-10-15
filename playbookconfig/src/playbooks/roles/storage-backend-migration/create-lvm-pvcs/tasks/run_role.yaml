@@ -25,7 +25,7 @@
     mode: "0755"
 
 - name: Create LVM PVCs
-  command: "{{ tmp_workspace }}/create_lvm_pvcs.py --storage-class {{ lvm_vg_name_cacheable }}"
+  command: "{{ tmp_workspace }}/create_lvm_pvcs.py --storage-class {{ lvm_storage_class_name }}"
   args:
     stdin: |
       {% for item in create_lvm_pvcs_list %}

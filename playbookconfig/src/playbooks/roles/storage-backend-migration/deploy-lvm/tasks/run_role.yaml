@@ -31,6 +31,13 @@
 - name: "Configure {{ lvm_mode_cached }} provisioning for {{ lvm_vg_name_cacheable }}"
   include_tasks: "{{ lvm_mode_cached }}/main.yaml"
 
+- name: Enable general default storage class for lvm-csi
+  command: >
+    system helm-override-update lvm-csi lvm-csi topolvm-system
+    --set enableGeneralSC=true
+  environment: "{{ system_env }}"
+  when: migration_type != "direct_copy"
+
 - name: Apply lvm-csi application
   command: system application-apply lvm-csi
   environment: "{{ system_env }}"

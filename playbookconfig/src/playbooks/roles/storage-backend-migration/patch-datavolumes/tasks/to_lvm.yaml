@@ -12,7 +12,7 @@
 
     kubectl patch datavolume "${DV_NAME}" -n "${DV_NS}" \
       --type merge \
-      -p '{"spec":{"pvc":{"storageClassName":"{{ lvm_vg_name_cacheable }}"}}}'
+      -p '{"spec":{"pvc":{"storageClassName":"{{ lvm_storage_class_name }}"}}}'
 
     # Patch accessModes: RWX -> RWO (TopoLVM does not support RWX)
     MODES=$(kubectl get datavolume "${DV_NAME}" -n "${DV_NS}" \
