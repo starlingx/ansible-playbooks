@@ -52,6 +52,10 @@
       when: migration_target == "lvm"
 
   rescue:
-    - include_tasks: "{{ role_path_common }}/tasks/clear_facts_cache.yaml"
+    - name: Preserve common role path before clearing facts
+      set_fact:
+        common_role_path: "{{ role_path_common }}"
 
-    - include_tasks: "{{ role_path_common }}/tasks/fail_playbook.yaml"
+    - include_tasks: "{{ common_role_path }}/tasks/clear_facts_cache.yaml"
+
+    - include_tasks: "{{ common_role_path }}/tasks/fail_playbook.yaml"

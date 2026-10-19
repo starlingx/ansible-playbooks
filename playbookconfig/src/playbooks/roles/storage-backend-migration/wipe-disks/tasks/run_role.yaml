@@ -20,3 +20,12 @@
   loop: "{{ wipe_osds_output.results }}"
   loop_control:
     label: "OSD id = {{ item.item.osd_id }}"
+
+- name: Create GPT label on LVM disks that will be partitioned
+  command: parted -s {{ item }} mklabel gpt
+  loop: >-
+    {{ lvm_devices_cached | default([])
+       | rejectattr('partitions', 'equalto', [])
+       | map(attribute='device') | list }}
+  loop_control:
+    label: "{{ item }}"

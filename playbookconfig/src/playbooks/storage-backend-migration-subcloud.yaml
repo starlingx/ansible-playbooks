@@ -53,7 +53,16 @@
 # - allow_out_of_sync: bool
 # - lvm_mode: thick or thin
 # - lvm_thin_disk: root or dedicated
-# - lvm_devices: list of device paths (e.g., ["/dev/disk/by-path/..."]). Defaults to all Ceph devices.
+# - lvm_devices: list of disks to use for LVM. Defaults to all Ceph devices.
+#     Each entry MUST be an object with a 'device' key and an optional
+#     'partitions' list, e.g.
+#           - device: /dev/disk/by-path/pci-0000:00:1f.2-ata-2
+#             partitions:
+#               - size_gib: 100
+#               - size_gib: 50
+#           - device: /dev/disk/by-path/pci-0000:00:1f.2-ata-3   # whole disk
+#     Omitting 'partitions' uses the whole disk. N partitions per disk are
+#     supported
 # - lvm_volume_size_gb: half, all, or a positive integer in GB (LVM thin uses half of available space by default)
 # - lvm_vg_name: string
 # - pvcs_to_migrate: list of PVC names to migrate (selective migration)
@@ -281,7 +290,8 @@
           assert:
             that:
               - lvm_devices is sequence and lvm_devices is not string
-            fail_msg: "lvm_devices must be a list"
+              - lvm_devices | rejectattr('device', 'defined') | list | length == 0
+            fail_msg: "lvm_devices must be a list of objects, each with a 'device' key"
           when: lvm_devices is defined
 
         - name: Validate lvm_volume_size_gb

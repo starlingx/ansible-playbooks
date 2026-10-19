@@ -15,13 +15,13 @@
       and pass the target device_path values to lvm_devices.
     success_msg: "LVM selected devices exist in inventory."
   vars:
-    invalid_devices: "{{ lvm_devices_cached | difference(all_disks_db | map(attribute='device_path') | list) }}"
+    invalid_devices: "{{ lvm_pv_devices | difference(all_disks_db | map(attribute='device_path') | list) }}"
 
 - name: Compute non-Ceph disks selected for LVM
   set_fact:
     non_ceph_disks: >-
       {{ all_disks_db
-         | selectattr('device_path', 'in', lvm_devices_cached)
+         | selectattr('device_path', 'in', lvm_pv_devices)
          | rejectattr('device_path', 'in', ceph_device_paths)
          | list }}
   vars:
@@ -33,3 +33,22 @@
   loop_control:
     loop_var: non_ceph_disk
     label: "{{ non_ceph_disk.device_path }}"
+
+- name: Compute disks selected for partitioning
+  set_fact:
+    partitioned_disks: >-
+      {{ all_disks_db
+         | selectattr('device_path', 'in', partitioned_device_paths)
+         | list }}
+  vars:
+    partitioned_device_paths: >-
+      {{ lvm_devices_cached
+         | rejectattr('partitions', 'equalto', [])
+         | map(attribute='device') | list }}
+
+- name: Validate disks selected for partitioning
+  include_tasks: validate_partitioned_disk.yaml
+  loop: "{{ partitioned_disks }}"
+  loop_control:
+    loop_var: partitioned_disk
+    label: "{{ partitioned_disk.device_path }}"

@@ -41,6 +41,18 @@ all:
         subcloud1:
           pvcs_to_migrate:
             - pvc-cephfs.*
+          # lvm_devices accepts whole disks and/or disks split into partitions.
+          # Each entry MUST be an object with a 'device' key. Omit 'partitions'
+          # to use the whole disk. All disks and partitions aggregate as PVs into
+          # a single VG / single StorageClass (dedicated-disk modes only).
+          lvm_devices:
+            # Partitioned disk: creates 2 partitions used as PVs in the single VG
+            - device: /dev/disk/by-path/pci-0000:00:1f.2-ata-2
+              partitions:
+                - size_gib: 100
+                - size_gib: 50
+            # Whole disk (no partitions): used entirely as one PV
+            - device: /dev/disk/by-path/pci-0000:00:1f.2-ata-3
         # Specific vars to this subcloud comes here
         subcloud2:
           pvcs_to_migrate:

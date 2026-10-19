@@ -51,15 +51,52 @@
         fail_msg: "lvm_devices must be a non-empty list"
       when: lvm_devices is defined
 
-    - name: Persist lvm_devices_cached
+    - name: Validate lvm_devices entry format
+      assert:
+        that:
+          - item is mapping and item.device is defined
+          - (item.partitions is not defined) or
+            (item.partitions is sequence and item.partitions is not string and item.partitions | length > 0)
+          - (item.partitions is not defined) or
+            (item.partitions | selectattr('size_gib', 'defined') | list | length == item.partitions | length)
+          - (item.partitions is not defined) or
+            (item.partitions | map(attribute='size_gib') | map('int') | select('le', 0) | list | length == 0)
+        fail_msg: >-
+          Each lvm_devices entry must be an object with a 'device' key and an
+          optional non-empty 'partitions' list whose items each have a positive
+          integer 'size_gib'. Offending entry: {{ item }}
+      loop: "{{ lvm_devices }}"
+      when: lvm_devices is defined
+
+    - name: Persist lvm_devices_cached with informed disks/partition or ceph devices
       set_fact:
-        lvm_devices_cached: "{{ lvm_devices | default(ceph_devices) | map('trim') | list }}"
+        lvm_devices_cached: >-
+          {%- set out = [] -%}
+          {%- for d in (lvm_devices | default(ceph_devices)) -%}
+          {%-   set _ = out.append({
+                  'device': d.device,
+                  'partitions': (d.partitions | default([])) | sort(attribute='size_gib', reverse=true) | list
+                }) -%}
+          {%- endfor -%}
+          {{ out }}
         cacheable: true
       vars:
-        ceph_devices: "{{ ceph_disks_by_host_db[inventory_hostname] | map(attribute='disk_device_path') | list }}"
+        ceph_devices: "{{ ceph_disks_by_host_db[inventory_hostname]
+                          | map(attribute='disk_device_path')
+                          | map('community.general.dict_kv', 'device')
+                          | list }}"
   when:
     - lvm_mode_cached == 'thick' or (lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'dedicated')
     - lvm_devices_cached is undefined
+
+# Flat list of disk device_paths derived from lvm_devices_cached, used by the
+# existence/non-Ceph pre-checks. Derived OUTSIDE the cached block above so it is
+# always available on resume (when lvm_devices_cached is already cached and the
+# block is skipped), not only on the first run that builds the cache.
+- name: Persist lvm_pv_devices
+  set_fact:
+    lvm_pv_devices: "{{ lvm_devices_cached | map(attribute='device') | list }}"
+  when: lvm_devices_cached is defined
 
 - name: Show lvm_devices_cached
   debug:
@@ -80,6 +117,7 @@
             'foripvid', d.foripvid,
             'capabilities', d.capabilities,
             'size_mib', d.size_mib,
+            'available_mib', d.available_mib,
             'partition_count', COALESCE(p.part_count, 0)
           )
         )

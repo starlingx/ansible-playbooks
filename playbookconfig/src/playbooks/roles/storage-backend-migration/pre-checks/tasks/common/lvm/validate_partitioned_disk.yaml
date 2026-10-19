@@ -1,0 +1,33 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+- name: Validate requested partitions fit disk {{ partitioned_disk.device_path }}
+  vars:
+    _spec: "{{ lvm_devices_cached
+               | selectattr('device', 'equalto', partitioned_disk.device_path)
+               | list | first | default({}) }}"
+    _req_parts: "{{ _spec.partitions | default([]) }}"
+    _req_mib_sum: "{{ _req_parts | map(attribute='size_gib') | map('int') | sum * 1024 }}"
+    _req_gib_sum: "{{ _req_parts | map(attribute='size_gib') | map('int') | sum }}"
+    _req_bytes_sum: "{{ _req_mib_sum | int * 1024 * 1024 }}"
+    _ceph_device_paths: "{{ ceph_disks_by_host_db[inventory_hostname]
+                            | map(attribute='disk_device_path') | list }}"
+    _available_bytes_in_disk: >-
+      {{ (partitioned_disk.size_mib | int * 1024 * 1024) - (lvm_overhead_per_pv_bytes | int)
+         if partitioned_disk.device_path in _ceph_device_paths
+         else (partitioned_disk.available_mib | int * 1024 * 1024) }}
+    _available_gib_in_disk_rounded: "{{ (_available_bytes_in_disk
+                                        | int / 1024 / 1024 / 1024) | round(3, 'floor') }}"
+  block:
+    - name: Fail if requested partitions exceed disk {{ partitioned_disk.device_path }} available space
+      fail:
+        msg: >-
+          Requested partitions on {{ partitioned_disk.device_path }} total
+          {{ _req_gib_sum }} GiB, which does not fit the
+          {{ _available_gib_in_disk_rounded }} GiB
+          available on the disk.
+      when: _req_bytes_sum | int > _available_bytes_in_disk | int
+  when: _req_parts | length > 0

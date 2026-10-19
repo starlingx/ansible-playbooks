@@ -12,18 +12,33 @@
 - name: Compute LVM space from selected disks
   set_fact:
     lvm_total_raw: "{{ total_raw }}"
-    lvm_metadata_overhead: "{{ selected_disks | length * lvm_overhead_per_pv_bytes | int }}"
+    # One PV metadata overhead per PV: each partition is a PV, each whole disk is a PV.
+    lvm_metadata_overhead: "{{ lvm_pv_count | int * lvm_overhead_per_pv_bytes | int }}"
     lvm_thin_vg_reserved: "{{ (total_raw | int * lvm_thin_vg_reserved_percent | int / 100) | int if lvm_mode_cached == 'thin' else 0 }}"
     lvm_thin_metadata: "{{ (total_raw | int * lvm_thin_metadata_percent | float / 100) | int if lvm_mode_cached == 'thin' else 0 }}"
     lvm_usable_bytes: >-
       {{ (total_raw | int)
-         - (selected_disks | length * lvm_overhead_per_pv_bytes | int)
+         - (lvm_pv_count | int * lvm_overhead_per_pv_bytes | int)
          - (lvm_spare | int)
          - (((total_raw | int * lvm_thin_vg_reserved_percent | int / 100) | int) if lvm_mode_cached == 'thin' else 0)
          - (((total_raw | int * lvm_thin_metadata_percent | float / 100) | int) if lvm_mode_cached == 'thin' else 0) }}
   vars:
-    selected_disks: "{{ all_disks_db | selectattr('device_path', 'in', lvm_devices_cached) | list }}"
-    total_raw: "{{ selected_disks | map(attribute='size_mib') | map('int') | sum * 1024 * 1024 }}"
+    # Whole-disk entries count the full disk size_mib; partitioned entries count the
+    # SUM of their requested partition sizes (not the whole disk).
+    whole_disk_specs: "{{ lvm_devices_cached | selectattr('partitions', 'equalto', []) | list }}"
+    part_specs: "{{ lvm_devices_cached | rejectattr('partitions', 'equalto', []) | list }}"
+    whole_disk_devices: "{{ whole_disk_specs | map(attribute='device') | list }}"
+    whole_disk_raw: >-
+      {{ (all_disks_db | selectattr('device_path', 'in', whole_disk_devices)
+          | map(attribute='size_mib') | map('int') | sum) * 1024 * 1024 }}
+    part_raw: >-
+      {{ (part_specs | map(attribute='partitions') | map('map', attribute='size_gib')
+          | map('map', 'int') | map('sum') | sum) * 1024 * 1024 * 1024 }}
+    total_raw: "{{ (whole_disk_raw | int) + (part_raw | int) }}"
+    # One PV per whole disk, plus one PV per requested partition.
+    lvm_pv_count: >-
+      {{ (whole_disk_specs | length) +
+         (part_specs | map(attribute='partitions') | map('length') | map('int') | sum) }}
   when: lvm_mode_cached == 'thick' or (lvm_mode_cached == 'thin' and lvm_thin_disk_cached == 'dedicated')
 
 - name: Compute LVM space from thin/root pool

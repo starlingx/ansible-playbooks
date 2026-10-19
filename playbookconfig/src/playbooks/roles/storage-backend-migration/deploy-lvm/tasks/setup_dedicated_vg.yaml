@@ -15,7 +15,94 @@
     - "'already present' not in (lvg_add_result.stderr | default(''))"
   changed_when: lvg_add_result.rc == 0
 
-- name: Add disks as LVM PVs
+- name: Build indexed partition targets
+  set_fact:
+    lvm_partition_targets: >-
+      {{ lvm_partition_targets | default([]) +
+         (range(item.partitions | length)
+          | map('community.general.dict_kv', 'index')
+          | zip(item.partitions) | map('combine')
+          | map('combine', {'device': item.device})
+          | list) }}
+  loop: "{{ lvm_devices_cached | rejectattr('partitions', 'equalto', []) | list }}"
+  loop_control:
+    label: "{{ item.device }}"
+
+- name: Create partitions workspace
+  file:
+    path: "{{ tmp_path }}/deploy-lvm"
+    state: directory
+    mode: "0755"
+
+- name: Copy create_tag_partition.sh to workspace
+  copy:
+    src: "{{ role_path }}/files/create_tag_partition.sh"
+    dest: "{{ tmp_path }}/deploy-lvm/create_tag_partition.sh"
+    mode: "0755"
+
+# A wiped disk only gets its available_mib refreshed by sysinv-agent once a
+# partition table exists, so host-disk-partition-add fails while it is still 0.
+- name: Wait for sysinv to report available space on partitioned disks
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -c
+    "SELECT d.available_mib FROM i_idisk d
+     JOIN i_host h ON d.forihostid = h.id
+     WHERE h.hostname = '{{ inventory_hostname }}'
+       AND d.device_path = '{{ item }}'"
+  register: disk_available_check
+  until: (disk_available_check.stdout | trim | default('0')) | int > 0
+  retries: 60
+  delay: 10
+  changed_when: false
+  loop: "{{ lvm_partition_targets | default([]) | map(attribute='device') | unique | list }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Create and tag partitions for partitioned disks
+  command: "{{ tmp_path }}/deploy-lvm/create_tag_partition.sh"
+  environment: "{{ system_env | combine({'MIGRATION_HOST': inventory_hostname, 'MIGRATION_DEVICE': item.device, 'MIGRATION_SIZE_GIB': item.size_gib | string, 'MIGRATION_INDEX': item.index | string}) }}"
+  register: partition_add_result
+  changed_when: "'slot already present' not in partition_add_result.stdout"
+  loop: "{{ lvm_partition_targets | default([]) }}"
+  loop_control:
+    label: "{{ item.device }} #{{ item.index }} ({{ item.size_gib }} GiB)"
+
+- name: Read device_path of each created partition
+  become: true
+  become_user: postgres
+  command: >
+    psql -d sysinv -t -A -c
+    "SELECT p.device_path FROM partition p
+     JOIN i_idisk d ON p.idisk_id = d.id
+     JOIN i_host h ON p.forihostid = h.id
+     WHERE h.hostname = '{{ inventory_hostname }}'
+       AND d.device_path = '{{ item.device }}'
+       AND p.capabilities::jsonb->>'migration_device' = '{{ item.device }}'
+       AND p.capabilities::jsonb->>'migration_index' = '{{ item.index | string }}'"
+  register: part_device_path_query
+  changed_when: false
+  loop: "{{ lvm_partition_targets | default([]) }}"
+  loop_control:
+    label: "{{ item.device }} #{{ item.index }}"
+
+- name: Register created partition device_paths from DB
+  set_fact:
+    created_pv_paths: >-
+      {{ part_device_path_query.results | default([])
+         | map(attribute='stdout') | map('trim')
+         | select('string') | select | list }}
+  when: part_device_path_query is defined and part_device_path_query.results is defined
+
+- name: Build the list of PV targets
+  set_fact:
+    lvm_pv_add_targets: >-
+      {{ (lvm_devices_cached | selectattr('partitions', 'equalto', [])
+          | map(attribute='device') | list)
+         + (created_pv_paths | default([])) }}
+
+- name: Add PVs to {{ lvm_vg_name_cacheable }}
   command: >
     system host-pv-add {{ inventory_hostname }} {{ lvm_vg_name_cacheable }} {{ item }}
   environment: "{{ system_env }}"
@@ -23,8 +110,9 @@
   failed_when:
     - pv_add_result.rc != 0
     - "'already assigned' not in (pv_add_result.stderr | default(''))"
+    - "'already in use by another physical volume' not in (pv_add_result.stderr | default(''))"
   changed_when: pv_add_result.rc == 0
-  loop: "{{ lvm_devices_cached }}"
+  loop: "{{ lvm_pv_add_targets }}"
 
 - name: "Wait for all PVs in {{ lvm_vg_name_cacheable }} to reach provisioned state"
   become: true
@@ -33,7 +121,7 @@
     psql -d sysinv -t -A -c
     "SELECT COUNT(*) FROM i_pv WHERE lvm_vg_name = '{{ lvm_vg_name_cacheable }}' AND pv_state = 'provisioned'"
   register: pv_provisioned_count
-  until: pv_provisioned_count.stdout | int == lvm_devices_cached | length
+  until: pv_provisioned_count.stdout | int == lvm_pv_add_targets | length
   retries: 60
   delay: 10
   changed_when: false
