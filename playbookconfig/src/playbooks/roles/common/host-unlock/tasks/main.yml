@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2021, 2023, 2025 Wind River Systems, Inc.
+# Copyright (c) 2021, 2023, 2025-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -18,7 +18,7 @@
 - name: Set default values for unlock facts
   set_fact:
     wait_for_unlock: "{{ wait_for_unlock|default(false) }}"
-    shutdown_timeout: "{{ shutdown_timeout|default(180) }}"
+    shutdown_timeout: "{{ shutdown_timeout|default(300) }}"
     unlock_timeout: "{{ unlock_timeout|default(900) }}"
     alarm_check_timeout: "{{ alarm_check_timeout|default(180) }}"
 
@@ -35,13 +35,15 @@
   # system has rebooted by maintenance before executing the next task. The 3 minutes
   # timeout should be enough as maintenance will force reboot if it does not take place within
   # 2 minutes.
+  # wait_for counts 'delay' within 'timeout', so timeout is set to shutdown_timeout + 5
+  # to give the full 300s detection window after the 5s initial delay (polls 5s to 305s).
   - name: Wait up to {{ shutdown_timeout }} seconds for ssh port to become unavailable for {{ inventory_hostname }}
     local_action:
       module: wait_for
         port={{ ansible_port }}
         host={{ ansible_host }}
         delay=5
-        timeout={{ shutdown_timeout }}
+        timeout={{ shutdown_timeout + 5 }}
         state=stopped
 
   - name: Wait up to {{ unlock_timeout }} seconds for ssh port to become available for {{ inventory_hostname }}
