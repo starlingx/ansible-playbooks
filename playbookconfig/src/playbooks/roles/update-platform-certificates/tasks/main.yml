@@ -125,6 +125,7 @@
         - { name: system-openldap-local-certificate, namespace: deployment, type: certificate }
         - { name: system-registry-local-certificate, namespace: deployment, type: certificate }
         - { name: system-restapi-gui-certificate, namespace: deployment, type: certificate }
+        - { name: system-openbao-local-certificate, namespace: deployment, type: certificate }
 
     - name: Remove OIDC certificate if we are recreating it
       include_role:
@@ -407,6 +408,11 @@
           secret: system-openldap-local-certificate,
           namespace: deployment,
           should_run: "{{ install_system_open_ldap_certificate }}"
+        }
+        - {
+          secret: system-openbao-local-certificate,
+          namespace: deployment,
+          should_run: "{{ install_system_openbao_certificate }}"
         }
 
   when: mode == 'check'
