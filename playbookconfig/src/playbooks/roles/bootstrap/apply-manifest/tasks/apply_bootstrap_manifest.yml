@@ -361,6 +361,75 @@
 
   when: mode == 'restore'
 
+# Apply the openbao bootstrap manifest before the platform bootstrap
+# manifest, so openbao is running before the platform services.
+- block:
+
+  # Avoid writing secrets to unencrypted disk:
+  - name: Verify LUKS filesystem is mounted before openbao bootstrap
+    command: /usr/bin/mountpoint -q {{ luks_fs_dir }}
+    changed_when: false
+
+  - name: Set openbao puppet log dir
+    set_fact:
+      openbao_puppet_log_dir: "/var/log/puppet/{{ now(fmt='%Y-%m-%d-%H-%M-%S') }}_bootstrap_openbao"
+
+  - name: Create openbao puppet dir with permissions
+    ansible.builtin.file:
+      path: "{{ openbao_puppet_log_dir }}"
+      state: directory
+      mode: '0700'
+      owner: root
+      group: root
+
+  - name: Create openbao puppet log with permissions
+    ansible.builtin.file:
+      path: "{{ openbao_puppet_log_dir }}/puppet.log"
+      state: touch
+      mode: '0600'
+      owner: root
+      group: root
+      modification_time: preserve
+      access_time: preserve
+
+  - name: Applying openbao bootstrap manifest (bao-first, before platform)
+    shell: |
+      set -o pipefail
+      cd /tmp
+      puppet apply --trace --detailed-exitcodes \
+        --modulepath /usr/share/puppet/modules:/usr/share/openstack-puppet/modules \
+        -e "class { '::platform::openbao::params':
+              service_enabled => {{ bootstrap_start_openbao | default(false) | bool | lower }},
+              luks_fs_mount   => '{{ luks_fs_dir | regex_replace('/$', '') }}' }
+            include ::platform::openbao::bootstrap" \
+        < /dev/null 2>&1 \
+        | awk '{ system("date -u +%FT%T.%3N | tr \"\n\" \" \""); print $0; fflush(); }' \
+        > {{ openbao_puppet_log_dir }}/puppet.log
+    args:
+      executable: /bin/bash
+    register: openbao_bootstrap_manifest
+    environment:
+      LC_ALL: "en_US.UTF-8"
+    failed_when: false
+
+  # puppet apply --detailed-exitcodes:
+  #   0 = unchanged (success),
+  #   2 = changes applied (success),
+  #   4 = failures,
+  #   6 = changes + failures.
+  # 'set -o pipefail' makes the registered rc puppet's exit code, not
+  # awk's, so a real puppet failure is caught here rather than masked
+  # by the pipe.
+  - name: Fail if openbao bootstrap manifest apply returns an error
+    fail:
+      msg: >-
+        Failed to apply openbao bootstrap manifest before the platform
+        apply. See {{ openbao_puppet_log_dir }}/puppet.log for details.
+    when:
+      - openbao_bootstrap_manifest.rc is defined
+      - openbao_bootstrap_manifest.rc not in [0, 2]
+  when: bootstrap_configure_openbao
+
 - name: Applying puppet bootstrap manifest
   command: >
     /usr/local/bin/puppet-manifest-apply.sh

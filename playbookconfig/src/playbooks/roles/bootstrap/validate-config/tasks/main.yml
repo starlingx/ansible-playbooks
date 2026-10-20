@@ -252,6 +252,12 @@
     when: (dns_servers | length == 0) or (dns_servers | length > 3)
 
 
+# Openbao configure validation
+- name: Validate developer overrides for openbao service
+  fail:
+    msg: "bootstrap_start_openbao requires bootstrap_configure_openbao"
+  when: bootstrap_start_openbao and not bootstrap_configure_openbao
+
 # DNS servers config validation
 - name: Check format of DNS server IP(s) (Bullseye)
   debug:
