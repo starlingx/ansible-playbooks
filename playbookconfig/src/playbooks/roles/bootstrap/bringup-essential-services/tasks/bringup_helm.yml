@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2019-2024 Wind River Systems, Inc.
+# Copyright (c) 2019-2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -140,15 +140,16 @@
     - "{{ helm_repo_name_platform }}"
 
 - name: Stop lighttpd
-  systemd:
+  ansible.builtin.systemd:
     name: lighttpd
     state: stopped
   retries: 3
   delay: 15
 
 - name: Disable lighttpd
-  # Systemd module does not support disabled state. Resort to command
-  command: systemctl disable lighttpd
+  ansible.builtin.systemd:
+    name: lighttpd
+    enabled: false
 
 - name: Verify systemctl running without timeout
   import_role:
@@ -159,14 +160,16 @@
   command: mount -o bind -t ext4 {{ source_helm_bind_dir }} {{ target_helm_bind_dir }}
 
 - name: Enable lighttpd
-  command: systemctl enable lighttpd
+  ansible.builtin.systemd:
+    name: lighttpd
+    enabled: true
 
 - name: Verify systemctl running without timeout
   import_role:
     name: common/verify-systemctl-running
 
 - name: Restart lighttpd for Helm
-  systemd:
+  ansible.builtin.systemd:
     name: lighttpd
     state: restarted
   retries: 3
@@ -177,7 +180,7 @@
     name: common/verify-systemctl-running
 
 - name: Start kubelet
-  systemd:
+  ansible.builtin.systemd:
     name: kubelet
     state: started
   retries: 3
