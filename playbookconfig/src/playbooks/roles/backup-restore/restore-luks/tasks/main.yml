@@ -36,3 +36,21 @@
     {{ archive_luks_fs_path }}
   when: bkp_has_luks_config.rc is defined and
         bkp_has_luks_config.rc == 0
+
+# Ward the host OpenBao puppet classes off during restore. OpenBao
+# backup-and-restore support is still in development
+- name: Ensure OpenBao LUKS directory exists for the restore ward
+  file:
+    path: "{{ luks_fs_path }}/controller/.openbao"
+    state: directory
+    mode: '0755'
+  when: bkp_has_luks_config.rc is defined and
+        bkp_has_luks_config.rc == 0
+
+- name: Ward host OpenBao puppet off on restore (bao B&R support pending)
+  file:
+    path: "{{ luks_fs_path }}/controller/.openbao/.disabled"
+    state: touch
+    mode: '0644'
+  when: bkp_has_luks_config.rc is defined and
+        bkp_has_luks_config.rc == 0
