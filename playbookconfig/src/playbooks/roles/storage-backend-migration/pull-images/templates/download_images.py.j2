@@ -9,13 +9,13 @@ from sysinv.common import constants
 from sysinv.common import utils
 from sysinv.conductor import kube_app
 from sysinv.db import api
-import functools
 import eventlet
 
 eventlet.monkey_patch()
 
 import logging
 import sys
+import time
 import warnings
 
 # To supress SQLAlchemy warnings
@@ -47,7 +47,34 @@ _docker = kube_app.DockerHelper(dbapi)
 
 from sysinv.conductor import kube_app
 
-rpc_app = dbapi.kube_app_get(constants.HELM_APP_PLATFORM)
+DB_RETRIES = {{ db_connect_retries | default(12) | int }}
+DB_RETRY_DELAY = {{ db_connect_retry_delay | default(10) | int }}
+
+IMAGE_RETRIES = {{ image_download_retries | default(5) | int }}
+IMAGE_RETRY_DELAY = {{ image_download_retry_delay | default(15) | int }}
+
+
+def _kube_app_get_with_retry(name, retries=DB_RETRIES, delay=DB_RETRY_DELAY):
+    last_exc = None
+    for attempt in range(1, retries + 1):
+        try:
+            return dbapi.kube_app_get(name)
+        except Exception as exc:
+            # DB not reachable yet (DNS/connection); wait and retry.
+            last_exc = exc
+            logger.warning(
+                "sysinv DB not reachable yet (attempt %d/%d): %s",
+                attempt, retries, exc)
+            _file_handler.flush()
+            if attempt < retries:
+                time.sleep(delay)
+    logger.error(
+        "Giving up connecting to sysinv DB after %d attempts", retries)
+    _file_handler.flush()
+    raise last_exc
+
+
+rpc_app = _kube_app_get_with_retry(constants.HELM_APP_PLATFORM)
 
 app = kube_app.AppOperator.Application(rpc_app)
 
@@ -57,12 +84,45 @@ registries_info = _docker.retrieve_specified_registries()
 local_registry_auth = utils.get_local_docker_registry_auth()
 docker_registry_server = constants.DOCKER_REGISTRY_SERVER
 
+
+def _download_an_image_with_retry(image,
+                                  retries=IMAGE_RETRIES,
+                                  delay=IMAGE_RETRY_DELAY):
+    """Download a single image, retrying on transient failures.
+
+    download_an_image() can fail either by returning (tag, False) or by
+    raising (e.g. 'crictl images' returning a non-zero status while the
+    container runtime is temporarily unavailable). Both cases are retried
+    so a transient hiccup does not abort the whole migration. The return
+    contract (tag, success) is preserved for the caller.
+    """
+    tag = image
+    for attempt in range(1, retries + 1):
+        try:
+            tag, success = _docker.download_an_image(
+                app, registries_info, image)
+            if success:
+                if attempt > 1:
+                    logger.info(
+                        "Image downloaded on attempt %d/%d: %s",
+                        attempt, retries, tag)
+                return tag, True
+            logger.warning(
+                "Image download returned failure (attempt %d/%d): %s",
+                attempt, retries, tag)
+        except Exception as exc:
+            logger.warning(
+                "Image download raised (attempt %d/%d) for %s: %s",
+                attempt, retries, tag, exc)
+        _file_handler.flush()
+        if attempt < retries:
+            time.sleep(delay)
+    return tag, False
+
+
 pool = eventlet.greenpool.GreenPool(size={{ max_parallel_download | int }})
-for tag, success in pool.imap(
-    functools.partial(_docker.download_an_image,
-                      app,
-                      registries_info),
-                      images_to_download):
+for tag, success in pool.imap(_download_an_image_with_retry,
+                              images_to_download):
     if success:
         logger.info("Image downloaded successfully: %s", tag)
         _file_handler.flush()
