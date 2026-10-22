@@ -7,6 +7,9 @@
 MODE=$1
 LVM_CFG="--config 'devices { filter=[\"a|.*|\"] global_filter=[\"a|.*|\"] }'"
 
+# Platform volume group that must be preserved (reused, not wiped).
+readonly PLATFORM_VG="cgts-vg"
+
 ########################################################################
 # Name      : log
 # Purpose   : Print log message
@@ -37,6 +40,57 @@ resolve_disk() {
 }
 
 ########################################################################
+# Name      : wipe_vg_lvs
+# Purpose   : For each LV (excluding the shared thin pool) it activates the LV,
+#             wipes its signatures, then applies the requested final
+#             action. The thin pool itself is always skipped here; callers
+#             that need it removed do so separately.
+# Parameters: \$1 vg_name      - Volume Group Name
+#             \$2 final_action - "deactivate" (lvchange -an) or
+#                                "remove" (lvremove -f)
+#             \$3 list_mode    - "tagged" (only lvm-csi / topolvm tagged
+#                                LVs) or "all" (every LV in the VG)
+# Globals    : Sets LVS to the discovered LV list (used by callers' logs).
+# Return     : Does not return
+########################################################################
+wipe_vg_lvs() {
+    local vg_name=${1}
+    local final_action=${2}
+    local list_mode=${3}
+
+    # Search for Logical Volumes on the VG
+    if [ "$list_mode" = "tagged" ]; then
+        LVS=$(eval lvs $LVM_CFG "$vg_name" -o lv_path --select 'lv_tags=lvm-csi || lv_tags=topolvm' --noheadings 2>/dev/null | xargs)
+    else
+        LVS=$(eval lvs $LVM_CFG "$vg_name" -o lv_path --noheadings 2>/dev/null | xargs)
+    fi
+
+    if [ -n "$LVS" ]; then
+        for lv in $LVS; do
+            # Skip if LV path contains the standard pool name
+            if [[ "$lv" =~ lvmcsi-pool ]]; then
+                continue
+            fi
+
+            # Activate LV
+            eval lvchange $LVM_CFG -ay "$lv" >/dev/null 2>&1
+
+            # Wiping LV
+            if ! wipefs -a "$lv" >/dev/null 2>&1; then
+                log "ERROR" "Failed to wipe LV $lv"
+            fi
+
+            # Apply the requested final action
+            if [ "$final_action" = "remove" ]; then
+                eval lvremove $LVM_CFG -f "$lv" >/dev/null 2>&1
+            else
+                eval lvchange $LVM_CFG -an "$lv" >/dev/null 2>&1
+            fi
+        done
+    fi
+}
+
+########################################################################
 # Name      : wipe_lv
 # Purpose   : Wipe all LVs from a VG without removing the VG or LV
 #             structure
@@ -46,31 +100,23 @@ resolve_disk() {
 wipe_lv() {
     local vg_name=${1}
 
+    # Skip cgts-vg; the platform VG is preserved and only its tagged LVs are
+    # wiped
+    if [ "$vg_name" = "$PLATFORM_VG" ]; then
+        wipe_vg_lvs "$vg_name" deactivate tagged
+        log "INFO" "Found LVs in ${vg_name}: ${LVS[*]}"
+        log "INFO" "Successfully wiped LVs from ${vg_name} - ${LVS[*]}"
+        return 0
+    fi
+
     # Activate VG
-    # LVM_CFG stablish a local configuration what avoid problems with the global_filter on lvm.conf
+    # LVM_CFG establishes a local configuration that avoids problems with the
+    # global_filter on lvm.conf
     eval vgchange $LVM_CFG -ay "$vg_name" >/dev/null 2>&1
 
-    # Search for Logical Volumes on VG
-    LVS=$(eval lvs $LVM_CFG "$vg_name" -o lv_path --noheadings 2>/dev/null | xargs)
-
-    if [ -n "$LVS" ]; then
-        for lv in $LVS; do
-            # Skip if LV path contains the standard pool name
-            if [[ "$lv" =~ lvmcsi-pool ]]; then
-                continue
-            fi
-            # Activate LV
-            eval lvchange $LVM_CFG -ay "$lv" 2>/dev/null
-
-            # Wiping LV
-            if ! wipefs -a "$lv" >/dev/null 2>&1; then
-                log "ERROR" "Failed to wipe LV $lv"
-            fi
-
-            # Deactivate LV
-            eval lvchange $LVM_CFG -an "$lv" >/dev/null 2>&1
-        done
-    fi
+    # Wipe and deactivate every LV in the VG
+    wipe_vg_lvs "$vg_name" deactivate all
+    log "INFO" "Found LVs in ${vg_name}: ${LVS[*]}"
 
     # Deactivate VG
     eval vgchange $LVM_CFG -an "$vg_name" >/dev/null 2>&1
@@ -89,6 +135,13 @@ wipe_lv() {
 ########################################################################
 wipe_disk() {
     local vg_name=${1}
+
+    # Skip cgts-vg; the platform VG is preserved and only its tagged LVs are
+    # removed.
+    if [ "$vg_name" = "$PLATFORM_VG" ]; then
+        remove_cgts_lvs
+        return 0
+    fi
 
     # Discover all PVs assigned to the vg
     local pvs_list
@@ -151,6 +204,23 @@ wipe_disk() {
 }
 
 ########################################################################
+# Name      : remove_cgts_lvs
+# Purpose   : Remove lvm-csi purpose LVs from CGTS-VG.
+# Return    : Does not return
+########################################################################
+remove_cgts_lvs() {
+    wipe_vg_lvs "$PLATFORM_VG" remove tagged
+    log "INFO" "Found LVs in ${PLATFORM_VG}: ${LVS[*]}"
+
+    if [ -n "$LVS" ]; then
+        # Removing the pool LV
+        eval lvremove $LVM_CFG -f "/dev/${PLATFORM_VG}/lvmcsi-pool" >/dev/null 2>&1
+    fi
+
+    log "INFO" "Successfully deleted LVs from ${PLATFORM_VG} - ${LVS[*]}"
+}
+
+########################################################################
 # Validate if the script is running as root
 if [ "$(id -u)" -ne 0 ]; then
     log "ERROR" "Must run as root"; exit 1
@@ -176,7 +246,7 @@ for dev in $ALL_DEVICES; do
         continue
     fi
 
-    vg_name=$(eval pvs $LVM_CFG "$dev" -o vg_name --noheadings --select 'vg_tags=lvm-csi' 2>&1 | xargs)
+    vg_name=$(eval pvs $LVM_CFG "$dev" -o vg_name --noheadings --select "'vg_tags=lvm-csi || vg_name=${PLATFORM_VG}'" 2>&1 | xargs)
 
     # Skip in cases of error reading the device
     if [[ "$vg_name" =~ (Cannot|Failed|error|denied) ]]; then
@@ -184,11 +254,6 @@ for dev in $ALL_DEVICES; do
     fi
     # Skip in cases of empty metadata
     if [ -z "$vg_name" ]; then
-        continue
-    fi
-
-    # Skip cgts-vg
-    if [ "$vg_name" = "cgts-vg" ]; then
         continue
     fi
 
