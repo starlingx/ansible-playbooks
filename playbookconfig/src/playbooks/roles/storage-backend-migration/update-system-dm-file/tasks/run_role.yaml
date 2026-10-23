@@ -26,7 +26,6 @@
     dm_script_name: "fix_rook_backend_network.py"
   when: migration_target == "rook_ceph"
 
-# TBD: review this once the final DM implementation is ready
 - name: Fix LVM storage backend network
   include_tasks: change_dm_file.yaml
   vars:
