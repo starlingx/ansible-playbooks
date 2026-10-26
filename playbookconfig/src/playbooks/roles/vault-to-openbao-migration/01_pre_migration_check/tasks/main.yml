@@ -1,0 +1,17 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 1 — pre-migration checks. Verify-only: asserts every precondition and
+# changes nothing. Health/version/secret checks in vault_health.yml; cutover
+# baselines in pv_baseline.yml.
+
+- name: "Vault health and active-controller checks"
+  import_tasks: vault_health.yml
+  tags: [phase1]
+
+- name: "Cutover-safety baselines"
+  import_tasks: pv_baseline.yml
+  tags: [phase1]

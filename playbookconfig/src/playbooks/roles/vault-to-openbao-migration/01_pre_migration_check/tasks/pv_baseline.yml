@@ -1,0 +1,100 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 1 — record pre-migration cluster state (read-only). Captures, as facts
+# for later phases and rollback: the injector webhook count, each Vault data PV's
+# reclaim policy and RBD image/volume handle, and (duplex only) the current Raft
+# leader. Purely observational — it reads cluster state and asserts invariants
+# but never mutates anything.
+
+- name: "Record pre-migration cluster state"
+  tags: [phase1]
+  check_mode: false
+  block:
+    - name: "Probe baseline injector webhook count"
+      include_tasks: "{{ role_path }}/../common/tasks/probes/webhook_count.yml"
+
+    - name: "Record baseline webhook count fact"
+      set_fact:
+        s1_baseline_webhook_count: "{{ probe_webhook_count | int }}"
+
+    - name: "List Vault data PVCs"
+      # The jsonpath contains a space ({range .items[*]}). Pass argv as a list so
+      # the whole jsonpath stays one argument; a single command string would be
+      # split on that space, handing kubectl a stray bare arg and failing the
+      # query (see the webhook_count probe for the same pattern).
+      command:
+        argv:
+          - kubectl
+          - get
+          - pvc
+          - -n
+          - "{{ vault_namespace }}"
+          - -l
+          - "app.kubernetes.io/instance={{ vault_statefulset }}"
+          - -o
+          # Single-quoted YAML scalar so the inner {"\n"} reaches kubectl verbatim.
+          # kubectl's jsonpath parser needs a double-quoted {"\n"} for the newline
+          # separator; a single-quoted {'\n'} fails to parse ("unterminated quoted
+          # string") when passed as one argv element.
+          - 'jsonpath={range .items[*]}{.metadata.name}={.spec.volumeName}{"\n"}{end}'
+      environment: "{{ openrc_env }}"
+      register: s1_vault_pvcs_raw
+      failed_when: false
+
+    - name: "Build PVC->PV map for Vault data volumes"
+      set_fact:
+        s1_vault_pvc_pv_pairs: "{{ (s1_vault_pvcs_raw.stdout | default('') | trim | split('\n'))
+          | select('search', '=')
+          | map('split', '=')
+          | list }}"
+
+    - name: "Read reclaim policy + RBD image handle per bound PV"
+      # jsonpath emits: <reclaimPolicy>|<rbdImageName>|<csiVolumeHandle>
+      command: >-
+        kubectl get pv {{ item.1 }}
+        -o jsonpath={.spec.persistentVolumeReclaimPolicy}|{.spec.csi.volumeAttributes.imageName}|{.spec.csi.volumeHandle}
+      environment: "{{ openrc_env }}"
+      loop: "{{ s1_vault_pvc_pv_pairs }}"
+      loop_control:
+        label: "{{ item.0 }} -> {{ item.1 }}"
+      register: s1_vault_pv_details_raw
+      failed_when: false
+      when: (item.1 | default('') | trim) != ''
+
+    - name: "Record per-PV reclaim policy + RBD image handle baseline"
+      # Pair each PVC name with its PV detail string into a list of
+      # [pvc_name, "reclaimPolicy|rbdImageName|volumeHandle"] entries, so a later
+      # cutover/rollback can restore each PV's original state.
+      set_fact:
+        s1_vault_pv_baseline: >-
+          {{
+            (s1_vault_pv_details_raw.results | default([]))
+            | selectattr('stdout', 'defined')
+            | map(attribute='item')
+            | zip(
+                (s1_vault_pv_details_raw.results | default([]))
+                | selectattr('stdout', 'defined')
+                | map(attribute='stdout')
+              )
+            | list
+          }}
+
+    - name: "Duplex — identify and record the Raft leader"
+      when: migration_system_mode == 'duplex'
+      block:
+        - name: "Probe Raft leader"
+          include_tasks: "{{ role_path }}/../common/tasks/probes/raft_leader.yml"
+
+        - name: "Record Raft leader fact"
+          set_fact:
+            s1_raft_leader: "{{ probe_raft_leader | default('') }}"
+
+        - name: "Assert a Raft leader was identified"
+          assert:
+            that: (s1_raft_leader | default('') | trim) != ''
+            fail_msg: "Duplex: no Raft leader identified (cluster may be electing or unhealthy)."
+            quiet: true

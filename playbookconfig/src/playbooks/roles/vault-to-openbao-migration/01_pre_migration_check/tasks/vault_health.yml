@@ -1,0 +1,111 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 1 — active-controller + Vault health checks (verify-only). Asserts the
+# active controller, every Vault server pod healthy + unsealed, raft storage,
+# required version, and a complete unseal shard-secret set. Changes nothing.
+
+- name: "Vault health"
+  tags: [phase1]
+  check_mode: false
+  block:
+    - name: "Check that this host is the active controller"
+      shell: >-
+        system host-show $(cat /etc/hostname)
+        --column capabilities --format value | grep -i "Controller-Active"
+      environment: "{{ openrc_env }}"
+      register: s1_active_ctlr
+      failed_when: false
+
+    - name: "Assert running on the active controller"
+      assert:
+        that: (s1_active_ctlr.rc | default(1)) == 0
+        fail_msg: >-
+          Must run on the active controller. This host does not report
+          'Controller-Active' in its capabilities, or the system CLI is
+          unreachable (rc={{ s1_active_ctlr.rc | default('n/a') }}).
+        quiet: true
+
+    - name: "List Vault server pods"
+      command: >-
+        kubectl get pods -n {{ vault_namespace }}
+        -l app.kubernetes.io/instance={{ vault_statefulset }},component=server
+        -o jsonpath={.items[*].metadata.name}
+      environment: "{{ openrc_env }}"
+      register: s1_vault_pods_raw
+      failed_when: false
+
+    - name: "Assert at least one Vault pod exists"
+      assert:
+        that: (s1_vault_pods_raw.stdout | default('') | trim) != ''
+        fail_msg: "No Vault server pods in namespace '{{ vault_namespace }}'."
+        quiet: true
+
+    - name: "Set Vault pod list fact"
+      set_fact:
+        s1_vault_pods: "{{ s1_vault_pods_raw.stdout | default('') | split }}"
+
+    - name: "Query vault status per pod"
+      command: kubectl exec {{ item }} -n {{ vault_namespace }} -- vault status -format=json
+      environment: "{{ openrc_env }}"
+      loop: "{{ s1_vault_pods }}"
+      register: s1_vault_status_raw
+      failed_when: false
+
+    - name: "Assert every Vault pod is reachable and unsealed"
+      assert:
+        that:
+          - (item.stdout | default('') | trim) != ''
+          - not ((item.stdout | from_json).sealed | default(true))
+        fail_msg: "Vault pod '{{ item.item }}' is sealed or unreachable."
+        quiet: true
+      loop: "{{ s1_vault_status_raw.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: "Assert every Vault pod reports raft storage"
+      # Check each pod, not just the first: a raft HA cluster can be in a mixed
+      # state (e.g. mid-upgrade), and the migration must refuse to proceed on it.
+      assert:
+        that:
+          - (item.stdout | default('') | trim) != ''
+          - (item.stdout | from_json).storage_type | default('') == 'raft'
+        fail_msg: >-
+          Vault pod '{{ item.item }}' storage type is
+          '{{ (item.stdout | from_json).storage_type | default('(unknown)')
+              if (item.stdout | default('') | trim) != '' else '(unreachable)' }}',
+          expected 'raft'.
+        quiet: true
+      loop: "{{ s1_vault_status_raw.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: "Assert every Vault pod matches the required version"
+      # Every server must be on the required version; a single lagging pod means
+      # the cluster is not uniformly upgraded and the migration must not run.
+      assert:
+        that:
+          - (item.stdout | default('') | trim) != ''
+          - (item.stdout | from_json).version | default('') == vault_required_version
+        fail_msg: >-
+          Vault pod '{{ item.item }}' version is
+          '{{ (item.stdout | from_json).version | default('(unparsed)')
+              if (item.stdout | default('') | trim) != '' else '(unreachable)' }}',
+          expected '{{ vault_required_version }}'. Upgrade externally, then re-run.
+        quiet: true
+      loop: "{{ s1_vault_status_raw.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: "Verify the unseal shard-secret set"
+      script: find-shard-secrets.sh {{ vault_namespace }} {{ vault_shard_secret_prefix }}
+      environment: "{{ openrc_env }}"
+      register: s1_shard_prefix_raw
+      no_log: true
+
+    - name: "Record the discovered shard-secret prefix"
+      set_fact:
+        s1_shard_secret_prefix: "{{ s1_shard_prefix_raw.stdout | trim }}"
