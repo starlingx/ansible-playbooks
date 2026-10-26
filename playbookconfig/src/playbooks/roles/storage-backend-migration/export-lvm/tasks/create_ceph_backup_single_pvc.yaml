@@ -21,3 +21,7 @@
     PVC_NAME: "{{ generic_pvc_namespace }}-{{ pvc.name }}"
     CEPH_BACKUP_DIR: "{{ generic_backups_path }}"
   register: backup_result
+
+- name: "[PVC {{ pvc.name }}] Show backup summary"
+  debug:
+    var: backup_result.stdout_lines

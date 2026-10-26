@@ -73,22 +73,19 @@ for NAMESPACE in ${PVCS_NAMESPACE_LIST}; do
         # TopoLVM does not support RWX or ROX, change to RWO
         sed -i 's/ReadWriteMany/ReadWriteOnce/g; s/ReadOnlyMany/ReadWriteOnce/g' "${PVC_RECOVER_YAML}"
 
-        # If the PVC was created from a snapshot, remove the Volume Snaphost references (dataSource sections)
-        if grep -E "snapshot.storage.k8s.io" ${PVC_RECOVER_YAML} 1>/dev/null 2>&1; then
-            PVC_VOLUME_SNAPSHOT_BLOCK="$(mktemp -ut pvc_snap.XXXXXXX)"
-            kubectl -n "${NAMESPACE}" get "${PVC}" -o go-template='
-                {{- range $section_name, $section := .spec }}
-                    {{- if eq $section_name "dataSource" "dataSourceRef" }}
-                    {{- "  "}}{{- $section_name -}}{{":\n"}}
-                    {{- range $name, $value := $section }}
-                        {{- "    "}}{{- $name -}}{{": "}}{{- $value -}}{{"\n"}}
-                    {{- end }}
-                    {{- end }}
-                {{- end }}' > "${PVC_VOLUME_SNAPSHOT_BLOCK}"
-
-            awk -i inplace 'NR==FNR {a[$0]; next} !($0 in a)' "${PVC_VOLUME_SNAPSHOT_BLOCK}" "${PVC_RECOVER_YAML}"
-            rm -f "${PVC_VOLUME_SNAPSHOT_BLOCK}"
-        fi
+        # Remove any dataSource/dataSourceRef references (snapshot or PVC-to-PVC clone).
+        # Using python for better control when using yaml
+        python3 -c '
+import sys, yaml
+path = sys.argv[1]
+with open(path) as f:
+    doc = yaml.safe_load(f)
+spec = doc.get("spec", {})
+spec.pop("dataSource", None)
+spec.pop("dataSourceRef", None)
+with open(path, "w") as f:
+    yaml.safe_dump(doc, f, default_flow_style=False, sort_keys=False)
+' "${PVC_RECOVER_YAML}"
 
         # Upsize PVC if target size was computed
         PVC_NAME_ONLY="${PVC#persistentvolumeclaim/}"

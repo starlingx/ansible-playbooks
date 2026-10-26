@@ -1,0 +1,41 @@
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+import json
+
+filename = "{{ tmp_workspace }}/{{ data_volume_name.key }}_dvt.json"
+lvm_mode_cached = "{{ lvm_mode_cached }}"
+
+with open(filename, 'r') as f:
+    templates = json.load(f)
+
+for template in templates:
+    pvc = template.get('spec', {}).get('pvc')
+    if pvc is None:
+        # Skip templates that do not define spec.pvc
+        continue
+
+    # Re-target to the LVM StorageClass
+    pvc['storageClassName'] = "{{ lvm_storage_class_name }}"
+
+    # TopoLVM does not support RWX/ROX, change them to RWO
+    access_modes = pvc.get('accessModes', [])
+    if 'ReadWriteMany' in access_modes or 'ReadOnlyMany' in access_modes:
+        new_access_modes = []
+        for mode in access_modes:
+            if mode in ('ReadWriteMany', 'ReadOnlyMany'):
+                new_access_modes.append('ReadWriteOnce')
+            else:
+                new_access_modes.append(mode)
+        pvc['accessModes'] = new_access_modes
+
+    # Thick TopoLVM cannot provide the snapshot a csi-clone needs, so force
+    # CDI host-assisted copy. Thin keeps the faster csi-clone.
+    if lvm_mode_cached == "thick":
+        template.setdefault('metadata', {}).setdefault('annotations', {})['cdi.kubevirt.io/cloneType'] = 'copy'
+
+with open(filename, 'w') as f:
+    json.dump(templates, f, indent=2)

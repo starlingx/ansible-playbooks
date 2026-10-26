@@ -77,6 +77,20 @@
         src: "{{ tmp_workspace }}/{{ data_volume_name.key }}_dvt.json"
       register: saved_dvt
 
+    - name: "Render transform script for dataVolumeTemplates of {{ data_volume_name.key }}"
+      template:
+        src: transform_dvt.py.j2
+        dest: "{{ tmp_workspace }}/transform_dvt_{{ data_volume_name.key }}.py"
+        mode: "0644"
+
+    - name: "Transform dataVolumeTemplates to LVM StorageClass for {{ data_volume_name.key }}"
+      command: "python3 {{ tmp_workspace }}/transform_dvt_{{ data_volume_name.key }}.py"
+
+    - name: "Re-read transformed dataVolumeTemplates for {{ data_volume_name.key }}"
+      slurp:
+        src: "{{ tmp_workspace }}/{{ data_volume_name.key }}_dvt.json"
+      register: saved_dvt
+
     - name: "Patch dataVolumeTemplates back on VM {{ dv_owner_vm.stdout }}"
       command: >-
         kubectl patch vm {{ dv_owner_vm.stdout }} -n {{ data_volume_name.value.namespace }}
@@ -87,6 +101,11 @@
     - name: "Delete saved dataVolumeTemplates file for {{ data_volume_name.key }}"
       file:
         path: "{{ tmp_workspace }}/{{ data_volume_name.key }}_dvt.json"
+        state: absent
+
+    - name: "Delete transform script for dataVolumeTemplates of {{ data_volume_name.key }}"
+      file:
+        path: "{{ tmp_workspace }}/transform_dvt_{{ data_volume_name.key }}.py"
         state: absent
 
 - name: "Delete and recreate DataVolume {{ data_volume_name.key }} when there are no dataVolumeTemplates"

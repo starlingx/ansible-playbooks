@@ -14,10 +14,10 @@
       --type merge \
       -p '{"spec":{"pvc":{"storageClassName":"{{ lvm_storage_class_name }}"}}}'
 
-    # Patch accessModes: RWX -> RWO (TopoLVM does not support RWX)
+    # Patch accessModes: RWX/ROX -> RWO (TopoLVM does not support RWX/ROX)
     MODES=$(kubectl get datavolume "${DV_NAME}" -n "${DV_NS}" \
       -o jsonpath='{.spec.pvc.accessModes[*]}')
-    if echo "${MODES}" | grep -q "ReadWriteMany"; then
+    if echo "${MODES}" | grep -qE "ReadWriteMany|ReadOnlyMany"; then
       kubectl patch datavolume "${DV_NAME}" -n "${DV_NS}" \
         --type json \
         -p '[{"op":"replace","path":"/spec/pvc/accessModes","value":["ReadWriteOnce"]}]'
