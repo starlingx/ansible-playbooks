@@ -1,0 +1,141 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 2 — gather Vault source data (verification helper, read-only). Captures
+# the source inventory (collect-source-inventory.sh, in-pod) and a checksum
+# manifest of the Raft data dir (collect-data-checksums.sh, in-pod), then writes
+# both as reference JSON for the Phase 5 equivalence check. Runs while Vault is
+# up; changes nothing.
+#
+# The entire phase is the fidelity-verification path, so verification_level ==
+# 'none' skips it wholesale. With no source inventory written here, the Phase 5
+# equivalence check has nothing to compare against and is likewise a no-op — so
+# 'none' disables verification across both phases.
+
+- name: "Gather Vault source data"
+  tags: [phase2]
+  check_mode: false
+  when: verification_level != 'none'
+  block:
+    # Prefer the Phase-1 Raft leader (duplex); else <statefulset>-0.
+    - name: "Resolve Vault query pod"
+      set_fact:
+        s2_vault_pod: >-
+          {{ s1_raft_leader
+             if (s1_raft_leader is defined and (s1_raft_leader | trim) != '')
+             else (vault_statefulset ~ '-0') }}
+
+    # In-pod reads need auth: load root token from the discovered shard set, pass
+    # it on stdin to the collector. Trailing newline must be trimmed or Vault 403s.
+    - name: "Load Vault root token"
+      command: >-
+        kubectl get secret {{ s1_shard_secret_prefix | default(vault_shard_secret_prefix) }}-root
+        -n {{ vault_namespace }} -o jsonpath={.data.strdata}
+      environment: "{{ openrc_env }}"
+      register: s2_root_token_b64
+      no_log: true
+
+    - name: "Decode the Vault root token"
+      set_fact:
+        s2_vault_token: "{{ s2_root_token_b64.stdout | default('') | b64decode | trim }}"
+      no_log: true
+
+    - name: "Copy collectors into the Vault pod"
+      command: >-
+        kubectl cp {{ role_path }}/files/{{ item }}
+        {{ vault_namespace }}/{{ s2_vault_pod }}:/tmp/{{ item }}
+      environment: "{{ openrc_env }}"
+      loop:
+        - collect-source-inventory.sh
+        - collect-data-checksums.sh
+
+    - name: "Run source-inventory collector in-pod (token on stdin)"
+      command: >-
+        kubectl exec -i {{ s2_vault_pod }} -n {{ vault_namespace }} --
+        sh /tmp/collect-source-inventory.sh {{ verification_level }}
+      args:
+        stdin: "{{ s2_vault_token }}"
+      environment: "{{ openrc_env }}"
+      register: s2_inventory_raw
+      no_log: true
+
+    - name: "Parse the source inventory"
+      set_fact:
+        s2_inventory: "{{ (s2_inventory_raw.stdout | from_json)
+          if (s2_inventory_raw.stdout | default('') | trim) != '' else {} }}"
+      no_log: "{{ verification_level == 'values' }}"
+
+    - name: "Run data-checksum collector on the Raft data dir in-pod"
+      command: >-
+        kubectl exec {{ s2_vault_pod }} -n {{ vault_namespace }} --
+        sh /tmp/collect-data-checksums.sh {{ vault_data_mount }}
+      environment: "{{ openrc_env }}"
+      register: s2_data_checksums_raw
+
+    - name: "Parse source data checksums"
+      set_fact:
+        s2_data_checksums: "{{ (s2_data_checksums_raw.stdout | from_json)
+          if (s2_data_checksums_raw.stdout | default('') | trim) != '' else {} }}"
+
+    - name: "Assert the checksum manifest captured the expected Raft files"
+      assert:
+        that:
+          - (s2_data_checksums.file_count | default(0) | int) > 0
+          - (s2_data_checksums.total_bytes | default(0) | int) > 0
+          - "'node-id' in _paths"
+          - "'vault.db' in _paths"
+          - "'raft/raft.db' in _paths"
+        fail_msg: >-
+          The checksum manifest did not find the expected Raft files under
+          {{ vault_data_mount }} on {{ s2_vault_pod }}
+          (file_count={{ s2_data_checksums.file_count | default(0) }}).
+        quiet: true
+      vars:
+        _paths: "{{ s2_data_checksums.files | default([]) | map(attribute='path') | list }}"
+
+    - name: "Assemble the source inventory reference"
+      set_fact:
+        s2_source_inventory:
+          schema: vtom.source-inventory/v1
+          verification_level: "{{ verification_level }}"
+          system_mode: "{{ migration_system_mode }}"
+          query_pod: "{{ s2_vault_pod }}"
+          engine_mounts: "{{ s2_inventory.engine_mounts | default([]) }}"
+          auth_mounts: "{{ s2_inventory.auth_mounts | default([]) }}"
+          audit_devices: "{{ s2_inventory.audit_devices | default([]) }}"
+          policies: "{{ s2_inventory.policies | default([]) }}"
+          secret_paths: "{{ s2_inventory.secret_paths | default([]) }}"
+          value_hashes: "{{ s2_inventory.value_hashes | default([]) }}"
+          data_checksums: "{{ s2_data_checksums | default({}) }}"
+      no_log: "{{ verification_level == 'values' }}"
+
+    - name: "Ensure inventory output dir exists (0700)"
+      file:
+        path: "{{ gather_output_dir }}"
+        state: directory
+        mode: "0700"
+
+    - name: "Write source inventory JSON (0600)"
+      copy:
+        content: "{{ s2_source_inventory | to_nice_json }}"
+        dest: "{{ gather_output_dir }}/source-inventory.json"
+        mode: "0600"
+      no_log: "{{ verification_level == 'values' }}"
+
+    - name: "Write source data-checksum manifest JSON (0600)"
+      copy:
+        content: "{{ s2_data_checksums | default({}) | to_nice_json }}"
+        dest: "{{ gather_output_dir }}/source-data-checksums.json"
+        mode: "0600"
+
+- name: "Note skipped source-data gathering"
+  debug:
+    msg: >-
+      verification_level=none: skipping Phase 2 source-data gathering. No source
+      inventory is recorded, so the Phase 5 equivalence check is also skipped —
+      the migration runs without fidelity verification.
+  tags: [phase2]
+  when: verification_level == 'none'

@@ -24,3 +24,8 @@
       import_role:
         name: vault-to-openbao-migration/01_pre_migration_check
       tags: [phase1]
+
+    - name: "Phase 2 — gather Vault source data"
+      import_role:
+        name: vault-to-openbao-migration/02_gather_vault_data
+      tags: [phase2]
