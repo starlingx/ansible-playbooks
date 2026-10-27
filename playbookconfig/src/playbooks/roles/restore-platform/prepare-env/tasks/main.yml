@@ -38,7 +38,7 @@
   - name: Assert that backup_filename is an encrypted file
     assert:
       that:
-      - '"GPG symmetrically encrypted data" in local_backup_file_type.stdout'
+      - 'local_backup_file_type.stdout is search("(PGP|GPG).*symmetric.*encrypt")'
       fail_msg: >
         Platform backup file {{ local_backup_file_path }} is not encrypted
 
@@ -69,7 +69,7 @@
 - name: Assert that backup_filename is not encrypted
   assert:
     that:
-    - '"GPG symmetrically encrypted data" not in local_backup_file_type.stdout'
+    - 'local_backup_file_type.stdout is not search("(PGP|GPG).*symmetric.*encrypt")'
     fail_msg: >
       Platform backup file {{ local_backup_file_path }} is encrypted
   when: not platform_tarball_encrypted|bool
