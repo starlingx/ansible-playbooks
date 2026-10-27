@@ -6,6 +6,6 @@
 
 - name: "{{ action }} auto-scale for all pools"
   shell: |
-    for pool in $(ceph osd pool ls); do
-      ceph osd pool set $pool pg_autoscale_mode {{ action }}
+    for pool in $(timeout {{ timeout_ceph_cmd }} ceph osd pool ls); do
+      timeout {{ timeout_ceph_cmd }} ceph osd pool set $pool pg_autoscale_mode {{ action }}
     done

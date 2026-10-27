@@ -5,7 +5,7 @@
 #
 
 - name: Get details of all pools in JSON format
-  command: timeout 30 ceph osd pool ls detail --format json
+  command: timeout {{ timeout_ceph_cmd }} ceph osd pool ls detail --format json
   register: ceph_pools_raw
   changed_when: false
   become: true

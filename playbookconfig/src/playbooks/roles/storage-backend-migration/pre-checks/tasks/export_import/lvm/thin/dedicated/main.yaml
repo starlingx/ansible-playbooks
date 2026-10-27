@@ -3,3 +3,6 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
+
+- name: Check space for backups
+  include_tasks: "{{ role_path_common }}/tasks/check_space_for_backups.yaml"

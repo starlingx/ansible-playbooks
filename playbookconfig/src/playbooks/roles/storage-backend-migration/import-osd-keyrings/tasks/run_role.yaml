@@ -67,7 +67,7 @@
 
 - name: Import OSD keyring into Ceph
   command: >
-      ceph auth import -i {{ tmp_workspace }}/osd.{{ osd_id_file.results[osd_index].content | b64decode | trim }}.keyring
+      timeout {{ timeout_ceph_cmd }} ceph auth import -i {{ tmp_workspace }}/osd.{{ osd_id_file.results[osd_index].content | b64decode | trim }}.keyring
   loop: "{{ osds }}"
   loop_control:
     index_var: osd_index

@@ -28,7 +28,7 @@
     pv_data: "{{ pv_data_file.content | b64decode | from_yaml }}"
 
 - name: "Get pool ID for {{ new_pool }}"
-  shell: "ceph osd lspools | grep ' {{ new_pool }}$' | awk '{print $1}'"
+  shell: "timeout {{ timeout_ceph_cmd }} ceph osd lspools | grep ' {{ new_pool }}$' | awk '{print $1}'"
   register: pool_id_output
 
 - name: "Extract pool ID"

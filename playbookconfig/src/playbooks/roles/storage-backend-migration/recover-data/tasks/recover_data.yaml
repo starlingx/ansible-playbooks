@@ -118,7 +118,7 @@
 
 - name: Wait until all MONs to be in quorum
   run_once: true
-  shell: timeout 30 ceph mon stat
+  shell: timeout {{ timeout_ceph_cmd }} ceph mon stat
   register: ceph_mon_stat
   retries: 60
   delay: 10
@@ -135,7 +135,7 @@
     KUBECONFIG: "{{ kubeconfig }}"
   block:
   - name: Export Ceph auth keyring
-    command: ceph auth export -o {{ tmp_workspace }}/export.keyring
+    command: timeout {{ timeout_ceph_cmd }} ceph auth export -o {{ tmp_workspace }}/export.keyring
 
   - name: Get rook-ceph-recovery pod name
     shell: kubectl get pods -n rook-ceph | awk '/rook-ceph-recovery-{{ inventory_hostname }}/ {print $1}'
@@ -335,7 +335,7 @@
 
 - name: Wait until all MONs to be in quorum
   run_once: true
-  shell: timeout 30 ceph mon stat
+  shell: timeout {{ timeout_ceph_cmd }} ceph mon stat
   register: ceph_mon_stat
   retries: 60
   delay: 10

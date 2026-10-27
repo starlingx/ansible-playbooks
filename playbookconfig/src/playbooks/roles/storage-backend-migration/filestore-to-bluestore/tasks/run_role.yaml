@@ -19,7 +19,7 @@
   loop: "{{ script_files }}"
 
 - name: Get cluster status prior to migration to Bluestore
-  command: timeout 30 ceph -s
+  command: timeout {{ timeout_ceph_cmd }} ceph -s
   register: ceph_status
   changed_when: false
 
@@ -28,7 +28,7 @@
     var: ceph_status.stdout_lines
 
 - name: Get OSD tree before migrating OSD
-  command: timeout 30 ceph osd tree
+  command: timeout {{ timeout_ceph_cmd }} ceph osd tree
   register: ceph_osd_tree_output
   changed_when: false
 
@@ -79,7 +79,7 @@
     state: absent
 
 - name: Get Bluestore OSD count
-  command: timeout 30 ceph osd count-metadata osd_objectstore
+  command: timeout {{ timeout_ceph_cmd }} ceph osd count-metadata osd_objectstore
   register: bluestore_osd_count
   changed_when: false
 

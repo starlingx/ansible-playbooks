@@ -15,7 +15,7 @@
   when: not dev_stat.stat.exists
 
 - name: Get OSD metadata
-  command: "timeout 30 ceph osd metadata {{ item.osd_id }}"
+  command: "timeout {{ timeout_ceph_cmd }} ceph osd metadata {{ item.osd_id }}"
   changed_when: false
   register: osd_metadata_output
   failed_when:
@@ -68,11 +68,11 @@
         var: wipe_osd_disk.stdout_lines
 
     - name: Destroy OSD
-      command: "ceph osd destroy {{ item.osd_id }} --yes-i-really-mean-it"
+      command: "timeout {{ timeout_ceph_cmd }} ceph osd destroy {{ item.osd_id }} --yes-i-really-mean-it"
       register: osd_destroy_output
 
     - name: Purge OSD
-      command: "ceph osd purge {{ item.osd_id }} --yes-i-really-mean-it"
+      command: "timeout {{ timeout_ceph_cmd }} ceph osd purge {{ item.osd_id }} --yes-i-really-mean-it"
       register: osd_purge_output
 
 - name: Update OSD / Partition info in SysInv database
@@ -111,14 +111,14 @@
   command: "ceph-volume --cluster ceph raw activate --no-systemd --no-tmpfs --device {{ item.disk_device_path }}"
 
 - name: Restore device class
-  command: "ceph osd crush set-device-class {{ item.osd_class }} osd.{{ item.osd_id }}"
+  command: "timeout {{ timeout_ceph_cmd }} ceph osd crush set-device-class {{ item.osd_class }} osd.{{ item.osd_id }}"
 
 - name: Restore reweight
-  command: "ceph osd reweight {{ item.osd_id }} {{ item.osd_reweight }}"
+  command: "timeout {{ timeout_ceph_cmd }} ceph osd reweight {{ item.osd_id }} {{ item.osd_reweight }}"
 
 - name: Restore CRUSH location
   command: >
-    ceph osd crush add osd.{{ item.osd_id }}
+    timeout {{ timeout_ceph_cmd }} ceph osd crush add osd.{{ item.osd_id }}
     {{ item.osd_weight }} {{ item.osd_crush_location }}
 
 - name: Create systemd unit file for OSD

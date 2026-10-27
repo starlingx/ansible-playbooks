@@ -8,7 +8,7 @@
   shell: |
     set -o pipefail
 
-    ALL_POOLS=$(ceph osd pool ls)
+    ALL_POOLS=$(timeout {{ timeout_ceph_cmd }} ceph osd pool ls)
 
     for pool in $ALL_POOLS; do
       echo "Checking pool: $pool"

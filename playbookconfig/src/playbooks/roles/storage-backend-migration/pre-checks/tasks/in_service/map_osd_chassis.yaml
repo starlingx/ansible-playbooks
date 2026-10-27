@@ -5,7 +5,7 @@
 #
 
 - name: Get CRUSH map tree to map OSDs to their hosts/chassis
-  command: timeout 30 ceph osd tree --format json
+  command: timeout {{ timeout_ceph_cmd }} ceph osd tree --format json
   register: ceph_osd_tree_json
   changed_when: false
 

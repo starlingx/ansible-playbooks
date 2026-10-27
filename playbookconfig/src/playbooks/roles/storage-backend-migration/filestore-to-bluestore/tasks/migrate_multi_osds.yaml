@@ -81,17 +81,17 @@
     label: "Host {{ inventory_hostname }} OSD id = {{ item.osd_id }}"
 
 - name: Wait until OSDs are up
-  command: ceph osd tree -f json
+  command: timeout {{ timeout_ceph_cmd }} ceph osd tree -f json
   register: ceph_osd_tree
   retries: 60
   delay: 10
   until: >
-    ceph_osd_tree.stdout | from_json | json_query("nodes[?type=='osd'].status") is not none and
+    (ceph_osd_tree.stdout | default('{}', true) | from_json | json_query("nodes[?type=='osd'].status")) is not none and
     (
-      ceph_osd_tree.stdout | from_json | json_query("nodes[?type=='osd'].status")
+      ceph_osd_tree.stdout | default('{}', true) | from_json | json_query("nodes[?type=='osd'].status")
     ) | select("equalto", "up") | list | length ==
     (
-      ceph_osd_tree.stdout | from_json | json_query("nodes[?type=='osd'].status") | length
+      ceph_osd_tree.stdout | default('{}', true) | from_json | json_query("nodes[?type=='osd'].status") | length
     )
   changed_when: false
 
@@ -103,7 +103,7 @@
     var: ceph_status.stdout_lines
 
 - name: Get OSD tree after migrating OSD
-  command: timeout 30 ceph osd tree
+  command: timeout {{ timeout_ceph_cmd }} ceph osd tree
   register: ceph_osd_tree_output
   changed_when: false
 

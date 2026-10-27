@@ -11,9 +11,9 @@ MOUNT_POINT="/mnt/cephfs_temp_rename"
 
 echo "Collecting cluster information for mounting..."
 # Get admin key automatically
-SECRET=$(ceph auth get-key client.admin)
+SECRET=$(timeout "$TIMEOUT_CEPH_CMD" ceph auth get-key client.admin)
 # Get monitor IPs automatically (format ip1:port,ip2:port,ip3:port)
-MONS=$(ceph mon dump 2>/dev/null | grep -oP 'v1:\K(\[[^\]]+\]:[0-9]+|[0-9.]+:[0-9]+)' | paste -sd "," -)
+MONS=$(timeout "$TIMEOUT_CEPH_CMD" ceph mon dump 2>/dev/null | grep -oP 'v1:\K(\[[^\]]+\]:[0-9]+|[0-9.]+:[0-9]+)' | paste -sd "," -)
 
 if [ -z "$SECRET" ] || [ -z "$MONS" ]; then
     echo "Error: Could not obtain Ceph credentials or monitor IPs."
@@ -31,7 +31,7 @@ if ! mountpoint -q "$MOUNT_POINT"; then
 fi
 
 echo "Searching for subvolumes..."
-SUBVOLUMES=$(ceph fs subvolume ls "$VOLUME" "$GROUP" --format json | grep -oP '"name":\s*"\K[^"]+')
+SUBVOLUMES=$(timeout "$TIMEOUT_CEPH_CMD" ceph fs subvolume ls "$VOLUME" "$GROUP" --format json | grep -oP '"name":\s*"\K[^"]+')
 
 if [ -z "$SUBVOLUMES" ]; then
     echo "No subvolumes found."

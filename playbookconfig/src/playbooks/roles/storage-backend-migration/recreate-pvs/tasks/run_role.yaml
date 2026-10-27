@@ -24,7 +24,7 @@
   when: pv_list is not defined
 
 - name: "Get rbd pool id"
-  shell: ceph osd lspools | awk '$2 == "kube-rbd" {print $1}'
+  shell: timeout {{ timeout_ceph_cmd }} ceph osd lspools | awk '$2 == "kube-rbd" {print $1}'
   register: rbd_pool_id_result
   when: rbd_pool_id is not defined
 
@@ -35,7 +35,7 @@
   when: rbd_pool_id is not defined
 
 - name: Get cephfilesystem ID
-  shell: ceph fs get kube-cephfs --format json-pretty
+  shell: timeout {{ timeout_ceph_cmd }} ceph fs get kube-cephfs --format json-pretty
   register: fs_map
   when: fscid is not defined
 

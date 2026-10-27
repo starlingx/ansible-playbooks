@@ -18,6 +18,8 @@
 
 - name: Rename CephFs subvolume snapshots
   shell: "{{ tmp_workspace }}/rename_cephfs_subvolume_snaps.sh"
+  environment:
+    TIMEOUT_CEPH_CMD: "{{ timeout_ceph_cmd }}"
   register: rename_result
 
 - name: Show rename result

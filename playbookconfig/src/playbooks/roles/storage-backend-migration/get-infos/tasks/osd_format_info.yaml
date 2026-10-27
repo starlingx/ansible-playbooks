@@ -5,7 +5,7 @@
 #
 
 - name: Get OSDs information from ceph
-  shell: "ceph osd tree -f json | python3 -c '{{ lookup('file', 'get_osd_info.py') }}'"
+  shell: "timeout {{ timeout_ceph_cmd }} ceph osd tree -f json | python3 -c '{{ lookup('file', 'get_osd_info.py') }}'"
   register: ceph_osds_info
   changed_when: false
 
@@ -24,7 +24,7 @@
     all_osd_ids: "{{ ceph_disks_by_host_db.values() | flatten | map(attribute='osd_id') | list }}"
 
 - name: Build OSD info lookup table with metadata
-  shell: "ceph osd metadata {{ item }} -f json"
+  shell: "timeout {{ timeout_ceph_cmd }} ceph osd metadata {{ item }} -f json"
   register: osd_metadata_results
   changed_when: false
   loop: "{{ all_osd_ids }}"

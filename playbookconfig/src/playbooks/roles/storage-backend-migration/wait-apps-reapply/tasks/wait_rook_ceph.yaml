@@ -72,7 +72,7 @@
   changed_when: false
 
 - name: Wait for Ceph cluster to reach HEALTH_OK
-  command: timeout 30 ceph health detail
+  command: timeout {{ timeout_ceph_cmd }} ceph health detail
   register: ceph_health
   until: "'HEALTH_OK' in ceph_health.stdout"
   retries: 120

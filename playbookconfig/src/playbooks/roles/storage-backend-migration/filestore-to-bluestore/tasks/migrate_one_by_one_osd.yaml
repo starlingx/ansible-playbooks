@@ -5,7 +5,7 @@
 #
 
 - name: Get the current metadata of OSD {{ item.osd_id }}
-  command: ceph osd metadata {{ item.osd_id }}
+  command: timeout {{ timeout_ceph_cmd }} ceph osd metadata {{ item.osd_id }}
   register: current_osd_metadata
   changed_when: false
 
@@ -16,7 +16,7 @@
 - name: Mark OSD as out if replica is 1
   block:
     - name: Reweight OSD {{ item.osd_id }} to zero
-      command: ceph osd crush reweight osd.{{ item.osd_id }} 0
+      command: timeout {{ timeout_ceph_cmd }} ceph osd crush reweight osd.{{ item.osd_id }} 0
       register: reweight_zero_result
 
     - name: Wait for OSD {{ item.osd_id }} to drain after reweight
@@ -31,7 +31,7 @@
             msg: "OSD {{ item.osd_id }} drain after reweight timed out. Proceeding to osd out."
 
     - name: Mark osd {{ item.osd_id }} as out
-      command: ceph osd out {{ item.osd_id }}
+      command: timeout {{ timeout_ceph_cmd }} ceph osd out {{ item.osd_id }}
       register: mark_osd_out_result
 
     - name: Wait for OSD {{ item.osd_id }} to drain after mark out
@@ -40,7 +40,7 @@
         osd_id: "{{ item.osd_id }}"
 
     - name: Wait for OSD {{ item.osd_id }} to be safe to destroy
-      command: ceph osd safe-to-destroy {{ item.osd_id }}
+      command: timeout {{ timeout_ceph_cmd }} ceph osd safe-to-destroy {{ item.osd_id }}
       register: safe_to_destroy_check
       until: safe_to_destroy_check.rc == 0
       retries: 30
@@ -77,17 +77,17 @@
     enabled: true
 
 - name: Wait until OSDs are up
-  command: ceph osd tree -f json
+  command: timeout {{ timeout_ceph_cmd }} ceph osd tree -f json
   register: ceph_osd_tree
   retries: 120
   delay: 10
   until: >
-    ceph_osd_tree.stdout | from_json | json_query("nodes[?type=='osd'].status") is not none and
+    (ceph_osd_tree.stdout | default('{}', true) | from_json | json_query("nodes[?type=='osd'].status")) is not none and
     (
-      ceph_osd_tree.stdout | from_json | json_query("nodes[?type=='osd'].status")
+      ceph_osd_tree.stdout | default('{}', true) | from_json | json_query("nodes[?type=='osd'].status")
     ) | select("equalto", "up") | list | length ==
     (
-      ceph_osd_tree.stdout | from_json | json_query("nodes[?type=='osd'].status") | length
+      ceph_osd_tree.stdout | default('{}', true) | from_json | json_query("nodes[?type=='osd'].status") | length
     )
   changed_when: false
 
@@ -99,7 +99,7 @@
     var: ceph_status.stdout_lines
 
 - name: Get OSD tree after migrating OSD
-  command: timeout 30 ceph osd tree
+  command: timeout {{ timeout_ceph_cmd }} ceph osd tree
   register: ceph_osd_tree_output
   changed_when: false
 

@@ -35,7 +35,7 @@
     manifest_path: "{{ tmp_workspace }}/filesystem.yaml"
 
 - name: Remove existing Ceph filesystem if present
-  command: ceph fs rm {{ fs_name }} --yes-i-really-mean-it
+  command: timeout {{ timeout_ceph_cmd }} ceph fs rm {{ fs_name }} --yes-i-really-mean-it
   register: filesystem_remove
   changed_when:
     - filesystem_remove.rc == 0
@@ -43,8 +43,8 @@
 
 - name: Create and reset CephFS
   shell: |
-    ceph fs new {{ fs_name }} {{ metadata_pool_name }} {{ data_pool_name }} --force
-    ceph fs reset {{ fs_name }} --yes-i-really-mean-it
+    timeout {{ timeout_ceph_cmd }} ceph fs new {{ fs_name }} {{ metadata_pool_name }} {{ data_pool_name }} --force
+    timeout {{ timeout_ceph_cmd }} ceph fs reset {{ fs_name }} --yes-i-really-mean-it
 
 - name: Recover CephFS journals and reset tables
   shell: |
@@ -132,7 +132,7 @@
   changed_when: false
 
 - name: Repair MDS
-  command: ceph mds repaired 0
+  command: timeout {{ timeout_ceph_cmd }} ceph mds repaired 0
   register: ceph_mds_repair_output
 
 - name: Debug MDS repair

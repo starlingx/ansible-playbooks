@@ -15,7 +15,7 @@
 
 - name: Get CephFS subvolume info
   command: >
-    ceph fs subvolume info kube-cephfs {{ subvol_result.stdout }} csi --format json
+    timeout {{ timeout_ceph_cmd }} ceph fs subvolume info kube-cephfs {{ subvol_result.stdout }} csi --format json
   register: subvol_info_result
   changed_when: false
 

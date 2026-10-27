@@ -33,7 +33,7 @@
 # The reason to check for 'recover' instead of 'recovery' is that this way it
 # also matches some PGs in recovery state in addition to the 'recovery' entry
 - name: Wait until the 'recover' keyword goes away from ceph status
-  command: timeout 30 ceph -s
+  command: timeout {{ timeout_ceph_cmd }} ceph -s
   register: ceph_status
   until: >
     'recover' not in ceph_status.stdout

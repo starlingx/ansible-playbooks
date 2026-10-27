@@ -47,13 +47,13 @@
 
 - name: Create new RBD pool if needed
   shell: |
-    if ! ceph osd pool ls | grep -q "^${NEW_POOL}$"; then
+    if ! timeout {{ timeout_ceph_cmd }} ceph osd pool ls | grep -q "^${NEW_POOL}$"; then
       echo "Creating new pool: ${NEW_POOL}"
-      ceph osd pool create "${NEW_POOL}" 64 64
+      timeout {{ timeout_ceph_cmd }} ceph osd pool create "${NEW_POOL}" 64 64
       rbd pool init "${NEW_POOL}"
-      ceph osd pool set "${NEW_POOL}" size "${NEW_POOL_SIZE}"
-      ceph osd pool set "${NEW_POOL}" min_size "${NEW_POOL_MIN}"
-      ceph osd pool get "${NEW_POOL}" all
+      timeout {{ timeout_ceph_cmd }} ceph osd pool set "${NEW_POOL}" size "${NEW_POOL_SIZE}"
+      timeout {{ timeout_ceph_cmd }} ceph osd pool set "${NEW_POOL}" min_size "${NEW_POOL_MIN}"
+      timeout {{ timeout_ceph_cmd }} ceph osd pool get "${NEW_POOL}" all
     else
       echo "Pool ${NEW_POOL} already exists"
     fi
@@ -70,10 +70,10 @@
 - name: Delete RBD pool
   shell: |
     echo "Deleting pool: ${ORIGINAL_POOL}"
-    mon_allow_pool_delete=$(ceph config get mon.0 mon_allow_pool_delete)
-    ceph config set mon mon_allow_pool_delete true
-    ceph osd pool delete "${ORIGINAL_POOL}" "${ORIGINAL_POOL}" --yes-i-really-really-mean-it
-    ceph config set mon mon_allow_pool_delete "${mon_allow_pool_delete}"
+    mon_allow_pool_delete=$(timeout {{ timeout_ceph_cmd }} ceph config get mon.0 mon_allow_pool_delete)
+    timeout {{ timeout_ceph_cmd }} ceph config set mon mon_allow_pool_delete true
+    timeout {{ timeout_ceph_cmd }} ceph osd pool delete "${ORIGINAL_POOL}" "${ORIGINAL_POOL}" --yes-i-really-really-mean-it
+    timeout {{ timeout_ceph_cmd }} ceph config set mon mon_allow_pool_delete "${mon_allow_pool_delete}"
   environment:
     ORIGINAL_POOL: "{{ original_pool }}"
 
@@ -118,7 +118,7 @@
     state: absent
 
 - name: Get kube-rbd pool details from live system
-  command: timeout 30 ceph osd pool ls detail --format json
+  command: timeout {{ timeout_ceph_cmd }} ceph osd pool ls detail --format json
   register: kube_rbd_pool_raw
   changed_when: false
   when: all_pools_list | selectattr('name', 'equalto', 'kube-rbd') | list | length == 0
