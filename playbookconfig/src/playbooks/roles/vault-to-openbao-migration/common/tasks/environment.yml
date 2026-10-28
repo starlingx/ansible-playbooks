@@ -1,0 +1,24 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Source openrc + set KUBECONFIG once into openrc_env, reused by kubectl/system/
+# helm tasks. no_log guards the OS_* secrets. Reads only (safe in --check).
+
+- name: Capture the environment exported by sourcing openrc
+  shell: |
+    source {{ openrc_path }}
+    export KUBECONFIG={{ kubeconfig_path }}
+    python3 -c 'import os, json; print(json.dumps(dict(os.environ)))'
+  args:
+    executable: /bin/bash
+  register: openrc_env_raw
+  no_log: true
+  check_mode: false
+
+- name: Build reusable environment fact
+  set_fact:
+    openrc_env: "{{ openrc_env_raw.stdout | from_json }}"
+  no_log: true

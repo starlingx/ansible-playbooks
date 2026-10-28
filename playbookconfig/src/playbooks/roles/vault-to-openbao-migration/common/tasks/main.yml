@@ -1,0 +1,25 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Shared context for every phase: validate variables, capture the platform
+# environment, detect system_mode. Probe files are included on demand by phases.
+
+- name: Validate variable choices
+  assert:
+    that:
+      - system_mode in ['auto', 'simplex', 'duplex']
+      - vault_final_state in ['removed', 'suspended']
+      - verification_level in ['none', 'structure', 'values']
+      - rollback_mode in ['manual', 'auto', 'off']
+      - (start_phase | string) in ['', '1', '2', '3', '4', '5']
+    fail_msg: "Invalid variable value (see common/defaults/main.yml for allowed)."
+    quiet: true
+
+- name: Capture platform environment (openrc + KUBECONFIG)
+  import_tasks: environment.yml
+
+- name: Determine system_mode
+  import_tasks: detect_system_mode.yml

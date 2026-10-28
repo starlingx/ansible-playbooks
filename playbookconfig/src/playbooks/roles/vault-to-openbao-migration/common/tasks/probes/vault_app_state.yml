@@ -1,0 +1,41 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Probe: set probe_vault_app_state {applied|uploaded|removed|suspended|absent}.
+# An applied app whose HelmReleases are suspended reports as suspended.
+# Read-only.
+
+- name: "Probe vault_app_state: query platform state"
+  check_mode: false
+  block:
+    - name: "Probe vault_app_state: application-show vault"
+      command: system application-show vault --column status --format value
+      environment: "{{ openrc_env }}"
+      register: probe_vault_app_raw
+      failed_when: false
+
+    - name: "Probe vault_app_state: helmrelease suspend flag (only if applied)"
+      command: >-
+        kubectl get helmrelease vault
+        -n {{ vault_namespace }}
+        -o jsonpath={.spec.suspend}
+      environment: "{{ openrc_env }}"
+      register: probe_vault_hr_raw
+      failed_when: false
+      when: (probe_vault_app_raw.stdout | default('') | trim) == 'applied'
+
+- name: "Probe vault_app_state: set result fact"
+  set_fact:
+    probe_vault_app_state: >-
+      {{
+        'absent' if (probe_vault_app_raw.rc | default(1)) != 0
+        else (
+          'suspended'
+          if ((probe_vault_app_raw.stdout | default('') | trim) == 'applied'
+              and (probe_vault_hr_raw.stdout | default('') | trim) == 'true')
+          else (probe_vault_app_raw.stdout | default('unknown') | trim)
+        )
+      }}

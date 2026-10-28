@@ -1,0 +1,34 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Set migration_system_mode. An explicit simplex/duplex is used verbatim; "auto"
+# reads system_mode from /etc/platform/platform.conf. Reads only.
+
+# TODO: This is a temporary solution to set the system mode. A new solution will follow when the changes for
+# migration in HA configuration is made.
+
+- name: Use explicit system_mode override
+  set_fact:
+    migration_system_mode: "{{ system_mode }}"
+  when: system_mode in ['simplex', 'duplex']
+
+- name: Auto-detect system_mode from platform.conf
+  when: system_mode == 'auto'
+  block:
+    - name: Read system_mode from platform.conf
+      command: awk -F= '/^system_mode=/ {print $2}' /etc/platform/platform.conf
+      register: platform_mode
+      check_mode: false
+
+    - name: Set migration_system_mode from platform.conf
+      set_fact:
+        migration_system_mode: "{{ 'duplex' if (platform_mode.stdout | trim) == 'duplex' else 'simplex' }}"
+
+- name: Assert system_mode resolved to a concrete value
+  assert:
+    that: migration_system_mode in ['simplex', 'duplex']
+    fail_msg: "Failed to resolve system_mode (got '{{ migration_system_mode | default('') }}')."
+    quiet: true
