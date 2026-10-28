@@ -27,7 +27,7 @@
   changed_when: false
 
 - name: Wait for Ceph cluster to reach HEALTH_OK
-  command: timeout 30 ceph health detail
+  command: timeout {{ timeout_ceph_cmd }} ceph health detail
   register: ceph_health
   until: "'HEALTH_OK' in ceph_health.stdout"
   retries: 120
@@ -39,7 +39,7 @@
     var: ceph_health.stdout_lines
 
 - name: Wait until all PGs are active+clean
-  command: timeout 30 ceph pg stat
+  command: timeout {{ timeout_ceph_cmd }} ceph pg stat
   register: ceph_pg_stat
   until: >
     ceph_pg_stat.stdout is search('^([0-9]+) pgs: \\1 active\\+clean')
@@ -70,7 +70,7 @@
   when: has_long_running_operations.stdout_lines | length > 0
 
 - name: Wait until the 'degraded' and 'scrub' keywords go away from ceph status
-  command: timeout 30 ceph -s
+  command: timeout {{ timeout_ceph_cmd }} ceph -s
   register: ceph_status
   until: >
     'degraded' not in ceph_status.stdout and 'scrub' not in ceph_status.stdout

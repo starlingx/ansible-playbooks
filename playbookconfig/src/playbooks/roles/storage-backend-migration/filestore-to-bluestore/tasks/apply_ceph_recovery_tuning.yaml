@@ -13,7 +13,7 @@
   shell: |
     set -e
     {% for key, value in ceph_recovery_tuning_profile.items() %}
-    ceph config set osd {{ key }} {{ value }}
-    ceph tell 'osd.*' config set {{ key }} {{ value }}
+    timeout {{ timeout_ceph_cmd }} ceph config set osd {{ key }} {{ value }}
+    timeout {{ timeout_ceph_cmd }} ceph tell 'osd.*' config set {{ key }} {{ value }}
     {% endfor %}
   delegate_to: "{{ system.active_controller }}"

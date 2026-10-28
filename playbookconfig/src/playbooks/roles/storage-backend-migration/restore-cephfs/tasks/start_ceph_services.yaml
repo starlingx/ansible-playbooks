@@ -33,7 +33,7 @@
   until: ceph_pods_check.rc == 0
 
 - name: Wait until all MONs to be in quorum
-  shell: timeout 30 ceph mon stat
+  shell: timeout {{ timeout_ceph_cmd }} ceph mon stat
   register: ceph_mon_stat
   retries: 60
   delay: 10
@@ -44,7 +44,7 @@
     var: ceph_mon_stat.stdout_lines
 
 - name: Wait until all MGR to be in active
-  shell: timeout 30 ceph -s
+  shell: timeout {{ timeout_ceph_cmd }} ceph -s
   register: ceph_status
   retries: 60
   delay: 10
@@ -56,7 +56,7 @@
     var: ceph_status.stdout_lines
 
 - name: Wait until all OSDs to be up
-  command: timeout 30 ceph osd stat
+  command: timeout {{ timeout_ceph_cmd }} ceph osd stat
   register: ceph_osd_stat
   until: >
     ceph_osd_stat.stdout is search('^([0-9]+) osds: \\1 up')

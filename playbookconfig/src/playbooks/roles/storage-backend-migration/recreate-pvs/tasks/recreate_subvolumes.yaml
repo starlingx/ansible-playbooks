@@ -18,6 +18,6 @@
     new_pv_subvolume_name: "{{ new_pv_data.spec.csi.volumeAttributes.subvolumeName }}"
 
 - name: "Create volume for PV {{ pv_name }}"
-  command: ceph fs subvolume create kube-cephfs {{ new_pv_subvolume_name }} --group-name csi --size {{ pv_required_subvolume_bytes }}
+  command: timeout {{ timeout_ceph_cmd }} ceph fs subvolume create kube-cephfs {{ new_pv_subvolume_name }} --group-name csi --size {{ pv_required_subvolume_bytes }}
   vars:
     pv_required_subvolume_bytes: "{{ pv_subvolume_size_bytes | int + 268435456 }}" # + 256MiB

@@ -13,18 +13,18 @@
 # If nothing changes within the timeout, it proceeds (nothing to
 # move or already done).
 - name: Wait for PG movement to start
-  command: timeout 30 ceph pg stat --format json
+  command: timeout {{ timeout_ceph_cmd }} ceph pg stat --format json
   register: pg_movement
   changed_when: false
   failed_when: false
   retries: "{{ (filestore_bluestore_movement_timeout_seconds | int / filestore_bluestore_poll_interval_seconds | int) | int }}"
   delay: "{{ filestore_bluestore_poll_interval_seconds }}"
   vars:
-    pg_data: "{{ (pg_movement.stdout | from_json).pg_summary }}"
-    active_clean: "{{ pg_data.num_pg_by_state | selectattr('name', 'equalto', 'active+clean') | map(attribute='num') | first | default(0) }}"
+    pg_data: "{{ (pg_movement.stdout | default('{}', true) | from_json).pg_summary | default({}) }}"
+    active_clean: "{{ (pg_data.num_pg_by_state | default([])) | selectattr('name', 'equalto', 'active+clean') | map(attribute='num') | first | default(0) }}"
   until: >
     pg_movement.rc == 0 and
-    active_clean | int < pg_data.num_pgs | int
+    active_clean | int < (pg_data.num_pgs | default(0) | int)
   when: wait_pg_movement | default(true) | bool
 
 - name: Wait until cluster finishes recovery
@@ -54,22 +54,23 @@
     var: wait_recovery_result
 
 - name: Check cluster health after recovery
-  command: ceph health -f json
+  command: timeout {{ timeout_ceph_cmd }} ceph health -f json
   register: ceph_health
   changed_when: false
 
 - name: Wait until ceph is HEALTH_OK
-  command: ceph health -f json
+  command: timeout {{ timeout_ceph_cmd }} ceph health -f json
   register: ceph_health
   retries: 60
   delay: 10
   until: >
     (
-      ceph_health.stdout | from_json | json_query("status") == "HEALTH_OK"
+      (ceph_health.stdout | default('{}', true) | from_json | json_query("status")) == "HEALTH_OK"
     ) or
     (
       (
-        ceph_health.stdout | from_json | json_query("checks")
+        (ceph_health.stdout | default('{}', true) | from_json | json_query("checks"))
+      | default({})
       | dict2items
       | selectattr("value.severity", "equalto", "HEALTH_WARN")
       | list
@@ -81,7 +82,7 @@
 # The reason to check for 'recover' instead of 'recovery' is that this way it
 # also matches some PGs in recovery state in addition to the 'recovery' entry
 - name: Wait until the 'recover' keyword goes away from ceph status
-  command: timeout 30 ceph -s
+  command: timeout {{ timeout_ceph_cmd }} ceph -s
   register: ceph_status
   until: >
     'recover' not in ceph_status.stdout

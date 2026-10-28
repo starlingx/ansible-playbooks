@@ -104,7 +104,7 @@
 
 - name: List current Ceph subvolumes after cleanup
   command: >
-    ceph fs subvolume ls "kube-cephfs" csi --format json
+    timeout {{ timeout_ceph_cmd }} ceph fs subvolume ls "kube-cephfs" csi --format json
   register: subvolume_list_after_cleanup
   changed_when: false
   ignore_errors: true

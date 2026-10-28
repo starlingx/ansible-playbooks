@@ -35,7 +35,7 @@
   include_tasks: "{{ roles_dir_path }}/pre-checks/tasks/common/display_alarms.yaml"
 
 - name: Check Ceph cluster status
-  command: timeout 30 ceph -s
+  command: timeout {{ timeout_ceph_cmd }} ceph -s
   register: ceph_status
   changed_when: false
   when: migration_target == "rook_ceph"

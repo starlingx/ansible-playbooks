@@ -63,6 +63,8 @@ block_openstack_app: true
 
 allow_out_of_sync: false
 
+timeout_ceph_cmd: 600
+
 #############################
 # Rook-Ceph target specific #
 #############################

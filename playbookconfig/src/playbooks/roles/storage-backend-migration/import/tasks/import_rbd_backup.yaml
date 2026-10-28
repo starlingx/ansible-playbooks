@@ -45,7 +45,7 @@
             pool_name="$pool_dir"
             echo "Processing Pool Directory: $pool_name"
 
-            if ! ceph osd pool ls | grep -q "^${pool_name}$"; then
+            if ! timeout {{ timeout_ceph_cmd }} ceph osd pool ls | grep -q "^${pool_name}$"; then
               echo "ERROR: Pool ${pool_name} does not exist in destination."
               exit 1
             fi
