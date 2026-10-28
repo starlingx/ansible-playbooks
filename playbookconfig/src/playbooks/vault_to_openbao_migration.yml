@@ -19,4 +19,8 @@
     - role: vault-to-openbao-migration/common
       tags: [always]
 
-  tasks: []
+  tasks:
+    - name: "Phase 1 — pre-migration checks"
+      import_role:
+        name: vault-to-openbao-migration/01_pre_migration_check
+      tags: [phase1]
