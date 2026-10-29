@@ -85,7 +85,7 @@
 
   - name: Print the output of platform restore playbook
     debug:
-      msg: "{{ job_result.stdout }}"
+      msg: "{{ job_result.stdout_lines }}"
 
   - name: Reconfigure OAM network post factory restore
     block:

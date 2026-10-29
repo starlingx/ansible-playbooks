@@ -1,6 +1,6 @@
 ---
 #
-# Copyright (c) 2022 Wind River Systems, Inc.
+# Copyright (c) 2022,2026 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -25,9 +25,9 @@
       "@{{ subcloud_overrides }}"
     register: images_restore_output
 
-  - name: Print the output of platform restore playbook
+  - name: Print the output of user images restore playbook
     debug:
-      msg: "{{ images_restore_output.stdout }}"
+      msg: "{{ images_restore_output.stdout_lines }}"
 
   always:
     - name: Remove subcloud overrides file on {{ inventory_hostname }}
