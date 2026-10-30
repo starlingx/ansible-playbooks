@@ -35,6 +35,13 @@
       changed_when: false
       register: ceph_df_json
 
+    - name: Ensure ceph df returned data
+      assert:
+        that: ceph_df_json.stdout | trim | length > 0
+        fail_msg: >-
+          The ceph df query returned no data from the ceph cluster.
+          Cannot continue the migration.
+
     # Changed to use "rbd diff" to calculate the space used by RBD volumes
     - name: Register total used bytes in ceph without consider replicas
       set_fact:

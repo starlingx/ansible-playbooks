@@ -130,6 +130,13 @@
       register: all_disks_query
       changed_when: false
 
+    - name: Ensure disk query returned data
+      assert:
+        that: all_disks_query.stdout | trim | length > 0
+        fail_msg: >-
+          The disk query returned no data from the inventory.
+          Cannot continue the migration.
+
     - name: Set all_disks_db fact
       set_fact:
         all_disks_db: "{{ all_disks_query.stdout | from_json }}"

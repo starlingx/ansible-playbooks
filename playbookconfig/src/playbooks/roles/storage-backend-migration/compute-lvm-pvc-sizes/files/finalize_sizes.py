@@ -21,6 +21,11 @@ def ceil_to_next_gib(size_bytes):
     return math.ceil(size_bytes / GIB) * GIB
 
 
+def apply_upsize(requested_bytes, upsize_percent):
+    upsized = requested_bytes * (1 + upsize_percent / 100)
+    return ceil_to_next_gib(int(upsized))
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Finalize PVC target sizes with file density decision.')
@@ -42,8 +47,13 @@ def main():
     # Filesystem PVCs: apply file density decision
     for pvc in pvcs:
         if not pvc.get('needs_file_count'):
+            # Volumes that skipped counting but were already flagged for upsize
+            # (usage at/above the no-density threshold) still get the upsize.
+            if pvc.get('needs_upsize'):
+                pvc['target_bytes'] = apply_upsize(
+                    pvc['requested_bytes'], pvc['upsize_percent'])
             pvc['effective_bytes'] = max(pvc['target_bytes'], args.xfs_min_bytes)
-            pvc['needs_upsize'] = False
+            pvc['needs_upsize'] = bool(pvc.get('needs_upsize'))
             pvc['file_count'] = None
             pvc['files_per_gib'] = None
             results.append(pvc)
@@ -57,8 +67,7 @@ def main():
         file_density_per_gib = pvc['file_density_per_gib']
 
         if files_per_gib > file_density_per_gib:
-            upsized = pvc['requested_bytes'] * (1 + upsize_percent / 100)
-            target_bytes = ceil_to_next_gib(int(upsized))
+            target_bytes = apply_upsize(pvc['requested_bytes'], upsize_percent)
             needs_upsize = True
         else:
             target_bytes = pvc['requested_bytes']

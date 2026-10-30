@@ -11,6 +11,13 @@
   register: hosts_json
   changed_when: false
 
+- name: Ensure hosts query returned data
+  assert:
+    that: hosts_json.stdout | trim | length > 0
+    fail_msg: >-
+      The hosts query returned no data from the Kubernetes cluster.
+      Cannot continue the migration.
+
 - name: Parse hosts JSON
   set_fact:
     hosts_list: "{{ hosts_json.stdout | from_json }}"

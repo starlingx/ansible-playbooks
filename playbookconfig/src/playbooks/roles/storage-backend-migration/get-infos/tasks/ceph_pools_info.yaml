@@ -12,6 +12,14 @@
   when: >
     (extra_pools_list is not defined) or (all_pools_list is not defined)
 
+- name: Ensure pool details query returned data
+  assert:
+    that: ceph_pools_raw.stdout | trim | length > 0
+    fail_msg: >-
+      The pool details query returned no data from the ceph cluster.
+      Cannot continue the migration.
+  when: all_pools_list is not defined
+
 - name: Parse and cache configuration for ALL pools
   vars:
     _all_pools_json: |

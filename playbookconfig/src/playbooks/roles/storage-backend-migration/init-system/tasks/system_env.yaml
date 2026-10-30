@@ -11,6 +11,7 @@
     env
   register: env_output
   failed_when: "'Openstack Admin credentials can only be loaded from the active controller.' in env_output.stdout"
+  no_log: true
   when: system_env is undefined
 
 - name: Gather wanted variables

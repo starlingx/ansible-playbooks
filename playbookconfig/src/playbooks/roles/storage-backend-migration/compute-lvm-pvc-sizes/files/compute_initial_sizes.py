@@ -19,10 +19,17 @@ def main():
     parser = argparse.ArgumentParser(
         description='Compute initial target PVC sizes based on Ceph usage.')
     parser.add_argument('pvcs', help='JSON array of PVCs with used_bytes')
+    parser.add_argument('--usage-threshold-no-density-percent', type=int, required=True,
+                        help='Usage threshold %% at or above which a volume is '
+                             'upsized regardless of file density (skips counting)')
     parser.add_argument('--usage-threshold-regular-volume-percent', type=int, required=True,
-                        help='Usage threshold %% for volumes larger than --small-vol-gib')
+                        help='Usage threshold %% for volumes larger than '
+                             '--small-vol-gib needing file counting to detect '
+                             'high-density volumes')
     parser.add_argument('--usage-threshold-small-volume-percent', type=int, required=True,
-                        help='Usage threshold %% for volumes at or below --small-vol-gib')
+                        help='Usage threshold %% for volumes at or below '
+                             '--small-vol-gib needing file counting to detect '
+                             'high-density volumes')
     parser.add_argument('--small-vol-gib', type=int, required=True,
                         help='Max size (GiB) to be considered a small volume')
     parser.add_argument('--upsize-percent', type=int, required=True,
@@ -30,6 +37,16 @@ def main():
     parser.add_argument('--file-density-per-gib', type=int, required=True,
                         help='File density threshold (files per GiB)')
     args = parser.parse_args()
+
+    if not (args.usage_threshold_no_density_percent
+            >= args.usage_threshold_regular_volume_percent
+            and args.usage_threshold_no_density_percent
+            >= args.usage_threshold_small_volume_percent):
+        parser.error(
+            '--usage-threshold-no-density-percent must be >= both '
+            '--usage-threshold-regular-volume-percent and '
+            '--usage-threshold-small-volume-percent, otherwise file-density '
+            'detection is not reached')
 
     pvcs = json.loads(args.pvcs)
 
@@ -43,7 +60,11 @@ def main():
                      if requested_gib <= args.small_vol_gib
                      else args.usage_threshold_regular_volume_percent)
         usage_percent = (used_bytes / requested_bytes * 100) if requested_bytes > 0 else 0
-        needs_file_count = usage_percent >= threshold
+
+        # A volume at/above the no-density threshold must be upsized regardless
+        # of file count, so decide it here and skip the expensive file counting.
+        needs_upsize = usage_percent >= args.usage_threshold_no_density_percent
+        needs_file_count = (not needs_upsize) and (usage_percent >= threshold)
 
         usage_rounded = round(usage_percent, 2)
         if usage_rounded > usage_percent:
@@ -65,6 +86,7 @@ def main():
             'threshold': threshold,
             'target_bytes': requested_bytes,
             'needs_file_count': needs_file_count,
+            'needs_upsize': needs_upsize,
             'file_density_per_gib': args.file_density_per_gib,
             'upsize_percent': args.upsize_percent,
         })

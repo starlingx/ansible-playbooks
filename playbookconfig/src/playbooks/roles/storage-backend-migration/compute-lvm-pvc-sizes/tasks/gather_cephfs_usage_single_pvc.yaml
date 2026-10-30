@@ -19,6 +19,13 @@
   register: subvol_info_result
   changed_when: false
 
+- name: Ensure subvolume info returned data
+  assert:
+    that: subvol_info_result.stdout | trim | length > 0
+    fail_msg: >-
+      The subvolume info query for PVC {{ pvc.namespace }}/{{ pvc.name }}
+      returned no data from the ceph cluster. Cannot continue the migration.
+
 - name: Append to results
   set_fact:
     cephfs_usage_results: >-

@@ -4,18 +4,24 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-# Usage threshold (%) above which file counting is triggered.
+# Usage threshold (%) at or above which a volume is upsized regardless of file
+# density.
+usage_threshold_no_density_percent: 90
+
+# Usage threshold (%) above which file counting is triggered to detect
+# high-density volumes.
 # Volumes at or above this usage may need upsizing for XFS overhead.
 usage_threshold_regular_volume_percent: 85
 
-# Lower threshold for small volumes (≤ small_volume_gib).
+# Lower threshold for small volumes (≤ small_volume_gib) above which file
+# counting is triggered to detect high-density volumes.
 # XFS overhead is proportionally larger on small volumes.
 usage_threshold_small_volume_percent: 80
 
 # Volumes at or below this size (GiB) use the lower threshold.
 small_volume_gib: 1
 
-# Percentage to upsize when high usage + high file density is detected.
+# Percentage to upsize when required
 upsize_percent: 5
 
 # File density threshold (files per GiB of used space).

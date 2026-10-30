@@ -12,6 +12,13 @@
   register: ceph_df_json
   changed_when: false
 
+- name: Ensure ceph df returned data
+  assert:
+    that: ceph_df_json.stdout | trim | length > 0
+    fail_msg: >-
+      The ceph df query returned no data from the ceph cluster.
+      Cannot continue the migration.
+
 - name: Register available and used space and OSD count
   set_fact:
     ceph_total_bytes: "{{ (ceph_df_json.stdout | from_json).stats.total_bytes }}"
@@ -31,6 +38,13 @@
   command: timeout {{ timeout_ceph_cmd }} ceph osd df --format json
   register: ceph_osd_df_json
   changed_when: false
+
+- name: Ensure ceph osd df returned data
+  assert:
+    that: ceph_osd_df_json.stdout | trim | length > 0
+    fail_msg: >-
+      The ceph osd df query returned no data from the ceph cluster.
+      Cannot continue the migration.
 
 - name: Set OSD usage safety margin for calculation
   set_fact:

@@ -11,6 +11,8 @@
   rescue:
     - include_tasks: "{{ role_path_common }}/tasks/clear_facts_cache.yaml"
 
+    # Do not call fail_playbook.yaml because this is a checkpoint,
+    # meaning that if it fails, the fail_playbook.yaml runs automatically.
     - name: Force play failure after cleanup
       fail:
         msg: "Final failure after cache cleanup."

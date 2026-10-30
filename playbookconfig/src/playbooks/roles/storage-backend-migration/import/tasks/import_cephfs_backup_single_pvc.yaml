@@ -7,11 +7,20 @@
 - name: "[PVC {{ pvc.name }}] Import CephFS backup file"
   shell: |
     set -e -o pipefail
-    echo "Importing backup to /data/{{ pvc.name }}/..."
-    kubectl exec -n {{ cephfs_pvc_namespace }} {{ batch_pod_name }} -- dar -x "/backup/backup-${PVC_NAME}.dar" -R "/data/{{ pvc.name }}/" -Q -wa
+    echo "Importing backup to /data/${TARGET_PVC}/..."
+    DAR_OUT="$(kubectl exec -n "${NS}" "${POD}" -- \
+      dar -x "/backup/backup-${PVC_NAME}.dar" -R "/data/${TARGET_PVC}/" -Q -wa 2>&1)"
+    echo "${DAR_OUT}"
+    if echo "${DAR_OUT}" | grep -Eq '[1-9][0-9]* inode\(s\) (not restored|ignored|failed to restore|deleted)'; then
+      echo "ERROR: dar did not fully restore /data/${TARGET_PVC} (see summary above)." >&2
+      exit 1
+    fi
   environment:
     KUBECONFIG: "{{ kubeconfig }}"
     PVC_NAME: "{{ cephfs_pvc_namespace }}-{{ pvc.name }}"
+    TARGET_PVC: "{{ pvc.name }}"
+    NS: "{{ cephfs_pvc_namespace }}"
+    POD: "{{ batch_pod_name }}"
   register: import_result
 
 - name: "[PVC {{ pvc.name }}] Show import CephFS result"

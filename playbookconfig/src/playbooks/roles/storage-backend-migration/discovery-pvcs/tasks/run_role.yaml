@@ -32,6 +32,14 @@
     rbd_pvcs_raw is undefined or rbd_pvcs_raw is none or
     rbd_pvcs_names is undefined or rbd_pvcs_names is none
 
+- name: Ensure PVC discovery returned data
+  assert:
+    that: pvcs_raw_result.stdout | trim | length > 0
+    fail_msg: >-
+      The PVC discovery script returned no data from the Kubernetes cluster.
+      Cannot continue the migration.
+  when: pvcs_raw_result.stdout is defined
+
 - name: Set all PVC facts
   vars:
     pvcs: "{{ pvcs_raw_result.stdout | from_json }}"

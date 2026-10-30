@@ -9,6 +9,13 @@
   register: ceph_osd_tree_json
   changed_when: false
 
+- name: Ensure ceph osd tree returned data
+  assert:
+    that: ceph_osd_tree_json.stdout | trim | length > 0
+    fail_msg: >-
+      The ceph osd tree query returned no data from the ceph cluster.
+      Cannot continue the migration.
+
 - name: Build OSD to chassis list
   set_fact:
     _osd_chassis_list: "{{ _osd_chassis_list | default([]) + ([{'osd_id': item.id, 'chassis_name': _chassis.name}] if _chassis else []) }}"

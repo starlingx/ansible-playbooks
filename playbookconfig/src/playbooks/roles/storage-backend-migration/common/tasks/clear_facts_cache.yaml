@@ -4,25 +4,69 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-- name: Clear Facts Cache (Ansible Cache)
-  meta: clear_facts
-
-- name: Clear Facts Cache (Ansible Cache) for localhost in dynamic place
-  file:
-    path: "~/.storage-backend-migration-ansible-cache/localhost"
-    state: absent
+# NEVER clear the cache once the pull-images checkpoint has been reached.
+#
+# The only source of truth that survives every scenario is the jsonfile fact
+# cache on disk (one JSON file per host, on the Ansible control node). We read
+# those files (excluding localhost) and look for the 'pull-images' string.
+- name: Locate the fact cache directory
+  set_fact:
+    _fact_cache_dir: "{{ '~/.storage-backend-migration-ansible-cache' | expanduser }}"
   delegate_to: localhost
   become: false
-  ignore_errors: true
 
-- name: Clear Facts Cache (Ansible Cache) for localhost in a fixed place
-  file:
-    path: "/home/sysadmin/.storage-backend-migration-ansible-cache/localhost"
-    state: absent
+- name: List cached host fact files (excluding localhost)
+  find:
+    paths: "{{ _fact_cache_dir }}"
+    patterns: "*"
+    excludes: "s1_localhost"
+  register: _fact_cache_files
   delegate_to: localhost
   become: false
-  ignore_errors: true
 
-- name: Show that cleanup is complete
-  debug:
-    msg: "The checkpoint tasks failed and the Ansible facts cache has been cleared."
+- name: Read cached host fact files
+  no_log: true
+  slurp:
+    src: "{{ item.path }}"
+  loop: "{{ _fact_cache_files.files | default([]) }}"
+  register: _fact_cache_contents
+  delegate_to: localhost
+  become: false
+
+- name: Determine whether pull-images checkpoint exists in any cached host
+  vars:
+    _fact_cache_decoded: >-
+      {{ (_fact_cache_contents.results | default([]))
+         | map(attribute='content')
+         | select('defined')
+         | map('b64decode')
+         | list }}
+  set_fact:
+    _pull_images_done: >-
+      {{ _fact_cache_decoded | select('search', 'pull-images') | list | length > 0 }}
+
+- name: Clear facts cache unless pull-images checkpoint is present on disk
+  when: not (_pull_images_done | bool)
+  block:
+    - name: Clear Facts Cache (Ansible Cache)
+      meta: clear_facts
+
+    - name: Clear Facts Cache (Ansible Cache) for localhost in dynamic place
+      file:
+        path: "~/.storage-backend-migration-ansible-cache/s1_localhost"
+        state: absent
+      delegate_to: localhost
+      become: false
+      ignore_errors: true
+
+    - name: Clear Facts Cache (Ansible Cache) for localhost in a fixed place
+      file:
+        path: "/home/sysadmin/.storage-backend-migration-ansible-cache/s1_localhost"
+        state: absent
+      delegate_to: localhost
+      become: false
+      ignore_errors: true
+
+    - name: Show that cleanup is complete
+      debug:
+        msg: "The checkpoint tasks failed and the Ansible facts cache has been cleared."

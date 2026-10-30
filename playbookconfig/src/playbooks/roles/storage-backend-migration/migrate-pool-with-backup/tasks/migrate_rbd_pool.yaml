@@ -123,6 +123,14 @@
   changed_when: false
   when: all_pools_list | selectattr('name', 'equalto', 'kube-rbd') | list | length == 0
 
+- name: Ensure kube-rbd pool details query returned data
+  assert:
+    that: kube_rbd_pool_raw.stdout | trim | length > 0
+    fail_msg: >-
+      The kube-rbd pool details query returned no data from the ceph cluster.
+      Cannot continue the migration.
+  when: all_pools_list | selectattr('name', 'equalto', 'kube-rbd') | list | length == 0
+
 - name: Extract kube-rbd pool configuration
   set_fact:
     kube_rbd_pool_config: "{{ kube_rbd_pool_raw.stdout | from_json | selectattr('pool_name', 'equalto', 'kube-rbd') | first }}"

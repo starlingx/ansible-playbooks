@@ -13,6 +13,95 @@
          | default('see the failed task output above for details')) }}
   when: migration_failed_task_name is undefined
 
+# On an early failure (inside init-system) role_path_common is not set yet; it
+# is defined only in a later play. The rescue blocks that include this file
+# always define common_role_path first, so resolve the common role path from
+# whichever is available, falling back to a path derived from playbook_dir.
+- name: Resolve common role path for failure handling
+  set_fact:
+    fail_role_path_common: >-
+      {{ role_path_common
+         | default(common_role_path
+         | default(playbook_dir ~ '/roles/storage-backend-migration/common')) }}
+  run_once: true
+
+# Re-read the password from openrc, the same
+# source init-system uses, so the standard become pattern works again. no_log
+# keeps the password out of the output.
+- name: Restore become password for failure handling
+  shell: |
+    source /etc/platform/openrc >/dev/null 2>&1
+    echo "$OS_PASSWORD"
+  register: _fail_openrc_pass
+  changed_when: false
+  no_log: true
+  when: ansible_become_pass is undefined
+
+- name: Set ansible_become_pass for failure handling
+  set_fact:
+    ansible_become_pass: "{{ _fail_openrc_pass.stdout }}"
+  no_log: true
+  when:
+    - ansible_become_pass is undefined
+    - _fail_openrc_pass.stdout | default('') | length > 0
+
+# Shared helpers so the "is the active controller discovered?" check and the
+# delegation target are defined once and reused by the tasks below.
+#   active_controller_ready  -> the active controller was discovered and is
+#                               registered in the active_controller group.
+#   fail_delegate_host       -> where DB/flag/alarm tasks should run: the active
+#                               controller when ready, otherwise localhost (the
+#                               host that holds the sysinv DB and the flag on an
+#                               early failure).
+- name: Set failure-handling helper facts
+  set_fact:
+    active_controller_ready: "{{ _ac_ready | bool }}"
+    fail_delegate_host: "{{ system.active_controller if _ac_ready | bool else 'localhost' }}"
+  vars:
+    _ac_ready: >-
+      {{ system is defined
+         and system.active_controller is defined
+         and system.active_controller in groups.get('active_controller', []) }}
+  run_once: true
+
+- name: Gather storage_backend info for failure reporting
+  include_tasks: "{{ fail_role_path_common }}/../get-infos/tasks/storage_backend_info.yaml"
+  run_once: true
+  when:
+    - storage_backend is undefined
+    - inventory_hostname == 'localhost'
+      or (system is defined
+          and system.active_controller is defined
+          and inventory_hostname == system.active_controller)
+
+- name: Resolve storage_backend for failure reporting
+  set_fact:
+    failure_storage_backend: >-
+      {{ hostvars[system.active_controller].storage_backend
+         if (active_controller_ready | bool
+             and hostvars[system.active_controller].storage_backend is defined)
+         else storage_backend }}
+  run_once: true
+  when: >-
+    (active_controller_ready | bool
+     and hostvars[system.active_controller].storage_backend is defined)
+    or storage_backend is defined
+
+- name: Assert a storage_backend was resolved for failure reporting
+  assert:
+    that:
+      - failure_storage_backend is defined
+    fail_msg: >-
+      No storage_backend could be resolved during failure handling on
+      {{ inventory_hostname }} (the sysinv query returned no 'ceph'/'ceph-store'
+      backend). The DB status update and error alarm cannot be set.
+  run_once: true
+  when:
+    - inventory_hostname == 'localhost'
+      or (system is defined
+          and system.active_controller is defined
+          and inventory_hostname == system.active_controller)
+
 - name: Update storage-backend migration_status capability to failed
   become: true
   become_user: postgres
@@ -22,28 +111,24 @@
     SET capabilities = (
       capabilities::jsonb || '{\"migration_status\": \"failed\"}'::jsonb
     )::text
-    WHERE id = {{ storage_backend.id }};
+    WHERE id = {{ failure_storage_backend.id }};
     "
-  vars:
-    storage_backend: "{{ hostvars[system.active_controller].storage_backend }}"
   run_once: true
-  delegate_to: "{{ system.active_controller }}"
-  when: hostvars[system.active_controller].storage_backend is defined
+  delegate_to: "{{ fail_delegate_host }}"
+  when: failure_storage_backend is defined
 
 - name: Raise migration error alarm
-  script: "{{ role_path_common }}/files/fm_alarm.py --entity-uuid {{ storage_backend.uuid }} --set error --file-name /home/sysadmin/storage-backend-migration-ansible.log"
-  vars:
-    storage_backend: "{{ hostvars[system.active_controller].storage_backend }}"
+  script: "{{ fail_role_path_common }}/files/fm_alarm.py --entity-uuid {{ failure_storage_backend.uuid }} --set error --file-name /home/sysadmin/storage-backend-migration-ansible.log"
   run_once: true
-  delegate_to: "{{ system.active_controller }}"
-  when: hostvars[system.active_controller].storage_backend is defined
+  delegate_to: "{{ fail_delegate_host }}"
+  when: failure_storage_backend is defined
 
 - name: Remove in-progress migration flag
   file:
     path: /run/.storage_backend_migration_in_progress
     state: absent
   run_once: true
-  delegate_to: "{{ system.active_controller }}"
+  delegate_to: "{{ fail_delegate_host }}"
 
 - name: Propagate the failure
   fail:
