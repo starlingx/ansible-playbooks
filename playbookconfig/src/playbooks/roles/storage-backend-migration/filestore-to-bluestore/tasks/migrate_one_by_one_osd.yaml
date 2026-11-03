@@ -8,6 +8,9 @@
   command: timeout {{ timeout_ceph_cmd }} ceph osd metadata {{ item.osd_id }}
   register: current_osd_metadata
   changed_when: false
+  retries: 3
+  delay: 60
+  until: current_osd_metadata.stdout | trim | length > 0
 
 - name: Get the current ObjectStore status from OSD {{ item.osd_id }}
   set_fact:

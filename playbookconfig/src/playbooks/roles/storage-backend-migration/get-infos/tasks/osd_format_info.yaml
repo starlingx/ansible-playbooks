@@ -29,6 +29,16 @@
   changed_when: false
   loop: "{{ all_osd_ids }}"
 
+- name: Ensure OSD metadata returned data for each OSD
+  assert:
+    that: item.stdout | trim | length > 0
+    fail_msg: >-
+      The OSD metadata query for OSD {{ item.item }} returned no data from the
+      ceph cluster. Cannot continue the migration.
+  loop: "{{ osd_metadata_results.results }}"
+  loop_control:
+    label: "OSD {{ item.item }}"
+
 - name: Integrate OSD metadata (including objectstore type) into a lookup table
   set_fact:
     ceph_osd_lookup: >-

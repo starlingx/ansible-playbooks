@@ -37,6 +37,13 @@
       register: db_osd_info
       changed_when: false
 
+    - name: Ensure OSD query returned data
+      assert:
+        that: db_osd_info.stdout | trim | length > 0
+        fail_msg: >-
+          The OSD query returned no data from the inventory.
+          Cannot continue the migration.
+
     - name: Set fact from SQL JSON output
       set_fact:
         ceph_disks_by_host_db: "{{ db_osd_info.stdout | from_json }}"

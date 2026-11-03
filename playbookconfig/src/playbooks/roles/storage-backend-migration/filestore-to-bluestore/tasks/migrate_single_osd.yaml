@@ -18,6 +18,9 @@
   command: "timeout {{ timeout_ceph_cmd }} ceph osd metadata {{ item.osd_id }}"
   changed_when: false
   register: osd_metadata_output
+  retries: 3
+  delay: 60
+  until: osd_metadata_output.rc == 2 or (osd_metadata_output.stdout | trim | length > 0)
   failed_when:
     - osd_metadata_output is failed
     - osd_metadata_output.rc != 2  # rc == 2 -> Error ENOENT: osd.x does not exist

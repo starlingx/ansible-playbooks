@@ -35,10 +35,18 @@
         --usage-threshold-regular-volume-percent '{{ usage_threshold_regular_volume_percent }}'
         --usage-threshold-small-volume-percent '{{ usage_threshold_small_volume_percent }}'
         --small-vol-gib '{{ small_volume_gib }}'
+        --usage-threshold-no-density-percent '{{ usage_threshold_no_density_percent }}'
         --upsize-percent '{{ upsize_percent }}'
         --file-density-per-gib '{{ file_density_per_gib }}'
       register: sizing_result
       changed_when: false
+
+    - name: Ensure initial sizing computation returned data
+      assert:
+        that: sizing_result.stdout | trim | length > 0
+        fail_msg: >-
+          The initial PVC sizing computation returned no data.
+          Cannot continue the migration.
 
     - name: Set sizing initial fact
       set_fact:
@@ -67,6 +75,13 @@
         --xfs-min-bytes '{{ xfs_min_size_bytes }}'
       register: sizing_final_result
       changed_when: false
+
+    - name: Ensure final sizing computation returned data
+      assert:
+        that: sizing_final_result.stdout | trim | length > 0
+        fail_msg: >-
+          The final PVC sizing computation returned no data.
+          Cannot continue the migration.
 
     - name: Set PVC target sizes
       set_fact:

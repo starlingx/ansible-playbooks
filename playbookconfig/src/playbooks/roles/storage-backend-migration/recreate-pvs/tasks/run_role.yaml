@@ -37,6 +37,9 @@
 - name: Get cephfilesystem ID
   shell: timeout {{ timeout_ceph_cmd }} ceph fs get kube-cephfs --format json-pretty
   register: fs_map
+  retries: 3
+  delay: 60
+  until: fs_map.stdout | default('') | trim | length > 0
   when: fscid is not defined
 
 - name: Set cephfilesystem ID fact

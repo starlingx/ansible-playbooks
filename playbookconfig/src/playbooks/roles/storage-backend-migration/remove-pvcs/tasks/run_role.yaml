@@ -96,6 +96,9 @@
          | join(' ') }}
   register: remove_pvcs_sc_filtered
   changed_when: false
+  retries: 3
+  delay: 60
+  until: remove_pvcs_sc_filtered.stdout | default('') | trim | length > 0
   when:
     - remove_pvcs_filter_storage_class is defined
     - remove_pvcs_filter_storage_class | length > 0

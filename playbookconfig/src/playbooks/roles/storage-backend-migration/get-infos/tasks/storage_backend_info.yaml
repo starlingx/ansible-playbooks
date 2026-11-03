@@ -20,6 +20,14 @@
   changed_when: false
   when: storage_backend is undefined
 
+- name: Ensure storage_backend query returned data
+  assert:
+    that: storage_backend_result.stdout | trim | length > 0
+    fail_msg: >-
+      No 'ceph' storage_backend named 'ceph-store' was found in the inventory.
+      Cannot continue the migration.
+  when: storage_backend is undefined
+
 - name: Set storage_backend
   set_fact:
     storage_backend: "{{ storage_backend_result.stdout | from_json }}"
