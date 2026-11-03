@@ -28,6 +28,13 @@
   set_fact:
     full_restore_items: "{{ restore_items + restore_extra_items }}"
 
+# On Debian Trixie, overwriting /etc/shadow mid-restore invalidates sudo's
+# cached credentials and breaks subsequent become tasks. Instead of excluding
+# shadow here and re-reading the backup tarball later, extract it in this same
+# pass but rename it on the fly to etc/shadow.tmp / etc/shadow-.tmp via tar
+# --transform. The deferred "Restore shadow" task in complete-restore then
+# simply moves the .tmp files into place as the final step. This removes the
+# need to read the tarball after it has been cleaned up.
 - name: Restore configuration files
   command: >-
     tar --use-compress-program=pigz -C / -xvpf {{ platform_backup_fqpn }} --overwrite
@@ -35,8 +42,7 @@
     {% for v in restore_exclude_items %}
     --exclude {{ v | quote }}
     {% endfor %}
-    --exclude etc/shadow
-    --exclude etc/shadow-
+    --transform='s|^etc/shadow\(-*\)$|etc/shadow\1.tmp|'
 
 - name: Set lvm-csi backend flag path
   set_fact:
