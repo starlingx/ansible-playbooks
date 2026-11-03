@@ -76,7 +76,7 @@ elif not is_old_version and rbd_or_cephfs == "cephfs":
     subvolumeName = data['spec']['csi']['volumeAttributes']['subvolumeName']
     subvolumePath = data['spec']['csi']['volumeAttributes']['subvolumePath']
     subvolumePrefix = "pvc-volumes"
-    subvolumeId = subvolumeName.replace(subvolumePrefix, "")
+    subvolumeId = subvolumeName.replace(subvolumePrefix, "").replace("csi-vol", "")
     normalized_volumeId = subvolumeId.lstrip('-')
 
 if rbd_or_cephfs == "cephfs":
