@@ -20,7 +20,7 @@ install_mocks()
 sys.modules["eventlet"].monkey_patch = lambda **kw: None
 from test_helpers import add_role_dirs
 from test_helpers import setup_pplr_mocks, setup_dli_mocks
-add_role_dirs(["common/push-docker-images/files", "recover-rook-ceph-data/files", "enroll-subcloud/update-oam-interface/files", "recover-ceph-data/files", "bootstrap/prepare-env/files", "common/update-sc-admin-endpoints/files"])
+add_role_dirs(["common/push-docker-images/files", "recover-rook-ceph-data/files", "common/update-oam-interface/files", "recover-ceph-data/files", "bootstrap/prepare-env/files", "common/update-sc-admin-endpoints/files"])
 
 os.environ.setdefault("REGISTRIES", "{}")
 import download_images as dli

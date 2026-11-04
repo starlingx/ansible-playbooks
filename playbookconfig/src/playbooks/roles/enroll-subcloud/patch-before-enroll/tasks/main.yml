@@ -160,6 +160,9 @@
         target_sw_version: "{{ patches_result.target_sw_version | default('') }}"
         reboot_required: "{{ patches_result.reboot_required | default(false) }}"
         enrollment_in_progress: true
+        # Persist the OAM interface in the database before a reboot-required
+        # unlock, so the subcloud stays reachable after the reboot.
+        persist_oam_interface: true
 
   when: release_ids_to_apply | length > 0
 

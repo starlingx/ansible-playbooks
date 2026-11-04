@@ -12,7 +12,8 @@
 #       * For each deploy command, periodically execute deploy show to
 #         validate state and ensure the step completes before proceeding
 #       * For RR: Lock the controller before deploy host and unlock after
-#         deploy host
+#         deploy host, persisting the OAM interface while locked if the
+#         caller asks for it
 #
 #   NOTE: Instead of using SOFTWARE_URL, software CLI is using SYSTEM_URL,
 #   which is already used by sysinv. To still authenticate with the
@@ -153,12 +154,17 @@
       {{ general_deploy_fail_message }}
   when: check_deploy_host.stdout != "deploy-host-done"
 
-  # Update the OAM interface if in the process of enrollment to
-  # ensure OAM network connectivity post unlock.
-- name: Update OAM interface for enrollment
+# The unlock below reboots the controller, which brings the network back up
+# from the sysinv database: if the OAM interface there is still the factory
+# one, the host returns unreachable. Persist it here, where the host is still
+# locked, as sysinv only recreates the OAM interface on a locked host.
+# Requires bootstrap_interface, plus bootstrap_vlan for a VLAN OAM.
+- name: Persist the OAM interface before the unlock reboot
   include_role:
-    name: enroll-subcloud/update-oam-interface
-  when: mode is defined and mode == "enroll" and reboot_required
+    name: common/update-oam-interface
+  when:
+    - reboot_required
+    - persist_oam_interface | default(false) | bool
 
 - name: Perform host unlock if reboot required
   include_role:
