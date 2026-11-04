@@ -4,6 +4,22 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+- name: Get current localhost real name
+  ansible.builtin.add_host:
+    name: "{{ lookup('ansible.builtin.pipe', 'hostname') }}"
+    ansible_connection: "local"
+  when: storage_backend is undefined
+
+- name: Set current_storage_backend
+  vars:
+    real_host: "{{ lookup('ansible.builtin.pipe', 'hostname') }}"
+  set_fact:
+    current_storage_backend: "{{ hostvars[real_host]['storage_backend'] }}"
+  changed_when: false
+  when:
+    - storage_backend is undefined
+    - hostvars[real_host]['storage_backend'] is defined
+
 - name: Get ceph storage_backend
   become: true
   become_user: postgres
@@ -18,7 +34,9 @@
     "
   register: storage_backend_result
   changed_when: false
-  when: storage_backend is undefined
+  when:
+    - current_storage_backend is undefined
+    - storage_backend is undefined
 
 - name: Ensure storage_backend query returned data
   assert:
@@ -26,11 +44,15 @@
     fail_msg: >-
       No 'ceph' storage_backend named 'ceph-store' was found in the inventory.
       Cannot continue the migration.
-  when: storage_backend is undefined
+  when:
+    - current_storage_backend is undefined
+    - storage_backend is undefined
 
 - name: Set storage_backend
+  vars:
+    real_host: "{{ lookup('ansible.builtin.pipe', 'hostname') }}"
   set_fact:
-    storage_backend: "{{ storage_backend_result.stdout | from_json }}"
+    storage_backend: "{{ current_storage_backend | default(storage_backend_result.stdout | from_json) }}"
     cacheable: true
   changed_when: false
   when: storage_backend is undefined
