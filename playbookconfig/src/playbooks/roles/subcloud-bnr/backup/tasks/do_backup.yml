@@ -86,7 +86,7 @@
 
   - name: Print the output of platform backup playbook
     debug:
-      msg: "{{ platform_backup_output.stdout }}"
+      msg: "{{ platform_backup_output.stdout_lines }}"
 
   - name: Remove previous backup upon successful subcloud backup (local storage)
     file:
