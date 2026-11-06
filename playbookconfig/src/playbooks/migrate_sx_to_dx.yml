@@ -56,14 +56,15 @@
                    (pxeboot_node_1_address | length == 0) or
                    (pxeboot_addrpool_name | length == 0)
 
-    - name: Get Debian codename
-      command: lsb_release -cs
-      register: codename
-
-    - name: Set codename facts
+    # The shared validate-addresses role gates its dual-stack tasks on
+    # is_bullseye/is_trixie. This playbook does not run the bootstrap
+    # prepare-env that normally sets them, so set them here. It ships only
+    # with the trixie release and is run against a system of its own release,
+    # so the OS codename is known and need not be probed at runtime.
+    - name: Set OS codename facts
       set_fact:
-        is_bullseye: "{{ codename.stdout == 'bullseye' }}"
-        is_trixie: "{{ codename.stdout == 'trixie' }}"
+        is_bullseye: false
+        is_trixie: true
 
     - name: Validate and parse required address parameters
       include_tasks: roles/common/validate-addresses/tasks/validate_and_parse_dual_stack.yml
@@ -147,15 +148,9 @@
         storage_addrpool_name: "{{ storage_addrpool_name }}"
       when: storage_node_0_address is defined and storage_node_1_address is defined
 
-    - name: Check primary pool address type (Bullseye)
-      set_fact:
-        is_primary_ipv6: "{{ dual_stack_network_params.external_oam_node_0_address_primary|ipv6 }}"
-      when: is_bullseye
-
-    - name: Check primary pool address type (Trixie)
+    - name: Check primary pool address type
       set_fact:
         is_primary_ipv6: "{{ dual_stack_network_params.external_oam_node_0_address_primary|ansible.utils.ipv6 }}"
-      when: is_trixie
 
     - name: Query current address-pool list
       shell: |
@@ -370,6 +365,11 @@
         new_cluster_host_c1_ipv6: "{{ dual_stack_network_params.cluster_host_node_1_address_primary if is_primary_ipv6
                         else dual_stack_network_params.cluster_host_node_1_address_secondary }}"
 
+    # pxeboot is handled IPv4-only here, unlike the other networks, because
+    # pxeboot is IPv4-only in the platform: it relies on a labeled (alias)
+    # interface and DHCPv6 cannot use a label (see sysinv puppet/interface.py,
+    # "pxeboot for now is only IPv4"). There is a single pxeboot pool and it is
+    # always IPv4, so there is no primary/secondary IPv6 branch to handle.
     - name: Prepare pxeboot configuration - addrpool name
       set_fact:
         pxeboot_addrpool_ipv4: "{{ dual_stack_network_params.pxeboot_addrpool_name_primary }}"
@@ -433,25 +433,17 @@
         vars:
           target_host: 'controller-0'
 
-      - name: Update system mode
-        expect:
-          echo: yes
-          command: bash -c 'source /etc/platform/openrc; system modify -m {{ duplex_mode }} '
-          responses:
-            (.*)Are you sure you want to continue(.*): "yes"
-        failed_when: false
-        when: current_system_mode.stdout == 'simplex'
-
-      # Wait up to 20 minutes for the runtime manifest triggered by the previous
-      # "system modify -m duplex" command, as there may be other runtime manifests
-      # being applied
-      - name: Wait for kubernetes duplex migration manifest completion, up to 20 minutes
-        wait_for:
-          path: "{{ kubernetes_duplex_migration_flag }}"
-          state: present
-          timeout: 1200
-          msg: Timeout waiting for kubernetes duplex migration manifest completion
-
+      # The address-pool updates below MUST run before "system modify -m
+      # duplex", not after. That command flips system_mode to duplex and, in
+      # the same conductor call, immediately fires the runtime manifests --
+      # platform::etcd::duplex_migration::runtime among them. Those manifests
+      # read the live controller-0 and controller-1 addresses; for instance
+      # platform::drbd::params derives its DRBD peer address from
+      # controller-1's management address once system_mode is duplex. On a
+      # system converting in place from simplex those fields have never been
+      # populated, so the manifest fails catalog compilation and the wait
+      # below times out after 20 minutes. Doing the updates first closes the
+      # race rather than racing it.
       - name: Update OAM IPv4 configuration
         shell: >-
           source /etc/platform/openrc;
@@ -512,6 +504,52 @@
               (current_admin_c0_ipv6 != new_admin_c0_ipv6 or
                current_admin_c1_ipv6 != new_admin_c1_ipv6)
 
+      # cluster-host and pxeboot are deliberately not updated with the pools
+      # above. sysinv treats them as read-only until the system mode is duplex
+      # and the simplex_to_duplex_migration capability is set, both of which
+      # "system modify -m duplex" does, so they are updated after it instead --
+      # still before the unlock, which is where they are consumed.
+      - name: Update storage IPv4 configuration
+        shell: >-
+          source /etc/platform/openrc;
+          system addrpool-modify {{ storage_uuid_ipv4 }} \
+            --controller0-address {{ new_storage_c0_ipv4 }} \
+            --controller1-address {{ new_storage_c1_ipv4 }}
+        when: storage_uuid_ipv4 is defined and
+             (current_storage_c0_ipv4 != new_storage_c0_ipv4 or
+              current_storage_c1_ipv4 != new_storage_c1_ipv4)
+
+      - name: Update storage IPv6 configuration
+        shell: >-
+          source /etc/platform/openrc;
+          system addrpool-modify {{ storage_uuid_ipv6 }} \
+            --controller0-address {{ new_storage_c0_ipv6 }} \
+            --controller1-address {{ new_storage_c1_ipv6 }}
+        when: storage_uuid_ipv6 is defined and
+              (current_storage_c0_ipv6 != new_storage_c0_ipv6 or
+               current_storage_c1_ipv6 != new_storage_c1_ipv6)
+
+      - name: Update system mode
+        expect:
+          echo: yes
+          command: bash -c 'source /etc/platform/openrc; system modify -m {{ duplex_mode }} '
+          responses:
+            (.*)Are you sure you want to continue(.*): "yes"
+        failed_when: false
+        when: current_system_mode.stdout == 'simplex'
+
+      # Wait up to 20 minutes for the runtime manifest triggered by the
+      # previous "system modify -m duplex" command, as there may be other
+      # runtime manifests being applied. Every address-pool update above has
+      # already run, so the manifests have the addresses they need on the
+      # first attempt.
+      - name: Wait for kubernetes duplex migration manifest completion, up to 20 minutes
+        wait_for:
+          path: "{{ kubernetes_duplex_migration_flag }}"
+          state: present
+          timeout: 1200
+          msg: Timeout waiting for kubernetes duplex migration manifest completion
+
       - name: Update cluster-host IPv4 configuration
         shell: >-
           source /etc/platform/openrc;
@@ -542,25 +580,203 @@
              (current_pxeboot_c0_ipv4 != new_pxeboot_c0_ipv4 or
               current_pxeboot_c1_ipv4 != new_pxeboot_c1_ipv4)
 
-      - name: Update storage IPv4 configuration
-        shell: >-
-          source /etc/platform/openrc;
-          system addrpool-modify {{ storage_uuid_ipv4 }} \
-            --controller0-address {{ new_storage_c0_ipv4 }} \
-            --controller1-address {{ new_storage_c1_ipv4 }}
-        when: storage_uuid_ipv4 is defined and
-             (current_storage_c0_ipv4 != new_storage_c0_ipv4 or
-              current_storage_c1_ipv4 != new_storage_c1_ipv4)
+      # Place controller-0's unit addresses on its interfaces and save them to
+      # disk now, so they survive the unlock reboot and DRBD can come up. This
+      # lives in its own role; see roles/migrate-sx-to-dx/tasks/main.yml for
+      # why it is an additive script here and not a puppet network apply.
+      - name: Place and persist controller-0 unit addresses before the unlock
+        include_role:
+          name: migrate-sx-to-dx
 
-      - name: Update storage IPv6 configuration
-        shell: >-
-          source /etc/platform/openrc;
-          system addrpool-modify {{ storage_uuid_ipv6 }} \
-            --controller0-address {{ new_storage_c0_ipv6 }} \
-            --controller1-address {{ new_storage_c1_ipv6 }}
-        when: storage_uuid_ipv6 is defined and
-              (current_storage_c0_ipv6 != new_storage_c0_ipv6 or
-               current_storage_c1_ipv6 != new_storage_c1_ipv6)
+      # Puppet regenerates haproxy.cfg during the unlock, so this edit only
+      # has to hold until then. Until the unlock the floating management
+      # address does not exist, the frontend bound to it cannot start, and
+      # haproxy stays down along with the USM endpoint that host-unlock
+      # queries below.
+      - name: Move the sm-api-internal frontend off the floating address
+        become: yes
+        replace:
+          path: /etc/haproxy/haproxy.cfg
+          regexp: '^(\s*bind\s+)controller\.internal:7777\s*$'
+          replace: '\g<1>127.0.0.1:7777'
+
+      - name: Restart haproxy now that its binds are satisfiable
+        become: yes
+        shell: systemctl restart haproxy
+        failed_when: false
+
+      # If this times out the unlock will be rejected, and this is the clearer
+      # place to find out why.
+      - name: Wait for the USM endpoint that host-unlock queries
+        wait_for:
+          host: controller.internal
+          port: 5497
+          timeout: 120
+          msg: haproxy is not serving the USM endpoint, host-unlock will be rejected
+
+      # etcd: grow the fixed-membership cluster for duplex operation.
+      #
+      # This playbook ships with the fixed-membership etcd release and is only
+      # run against a system of its own release. An older-release subcloud is
+      # converted by invoking that release's own copy of this playbook, the
+      # release-matched copy under /opt/dc-vault/playbooks/<version>/, which
+      # carries that release's own etcd handling. No in-playbook version
+      # detection is needed here.
+      - name: Fixed-membership etcd conversion steps
+        block:
+        # --- etcd: register the floating member, then hand it to Service Manager ---
+        # The conversion manifest has already renamed the incumbent to fixed-0 and
+        # registered the floating member against it, seeding the cluster from the
+        # data that was there. What is left here is the safety net for a system
+        # where that did not happen, and the handover to Service Manager, which
+        # must precede the unlock because SM owns the floating instance from then
+        # on -- exactly as it does after a fresh duplex bootstrap.
+        #
+        # fixed-0 answers on loopback during this window: the conversion runs while
+        # the cluster-host pool is still empty, since sysinv opens that pool only
+        # once the mode is duplex and the migration capability is set, and the mode
+        # change is what sets it. The renamed member therefore keeps an address
+        # that exists, and the unlock moves it to controller-0's unit address.
+        - name: Get cluster-host floating IP for etcd
+          shell: |
+            source /etc/platform/openrc
+            system addrpool-list --nowrap | awk '$4 == "{{ cluster_host_addrpool_ipv4 }}" { print $14 }'
+          register: etcd_floating_ip
+
+        - name: Determine the etcd endpoints used during the conversion
+          set_fact:
+            etcd_floating_peer_url: "https://{{ etcd_floating_ip.stdout | ansible.utils.ipwrap }}:2380"
+            etcd_fixed0_endpoint: "https://127.0.0.1:2379"
+
+        # The floating member is registered as a learner, not as a voter. A
+        # learner replicates the raft log but does not vote, so registering one
+        # leaves the quorum requirement unchanged. Registering a voter would raise
+        # it from one to two while fixed-0 is still the only member serving, and
+        # fixed-0 would then hold no quorum for the whole window between this
+        # registration and the floating member starting below. Were that start to
+        # fail, the cluster would be left with no way back: the registration
+        # cannot be withdrawn without quorum, and quorum cannot be regained
+        # without the member. The promotion further down is what makes the member
+        # count towards quorum, once it is known to be serving.
+        - name: Add the floating etcd member to the cluster as a learner
+          command: >-
+            etcdctl --endpoints {{ etcd_fixed0_endpoint }}
+            --cacert /etc/etcd/ca.crt
+            --cert /etc/etcd/etcd-client.crt
+            --key /etc/etcd/etcd-client.key
+            member add controller --learner --peer-urls={{ etcd_floating_peer_url }}
+          environment:
+            ETCDCTL_API: '3'
+          become: yes
+          register: etcd_member_add
+          failed_when: etcd_member_add.rc != 0 and
+                       'already exist' not in (etcd_member_add.stderr | lower)
+
+        - name: Show how the floating member was registered
+          debug:
+            msg: "{{ 'already registered by the conversion manifest'
+                     if etcd_member_add.rc != 0
+                     else 'registered by this playbook as a learner' }}"
+
+        - name: Enable SM etcd service for duplex operation
+          command: sm-manage service etcd
+          become: yes
+
+        - name: Start SM etcd service
+          command: sm-start service etcd
+          become: yes
+
+        # The member is deliberately left a learner here. Promoting it before the
+        # unlock would raise the quorum requirement to two while both voters are
+        # still on controller-0, and the unlock immediately reboots that node: if
+        # the floating member did not rejoin, the cluster would sit at 1-of-2 and
+        # could not recover, because removing a member itself needs quorum.
+        #
+        # The promotion happens when controller-1 unlocks, in
+        # etcd_fixed_membership.py, which promotes the floating member before
+        # registering fixed-1 -- etcd permits only one learner at a time, so the
+        # existing learner must become a voter before another can be added.
+        #
+        # A conversion that never adds controller-1 is not a complete conversion,
+        # so a learner is the correct end state for this playbook.
+        #
+        # The member transitions to "started" once the SM-started floating etcd
+        # instance (sm-start above) comes up and the learner has replicated
+        # enough of fixed-0's log to join. It does NOT wait for controller-1 --
+        # that is the later promotion step, done when controller-1 unlocks.
+        # Whether it has started replicating yet does not gate the conversion --
+        # fixed-0 serves the cluster alone until then -- so this is a single
+        # observation, not a wait: record its state and move on.
+        - name: Check whether the floating etcd member has started
+          shell: >-
+            etcdctl --endpoints {{ etcd_fixed0_endpoint }}
+            --cacert /etc/etcd/ca.crt
+            --cert /etc/etcd/etcd-client.crt
+            --key /etc/etcd/etcd-client.key
+            member list
+            | awk -F', ' '$3 == "controller" && $2 == "started" { print $1 }'
+          environment:
+            ETCDCTL_API: '3'
+          become: yes
+          register: etcd_floating_member
+          changed_when: false
+
+        # Informational only: fixed-0 serves the cluster and the unlock proceeds
+        # either way. The member is a learner in both cases; this only records
+        # whether it has started replicating yet.
+        - name: Report that the floating etcd member is not yet serving
+          debug:
+            msg: >-
+              The floating etcd member has not reported started yet.
+              It is registered as a learner, so it does not count towards quorum
+              and the cluster is still served by fixed-0 alone. Check
+              'systemctl status etcd'. It is promoted to a voting member when
+              controller-1 is unlocked.
+          when: etcd_floating_member.stdout | default('') | trim == ''
+
+      # After "system modify -m duplex" but before the unlock, the
+      # kube-apiserver manifest still points only at the old simplex etcd
+      # endpoint, which the conversion has turned into the floating learner. A
+      # learner refuses client requests, so kube-apiserver stops serving and
+      # the unlock -- and the IPsec step that follows -- fail. The
+      # per-controller cluster-host unit address is not on the interface yet
+      # (the unlock places it), so point the API server at fixed-0 on the
+      # loopback address: the co-located voting member that is reachable
+      # throughout this window. The unlock regenerates the manifest with the
+      # full endpoint list afterwards, so this only has to bridge the
+      # pre-unlock window. kubelet reloads the static manifest on its own.
+      - name: Point kube-apiserver at the local etcd member for the conversion
+        become: yes
+        replace:
+          path: /etc/kubernetes/manifests/kube-apiserver.yaml
+          regexp: '(--etcd-servers=)\S+'
+          replace: '\g<1>https://127.0.0.1:2379'
+        when: current_system_mode.stdout == 'simplex'
+
+      # Restart the apiserver static pod so kubelet recreates it on the
+      # rewritten manifest now (~7s) instead of on its next file-check (~20s).
+      # Only the apiserver pod restarts; kubelet and the other control-plane
+      # pods are untouched. The readiness wait below is the actual gate.
+      - name: Restart kube-apiserver to pick up the new endpoint
+        become: yes
+        shell: |
+          id=$(crictl ps --name kube-apiserver -q | head -1)
+          [ -n "$id" ] && crictl stop "$id" || true
+        when: current_system_mode.stdout == 'simplex'
+
+      # kubelet re-reads the static manifest and restarts the apiserver pod on
+      # the new endpoint. Wait for it to serve again before the unlock, so
+      # host-unlock never runs against a momentarily-down control plane. This
+      # is a required precondition: if the API server is not serving before the
+      # unlock, the unlock and the IPsec step fail, so a timeout here is a real
+      # failure (no failed_when override).
+      - name: Wait for kube-apiserver to serve on the local etcd member
+        command: curl -sk --max-time 5 https://127.0.0.1:16443/healthz
+        register: apiserver_healthz
+        until: apiserver_healthz.stdout == 'ok'
+        retries: 30
+        delay: 5
+        when: current_system_mode.stdout == 'simplex'
 
       - name: Unlock host
         include_role:
@@ -569,19 +785,26 @@
           target_host: 'controller-0'
           wait_for_unlock: true
 
+      # The pxeboot floating address may reside on a labeled alias rather than
+      # the base interface, where dnsmasq cannot serve controller-1. Re-enable
+      # pxeboot-ipv4 so the address is placed on the base interface.
+      #
+      # This runs before the IPsec step on purpose. Without the address on the
+      # base interface dnsmasq rejects controller-1's requests with "DHCP
+      # packet received on pxeboot0 which has no address", so controller-1
+      # never PXE boots and the conversion cannot be completed. Leaving it
+      # after a task that can fail means a single failure there strands the
+      # system with no way to add controller-1.
+      - name: Ensure pxeboot floating address on base interface
+        command: sm-restart-safe service pxeboot-ipv4
+        become: yes
+
       - name: Config and enable IPsec
         command: /usr/bin/ipsec-client pxecontroller
         register: result
         until: result.rc == 0
         retries: 3
         delay: 5
-        become: yes
-
-      # The pxeboot floating address may reside on a labeled alias rather than
-      # the base interface, where dnsmasq cannot serve controller-1. Re-enable
-      # pxeboot-ipv4 so the address is placed on the base interface.
-      - name: Ensure pxeboot floating address on base interface
-        command: sm-restart-safe service pxeboot-ipv4
         become: yes
 
       when: current_system_mode.stdout == 'simplex' or

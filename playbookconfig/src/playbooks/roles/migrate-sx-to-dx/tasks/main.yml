@@ -1,0 +1,36 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Place controller-0's per-controller platform network (unit) addresses on
+# its interfaces, and write them to /etc/network/interfaces.d, before the
+# controller unlock.
+#
+# Why before the unlock: the unlock reboots the controller, and on the next
+# boot DRBD, haproxy and etcd all expect controller-0's unit addresses to be
+# present. If those addresses are not in /etc/network/interfaces.d they are
+# not configured at boot, DRBD cannot start, and the conversion fails. So the
+# addresses are placed and saved to disk now, while the system is still up,
+# so they survive the reboot.
+#
+# Why a script and not puppet: a puppet network apply (platform::network::
+# runtime) would, in this window, bring the live management/OAM interface
+# down and back up to reconcile it -- flushing the address this playbook's
+# own connection is using, mid-conversion. This script only ADDS addresses
+# and never takes an interface down, so it is safe to run on the live
+# controller. Puppet regenerates these files normally after the unlock.
+#
+- name: Persist and place the controller-0 unit addresses
+  become: yes
+  script: >-
+    {{ role_path }}/files/place_unit_addresses.py
+    {{ new_mgmt_c0_ipv6 if is_primary_ipv6 else new_mgmt_c0_ipv4 }}
+    {{ new_cluster_host_c0_ipv6 if is_primary_ipv6 else new_cluster_host_c0_ipv4 }}
+    {{ new_oam_c0_ipv6 if is_primary_ipv6 else new_oam_c0_ipv4 }}
+  register: placed_unit_addresses
+
+- name: Show what the unit-address placement did
+  debug:
+    var: placed_unit_addresses.stdout_lines
