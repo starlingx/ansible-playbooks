@@ -43,6 +43,11 @@
 
 - set_fact:
     _restore_remove_items:
+      # In the initial != target case, platform_backup_fqpn is either a
+      # symlink into target_backup_dir (unencrypted) or the decrypted
+      # plaintext tarball. Both are safe to remove here; the
+      # user's original source in initial_backup_dir is never touched.
+      - "{{ platform_backup_fqpn }}"
       - "{{ registry_backup_fqpn|default('') }}"
   when: initial_backup_dir != target_backup_dir
 
@@ -65,23 +70,16 @@
       - "{{ patching_restore_data_file | default('') }}"
   when: upgrade_in_progress
 
-- name: Remove temporary files and directories used during restore
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop: >
-    {{
-      _remove_items + _restore_remove_items|default([])
-      + _upgrade_remove_items|default([])
-      + _encrypted_remove_items|default([])
-      + _decrypted_remove_items|default([])
-      | reject('equalto', '')
-    }}
+# The backup tarball ({{ platform_backup_fqpn }}) is deleted by the cleanup
+# task below. For encrypted restores platform_backup_fqpn points at the
+# decrypted tarball, which is listed in _decrypted_remove_items/
+# _encrypted_remove_items. Any data still needed from the tarball must be
+# read or staged out BEFORE that cleanup runs.
 
 # The .cloned_install flag is created by the factory install process and is
 # captured in the backup archive under etc/platform/. Detect it there and
 # register it in extra_required_flags so the optimized restore recreates it
-# on the target.
+# on the target. Must run before the tarball is removed.
 - name: Look for the clone identity reset flag in the backup
   shell: >-
     tar --use-compress-program=pigz -tf {{ platform_backup_fqpn }} |
@@ -95,6 +93,19 @@
   when:
     - cloned_install_flag.rc == 0
     - "'.cloned_install' not in extra_required_flags"
+
+- name: Remove temporary files and directories used during restore
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop: >
+    {{
+      _remove_items + _restore_remove_items|default([])
+      + _upgrade_remove_items|default([])
+      + _encrypted_remove_items|default([])
+      + _decrypted_remove_items|default([])
+      | reject('equalto', '')
+    }}
 
 - name: Combine required flags
   set_fact:
@@ -176,12 +187,13 @@
 # is modified. If the current system password differs from the backup
 # password (e.g., factory restore, or password changed after install),
 # overwriting shadow mid-restore causes "Duplicate become password prompt"
-# errors. Restore shadow after all become-dependent tasks complete.
-# This task must remain last in the playbook.
-- name: Restore shadow and cleanup backup
+# errors. The shadow files were extracted earlier (restore-configuration) as
+# /etc/shadow.tmp and /etc/shadow-.tmp via tar --transform. Move them into
+# place now, after all become-dependent tasks complete. A move preserves the
+# backup's mode/ownership and needs no access to the backup tarball (which has
+# already been cleaned up). This task must remain last in the playbook.
+- name: Restore shadow from deferred .tmp files
   shell: |
-    tar --use-compress-program=pigz -C / -xpf {{ platform_backup_fqpn }} --overwrite \
-      etc/shadow etc/shadow-
-    {% if initial_backup_dir != target_backup_dir %}
-    rm -f {{ platform_backup_fqpn }}
-    {% endif %}
+    mv -f /etc/shadow.tmp /etc/shadow
+    mv -f /etc/shadow-.tmp /etc/shadow-
+  become: yes
