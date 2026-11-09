@@ -1,0 +1,62 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Probe: set probe_app_state for probe_app_name to its platform status, 'absent'
+# or 'unknown' (never treat unknown as absent); a vault app with suspended
+# HelmReleases reports 'suspended'. Also sets probe_app_rc, probe_app_stderr.
+# Optional: probe_app_retries/delay, probe_app_halt_on_unknown, probe_app_halt_hint.
+- name: "Probe app_state: query platform state"
+  check_mode: false
+  block:
+    - name: "Probe app_state: application-show {{ probe_app_name }}"
+      command: system application-show {{ probe_app_name }} --column status --format value
+      environment: "{{ openrc_env }}"
+      register: probe_app_raw
+      failed_when: false
+      retries: "{{ probe_app_retries | default(3) }}"
+      delay: "{{ probe_app_delay | default(10) }}"
+      until: >-
+        probe_app_raw.rc == 0
+        or 'application not found' in (probe_app_raw.stderr | default(''))
+    - name: "Probe app_state: helmrelease suspend flag (only if vault is applied)"
+      command: >-
+        kubectl get helmrelease vault
+        -n {{ vault_namespace }}
+        -o jsonpath={.spec.suspend}
+      environment: "{{ openrc_env }}"
+      register: probe_hr_raw
+      failed_when: false
+      when:
+        - probe_app_name == 'vault'
+        - (probe_app_raw.stdout | default('') | trim) == 'applied'
+- name: "Probe app_state: set result facts"
+  set_fact:
+    probe_app_rc: "{{ probe_app_raw.rc | default(1) }}"
+    probe_app_stderr: "{{ probe_app_raw.stderr | default('') | trim }}"
+    probe_app_state: >-
+      {{
+        (
+          'suspended'
+          if ((probe_app_raw.stdout | default('') | trim) == 'applied'
+              and (probe_hr_raw.stdout | default('') | trim) == 'true')
+          else (probe_app_raw.stdout | default('') | trim)
+        )
+        if (probe_app_raw.rc | default(1)) == 0
+        else (
+          'absent'
+          if 'application not found' in (probe_app_raw.stderr | default(''))
+          else 'unknown'
+        )
+      }}
+- name: "Probe app_state: halt when the state is unknown (opt-in)"
+  assert:
+    that: probe_app_state != 'unknown'
+    fail_msg: >-
+      Cannot determine the {{ probe_app_name }} application state (system
+      application-show rc={{ probe_app_rc }}: {{ probe_app_stderr }}).
+      {{ probe_app_halt_hint | default('Fix the platform CLI, then re-run.') }}
+    quiet: true
+  when: probe_app_halt_on_unknown | default(false) | bool

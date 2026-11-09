@@ -1,0 +1,68 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 1 — assert the artifacts the migration depends on are in place, so a
+# missing one stops the run before Vault is shut down: exactly one OpenBao app
+# tarball whose chart appVersion matches expected_openbao_version, and the
+# storage class. Read-only.
+- name: "Staged artifacts"
+  tags: [phase1]
+  check_mode: false
+  block:
+    - name: "Discover the staged OpenBao app tarball (glob)"
+      find:
+        paths: "{{ openbao_apps_dir }}"
+        patterns: "{{ openbao_tarball_glob }}"
+        file_type: file
+      register: s1_tarball_find
+
+    - name: "Assert exactly one OpenBao app tarball is staged"
+      assert:
+        that:
+          - (s1_tarball_find.files | default([]) | length) == 1
+        fail_msg: >-
+          Expected exactly one '{{ openbao_tarball_glob }}' under {{ openbao_apps_dir }},
+          found {{ s1_tarball_find.files | default([]) | length }}.
+        quiet: true
+
+    - name: "Read the upstream OpenBao appVersion from the chart (read-chart-appversion.sh)"
+      command: >-
+        {{ role_path }}/files/read-chart-appversion.sh
+        {{ (s1_tarball_find.files | first).path }}
+      register: s1_version_raw
+      failed_when: false
+
+    - name: "Record the discovered upstream OpenBao version"
+      set_fact:
+        s1_openbao_version: "{{ s1_version_raw.stdout | default('') | trim }}"
+
+    # Hard gate: refuse to migrate onto a build the operator did not name.
+    # Skipped only when expected_openbao_version is set to '' (empty).
+    - name: "Assert discovered OpenBao version matches expected (set expected_openbao_version='' to skip)"
+      assert:
+        that:
+          - s1_openbao_version == (expected_openbao_version | string)
+        fail_msg: >-
+          OpenBao version '{{ s1_openbao_version }}' != expected_openbao_version '{{ expected_openbao_version }}'
+          (rc={{ s1_version_raw.rc | default('n/a') }} {{ s1_version_raw.stderr | default('') | trim }}).
+          Stage the expected build, or set expected_openbao_version='' to skip.
+        quiet: true
+      when: (expected_openbao_version | default('') | string | trim) != ''
+
+    - name: "Query the storage class"
+      command: kubectl get storageclass general -o name
+      environment: "{{ openrc_env }}"
+      register: s1_sc_raw
+      failed_when: false
+
+    - name: "Assert storage is configured"
+      assert:
+        that: (s1_sc_raw.rc | default(1)) == 0
+        fail_msg: >-
+          Vault and OpenBao applications require storage to be configured
+          (storage class 'general' not found, rc={{ s1_sc_raw.rc | default('n/a') }}
+          {{ s1_sc_raw.stderr | default('') | trim }}).
+        quiet: true

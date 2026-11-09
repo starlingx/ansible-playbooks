@@ -7,12 +7,13 @@
 # Vault-to-OpenBao migration. Runs on the active controller. The migration runs
 # as five phases:
 #   1. Verify prerequisites (Vault version, system state).
-#   2. Gather the source Vault inventory and record it for fidelity comparison.
+#   2. Gather the source Vault inventory and record it for comparison after migration.
 #   3. Copy the Raft data from Vault into OpenBao.
 #   4. Deploy the OpenBao app and verify the migrated secrets.
 #   5. Finalize: hand over the agent injector and dispose of Vault.
 - name: Migrate HashiCorp Vault to OpenBao
-  hosts: active_controller
+  hosts: localhost
+  connection: local
   gather_facts: true
 
   roles:

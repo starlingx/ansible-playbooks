@@ -1,0 +1,40 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 1 — assert no OpenBao deployment exists yet. The migration overwrites
+# the OpenBao data volume, so pre-existing OpenBao data must stop it before any
+# change. Read-only.
+- name: "OpenBao absent"
+  tags: [phase1]
+  check_mode: false
+  block:
+    - name: "Probe the openbao application state"
+      include_tasks: "{{ role_path }}/../common/tasks/probes/app_state.yml"
+      vars:
+        probe_app_name: openbao
+    - name: "Query the openbao namespace"
+      command: kubectl get namespace {{ openbao_namespace }} -o name
+      environment: "{{ openrc_env }}"
+      register: s1_openbao_ns_raw
+      failed_when: false
+    - name: "Assert the openbao application is absent or only uploaded"
+      assert:
+        that: probe_app_state in ['absent', 'uploaded']
+        fail_msg: >-
+          OpenBao application state is '{{ probe_app_state }}'
+          (rc={{ probe_app_rc }} {{ probe_app_stderr }}). The migration needs a
+          system without a deployed OpenBao. Remove it deliberately, then re-run.
+        quiet: true
+    - name: "Assert the openbao namespace does not exist"
+      assert:
+        that:
+          - (s1_openbao_ns_raw.rc | default(0)) != 0
+          - "'NotFound' in (s1_openbao_ns_raw.stderr | default(''))"
+        fail_msg: >-
+          Namespace '{{ openbao_namespace }}' exists or is unreadable (rc={{ s1_openbao_ns_raw.rc | default('n/a') }},
+          {{ s1_openbao_ns_raw.stderr | default('') | trim }}). It may hold OpenBao
+          data the migration would overwrite; remove it deliberately, then re-run.
+        quiet: true
