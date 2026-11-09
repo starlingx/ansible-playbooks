@@ -23,7 +23,8 @@
     - { role: bootstrap/store-passwd, when: save_password, become: yes }
     - { role: bootstrap/apply-manifest, become: yes }
     - { role: bootstrap/persist-config, become: yes }
-    - { role: bootstrap/bringup-essential-services, become: yes }
+    - { role: bootstrap/bringup-cluster-services, become: yes }
+    - { role: bootstrap/bringup-infra-services, become: yes }
     - { role: bootstrap/bringup-bootstrap-applications, become: yes }
     - { role: bootstrap/configure-kernel, become: yes }
     - { role: bootstrap/bringup-mgmt-ipsec, become: yes }

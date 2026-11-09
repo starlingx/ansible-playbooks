@@ -1,0 +1,12 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ROLE DESCRIPTION:
+#   Placeholder for Kubernetes cluster bringup. Content is split out from
+#   bringup-infra-services in a later change; this role is a no-op for now.
+#
+- name: Cluster services placeholder
+  meta: noop
