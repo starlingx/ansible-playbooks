@@ -1,0 +1,31 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Merge one helm override onto the openbao release, re-apply, and wait for 'applied'.
+# Inputs: override_chart, override_file (name under gather_output_dir), override_content (YAML).
+- name: "Write the {{ override_file }} helm override"
+  copy:
+    dest: "{{ gather_output_dir }}/{{ override_file }}"
+    mode: "0600"
+    content: "{{ override_content }}"
+- name: "Merge {{ override_file }} onto the {{ override_chart }} overrides"
+  command: >-
+    system helm-override-update openbao {{ override_chart }} openbao
+    --reuse-values --values {{ gather_output_dir }}/{{ override_file }}
+  environment: "{{ openrc_env }}"
+- name: "Re-apply openbao for {{ override_file }}"
+  command: system application-apply openbao
+  environment: "{{ openrc_env }}"
+  register: override_apply
+  failed_when:
+    - override_apply.rc != 0
+    - "'already' not in (override_apply.stderr | default('') | lower)"
+- name: "Wait for openbao to settle at 'applied' after {{ override_file }}"
+  include_tasks: "{{ role_path }}/../common/tasks/wait_app_state.yml"
+  vars:
+    wait_app_name: openbao
+    wait_app_accept: ['applied']
+    wait_app_retries: 48

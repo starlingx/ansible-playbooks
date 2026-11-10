@@ -51,6 +51,15 @@ expected_openbao_version: "2.2.0"
 # migration enforces injector.enabled, replicas and manager.pause itself.
 openbao_user_overrides_file: ""
 openbao_manager_user_overrides_file: ""
+# Whether Phase 4 enables the OpenBao agent injector once OpenBao is unsealed (true or
+# false). When false, OpenBao runs without an injector; enable it later with
+# injector.enabled=true in the openbao Helm overrides, then application-apply.
+enable_openbao_injector: false
+# Whether Phase 4 deletes Vault's injector webhook before enabling the OpenBao injector
+# (true or false). Used only when enable_openbao_injector is true. A removed Vault
+# leaves no webhook; a suspended Vault keeps its webhook, inert. Reapplying Vault later
+# recreates a deleted webhook, so with the OpenBao injector on both injectors would run.
+delete_vault_webhook: false
 
 # What happens when the migration fails (the playbook's top-level rescue).
 #   auto   - automatically roll back the changes made so far (default)
@@ -88,6 +97,9 @@ vault_shard_secret_count: 5
 # (e.g. stx-openbao-0).
 vault_statefulset: sva-vault
 openbao_statefulset: stx-openbao
+# Immutable unseal-key secret that `baomon conversion` creates in the OpenBao
+# namespace.
+openbao_generation_secret: openbao-unseal-gen-001
 vault_data_pvc: "data-{{ vault_statefulset }}-0"
 # OpenBao server pod (ordinal 0; see TODO(duplex-ha-migration)).
 openbao_pod: "{{ openbao_statefulset }}-0"

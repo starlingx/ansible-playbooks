@@ -1,0 +1,74 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Resolve the injector MutatingWebhookConfiguration name(s) owned by ONE app, and
+# optionally delete them. Vault and OpenBao share the inner webhook name, so the
+# owner is matched by resolve_injector_service_namespace (required). Output:
+# injector_webhook_names; with resolve_injector_delete (default false) only survivors.
+- name: "resolve_injector_webhooks: require the owning service namespace"
+  assert:
+    that:
+      - (resolve_injector_service_namespace | default('') | trim) != ''
+    fail_msg: >-
+      resolve_injector_webhooks needs resolve_injector_service_namespace: the
+      inner webhook name is shared by Vault and OpenBao, so it alone cannot
+      identify whose webhook to act on.
+    quiet: true
+- name: "resolve_injector_webhooks: list webhook configs as '<config> <inner>=<service ns> ...'"
+  command:
+    argv:
+      - kubectl
+      - get
+      - mutatingwebhookconfigurations
+      - -o
+      # yamllint disable rule:line-length
+      - 'jsonpath={range .items[*]}{.metadata.name}{" "}{range .webhooks[*]}{.name}={.clientConfig.service.namespace}{" "}{end}{"\n"}{end}'
+      # yamllint enable rule:line-length
+  environment: "{{ openrc_env }}"
+  register: resolve_injector_raw
+  check_mode: false
+  when: not ansible_check_mode
+- name: "resolve_injector_webhooks: publish the resolved resource names"
+  set_fact:
+    injector_webhook_names: >-
+      {{ resolve_injector_raw.stdout | default('')
+         | regex_findall(_resolve_injector_re) | unique | join('\n') }}
+  vars: &resolve_vars
+    _resolve_injector_re: >-
+      (?m)^(\S+) (?:.* )?{{ injector_webhook_name | regex_escape }}={{
+      resolve_injector_service_namespace | regex_escape }}\x20
+  when: not ansible_check_mode
+- name: "resolve_injector_webhooks: delete the resolved injector webhook config(s)"
+  command:
+    argv:
+      - kubectl
+      - delete
+      - mutatingwebhookconfiguration
+      - "{{ item }}"
+      - --ignore-not-found
+  environment: "{{ openrc_env }}"
+  loop: "{{ (injector_webhook_names | default('')) | regex_findall('(?m)^(.+)$') }}"
+  when:
+    - not ansible_check_mode
+    - resolve_injector_delete | default(false) | bool
+- name: "resolve_injector_webhooks: re-resolve after the delete (survivors only)"
+  command:
+    argv: "{{ resolve_injector_raw.cmd }}"
+  environment: "{{ openrc_env }}"
+  register: resolve_injector_after_raw
+  check_mode: false
+  when:
+    - not ansible_check_mode
+    - resolve_injector_delete | default(false) | bool
+- name: "resolve_injector_webhooks: publish the surviving resource names"
+  set_fact:
+    injector_webhook_names: >-
+      {{ resolve_injector_after_raw.stdout | default('')
+         | regex_findall(_resolve_injector_re) | unique | join('\n') }}
+  vars: *resolve_vars
+  when:
+    - not ansible_check_mode
+    - resolve_injector_delete | default(false) | bool

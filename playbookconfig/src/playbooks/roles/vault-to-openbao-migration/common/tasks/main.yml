@@ -15,6 +15,8 @@
       - verification_level in ['none', 'structure', 'values']
       - rollback_mode in ['manual', 'auto', 'off']
       - (start_phase | string) in ['', '1', '2', '3', '4', '5']
+      - (enable_openbao_injector | string | lower) in ['true', 'false']
+      - (delete_vault_webhook | string | lower) in ['true', 'false']
     fail_msg: "Invalid variable value (see common/defaults/main.yml for allowed)."
     quiet: true
 

@@ -23,7 +23,7 @@
   set_fact:
     openrc_env: >-
       {{ openrc_env_raw.stdout | from_json
-         | combine({'BAO_NAMESPACE': openbao_namespace,
+         | combine({'BAO_NAMESPACE': openbao_namespace, 'BAO_POD': openbao_pod, 'BAO_STATEFULSET': openbao_statefulset,
                     'VAULT_NAMESPACE': vault_namespace, 'VAULT_STS': vault_statefulset,
                     'CLONE_PVC': source_clone_pvc}) }}
   no_log: true

@@ -1,0 +1,54 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 4 — injector cutover, run when enable_openbao_injector is true. After the recovery
+# check, optionally delete Vault's injector webhook (delete_vault_webhook), enable the OpenBao
+# injector, and assert exactly one OpenBao webhook. Vault and OpenBao share the webhook's
+# inner name, so each is matched by its service namespace.
+- name: "Injector cutover — enable the OpenBao injector, assert exactly one OpenBao webhook"
+  when: not ansible_check_mode
+  block:
+    - name: "Delete Vault's injector webhook"
+      when: delete_vault_webhook | bool
+      block:
+        - name: "Resolve and delete the Vault injector webhook by resource name"
+          include_tasks: "{{ role_path }}/../common/tasks/resolve_injector_webhooks.yml"
+          vars:
+            resolve_injector_service_namespace: "{{ vault_namespace }}"
+            resolve_injector_delete: true
+        - name: "Assert no Vault injector webhook remains"
+          assert:
+            that:
+              - (injector_webhook_names | default('x') | trim) == ''
+            fail_msg: >-
+              Vault injector webhook(s) [{{ injector_webhook_names | default('?') | trim }}] remain
+              after the delete. Refusing to enable the OpenBao injector.
+            quiet: true
+    - name: "Resolve the OpenBao injector webhook before deciding enable vs skip"
+      include_tasks: "{{ role_path }}/../common/tasks/resolve_injector_webhooks.yml"
+      vars:
+        resolve_injector_service_namespace: "{{ openbao_namespace }}"
+    - name: "Enable the OpenBao injector"
+      include_tasks: apply_override.yml
+      vars:
+        override_chart: openbao
+        override_file: openbao-injector-on-overrides.yaml
+        override_content: |
+          injector:
+            enabled: true
+      when: (injector_webhook_names | default('') | trim) == ''
+    - name: "Re-resolve the OpenBao injector webhook"
+      include_tasks: "{{ role_path }}/../common/tasks/resolve_injector_webhooks.yml"
+      vars:
+        resolve_injector_service_namespace: "{{ openbao_namespace }}"
+    - name: "Assert exactly one OpenBao injector webhook"
+      assert:
+        that:
+          - (injector_webhook_names | regex_findall('(?m)^(.+)$') | length) == 1
+        fail_msg: >-
+          Expected exactly one OpenBao {{ injector_webhook_name }} webhook after enabling the
+          injector, found [{{ injector_webhook_names | default('') | trim }}].
+        quiet: true

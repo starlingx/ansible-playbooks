@@ -1,0 +1,91 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 4 — recovery check. Run `baomon conversion` to create the immutable gen-001,
+# unseal OpenBao from the copied store with the generation keys, and clear the
+# manager pause.
+- name: "Convert, unseal and clear the manager pause"
+  when: not ansible_check_mode
+  vars:
+    manager_pod: "{{ manager_pod_raw.stdout | trim }}"
+  block:
+    - name: "Query the stx-openbao-manager pod name"
+      command: >-
+        kubectl get pods -n {{ openbao_namespace }}
+        -l app.kubernetes.io/name=openbao-manager
+        -o jsonpath={.items[0].metadata.name}
+      environment: "{{ openrc_env }}"
+      register: manager_pod_raw
+    - name: "Assert the stx-openbao-manager pod was found"
+      assert:
+        that:
+          - manager_pod != ''
+        fail_msg: "No stx-openbao-manager pod found in {{ openbao_namespace }}."
+        quiet: true
+    - name: "Create gen-001 from the copied store"
+      when: not (gen_exists_at_entry | bool)
+      block:
+        # The manager is parked before `baomon run` (deploy.yml), so nothing auto-inits.
+        # Convert only once the server reports initialized from the copied store.
+        - name: "Wait for the server to report initialized from the copied store"
+          command: "python3 {{ role_path }}/../common/files/wait-bao-state.py --state initialized"
+          environment: "{{ openrc_env }}"
+        # --config is required: the default path is test-only and absent in the image.
+        - name: "Invoke `baomon conversion` (no_log — reads secret material)"
+          command: >-
+            kubectl exec {{ manager_pod }} -n {{ openbao_namespace }} --
+            baomon --config {{ baomon_config_path }} conversion
+          environment: "{{ openrc_env }}"
+          register: baomon_conversion
+          failed_when: false
+          no_log: true
+    - name: "Re-probe gen-001 existence after conversion"
+      include_tasks: "{{ role_path }}/../common/tasks/probes/gen_secret_exists.yml"
+      vars:
+        probe_gen_secret_name: "{{ openbao_generation_secret }}"
+    - name: "Assert `baomon conversion` succeeded and gen-001 exists"
+      assert:
+        that:
+          - (baomon_conversion.rc | default(0)) == 0
+          - probe_gen_secret_exists | default(false)
+        fail_msg: >-
+          `baomon conversion` failed (rc={{ baomon_conversion.rc | default('n/a') }}) or
+          {{ openbao_generation_secret }} does not exist. The exec task is no_log; run
+          `kubectl exec {{ manager_pod }} -n {{ openbao_namespace }} --
+          baomon --config {{ baomon_config_path }} conversion` to see the error.
+        quiet: true
+    # Removing the pause file lets init.sh exec `baomon run`, which skips auto-init
+    # and unseals from gen-001.
+    - name: "Unpause the manager: remove the pause_on_trap file"
+      command: >-
+        kubectl exec {{ manager_pod }} -n {{ openbao_namespace }} --
+        rm -f /workdir/pause_on_trap
+      environment: "{{ openrc_env }}"
+      when: unseal_entry.rc != 0
+    - name: "Recovery check: wait for OpenBao to unseal from the copied store"
+      command: "python3 {{ role_path }}/../common/files/wait-bao-state.py --state unsealed"
+      environment: "{{ openrc_env }}"
+    # An unsealed node that never becomes active answers every sys/* read with HTTP 500,
+    # so the inventory would read as empty.
+    - name: "Leadership gate: wait for OpenBao to become the active Raft leader"
+      command: "python3 {{ role_path }}/../common/files/wait-bao-state.py --state active"
+      environment: "{{ openrc_env }}"
+    # While manager.pause stays set, every manager restart parks again (init.sh
+    # re-seeds the pause file) and nothing unseals.
+    - name: "Wait for openbao to settle at 'applied' before clearing the manager pause"
+      include_tasks: "{{ role_path }}/../common/tasks/wait_app_state.yml"
+      vars:
+        wait_app_name: openbao
+        wait_app_accept: ['applied']
+        wait_app_retries: 48
+    - name: "Clear the manager pause override and re-apply"
+      include_tasks: apply_override.yml
+      vars:
+        override_chart: openbao-manager
+        override_file: openbao-manager-pause-overrides.yaml
+        override_content: |
+          manager:
+            pause: ""

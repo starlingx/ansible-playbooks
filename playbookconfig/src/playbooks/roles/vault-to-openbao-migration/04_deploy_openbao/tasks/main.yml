@@ -4,14 +4,63 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Phase 4 — deploy OpenBao with the injector disabled. Orchestration only (deploy).
-- name: "Announce Phase 4 (deploy)"
+# Phase 4 — deploy OpenBao, convert and unseal from the copied store, then cut over
+# the injector. Entry probes skip a run that already finished.
+- name: "Announce Phase 4 (deploy + recovery check + injector cutover)"
   tags: [phase4]
   debug:
     msg: >-
       Phase 4 deploy (system_mode={{ migration_system_mode }}).
       {{ 'DRY-RUN: no changes will be made.' if ansible_check_mode else '' }}
-
-- name: "Deploy OpenBao (replicas=1, injector disabled) + PVC adoption"
-  import_tasks: deploy.yml
+- name: "Entry probes and do-work decision"
   tags: [phase4]
+  block:
+    - name: "Probe gen-001 existence (skip-if-done)"
+      include_tasks: "{{ role_path }}/../common/tasks/probes/gen_secret_exists.yml"
+      vars:
+        probe_gen_secret_name: "{{ openbao_generation_secret }}"
+    - name: "Record gen-001 presence at entry"
+      set_fact:
+        gen_exists_at_entry: "{{ probe_gen_secret_exists | default(false) }}"
+    - name: "Probe OpenBao unseal state (skip-if-done)"
+      command: "python3 {{ role_path }}/../common/files/wait-bao-state.py --state unsealed --probe"
+      environment: "{{ openrc_env }}"
+      register: unseal_entry
+      # rc 6 is "not unsealed"; any other rc is a usage error or a crash.
+      failed_when: unseal_entry.rc not in [0, 6]
+      check_mode: false
+    - name: "Resolve the OpenBao injector webhook at entry"
+      include_tasks: "{{ role_path }}/../common/tasks/resolve_injector_webhooks.yml"
+      vars:
+        resolve_injector_service_namespace: "{{ openbao_namespace }}"
+    # Done when the injector is left disabled or its webhook already exists.
+    - name: "Record whether the injector cutover is done at entry"
+      set_fact:
+        injector_done_at_entry: >-
+          {{ not (enable_openbao_injector | bool)
+             or (injector_webhook_names | default('') | trim) != '' }}
+    # Done iff gen-001 exists, OpenBao is unsealed, and the injector cutover is done.
+    - name: "Compute the do-work condition"
+      set_fact:
+        do_work: >-
+          {{ ansible_check_mode
+             or not (
+               (gen_exists_at_entry | bool)
+               and unseal_entry.rc == 0
+               and (injector_done_at_entry | bool)) }}
+- name: "Deploy, convert/unseal and cut over the injector (skipped when already done)"
+  when: do_work | bool
+  tags: [phase4]
+  block:
+    - import_tasks: deploy.yml
+    - import_tasks: convert_unseal.yml
+    - import_tasks: injector_post.yml
+      when: enable_openbao_injector | bool
+- name: "Phase 4 summary"
+  tags: [phase4]
+  debug:
+    msg: >-
+      Phase 4 complete{{ ' (DRY-RUN — no changes made)' if ansible_check_mode else '' }}: mode={{ migration_system_mode }},
+      openbao={{ s1_openbao_version | default('(not checked this run)') }}, gen-001={{ openbao_generation_secret }},
+      recovery check={{ '(dry-run)' if ansible_check_mode else 'PASS' }},
+      injector={{ 'enabled' if (enable_openbao_injector | bool) else 'left disabled' }}.
