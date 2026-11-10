@@ -5,9 +5,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Phase 3 — first mutating phase: resolve the source and destination PVCs and the
-# destination spec, shut Vault down per vault_final_state, then clone the Raft PV
-# and bind the clone as the OpenBao data PVC.
-# Orchestration only: shutdown, clone_rebind.
+# destination spec, shut Vault down per vault_final_state, clone the Raft PV and
+# bind the clone as the OpenBao data PVC, then copy the unseal secrets.
+# Orchestration only: shutdown, clone_rebind, copy_secrets.
 
 - name: "Announce Phase 3 (first mutating phase)"
   tags: [phase3]
@@ -60,4 +60,17 @@
 
 - name: "Clone the source data and bind it as the OpenBao data PVC"
   import_tasks: clone_rebind.yml
+  tags: [phase3]
+
+- name: "Copy the legacy unseal secrets"
+  import_tasks: copy_secrets.yml
+  tags: [phase3]
+
+- name: "Phase 3 summary"
+  vars:
+    _secrets: "{{ s3_legacy_secret_names | default([]) | length }}"
+  debug:
+    msg: >-
+      Phase 3 complete{{ ' (DRY-RUN)' if ansible_check_mode else '' }}: mode={{ migration_system_mode }},
+      final_state={{ vault_final_state }}, {{ s3_source_pvc }} -> {{ s3_dest_pvc }}, secrets={{ _secrets }}.
   tags: [phase3]

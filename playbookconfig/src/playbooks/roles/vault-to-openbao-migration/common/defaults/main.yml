@@ -73,6 +73,9 @@ openbao_namespace: openbao
 # "cluster-key" (cluster-key-0..4 plus cluster-key-root). Override only if the
 # source deployment stores its unseal shards under a different name.
 vault_shard_secret_prefix: cluster-key
+# Number of unseal shard secrets (<prefix>-0..N-1, plus <prefix>-root). Fixed by
+# vault-manager (KEY_SECRET_SHARES=5); not an operator setting.
+vault_shard_secret_count: 5
 
 # StatefulSet names for the source and target server pods. vault_statefulset is
 # also the `app.kubernetes.io/instance` label value used to select the Vault
