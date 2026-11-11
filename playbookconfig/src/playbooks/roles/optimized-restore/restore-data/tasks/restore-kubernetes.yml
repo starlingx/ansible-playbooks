@@ -247,7 +247,57 @@
       systemd:
         name: kubelet
         state: started
-      when: not (factory_restore | default(false))
+      when:
+        - not (factory_restore | default(false))
+        - system_mode == 'simplex'
+
+    # On duplex and standard systems admin.conf and kubelet.conf point at the
+    # HA control-plane endpoint on port 6443, which is served by HAProxy.
+    # HAProxy only runs after controller-0 is unlocked, so during the restore
+    # kubelet cannot post node status (the node stays NotReady and no pod can
+    # be scheduled) and restore-time kubectl is refused. kube-apiserver itself
+    # listens on 16443 with the same certificate, so point both kubeconfigs at
+    # it before starting kubelet. After unlock, sysinv's
+    # controlplane_endpoint runtime manifest restores the 6443 endpoint.
+    - name: Bring controller-0 Kubernetes node to Ready
+      block:
+        - name: Point kubeconfigs at the apiserver (16443)
+          replace:
+            path: "/etc/kubernetes/{{ item }}"
+            regexp: '(server:\s*https://\[?[0-9a-fA-F:.]+\]?):6443'
+            replace: '\1:16443'
+          loop:
+            - admin.conf
+            - kubelet.conf
+
+        - name: Start kubelet
+          systemd:
+            name: kubelet
+            state: restarted
+
+        - name: Wait for kube-apiserver to be ready
+          command: kubectl get nodes --request-timeout=10s
+          register: _apiserver_ready
+          retries: 30
+          delay: 10
+          until: _apiserver_ready.rc == 0
+          changed_when: false
+
+        - name: Wait for controller-0 Kubernetes node to be Ready
+          command: >-
+            kubectl get node controller-0
+            -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+          register: _node_ready
+          retries: 30
+          delay: 10
+          until: _node_ready.stdout | trim == 'True'
+          changed_when: false
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      become: yes
+      when:
+        - not (factory_restore | default(false))
+        - system_mode != 'simplex'
 
     - name: Start kubelet during factory restore
       command: pmon-start kubelet
