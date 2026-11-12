@@ -1,0 +1,126 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Re-gather the OpenBao inventory as Phase 2 did for Vault and compare it with
+# source-inventory.json (value hashes only at verification_level=values).
+# Publishes s5_compare.
+- name: "Equivalence check: gather the OpenBao inventory and compare it with Phase 2"
+  tags: [phase5]
+  when: not ansible_check_mode
+  block:
+    # The value-hash key is set in Phase 2 and kept in memory only; fail early
+    # rather than report every value as changed.
+    - name: "Equivalence check FAIL: value-hash key from Phase 2 not available"
+      fail:
+        msg: >-
+          EQUIVALENCE CHECK CANNOT COMPARE VALUES: the Phase 2 value-hash key is not available.
+          Use -e verification_level=structure to skip the value comparison.
+      when:
+        - verification_level == 'values'
+        - vtom_hash_key is not defined
+
+    # Active-leader pre-check: if the node is unsealed but not leading, the
+    # collector's sys/* reads 500 into an empty inventory and fail every
+    # dimension. Fail with a precise message instead.
+    - name: "Pre-check: OpenBao is the active Raft leader"
+      command: "python3 {{ role_path }}/../common/files/wait-bao-state.py --state active --probe"
+      environment: "{{ openrc_env }}"
+      register: s5_active_check
+      failed_when: false
+
+    - name: "Fail precisely if OpenBao is unsealed but not the active leader"
+      fail:
+        msg: >-
+          EQUIVALENCE CHECK CANNOT RUN: OpenBao unsealed but not active leader
+          ({{ s5_active_check.stderr | default('') | trim }}); reads would 500 into an empty inventory. Check
+          `kubectl logs {{ openbao_pod }} -c openbao`.
+      when: s5_active_check.rc != 0
+
+    # The pod has no token: unauthenticated `bao list` 403s into EMPTY inventories (a
+    # false-positive check). Load the root token (cluster-key-root, copied in Phase 3)
+    # via the shared helper, which asserts it non-empty, and pass it as BAO_TOKEN.
+    - name: "Load OpenBao root token for authenticated inventory queries (no_log)"
+      include_tasks: "{{ role_path }}/../common/tasks/load_root_token.yml"
+      vars:
+        token_secret_namespace: "{{ openbao_namespace }}"
+        token_secret_name: cluster-key-root
+      no_log: true
+
+    # Gather the OpenBao inventory with the SAME in-pod collector Phase 2 ran
+    # against Vault (invoked with the bao CLI): source and target hash through
+    # identical code, so the equivalence-gating compare cannot drift between them.
+    - name: "Run the inventory collector in-pod (bao CLI; token on stdin)"
+      command:
+        argv:
+          - kubectl
+          - exec
+          - -i
+          - "{{ openbao_pod }}"
+          - -n
+          - "{{ openbao_namespace }}"
+          - -c
+          - openbao
+          - --
+          - sh
+          - -c
+          - "{{ lookup('file', role_path ~ '/../common/files/collect-inventory.sh') }}"
+          - collect-inventory
+          - bao
+          - "{{ verification_level }}"
+        stdin: "{{ root_token }}{{ ('\n' ~ vtom_hash_key) if verification_level == 'values' else '' }}"
+      environment: "{{ openrc_env }}"
+      register: s5_inventory_raw
+      failed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: "Assert the OpenBao inventory collector succeeded"
+      assert:
+        that: s5_inventory_raw.rc == 0
+        fail_msg: >-
+          The OpenBao inventory collector failed (rc={{ s5_inventory_raw.rc }}):
+          {{ s5_inventory_raw.stderr_lines | default([]) | last | default('(no stderr)') }}
+          This is a collector failure, not an inventory mismatch.
+        quiet: true
+
+    # The collector output goes on stdin, so the target hashes never touch disk.
+    # The verdict JSON carries names and counts only (no hashes), so it is shown.
+    - name: "Compare against the Phase 2 source inventory (compare-inventory.py)"
+      command:
+        argv: >-
+          {{ ['python3', role_path ~ '/files/compare-inventory.py',
+              gather_output_dir ~ '/source-inventory.json', '--level', verification_level]
+             + (openbao_builtin_policies | default([])
+                | map('regex_replace', '^', '--builtin-policy=') | list) }}
+        # | string: without it Ansible turns the JSON text into a dict, and the
+        # script would receive its Python repr instead of JSON.
+        stdin: "{{ s5_inventory_raw.stdout | string }}"
+      register: s5_compare_raw
+      failed_when: false
+      no_log: "{{ verification_level == 'values' }}"
+
+    - name: "Record the equivalence verdict"
+      set_fact:
+        s5_compare: >-
+          {{ (s5_compare_raw.stdout | from_json)
+             if (s5_compare_raw.stdout | default('') | trim).startswith('{')
+             else {'error': s5_compare_raw.stderr | default('no output') | trim} }}
+
+    - name: "Equivalence check: assert equivalence"
+      vars:
+        _result: "{{ s5_compare.error | default(s5_compare.dimensions | default({})) }}"
+        _diff: "{{ ('differences: ' ~ (s5_compare.diff | to_json)) if s5_compare.diff | default({}) else '' }}"
+      assert:
+        that:
+          - s5_compare_raw.rc == 0
+        fail_msg: >-
+          EQUIVALENCE CHECK FAILED ({{ verification_level }}): {{ _result }}
+          {{ _diff }}. Source Vault intact.
+        success_msg: >-
+          EQUIVALENCE CHECK PASS: OpenBao inventory equivalent to the Phase 2 source over paths,
+          policies+hashes, auth mounts, engine mounts, audit devices
+          {{ '(incl. hashed values)' if verification_level == 'values' else '(structure)' }}.
+        quiet: true

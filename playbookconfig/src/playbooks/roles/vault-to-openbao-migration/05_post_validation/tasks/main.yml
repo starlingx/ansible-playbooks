@@ -1,0 +1,12 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 5 — re-gather the OpenBao inventory and compare it with Phase 2 (audit
+# devices included). Orchestration only; never modifies the original Vault PVCs/PVs.
+- name: "Equivalence check"
+  import_tasks: equivalence_check.yml
+  when: verification_level != 'none'
+  tags: [phase5]

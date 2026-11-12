@@ -5,8 +5,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Phase 2 — gather Vault source data (read-only): the source inventory and a Raft
-# data checksum manifest, written as reference JSON. Skipped wholesale when
-# verification_level is 'none'.
+# data checksum manifest, written as reference JSON for the Phase 5 check. Skipped
+# wholesale when verification_level is 'none' (Phase 5's check is then a no-op too).
 - name: "Gather Vault source data"
   tags: [phase2]
   check_mode: false
@@ -26,7 +26,8 @@
       no_log: true
 
     # Per-run key for the value hashes, held only in this Ansible run's memory
-    # (lookup with /dev/null stores nothing).
+    # (lookup with /dev/null stores nothing). Phase 5 must run in the same
+    # process to reuse it; see equivalence_check.yml.
     - name: "Generate the per-run value-hash key (memory only)"
       set_fact:
         vtom_hash_key: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
@@ -156,6 +157,7 @@
   debug:
     msg: >-
       verification_level=none: skipping Phase 2 source-data gathering. No source
-      inventory is recorded, so the migration runs without verification.
+      inventory is recorded, so the Phase 5 equivalence check is also skipped and
+      the migration runs without verification.
   tags: [phase2]
   when: verification_level == 'none'

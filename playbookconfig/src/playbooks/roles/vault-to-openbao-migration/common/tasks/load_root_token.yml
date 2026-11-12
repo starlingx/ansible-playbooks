@@ -27,8 +27,8 @@
   no_log: true
 
 - name: "load_root_token: assert the token decoded non-empty"
-  # An empty token (missing secret / silent 403) would let callers record an
-  # empty inventory. Fail loudly here.
+  # An empty token (missing secret / silent 403) would let callers compare
+  # empty-vs-empty and pass an equivalence-gating check falsely. Fail loudly here.
   assert:
     that:
       - (root_token | default('') | trim) != ''

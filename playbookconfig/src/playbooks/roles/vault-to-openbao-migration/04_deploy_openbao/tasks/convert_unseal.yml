@@ -69,7 +69,7 @@
       command: "python3 {{ role_path }}/../common/files/wait-bao-state.py --state unsealed"
       environment: "{{ openrc_env }}"
     # An unsealed node that never becomes active answers every sys/* read with HTTP 500,
-    # so the inventory would read as empty.
+    # so Phase 5 would see an empty inventory.
     - name: "Leadership gate: wait for OpenBao to become the active Raft leader"
       command: "python3 {{ role_path }}/../common/files/wait-bao-state.py --state active"
       environment: "{{ openrc_env }}"
