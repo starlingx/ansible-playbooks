@@ -6,8 +6,8 @@
 #
 """Clone the Vault data PV and make the clone the OpenBao data PVC.
 rebind clones (or adopts) the PV and binds it straight to the destination PVC,
-then hands it to OpenBao (reclaim Delete, relabelled); prune-stale drops
-leftover unbound Retained clone PVs. Original Vault
+then hands it to OpenBao (reclaim Delete, relabelled); release frees an orphaned
+clone PV; prune-stale drops leftover unbound Retained clone PVs. Original Vault
 PVs are refused. Namespaces/names default from $VAULT_NAMESPACE, $VAULT_STS,
 $BAO_NAMESPACE, $CLONE_PVC. stdout: one JSON line. Exit: 0 ok / 2 usage / 3 refused / 4 read / 5 mutate."""
 import argparse
@@ -313,6 +313,81 @@ def rebind(kube: Kube, args: argparse.Namespace,
             "already_bound": False, "size": size, "storage_class": sc}
 
 
+# --- release ----------------------------------------------------------------
+
+def resolve_clone_pv(kube: Kube, args: argparse.Namespace,
+                     pvs: List[Dict[str, Any]]) -> Tuple[str, str]:
+    """Return (pv_name, how) of an orphaned (unbound) clone PV, or ("", "none")."""
+    if args.pv:
+        return args.pv, "argument"
+    obj = get_optional(kube, ["pvc", args.clone_pvc, "-n", args.vault_ns])
+    name = ((obj or {}).get("spec") or {}).get("volumeName") or ""
+    if name:
+        return name, "clone-pvc"
+    # An interrupted run can leave only a Released PV whose stale claimRef
+    # still names the clone claim.
+    for pv in pvs:
+        if (claim_ref(pv) == (args.vault_ns, args.clone_pvc)
+                and pv["spec"].get("persistentVolumeReclaimPolicy") == "Retain"):
+            return pv["metadata"]["name"], "clone-claimref"
+    for pv in get_json(kube, ["pv", "-l", CLONE_PV_LABEL]).get("items", []):
+        if phase(pv) != "Bound":
+            return pv["metadata"]["name"], "label"
+    return "", "none"
+
+
+def release(kube: Kube, args: argparse.Namespace,
+            sleep: Sleep = time.sleep) -> Dict[str, Any]:
+    """Free an orphaned clone PV and its clone claim; return the result dict.
+
+    Raises StepError on refusal, a failed read, or a failed mutation.
+    """
+    pvs = get_json(kube, ["pv"]).get("items", [])
+    clone_pv, how = resolve_clone_pv(kube, args, pvs)
+    result = {"result": "PASS", "clone_pv": clone_pv, "resolved_by": how,
+              "bound_temp_claim": False, "pv_removed_by": "n/a"}
+
+    pv_obj = None
+    if clone_pv:
+        guard(kube, args, clone_pv)
+        pv_obj = get_optional(kube, ["pv", clone_pv])
+
+    if pv_obj is not None:
+        # ceph-csi frees the image only when a claim on the PV goes away.
+        if phase(pv_obj) == "Available":
+            spec = pv_obj.get("spec", {})
+            mutate(kube, ["apply", "-f", "-"], pvc_manifest(
+                args.clone_pvc, args.vault_ns, "source-data-clone",
+                spec.get("capacity", {}).get("storage", ""),
+                spec.get("storageClassName", ""), {"volumeName": clone_pv}))
+            try:
+                wait_phase(kube, args, sleep,
+                           ["pvc", args.clone_pvc, "-n", args.vault_ns], "Bound")
+            except StepError as exc:
+                raise StepError(EXIT_MUTATE, "temporary claim did not bind %s: %s"
+                                % (clone_pv, exc))
+            result["bound_temp_claim"] = True
+        # Delete before the claims go, or ceph-csi keeps the image.
+        patch_pv(kube, clone_pv, {"persistentVolumeReclaimPolicy": "Delete"})
+
+    mutate(kube, ["delete", "pvc", args.clone_pvc, "-n", args.vault_ns,
+                  "--ignore-not-found=true", "--wait=true"])
+
+    if pv_obj is None:
+        result["pv_removed_by"] = "absent" if clone_pv else "n/a"
+        return result
+    gone = wait_for(lambda: get_optional(kube, ["pv", clone_pv]) is None,
+                    args.timeout, args.interval, sleep)
+    if gone:
+        result["pv_removed_by"] = "provisioner"
+    else:
+        # The object goes; its backing image may then need manual cleanup.
+        mutate(kube, ["delete", "pv", clone_pv, "--ignore-not-found=true",
+                      "--wait=true"])
+        result["pv_removed_by"] = "fallback-delete"
+    return result
+
+
 # --- prune-stale ------------------------------------------------------------
 
 def prune_stale(kube: Kube, args: argparse.Namespace,
@@ -365,6 +440,8 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
                     help="clone size when the source PVC does not state one")
     rb.add_argument("--fallback-sc", required=True,
                     help="storage class when the source/clone does not state one")
+    rl = sub.add_parser("release", parents=[common])
+    rl.add_argument("--pv", default="", help="clone PV name, when already known")
     sub.add_parser("prune-stale", parents=[common])
     args = p.parse_args(argv)
     missing = [f for f in ("vault_ns", "vault_sts", "openbao_ns", "clone_pvc")
@@ -381,7 +458,7 @@ def main(argv: List[str], kube: Kube = run_kubectl, sleep: Sleep = time.sleep) -
     except SystemExit as exc:
         return 2 if exc.code else 0
     try:
-        action = {"rebind": rebind, "prune-stale": prune_stale}
+        action = {"rebind": rebind, "release": release, "prune-stale": prune_stale}
         result = action[args.action](kube, args, sleep)
     except StepError as exc:
         err(str(exc))

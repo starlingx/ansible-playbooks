@@ -59,7 +59,6 @@ delete_vault_webhook: false
 #   auto   - automatically roll back the changes made so far (default)
 #   manual - stop and print the manual recovery steps, making no changes
 #   off    - do nothing; leave the system in its failed, partially-migrated state
-# TODO - subjected to change upon further development of migration rollback
 rollback_mode: auto
 
 # Optional hint for which migration phase to resume from (1..5), or "" to start
@@ -140,6 +139,6 @@ openbao_chart_path: /var/www/pages/helm_charts/stx-platform
 # JSON used to confirm the migration preserved every secret.
 gather_output_dir: /home/sysadmin/vault-migration-inventory
 
-# Delete the gather_output_dir files after Phase 5; re-running
+# Delete the gather_output_dir files after Phase 5 or an auto rollback; re-running
 # Phase 5 alone needs source-inventory.json, so set false to keep them.
 gather_output_cleanup: true

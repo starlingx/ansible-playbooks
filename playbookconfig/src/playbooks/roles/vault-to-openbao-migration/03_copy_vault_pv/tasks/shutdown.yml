@@ -45,7 +45,7 @@
             wait_app_accept: ['uploaded']
 
     # suspended: suspend the vault + vault-manager HelmReleases, then scale to 0.
-    # Keeps the app applied for inspection; 'removed' is the default.
+    # Keeps the app applied for fast rollback or inspection; 'removed' is the default.
     - name: "Suspend Vault (HelmReleases + StatefulSet)"
       when:
         - vault_final_state == 'suspended'

@@ -1,0 +1,287 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Ordered OpenBao teardown + Vault restore (rollback_mode auto): remove openbao and its
+# webhook (halt if it survives), delete the ns, release Phase 3 clone artifacts, restore
+# Vault by application-remove + application-apply (unsuspending first if suspended),
+# confirm the Vault PVCs are Bound and verify healthy. Runs only for a failure up to the
+# Phase 5 equivalence check; later failures leave OpenBao in place. Only copied data is
+# destroyed, never the original Vault PVCs/PVs or cluster-key-*.
+- name: "rollback/auto — announce ordered teardown"
+  debug:
+    msg: >-
+      [ROLLBACK: auto]{{ ' DRY-RUN:' if ansible_check_mode else '' }} teardown + Vault restore
+      (vault_final_state={{ vault_final_state }}): remove openbao → remove webhook → delete ns (and PVCs) →
+      remove vault (if still applied/suspended) → apply vault → verify healthy.
+
+# STEP 1 — application-remove openbao, then remove its injector webhook (after, since
+# the running injector recreates it; it cannot block removal). Only OpenBao's webhook
+# is targeted, by service namespace: Vault shares the inner name.
+- name: "rollback/auto — query openbao application state"
+  include_tasks: "{{ role_path }}/../common/tasks/probes/app_state.yml"
+  vars:
+    probe_app_name: openbao
+    probe_app_halt_on_unknown: true
+    probe_app_halt_hint: >-
+      ROLLBACK HALTED. No further changes made. Fix the platform CLI, then re-run rollback.
+
+- name: "rollback/auto — record openbao state before removal"
+  set_fact:
+    rb_openbao_state: "{{ probe_app_state }}"
+
+- name: "rollback/auto — remove the openbao application"
+  when: not ansible_check_mode
+  block:
+    - name: "rollback/auto — already removed — skip application-remove (idempotent)"
+      debug:
+        msg: "openbao application already '{{ rb_openbao_state }}' — skipping application-remove."
+      when: rb_openbao_state in ['removed', 'absent', 'uploaded']
+
+    - name: "rollback/auto — system application-remove openbao (step 1)"
+      command:
+        cmd: system application-remove openbao
+      environment: "{{ openrc_env }}"
+      register: rb_app_remove
+      when: rb_openbao_state not in ['removed', 'absent', 'uploaded']
+
+    - name: "rollback/auto — wait for openbao application to reach uploaded/removed"
+      include_tasks: "{{ role_path }}/../common/tasks/wait_app_state.yml"
+      vars:
+        wait_app_name: openbao
+        wait_app_accept: ['uploaded', 'removed', 'absent']
+      when: rb_openbao_state not in ['removed', 'absent', 'uploaded']
+
+# Injector-webhook removal + HALT gate. application-remove has torn the injector
+# down, so it can no longer recreate the config.
+- name: "rollback/auto — resolve and delete any surviving injector webhook by resolved resource name"
+  include_tasks: "{{ role_path }}/../common/tasks/resolve_injector_webhooks.yml"
+  vars:
+    resolve_injector_service_namespace: "{{ openbao_namespace }}"
+    resolve_injector_delete: true
+
+- name: "rollback/auto — halt on a surviving webhook, then delete the openbao namespace"
+  when: not ansible_check_mode
+  block:
+    # The helper re-resolves after deleting, so injector_webhook_names now holds
+    # only OpenBao webhooks that survived. Vault's own webhook is never counted.
+    - name: "rollback/auto — HALT if the OpenBao injector webhook survives removal"
+      assert:
+        that:
+          - (injector_webhook_names | default('x') | trim) == ''
+        fail_msg: >-
+          ROLLBACK HALTED: OpenBao injector webhook config(s)
+          [{{ injector_webhook_names | default('?') | trim }}] still present after
+          application-remove. Remove them manually, then re-run rollback. No further changes made.
+        success_msg: "OpenBao injector webhook removed after app teardown; proceeding with Vault restore."
+        quiet: true
+
+    # STEP 2 — delete the openbao namespace; this also removes every OpenBao PVC
+    # (data-, audit-, all ordinals). Idempotent, --ignore-not-found.
+    - name: "rollback/auto — delete the openbao namespace (step 2)"
+      command:
+        cmd: kubectl delete namespace {{ openbao_namespace }} --ignore-not-found
+      environment: "{{ openrc_env }}"
+      register: rb_ns_delete
+      failed_when: false
+
+    - name: "rollback/auto — wait for the openbao namespace to terminate"
+      command:
+        cmd: kubectl get namespace {{ openbao_namespace }} -o jsonpath={.status.phase}
+      environment: "{{ openrc_env }}"
+      register: rb_ns_phase
+      failed_when: false
+      check_mode: false
+      retries: 30
+      delay: 5
+      until: (rb_ns_phase.rc | default(0)) != 0 or (rb_ns_phase.stdout | default('') | trim) == ''
+
+# STEP 3 — restore Vault through the application framework: remove it if it is still
+# applied or suspended, then apply. The framework recreates the workloads and the
+# injector webhook; the original Vault PVCs and cluster-key-* secrets survive remove.
+- name: "rollback/auto — probe current Vault application state"
+  include_tasks: "{{ role_path }}/../common/tasks/probes/app_state.yml"
+  vars:
+    probe_app_name: vault
+    probe_app_halt_on_unknown: true
+    probe_app_halt_hint: >-
+      ROLLBACK HALTED. No further changes made. Fix the platform CLI, then re-run rollback.
+- name: "rollback/auto — record Vault state before restore"
+  set_fact:
+    rb_vault_state_before: "{{ probe_app_state }}"
+- name: "rollback/auto — remove Vault so the framework can restore it"
+  when:
+    - not ansible_check_mode
+    - rb_vault_state_before not in ['uploaded', 'removed', 'absent']
+  block:
+    # Flux does not uninstall a suspended HelmRelease, so unsuspend before remove.
+    - name: "rollback/auto — suspended: unsuspend the vault + vault-manager HelmReleases"
+      command:
+        cmd: >-
+          kubectl patch helmrelease {{ item }}
+          -n {{ vault_namespace }}
+          --type merge -p {{ '{"spec":{"suspend":false}}' | quote }}
+      environment: "{{ openrc_env }}"
+      loop:
+        - vault
+        - vault-manager
+      when: rb_vault_state_before == 'suspended'
+    - name: "rollback/auto — system application-remove vault"
+      command:
+        cmd: system application-remove vault
+      environment: "{{ openrc_env }}"
+    - name: "rollback/auto — wait for the vault application to reach uploaded/removed"
+      include_tasks: "{{ role_path }}/../common/tasks/wait_app_state.yml"
+      vars:
+        wait_app_name: vault
+        wait_app_accept: ['uploaded', 'removed']
+# Orphan cleanup only: free a clone PV a rollback mid-Phase 3 left unbound. A bound
+# clone is the OpenBao data PVC and is already freed (reclaim Delete) by the
+# namespace deletion above. clone-pv.py release refuses any original Vault PV.
+- name: "rollback/auto — free any orphaned Phase 3 clone PV"
+  command: "python3 {{ role_path }}/../common/files/clone-pv.py release"
+  environment: "{{ openrc_env }}"
+  register: rb_clone_release
+# STEP 4 — confirm the original Vault data PVCs are intact, then apply vault;
+# Vault re-attaches to its untouched data and auto-unseals from the surviving
+# cluster-key-* secrets.
+- name: "rollback/auto — confirm the original Vault data PVC is Bound"
+  when: not ansible_check_mode
+  block:
+    - name: "rollback/auto — probe that the original Vault data PVC is present and Bound"
+      command:
+        cmd: >-
+          kubectl get pvc {{ vault_data_pvc }} -n {{ vault_namespace }}
+          -o jsonpath={.status.phase}
+      environment: "{{ openrc_env }}"
+      register: rb_vault_data_pvc_phase
+      failed_when: false
+      check_mode: false
+
+    - name: "rollback/auto — assert the original Vault data PVC is Bound (else halt)"
+      assert:
+        that:
+          - (rb_vault_data_pvc_phase.stdout | default('') | trim) == 'Bound'
+        fail_msg: >-
+          ROLLBACK HALTED: Vault data PVC '{{ vault_data_pvc }}' in '{{ vault_namespace }}' is
+          '{{ rb_vault_data_pvc_phase.stdout | default('(missing)') | trim }}', expected 'Bound'
+          (changed outside the migration).
+          OpenBao teardown completed. Investigate before applying Vault. No further changes made.
+        success_msg: "Original Vault data PVC is Bound — Vault will re-attach to its untouched Raft data."
+        quiet: true
+
+- name: "rollback/auto — apply Vault and wait for it to be applied"
+  when: not ansible_check_mode
+  block:
+    - name: "rollback/auto — system application-apply vault"
+      command:
+        cmd: system application-apply vault
+      environment: "{{ openrc_env }}"
+    - name: "rollback/auto — wait for the vault application to reach 'applied'"
+      include_tasks: "{{ role_path }}/../common/tasks/wait_app_state.yml"
+      vars:
+        wait_app_name: vault
+        wait_app_accept: ['applied']
+        wait_app_retries: 90
+# The restore target is what the framework declares: the StatefulSet's replica
+# count, all pods Ready, initialized + unsealed, and the injector webhook present.
+- name: "rollback/auto — verify Vault is restored"
+  when: not ansible_check_mode
+  block:
+    - name: "rollback/auto — read the Vault StatefulSet replica count"
+      command:
+        cmd: >-
+          kubectl get statefulset {{ vault_statefulset }}
+          -n {{ vault_namespace }} -o jsonpath={.spec.replicas}
+      environment: "{{ openrc_env }}"
+      register: rb_vault_replicas_raw
+      check_mode: false
+    - name: "rollback/auto — record the Vault replica count (at least 1)"
+      set_fact:
+        rb_vault_replicas: "{{ rb_vault_replicas_raw.stdout | trim | int }}"
+    - name: "rollback/auto — assert the Vault StatefulSet declares replicas"
+      assert:
+        that: rb_vault_replicas | int >= 1
+        fail_msg: >-
+          Vault NOT restored: StatefulSet {{ vault_statefulset }} declares
+          '{{ rb_vault_replicas_raw.stdout | trim }}' replicas after application-apply.
+        quiet: true
+    - name: "rollback/auto — wait for all Vault pods to be Ready"
+      command:
+        cmd: >-
+          kubectl get statefulset {{ vault_statefulset }}
+          -n {{ vault_namespace }}
+          -o jsonpath={.status.readyReplicas}
+      environment: "{{ openrc_env }}"
+      register: rb_vault_ready
+      failed_when: false
+      check_mode: false
+      retries: 60
+      delay: 10
+      until: (rb_vault_ready.stdout | default('0') | trim | int) == (rb_vault_replicas | int)
+    - name: "rollback/auto — read Vault seal status per pod"
+      # vault status exits 0 unsealed, 2 sealed; parse the JSON either way.
+      command: >-
+        kubectl exec {{ vault_statefulset }}-{{ item }} -n {{ vault_namespace }}
+        -- vault status -format=json
+      environment: "{{ openrc_env }}"
+      loop: "{{ range(rb_vault_replicas | int) | list }}"
+      register: rb_vault_seal
+      failed_when: rb_vault_seal.rc not in [0, 2]
+      check_mode: false
+    - name: "rollback/auto — resolve Vault's injector webhook"
+      include_tasks: "{{ role_path }}/../common/tasks/resolve_injector_webhooks.yml"
+      vars:
+        resolve_injector_service_namespace: "{{ vault_namespace }}"
+        resolve_injector_delete: false
+    - name: "rollback/auto — assert Vault's injector webhook exists"
+      assert:
+        that: (injector_webhook_names | default('') | trim) != ''
+        fail_msg: >-
+          Vault NOT restored: the injector webhook is missing after application-apply.
+          Investigate the vault HelmRelease.
+        quiet: true
+    - name: "rollback/auto — wait for the injector to fill in the webhook caBundle"
+      command:
+        argv:
+          - kubectl
+          - get
+          - mutatingwebhookconfiguration
+          - "{{ item }}"
+          - -o
+          - jsonpath={.webhooks[*].clientConfig.caBundle}
+      environment: "{{ openrc_env }}"
+      loop: "{{ injector_webhook_names | regex_findall('(?m)^(.+)$') }}"
+      register: rb_webhook_ca
+      retries: 24
+      delay: 5
+      until: (rb_webhook_ca.stdout | default('') | trim) != ''
+      check_mode: false
+    - name: "rollback/auto — assert Vault restored"
+      assert:
+        that:
+          - _seal | length == (rb_vault_replicas | int)
+          - _seal | selectattr('initialized', 'equalto', true) | list | length == _seal | length
+          - _seal | selectattr('sealed', 'equalto', false) | list | length == _seal | length
+        fail_msg: >-
+          Vault NOT restored: ready='{{ rb_vault_ready.stdout | default('(none)') | trim }}'/{{ rb_vault_replicas }},
+          initialized={{ _seal | map(attribute='initialized') | list }},
+          sealed={{ _seal | map(attribute='sealed') | list }}.
+          OpenBao teardown succeeded; Vault data and cluster-key-* secrets intact.
+          Investigate the vault namespace.
+        success_msg: >-
+          Vault restored: applied, all {{ rb_vault_replicas }} Ready, initialized + unsealed,
+          injector webhook present with caBundle. Rollback complete.
+        quiet: true
+      vars:
+        _seal: "{{ rb_vault_seal.results | default([]) | map(attribute='stdout') | map('from_json') | list }}"
+- name: "rollback/auto — teardown + restore complete"
+  debug:
+    msg: >-
+      [ROLLBACK: auto] Complete{{ ' (DRY-RUN)' if ansible_check_mode else '' }}:
+      OpenBao webhook/app/PVCs/namespace removed; Vault
+      {{ 'removed and re-applied (applied + ready)' if not ansible_check_mode else 'would be removed and re-applied' }}.
+- name: "rollback/auto — remove gathered inventory files"
+  include_tasks: "{{ role_path }}/../common/tasks/cleanup_gather_output.yml"

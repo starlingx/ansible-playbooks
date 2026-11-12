@@ -5,7 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Scale one Vault workload to 0 and wait until it has no pods. The scale bypasses
-# Helm.
+# Helm; rollback removes and re-applies Vault, which restores the chart's count.
 # Input: s3_workload - {kind, name}; kind is statefulset|deployment.
 
 - name: "scale_to_zero: scale {{ s3_workload.kind }}/{{ s3_workload.name }} to 0"
