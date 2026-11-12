@@ -1,0 +1,79 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 3 — shut Vault down per vault_final_state: removed runs application-remove;
+# suspended suspends the HelmReleases and scales the StatefulSet, vault-manager and
+# agent-injector to 0. Idempotent via the app_state probe; mutations skip in --check.
+- name: "Shut Vault down"
+  tags: [phase3]
+  block:
+    - name: "Probe current Vault application state (skip-if-done)"
+      include_tasks: "{{ role_path }}/../common/tasks/probes/app_state.yml"
+      vars:
+        probe_app_name: vault
+        probe_app_halt_on_unknown: true
+        probe_app_halt_hint: >-
+          Nothing was changed. Fix the platform CLI (see the sysinv QueuePool recovery).
+
+
+    - name: "Record Vault state before shutdown"
+      set_fact:
+        s3_vault_state_before: "{{ probe_app_state }}"
+
+    # application-remove transitions applied -> uploaded (PVCs/PVs/secrets
+    # survive). Skip if already at/past 'uploaded'.
+    - name: "Remove the vault application"
+      when:
+        - vault_final_state == 'removed'
+        - not ansible_check_mode
+        - s3_vault_state_before != 'uploaded'
+      block:
+        - name: "Request vault application-remove"
+          command: system application-remove vault
+          environment: "{{ openrc_env }}"
+          register: s3_app_remove
+
+        # Only 'uploaded' is expected. Anything else, including a vanished app,
+        # is unexpected and must stop the migration.
+        - name: "Wait for vault application to reach 'uploaded'"
+          include_tasks: "{{ role_path }}/../common/tasks/wait_app_state.yml"
+          vars:
+            wait_app_name: vault
+            wait_app_accept: ['uploaded']
+
+    # suspended: suspend the vault + vault-manager HelmReleases, then scale to 0.
+    # Keeps the app applied for inspection; 'removed' is the default.
+    - name: "Suspend Vault (HelmReleases + StatefulSet)"
+      when:
+        - vault_final_state == 'suspended'
+        - not ansible_check_mode
+        - s3_vault_state_before != 'suspended'
+      block:
+        - name: "Suspend the vault + vault-manager HelmReleases"
+          command: >-
+            kubectl patch helmrelease {{ item }}
+            -n {{ vault_namespace }}
+            --type merge -p {{ '{"spec":{"suspend":true}}' | quote }}
+          environment: "{{ openrc_env }}"
+          loop:
+            - vault
+            - vault-manager
+          register: s3_hr_suspend
+
+        # Stop vault-manager and the injector before the server, so neither
+        # reacts to the server going away.
+        - name: "Scale vault-manager, the agent-injector and the Vault StatefulSet to 0"
+          include_tasks: "{{ role_path }}/tasks/scale_to_zero.yml"
+          loop:
+            - kind: statefulset
+              name: "{{ vault_manager_statefulset }}"
+            - kind: deployment
+              name: "{{ vault_injector_deployment }}"
+            - kind: statefulset
+              name: "{{ vault_statefulset }}"
+          loop_control:
+            loop_var: s3_workload
+            label: "{{ s3_workload.kind }}/{{ s3_workload.name }}"

@@ -8,9 +8,9 @@
 # as five phases:
 #   1. Verify prerequisites (Vault version, system state).
 #   2. Gather the source Vault inventory and record it for comparison after migration.
-#   3. Copy the Raft data from Vault into OpenBao.
+#   3. Shut Vault down and copy the Raft data from Vault into OpenBao.
 #   4. Deploy the OpenBao app and verify the migrated secrets.
-#   5. Finalize: hand over the agent injector and dispose of Vault.
+#   5. Finalize: validate the migration.
 - name: Migrate HashiCorp Vault to OpenBao
   hosts: localhost
   connection: local
@@ -30,3 +30,8 @@
       import_role:
         name: vault-to-openbao-migration/02_gather_vault_data
       tags: [phase2]
+
+    - name: "Phase 3 — shut Vault down (first mutating phase)"
+      import_role:
+        name: vault-to-openbao-migration/03_copy_vault_pv
+      tags: [phase3]

@@ -1,0 +1,33 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Wait until wait_app_name reaches a state in wait_app_accept, else fail with the
+# last status. A failing platform CLI never counts; 'absent' only if accepted.
+# Inputs: wait_app_name, wait_app_accept (list), wait_app_retries (60),
+# wait_app_delay (10).
+- name: "Wait app_state: poll {{ wait_app_name }}"
+  command: system application-show {{ wait_app_name }} --column status --format value
+  environment: "{{ openrc_env }}"
+  register: wait_app_raw
+  failed_when: false
+  check_mode: false
+  retries: "{{ wait_app_retries | default(60) }}"
+  delay: "{{ wait_app_delay | default(10) }}"
+  until: >-
+    (wait_app_raw.rc == 0 and (wait_app_raw.stdout | trim) in wait_app_accept)
+    or (wait_app_raw.rc != 0 and 'absent' in wait_app_accept
+        and 'application not found' in wait_app_raw.stderr)
+- name: "Wait app_state: assert {{ wait_app_name }} reached an accepted state"
+  assert:
+    that: >-
+      (wait_app_raw.rc == 0 and (wait_app_raw.stdout | trim) in wait_app_accept)
+      or (wait_app_raw.rc != 0 and 'absent' in wait_app_accept
+          and 'application not found' in wait_app_raw.stderr)
+    fail_msg: >-
+      Application '{{ wait_app_name }}' did not reach {{ wait_app_accept }}.
+      Last status='{{ wait_app_raw.stdout | trim }}' rc={{ wait_app_raw.rc }}
+      stderr='{{ wait_app_raw.stderr | trim }}'.
+    quiet: true

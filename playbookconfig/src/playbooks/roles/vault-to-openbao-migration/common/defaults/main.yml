@@ -9,9 +9,9 @@
 #   1. Verify prerequisites (Vault version, system state).
 #   2. Gather the source Vault inventory and record it as the reference the
 #      post-migration check compares against.
-#   3. Copy the Raft data from Vault into OpenBao.
+#   3. Shut Vault down and copy the Raft data from Vault into OpenBao.
 #   4. Deploy the OpenBao app and verify the migrated secrets.
-#   5. Finalize: hand over the agent injector and dispose of Vault.
+#   5. Finalize: validate the migration.
 
 # Which StarlingX system layout the migration targets.
 #   auto    - read the real mode from /etc/platform/platform.conf (default)
@@ -20,11 +20,11 @@
 # TODO - subjected to change upon further development of duplex migration
 system_mode: auto
 
-# What to do with the source Vault once its data has been copied, during the
-# finalize phase.
+# What to do with the source Vault during Phase 3 (shutdown), before its data is
+# copied.
 #   removed   - run `system application-remove vault` (full teardown, default)
-#   suspended - scale the Vault HelmReleases to 0 replicas, leaving the Vault
-#               app applied after the migration completes
+#   suspended - suspend the Vault HelmReleases and scale the Vault workloads to 0,
+#               leaving the Vault app applied after the migration completes
 vault_final_state: removed
 
 # How thoroughly the migration compares source Vault secrets against the
@@ -80,6 +80,9 @@ vault_shard_secret_prefix: cluster-key
 # (e.g. stx-openbao-0).
 vault_statefulset: sva-vault
 openbao_statefulset: stx-openbao
+# Extra Vault workloads stopped when vault_final_state is 'suspended'.
+vault_manager_statefulset: "{{ vault_statefulset }}-manager-3"
+vault_injector_deployment: "{{ vault_statefulset }}-agent-injector"
 
 # Name of the agent-injector MutatingWebhookConfiguration. Vault and OpenBao use
 # the same webhook name, so the injector can be handed over without pods losing

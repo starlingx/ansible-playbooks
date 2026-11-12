@@ -1,0 +1,26 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Scale one Vault workload to 0 and wait until it has no pods. The scale bypasses
+# Helm.
+# Input: s3_workload - {kind, name}; kind is statefulset|deployment.
+
+- name: "scale_to_zero: scale {{ s3_workload.kind }}/{{ s3_workload.name }} to 0"
+  command: >-
+    kubectl scale {{ s3_workload.kind }} {{ s3_workload.name }}
+    -n {{ vault_namespace }} --replicas=0
+  environment: "{{ openrc_env }}"
+
+- name: "scale_to_zero: wait for zero {{ s3_workload.kind }}/{{ s3_workload.name }} pods"
+  # An empty .status.replicas (field absent) also means zero.
+  include_tasks: "{{ role_path }}/tasks/wait_resource_field.yml"
+  vars:
+    wait_kind: "{{ s3_workload.kind }}"
+    wait_name: "{{ s3_workload.name }}"
+    wait_ns: "{{ vault_namespace }}"
+    wait_jsonpath: "{.status.replicas}"
+    wait_accept: ['0', '']
+    wait_retries: 60

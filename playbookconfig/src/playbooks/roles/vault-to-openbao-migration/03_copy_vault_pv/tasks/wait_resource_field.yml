@@ -1,0 +1,31 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Poll a kubectl resource's jsonpath field (default .status.phase) until it is in
+# wait_accept. A failing kubectl never counts, so '' in wait_accept only matches a
+# successful call that returned an empty field.
+# Inputs: wait_kind, wait_name, wait_accept (list), wait_ns (omit for
+# cluster-scoped), wait_jsonpath, wait_retries (24), wait_delay (5). Read-only.
+- name: "Poll the resource field until accepted"
+  command: >-
+    kubectl get {{ wait_kind }} {{ wait_name }}
+    {{ ('-n ' ~ wait_ns) if (wait_ns | default('')) else '' }}
+    -o jsonpath={{ wait_jsonpath | default('{.status.phase}') }}
+  environment: "{{ openrc_env }}"
+  register: wait_raw
+  check_mode: false
+  failed_when: false
+  retries: "{{ wait_retries | default(24) }}"
+  delay: "{{ wait_delay | default(5) }}"
+  until: wait_raw.rc == 0 and (wait_raw.stdout | trim) in wait_accept
+- name: "Assert the resource reached an accepted value"
+  assert:
+    that: wait_raw.rc == 0 and (wait_raw.stdout | trim) in wait_accept
+    fail_msg: >-
+      {{ wait_kind }}/{{ wait_name }} did not reach {{ wait_accept | join('|') }}.
+      Last value='{{ wait_raw.stdout | trim }}' rc={{ wait_raw.rc }}
+      stderr='{{ wait_raw.stderr | trim }}'.
+    quiet: true

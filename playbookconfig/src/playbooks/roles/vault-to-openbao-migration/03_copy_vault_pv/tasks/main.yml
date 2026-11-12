@@ -1,0 +1,20 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 3 — first mutating phase: shut Vault down per vault_final_state.
+# Orchestration only: shutdown.
+
+- name: "Announce Phase 3 (first mutating phase)"
+  tags: [phase3]
+  debug:
+    msg: >-
+      Phase 3 copy (system_mode={{ migration_system_mode }},
+      vault_final_state={{ vault_final_state }}).
+      {{ 'DRY-RUN: no changes will be made.' if ansible_check_mode else '' }}
+
+- name: "Shut Vault down"
+  import_tasks: shutdown.yml
+  tags: [phase3]
