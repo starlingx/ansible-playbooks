@@ -4,26 +4,19 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Phase 5 — re-gather the OpenBao inventory and compare it with Phase 2 (audit
-# devices included), and only if all checks pass release stale clone PVs and
-# confirm Vault's final state. Orchestration only; never modifies the original Vault PVCs/PVs.
-- name: "Equivalence check"
-  import_tasks: equivalence_check.yml
-  when: verification_level != 'none'
-  tags: [phase5]
-
+# Phase 5, part 2 (tasks_from: finalize) — release stale clone PVs and confirm Vault's
+# final state. Runs after the validation passed, outside the playbook's rescue block: a
+# failure here stops the run and leaves OpenBao in place. Never modifies the original
+# Vault PVCs/PVs.
 - name: "Cleanup gate"
   import_tasks: gates.yml
   tags: [phase5]
-
 - name: "Cleanup"
   import_tasks: cleanup.yml
   tags: [phase5]
-
 - name: "Final Vault state confirmation"
   import_tasks: final_vault_state.yml
   tags: [phase5]
-
 - name: "Remove gathered inventory files"
   include_tasks:
     file: "{{ role_path }}/../common/tasks/cleanup_gather_output.yml"

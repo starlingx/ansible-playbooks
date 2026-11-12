@@ -11,8 +11,8 @@
 #   3. Shut Vault down and copy the Raft data from Vault into OpenBao.
 #   4. Deploy the OpenBao app, verify the migrated secrets, and hand over the
 #      agent injector.
-#   5. Validate the migrated secrets against the Phase 2 inventory and confirm
-#      Vault's final state.
+#   5. Validate the migrated secrets against the Phase 2 inventory, then clean
+#      up and confirm Vault's final state.
 - name: Migrate HashiCorp Vault to OpenBao
   hosts: localhost
   connection: local
@@ -23,6 +23,10 @@
       tags: [always]
 
   tasks:
+    # Phases 1 and 2 are read-only (they neither alter Vault nor install
+    # OpenBao), so they run outside the block: a failure here must NOT dispatch
+    # rollback.
+
     - name: "Phase 1 — pre-migration checks"
       import_role:
         name: vault-to-openbao-migration/01_pre_migration_check
@@ -33,17 +37,60 @@
         name: vault-to-openbao-migration/02_gather_vault_data
       tags: [phase2]
 
-    - name: "Phase 3 — copy Vault PV + secrets (first mutating phase)"
-      import_role:
-        name: vault-to-openbao-migration/03_copy_vault_pv
-      tags: [phase3]
+    # Phases 3 and 4 mutate the system and the Phase 5 validation checks it, so they run
+    # inside one block (not top-level tasks:) for the rescue to dispatch rollback.
+    - name: "Vault-to-OpenBao migration"
+      block:
+        - name: "Phase 3 — copy Vault PV + secrets (first mutating phase)"
+          import_role:
+            name: vault-to-openbao-migration/03_copy_vault_pv
+          tags: [phase3]
 
-    - name: "Phase 4 — deploy OpenBao + convert/unseal + injector cutover"
-      import_role:
-        name: vault-to-openbao-migration/04_deploy_openbao
-      tags: [phase4]
+        - name: "Phase 4 — deploy OpenBao + convert/unseal + injector cutover"
+          import_role:
+            name: vault-to-openbao-migration/04_deploy_openbao
+          tags: [phase4]
 
-    - name: "Phase 5 — post-migration validation + gated cleanup"
+        - name: "Phase 5 — post-migration validation"
+          import_role:
+            name: vault-to-openbao-migration/05_post_validation
+            tasks_from: validate
+          tags: [phase5]
+
+      # On failure, dispatch rollback per rollback_mode (it re-derives state from defaults
+      # and the live cluster, not phase facts), then re-raise to exit non-zero. The 'always'
+      # tag makes a tagged resume (e.g. --tags phase5) still roll back.
+      rescue:
+        - name: "Record the failing task + result for operators/CI"
+          set_fact:
+            migration_failed_task: "{{ ansible_failed_task.name | default('(unknown task)') }}"
+            migration_failed_result: "{{ ansible_failed_result | default({}) }}"
+          tags: [rollback, always]
+
+        - name: "Announce the failure and the selected rollback_mode"
+          debug:
+            msg:
+              - "MIGRATION FAILED in task: {{ migration_failed_task }}"
+              - "Selected rollback_mode = {{ rollback_mode }} (check_mode={{ ansible_check_mode }})."
+              - "Dispatching the rollback role to handle recovery per that mode."
+          tags: [rollback, always]
+
+        - name: "Dispatch the rollback role"
+          import_role:
+            name: vault-to-openbao-migration/rollback
+          tags: [rollback, always]
+
+        - name: "Re-raise so the migration run exits non-zero"
+          fail:
+            msg: >-
+              Vault-to-OpenBao migration failed in '{{ migration_failed_task }}'.
+              Rollback was dispatched with rollback_mode={{ rollback_mode }}. See
+              the rollback output above for the recovery path taken.
+          tags: [rollback, always]
+    # Once the validation passed, a failure in the cleanup or the final Vault state check must
+    # not tear down a working OpenBao, so this runs outside the block.
+    - name: "Phase 5 — gated cleanup + final Vault state"
       import_role:
         name: vault-to-openbao-migration/05_post_validation
+        tasks_from: finalize
       tags: [phase5]

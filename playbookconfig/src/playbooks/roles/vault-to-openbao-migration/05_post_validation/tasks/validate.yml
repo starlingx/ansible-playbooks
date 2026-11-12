@@ -1,0 +1,13 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 5, part 1 (tasks_from: validate) — re-gather the OpenBao inventory and compare it
+# with Phase 2 (audit devices included). Runs inside the playbook's rescue block: a
+# mismatch rolls back per rollback_mode. Part 2 (finalize.yml) runs outside the block.
+- name: "Equivalence check"
+  import_tasks: equivalence_check.yml
+  when: verification_level != 'none'
+  tags: [phase5]

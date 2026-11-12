@@ -1,0 +1,33 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Rollback, dispatched from the playbook's rescue. rollback_mode: manual prints the
+# recovery notice; off leaves state. The migration never modifies the original Vault PVCs/PVs.
+- name: "rollback — announce dispatch"
+  debug:
+    msg: >-
+      Rollback dispatched: rollback_mode={{ rollback_mode }},
+      vault_final_state={{ vault_final_state }}, check_mode={{ ansible_check_mode }}.
+  tags: [rollback]
+
+# --- manual: HALT, make NO changes ---
+- name: "rollback (manual) — halt, make no changes"
+  debug:
+    msg: >-
+      [ROLLBACK: manual] Halting; no changes made (source Vault data
+      + cluster-key-* secrets intact).
+  when: rollback_mode == 'manual'
+  tags: [rollback]
+
+# --- off: leave state for inspection; perform no rollback ---------------------
+- name: "rollback (off) — leave state for inspection, no rollback"
+  debug:
+    msg: >-
+      [ROLLBACK: off] Leaving the current state for inspection; nothing changed.
+      Choose rollback_mode=manual (halt with a notice), or resume the migration
+      (idempotent probes skip completed work).
+  when: rollback_mode == 'off'
+  tags: [rollback]

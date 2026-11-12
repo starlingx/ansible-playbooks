@@ -15,27 +15,19 @@
 #   5. Validate the migrated secrets against the Phase 2 inventory and confirm
 #      Vault's final state.
 
-# Which StarlingX system layout the migration targets.
-#   auto    - read the real mode from /etc/platform/platform.conf (default)
-#   simplex - force single-controller (AIO-SX) behavior
-#   duplex  - force two-controller (AIO-DX) behavior
+# StarlingX system layout: auto (read /etc/platform/platform.conf, default),
+# simplex (force AIO-SX) or duplex (force AIO-DX).
 # TODO - subjected to change upon further development of duplex migration
 system_mode: auto
 
-# What to do with the source Vault during Phase 3 (shutdown), before its data is
-# copied.
-#   removed   - run `system application-remove vault` (full teardown, default)
-#   suspended - suspend the Vault HelmReleases and scale the Vault workloads to 0,
-#               leaving the Vault app applied after the migration completes
+# Source Vault during Phase 3 (shutdown): removed (`system application-remove
+# vault`, default) or suspended (HelmReleases suspended and workloads scaled to 0,
+# app left applied).
 vault_final_state: removed
 
-# How thoroughly the migration compares source Vault secrets against the
-# migrated OpenBao secrets to confirm the migration preserved them.
-#   none      - skip verification entirely. Phase 2 gathers no source inventory
-#               and Phase 5 performs no equivalence check, so the migrated
-#               secrets are not compared against the source. The data copy
-#               itself still runs.
-#   structure - compare only the shape: secret paths, policies, and mount points
+# How source Vault secrets are compared with the migrated OpenBao secrets:
+#   none      - no Phase 2 inventory and no Phase 5 check; the copy still runs
+#   structure - compare secret paths, policies and mount points (default)
 #   values    - also compare secret contents by hash
 verification_level: structure
 
