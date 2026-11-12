@@ -1,0 +1,41 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Load a root token from a Kubernetes secret, decode it and assert it is non-empty.
+# Inputs: token_secret_namespace, token_secret_name, token_secret_key (default
+# 'strdata'). Output: root_token fact. `| trim` drops the secret's trailing newline,
+# which would 403 every call. All tasks are no_log and read-only.
+- name: "load_root_token: read the root-token secret"
+  command: >-
+    kubectl get secret {{ token_secret_name }}
+    -n {{ token_secret_namespace }}
+    -o jsonpath={.data.{{ token_secret_key | default('strdata') }}}
+  environment: "{{ openrc_env }}"
+  register: load_root_token_b64
+  failed_when: false
+  check_mode: false
+  no_log: true
+
+- name: "load_root_token: decode and trim the token"
+  # `| trim` REQUIRED — see header: the secret decodes with a trailing newline
+  # that otherwise 403s every authenticated call.
+  set_fact:
+    root_token: "{{ load_root_token_b64.stdout | default('') | b64decode | trim }}"
+  no_log: true
+
+- name: "load_root_token: assert the token decoded non-empty"
+  # An empty token (missing secret / silent 403) would let callers record an
+  # empty inventory. Fail loudly here.
+  assert:
+    that:
+      - (root_token | default('') | trim) != ''
+    fail_msg: >-
+      Could not load a non-empty root token from secret '{{ token_secret_name }}'
+      in namespace '{{ token_secret_namespace }}'. Authenticated vault/bao calls
+      would 403; refusing to proceed.
+    quiet: true
+  no_log: true
+  when: not ansible_check_mode

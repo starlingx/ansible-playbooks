@@ -1,0 +1,9 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 2 internal constants.
+# Vault server pod queried for the inventory (ordinal 0; see TODO(duplex-ha-migration)).
+vault_pod: "{{ vault_statefulset }}-0"

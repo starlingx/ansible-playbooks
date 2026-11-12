@@ -4,13 +4,9 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# collect-data-checksums.sh <data_dir> -> builds a checksum manifest of a Vault
-# Raft data directory as JSON {data_dir, files:[{path,sha256,bytes}], file_count,
-# total_bytes}. It SHA-256-hashes every regular file and records its size, with
-# paths RELATIVE to <data_dir> and sorted (LC_ALL=C), so the source and the
-# destination manifests can be compared byte-for-byte to confirm the copy is
-# complete and unaltered. Read-only: it never modifies <data_dir>. JSON goes to
-# stdout, diagnostics to stderr. Exit 0 ok / 2 usage / 4 hash-or-stat failure.
+# collect-data-checksums.sh <data_dir>: prints a JSON checksum manifest (relative,
+# sorted paths with sha256 and size) of a Vault Raft data dir so source and copy
+# can be compared. Read-only; diagnostics to stderr. Exit 0 ok / 2 usage / 4 hash.
 set -eu
 
 err() { echo "[collect-data-checksums] $*" >&2; }
@@ -56,16 +52,9 @@ total_bytes=0
 file_count=0
 first=1
 
-# find | LC_ALL=C sort gives a stable, locale-independent ordering so the source
-# and destination manifests line up for a straight comparison. The listing goes
-# to a temp file, not a pipe, so the read loop below runs in the current shell
-# (a piped `while` is a subshell in POSIX and would lose the counters). The Vault
-# Raft data dir holds only fixed, space/newline-free names (node-id, vault.db,
-# raft/raft.db), so newline-delimited reads are safe.
-#
-# Create the temp file in its own 0700 dir so no other user can pre-create or
-# swap it, and clean up with an unlink of the exact path we created (guarded so
-# the trap never runs a removal on an empty variable).
+# Sorted listing (LC_ALL=C) so source and destination manifests line up. It goes
+# to a temp file, not a pipe, so the loop keeps its counters; Raft names are
+# space-free. The temp file is in its own 0700 dir and removed by exact path.
 _tmpdir="$(mktemp -d)"
 _list="$_tmpdir/list"
 cleanup() {

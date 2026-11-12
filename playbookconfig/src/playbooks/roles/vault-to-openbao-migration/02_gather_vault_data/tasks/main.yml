@@ -4,63 +4,74 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Phase 2 — gather Vault source data (verification helper, read-only). Captures
-# the source inventory (collect-source-inventory.sh, in-pod) and a checksum
-# manifest of the Raft data dir (collect-data-checksums.sh, in-pod), then writes
-# both as reference JSON for the Phase 5 equivalence check. Runs while Vault is
-# up; changes nothing.
-#
-# The entire phase is the fidelity-verification path, so verification_level ==
-# 'none' skips it wholesale. With no source inventory written here, the Phase 5
-# equivalence check has nothing to compare against and is likewise a no-op — so
-# 'none' disables verification across both phases.
-
+# Phase 2 — gather Vault source data (read-only): the source inventory and a Raft
+# data checksum manifest, written as reference JSON. Skipped wholesale when
+# verification_level is 'none'.
 - name: "Gather Vault source data"
   tags: [phase2]
   check_mode: false
   when: verification_level != 'none'
   block:
-    # Prefer the Phase-1 Raft leader (duplex); else <statefulset>-0.
-    - name: "Resolve Vault query pod"
-      set_fact:
-        s2_vault_pod: >-
-          {{ s1_raft_leader
-             if (s1_raft_leader is defined and (s1_raft_leader | trim) != '')
-             else (vault_statefulset ~ '-0') }}
-
-    # In-pod reads need auth: load root token from the discovered shard set, pass
-    # it on stdin to the collector. Trailing newline must be trimmed or Vault 403s.
+    # TODO(duplex-ha-migration): simplex only; on duplex vault_pod should be the Raft leader.
+    # In-pod reads need auth: load the root token from the shard set, pass it on stdin.
     - name: "Load Vault root token"
-      command: >-
-        kubectl get secret {{ s1_shard_secret_prefix | default(vault_shard_secret_prefix) }}-root
-        -n {{ vault_namespace }} -o jsonpath={.data.strdata}
-      environment: "{{ openrc_env }}"
-      register: s2_root_token_b64
-      no_log: true
+      include_tasks: "{{ role_path }}/../common/tasks/load_root_token.yml"
+      vars:
+        token_secret_namespace: "{{ vault_namespace }}"
+        token_secret_name: "{{ s1_shard_secret_prefix | default(vault_shard_secret_prefix) }}-root"
 
-    - name: "Decode the Vault root token"
+    - name: "Bind the decoded token to the phase-local name"
       set_fact:
-        s2_vault_token: "{{ s2_root_token_b64.stdout | default('') | b64decode | trim }}"
+        s2_vault_token: "{{ root_token }}"
       no_log: true
 
-    - name: "Copy collectors into the Vault pod"
-      command: >-
-        kubectl cp {{ role_path }}/files/{{ item }}
-        {{ vault_namespace }}/{{ s2_vault_pod }}:/tmp/{{ item }}
-      environment: "{{ openrc_env }}"
-      loop:
-        - collect-source-inventory.sh
-        - collect-data-checksums.sh
+    # Per-run key for the value hashes, held only in this Ansible run's memory
+    # (lookup with /dev/null stores nothing).
+    - name: "Generate the per-run value-hash key (memory only)"
+      set_fact:
+        vtom_hash_key: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+      no_log: true
+      when: verification_level == 'values'
 
-    - name: "Run source-inventory collector in-pod (token on stdin)"
-      command: >-
-        kubectl exec -i {{ s2_vault_pod }} -n {{ vault_namespace }} --
-        sh /tmp/collect-source-inventory.sh {{ verification_level }}
-      args:
-        stdin: "{{ s2_vault_token }}"
+    - name: "Warn about the secret-content comparison scope"
+      debug:
+        msg: >-
+          verification_level=values compares the contents of the KV v2 'secret/'
+          mount only. Other KV mounts, and KV v1 mounts, are not compared by content.
+      when: verification_level == 'values'
+
+    # Collectors run as the `sh -c` script (no `kubectl cp`), so nothing is written
+    # into Vault; the token stays on stdin, never in argv.
+    - name: "Run source-inventory collector in-pod (vault CLI; token on stdin)"
+      command:
+        argv:
+          - kubectl
+          - exec
+          - -i
+          - "{{ vault_pod }}"
+          - -n
+          - "{{ vault_namespace }}"
+          - --
+          - sh
+          - -c
+          - "{{ lookup('file', role_path ~ '/../common/files/collect-inventory.sh') }}"
+          - collect-inventory
+          - vault
+          - "{{ verification_level }}"
+        stdin: "{{ s2_vault_token }}{{ ('\n' ~ vtom_hash_key) if verification_level == 'values' else '' }}"
       environment: "{{ openrc_env }}"
       register: s2_inventory_raw
+      failed_when: false
       no_log: true
+
+    # The collector's stderr carries only its own sanitized one-line reasons.
+    - name: "Assert the source-inventory collector succeeded"
+      assert:
+        that: s2_inventory_raw.rc == 0
+        fail_msg: >-
+          The Vault inventory collector failed (rc={{ s2_inventory_raw.rc }}):
+          {{ s2_inventory_raw.stderr_lines | default([]) | last | default('(no stderr)') }}
+        quiet: true
 
     - name: "Parse the source inventory"
       set_fact:
@@ -69,9 +80,19 @@
       no_log: "{{ verification_level == 'values' }}"
 
     - name: "Run data-checksum collector on the Raft data dir in-pod"
-      command: >-
-        kubectl exec {{ s2_vault_pod }} -n {{ vault_namespace }} --
-        sh /tmp/collect-data-checksums.sh {{ vault_data_mount }}
+      command:
+        argv:
+          - kubectl
+          - exec
+          - "{{ vault_pod }}"
+          - -n
+          - "{{ vault_namespace }}"
+          - --
+          - sh
+          - -c
+          - "{{ lookup('file', role_path ~ '/files/collect-data-checksums.sh') }}"
+          - collect-data-checksums
+          - "{{ vault_data_mount }}"
       environment: "{{ openrc_env }}"
       register: s2_data_checksums_raw
 
@@ -90,7 +111,7 @@
           - "'raft/raft.db' in _paths"
         fail_msg: >-
           The checksum manifest did not find the expected Raft files under
-          {{ vault_data_mount }} on {{ s2_vault_pod }}
+          {{ vault_data_mount }} on {{ vault_pod }}
           (file_count={{ s2_data_checksums.file_count | default(0) }}).
         quiet: true
       vars:
@@ -102,7 +123,7 @@
           schema: vtom.source-inventory/v1
           verification_level: "{{ verification_level }}"
           system_mode: "{{ migration_system_mode }}"
-          query_pod: "{{ s2_vault_pod }}"
+          query_pod: "{{ vault_pod }}"
           engine_mounts: "{{ s2_inventory.engine_mounts | default([]) }}"
           auth_mounts: "{{ s2_inventory.auth_mounts | default([]) }}"
           audit_devices: "{{ s2_inventory.audit_devices | default([]) }}"
@@ -135,7 +156,6 @@
   debug:
     msg: >-
       verification_level=none: skipping Phase 2 source-data gathering. No source
-      inventory is recorded, so the Phase 5 equivalence check is also skipped —
-      the migration runs without fidelity verification.
+      inventory is recorded, so the migration runs without verification.
   tags: [phase2]
   when: verification_level == 'none'
