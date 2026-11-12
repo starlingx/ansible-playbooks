@@ -1,0 +1,90 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 3 — clone the source Vault data PVC and bind the clone's PV straight to
+# the OpenBao data PVC (no second PVC, no copy). The clone is made in the vault
+# namespace (dataSource must be same-namespace) and its PV is rebound across
+# namespaces. The ORIGINAL source PVC/PV are only read — a ceph-csi RBD clone is a
+# fully independent image, so Vault's volume is never patched, deleted, or re-homed.
+
+- name: "Ensure the openbao namespace and read the clone resume marker"
+  environment: "{{ openrc_env }}"
+  tags: [phase3]
+  block:
+    - name: "Ensure the openbao namespace exists"
+      command: kubectl create namespace {{ openbao_namespace }}
+      register: s3_ns_create
+      failed_when:
+        - s3_ns_create.rc != 0
+        - "'AlreadyExists' not in (s3_ns_create.stderr | default(''))"
+      when: not ansible_check_mode
+
+    - name: "Probe destination PVC (resume check)"
+      include_tasks: "{{ role_path }}/../common/tasks/probes/pvc_exists.yml"
+      vars:
+        probe_pvc_namespace: "{{ openbao_namespace }}"
+        probe_pvc_name: "{{ s3_dest_pvc }}"
+
+    - name: "Read the destination PVC phase and clone annotation"
+      command: >-
+        kubectl get pvc {{ s3_dest_pvc }} -n {{ openbao_namespace }}
+        -o jsonpath={.status.phase}|{.metadata.annotations.vault-migration/source}
+      register: s3_dest_probe
+      check_mode: false
+      when: probe_pvc_exists | default(false)
+
+    # The destination appears Bound as soon as the rebind finishes, so resume keys
+    # on the annotation, not on the PVC merely existing.
+    - name: "A destination PVC that is not a migration clone is not ours to rebind"
+      assert:
+        that:
+          - (s3_dest_probe.stdout | default('') | trim).split('|')[1] | default('') == 'clone'
+        fail_msg: >-
+          PVC {{ s3_dest_pvc }} already exists in {{ openbao_namespace }} but is not annotated
+          vault-migration/source=clone. Refusing to rebind over it; remove it or investigate.
+        quiet: true
+      when: probe_pvc_exists | default(false)
+
+    - name: "Compute the clone verdict"
+      set_fact:
+        s3_do_clone: >-
+          {{ not (probe_pvc_exists | default(false))
+             or (s3_dest_probe.stdout | default('') | trim).split('|')[0] != 'Bound' }}
+
+# clone-pv.py rebind clones the source PVC (or adopts a clone PV an interrupted
+# run left behind), Retains and releases the clone PV, binds it under the
+# destination PVC, then sets it to Delete and relabels it. A destination already
+# Bound is only finished off (idempotent). Original PVs are refused.
+- name: "Clone the source PVC and bind the clone PV as the OpenBao data PVC"
+  when:
+    - not ansible_check_mode
+    - s3_do_clone | bool
+  tags: [phase3]
+  block:
+    - name: "Clone (or adopt) and bind as the destination PVC (clone-pv.py rebind)"
+      command:
+        argv:
+          - python3
+          - "{{ role_path }}/../common/files/clone-pv.py"
+          - rebind
+          - --source-pvc
+          - "{{ s3_source_pvc }}"
+          - --dest-pvc
+          - "{{ s3_dest_pvc }}"
+          - --dest-label
+          - "app.kubernetes.io/instance={{ s3_pvc_spec.labels['app.kubernetes.io/instance'] }}"
+          - --dest-label
+          - "app.kubernetes.io/name={{ s3_pvc_spec.labels['app.kubernetes.io/name'] }}"
+          - --dest-label
+          - "component={{ s3_pvc_spec.labels['component'] }}"
+          - --dest-annotation
+          - vault-migration/source=clone
+          - --fallback-size
+          - "{{ s3_source_storage | default('1Gi', true) }}"
+          - --fallback-sc
+          - "{{ s3_pvc_spec.storageClassName }}"
+      environment: "{{ openrc_env }}"
+      register: s3_rebind_raw

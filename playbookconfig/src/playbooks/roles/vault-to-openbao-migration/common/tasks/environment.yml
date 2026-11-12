@@ -5,7 +5,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Source openrc + set KUBECONFIG once into openrc_env, reused by kubectl/system/
-# helm tasks. no_log guards the OS_* secrets. Reads only (safe in --check).
+# helm tasks, plus BAO_*/VAULT_*/*_PVC names read by the role scripts. no_log guards
+# the OS_* secrets. Reads only (safe in --check).
 
 - name: Capture the environment exported by sourcing openrc
   shell: |
@@ -20,5 +21,9 @@
 
 - name: Build reusable environment fact
   set_fact:
-    openrc_env: "{{ openrc_env_raw.stdout | from_json }}"
+    openrc_env: >-
+      {{ openrc_env_raw.stdout | from_json
+         | combine({'BAO_NAMESPACE': openbao_namespace,
+                    'VAULT_NAMESPACE': vault_namespace, 'VAULT_STS': vault_statefulset,
+                    'CLONE_PVC': source_clone_pvc}) }}
   no_log: true

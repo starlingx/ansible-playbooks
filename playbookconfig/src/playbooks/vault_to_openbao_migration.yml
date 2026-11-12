@@ -31,7 +31,7 @@
         name: vault-to-openbao-migration/02_gather_vault_data
       tags: [phase2]
 
-    - name: "Phase 3 — shut Vault down (first mutating phase)"
+    - name: "Phase 3 — shut Vault down + clone Vault PV (first mutating phase)"
       import_role:
         name: vault-to-openbao-migration/03_copy_vault_pv
       tags: [phase3]

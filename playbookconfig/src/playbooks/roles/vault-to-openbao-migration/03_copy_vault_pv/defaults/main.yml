@@ -1,0 +1,9 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 3 internal constants.
+# Destination OpenBao data PVC (StatefulSet volumeClaimTemplate convention).
+openbao_data_pvc: "data-{{ openbao_statefulset }}-0"

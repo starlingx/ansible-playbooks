@@ -4,8 +4,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Phase 3 — first mutating phase: shut Vault down per vault_final_state.
-# Orchestration only: shutdown.
+# Phase 3 — first mutating phase: resolve the source and destination PVCs and the
+# destination spec, shut Vault down per vault_final_state, then clone the Raft PV
+# and bind the clone as the OpenBao data PVC.
+# Orchestration only: shutdown, clone_rebind.
 
 - name: "Announce Phase 3 (first mutating phase)"
   tags: [phase3]
@@ -15,6 +17,47 @@
       vault_final_state={{ vault_final_state }}).
       {{ 'DRY-RUN: no changes will be made.' if ansible_check_mode else '' }}
 
+- name: "Resolve the source/destination PVCs and the destination spec"
+  # check_mode hoisted so a dry-run still resolves the real source PVC size.
+  check_mode: false
+  tags: [phase3]
+  block:
+    # The destination PVC is the clone of the source volume, so its size and
+    # storage class come from the clone; only the labels follow chart conventions.
+    # The source size is the fallback size for the clone (clone_rebind.yml).
+    - name: "Read the source Vault data PVC (empty if absent)"
+      command: kubectl get pvc {{ vault_data_pvc }} -n {{ vault_namespace }} -o json
+      environment: "{{ openrc_env }}"
+      register: s3_source_pvc_raw
+      failed_when: false
+
+    - name: "Record the source Vault data PVC size (empty if unresolved)"
+      set_fact:
+        s3_source_storage: "{{ obj.spec.resources.requests.storage | default('') | trim }}"
+      vars:
+        obj: >-
+          {{ (s3_source_pvc_raw.stdout | from_json)
+             if (s3_source_pvc_raw.stdout | default('') | trim) != '' else {} }}
+
+    - name: "Set the destination OpenBao PVC spec"
+      set_fact:
+        s3_pvc_spec:
+          storageClassName: general
+          labels:
+            app.kubernetes.io/instance: "{{ openbao_statefulset }}"
+            app.kubernetes.io/name: openbao
+            component: server
+
+    # PVC names come from vault_data_pvc / openbao_data_pvc (common defaults).
+    - name: "Set source/destination PVC facts"
+      set_fact:
+        s3_source_pvc: "{{ vault_data_pvc }}"
+        s3_dest_pvc: "{{ openbao_data_pvc }}"
+
 - name: "Shut Vault down"
   import_tasks: shutdown.yml
+  tags: [phase3]
+
+- name: "Clone the source data and bind it as the OpenBao data PVC"
+  import_tasks: clone_rebind.yml
   tags: [phase3]

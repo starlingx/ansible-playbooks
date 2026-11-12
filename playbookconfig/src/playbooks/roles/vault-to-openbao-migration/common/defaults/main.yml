@@ -80,6 +80,7 @@ vault_shard_secret_prefix: cluster-key
 # (e.g. stx-openbao-0).
 vault_statefulset: sva-vault
 openbao_statefulset: stx-openbao
+vault_data_pvc: "data-{{ vault_statefulset }}-0"
 # Extra Vault workloads stopped when vault_final_state is 'suspended'.
 vault_manager_statefulset: "{{ vault_statefulset }}-manager-3"
 vault_injector_deployment: "{{ vault_statefulset }}-agent-injector"
@@ -109,12 +110,8 @@ openbao_builtin_policies:
 vault_data_mount: /vault/data
 openbao_data_mount: /openbao/data
 
-# Transient PVCs created during the data copy, then deleted:
-#   source_clone_pvc  - CSI snapshot/clone of the live Vault data PVC, created in
-#                       the vault namespace so the copy reads a stable snapshot
-#   source_mirror_pvc - PVC in the openbao namespace that rebinds the clone's
-#                       underlying PV so the copy-pod can mount it cross-namespace
-# Both are disposable and removed once the copy completes.
+# source_clone_pvc: CSI clone of the live Vault data PVC, created in the vault
+# namespace; its PV is then rebound as the OpenBao data PVC.
 source_clone_pvc: vault-source-data-clone
 source_mirror_pvc: vault-source-data-mirror
 
