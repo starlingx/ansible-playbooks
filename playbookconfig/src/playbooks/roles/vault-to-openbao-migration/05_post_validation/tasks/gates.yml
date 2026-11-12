@@ -1,0 +1,25 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Cleanup gate: Phase 5 cleanup runs only if the gen-001 unseal secret exists. The
+# other checks are hard-asserted elsewhere (equivalence_check.yml, Phase 4 unseal).
+- name: "Cleanup gate: gen-001 present"
+  tags: [phase5]
+  block:
+    - name: "Guard: probe gen-001 existence (recovery-check signal)"
+      include_tasks: "{{ role_path }}/../common/tasks/probes/gen_secret_exists.yml"
+      vars:
+        probe_gen_secret_name: "{{ openbao_generation_secret }}"
+      when: not ansible_check_mode
+    - name: "Guard: FAIL if gen-001 is missing (cleanup blocked)"
+      # Source Vault data + secrets are intact (Phase 5 never modifies them).
+      assert:
+        that: probe_gen_secret_exists | default(false)
+        fail_msg: >-
+          {{ openbao_generation_secret }} not found. Cleanup will NOT run;
+          source Vault data and cluster-key-* secrets are intact.
+        quiet: true
+      when: not ansible_check_mode

@@ -1,0 +1,31 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Cleanup, run after the cleanup gate: release any stale clone PV left by an
+# interrupted run. The original Vault PVCs/PVs are never touched, so Vault can be
+# reinstated with its pre-migration data.
+- name: "CLEANUP: release stale clone PV objects (copied material only)"
+  tags: [phase5]
+  block:
+    # Delete Retained clone PVs left by an interrupted run (normally none); their RBD
+    # images are only reported for out-of-band reclaim. Vault PVs are refused.
+    - name: "Cleanup: delete stale clone PV objects (clone-pv.py prune-stale)"
+      command: "python3 {{ role_path }}/../common/files/clone-pv.py prune-stale"
+      environment: "{{ openrc_env }}"
+      register: s5_prune
+      when: not ansible_check_mode
+
+    - name: "Cleanup: report stale clone PVs released (RBD image NOT auto-freed)"
+      debug:
+        msg: >-
+          Released {{ _stale | length }} stale Retained clone PV object(s) left by an interrupted run;
+          a completed run leaves none. Deleting a Retain PV does NOT free the backend RBD image
+          (ceph-csi). Reclaim out-of-band (rbd rm + omap): {{ _stale | to_json }}.
+      vars:
+        _stale: "{{ (s5_prune.stdout | from_json).stale }}"
+      when:
+        - not ansible_check_mode
+        - (s5_prune.stdout | from_json).stale | length > 0

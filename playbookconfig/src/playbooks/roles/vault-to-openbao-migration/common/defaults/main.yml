@@ -10,8 +10,10 @@
 #   2. Gather the source Vault inventory and record it as the reference the
 #      post-migration check compares against.
 #   3. Shut Vault down and copy the Raft data from Vault into OpenBao.
-#   4. Deploy the OpenBao app and verify the migrated secrets.
-#   5. Finalize: validate the migration.
+#   4. Deploy the OpenBao app, verify the migrated secrets, and enable the
+#      agent injector if requested.
+#   5. Validate the migrated secrets against the Phase 2 inventory and confirm
+#      Vault's final state.
 
 # Which StarlingX system layout the migration targets.
 #   auto    - read the real mode from /etc/platform/platform.conf (default)
@@ -145,3 +147,7 @@ openbao_chart_path: /var/www/pages/helm_charts/stx-platform
 # outputs: the gathered source Vault inventory and the data-checksum manifest
 # JSON used to confirm the migration preserved every secret.
 gather_output_dir: /home/sysadmin/vault-migration-inventory
+
+# Delete the gather_output_dir files after Phase 5; re-running
+# Phase 5 alone needs source-inventory.json, so set false to keep them.
+gather_output_cleanup: true

@@ -1,0 +1,31 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Remove the migration's files from gather_output_dir (inventory, checksums, helm
+# overrides), then the directory if empty; other content is left intact. Skipped
+# when gather_output_cleanup is false. Plain unlink, not a secure wipe; the value
+# hashes are keyed per run.
+- name: "Remove the migration files from gather_output_dir"
+  file:
+    path: "{{ gather_output_dir }}/{{ item }}"
+    state: absent
+  loop:
+    - source-inventory.json
+    - source-data-checksums.json
+    - openbao-deploy-overrides.yaml
+    - openbao-manager-pause-overrides.yaml
+    - openbao-injector-on-overrides.yaml
+  when:
+    - gather_output_cleanup | bool
+    - not ansible_check_mode
+
+- name: "Remove gather_output_dir if now empty"
+  command: rmdir {{ gather_output_dir | quote }}
+  register: gather_dir_rmdir
+  failed_when: false
+  when:
+    - gather_output_cleanup | bool
+    - not ansible_check_mode

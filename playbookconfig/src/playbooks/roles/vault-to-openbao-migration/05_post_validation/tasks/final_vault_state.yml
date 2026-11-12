@@ -1,0 +1,43 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# FINAL VAULT STATE (confirm-only; Phase 3 already set it).
+# Re-probe and assert Vault matches vault_final_state (removed stays removed;
+# suspended stays applied-but-suspended — never unsuspend here).
+
+- name: "Final Vault state: confirm consistent with vault_final_state"
+  tags: [phase5]
+  block:
+    - name: "Probe current Vault application state (final confirmation)"
+      include_tasks: "{{ role_path }}/../common/tasks/probes/app_state.yml"
+      vars:
+        probe_app_name: vault
+      when: not ansible_check_mode
+
+    - name: "Record final Vault state"
+      set_fact:
+        s5_vault_final_observed: "{{ probe_app_state | default('unknown') }}"
+      when: not ansible_check_mode
+
+    - name: "Assert final Vault state matches vault_final_state"
+      # removed → observed in {removed, absent, uploaded}; suspended → 'suspended'.
+      # Confirm only, never mutate.
+      assert:
+        that:
+          - >-
+            (vault_final_state == 'removed'
+             and s5_vault_final_observed in ['removed', 'absent', 'uploaded'])
+            or
+            (vault_final_state == 'suspended'
+             and s5_vault_final_observed == 'suspended')
+        fail_msg: >-
+          FINAL STATE MISMATCH: vault_final_state='{{ vault_final_state }}'
+          but Vault observed as '{{ s5_vault_final_observed }}'.
+        success_msg: >-
+          Vault final state confirmed '{{ s5_vault_final_observed }}' —
+          consistent with vault_final_state={{ vault_final_state }}.
+        quiet: true
+      when: not ansible_check_mode

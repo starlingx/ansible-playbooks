@@ -18,6 +18,7 @@
         msg: >-
           EQUIVALENCE CHECK CANNOT COMPARE VALUES: the Phase 2 value-hash key is not available.
           Use -e verification_level=structure to skip the value comparison.
+          Phase 5 cleanup did not run.
       when:
         - verification_level == 'values'
         - vtom_hash_key is not defined
@@ -36,7 +37,7 @@
         msg: >-
           EQUIVALENCE CHECK CANNOT RUN: OpenBao unsealed but not active leader
           ({{ s5_active_check.stderr | default('') | trim }}); reads would 500 into an empty inventory. Check
-          `kubectl logs {{ openbao_pod }} -c openbao`.
+          `kubectl logs {{ openbao_pod }} -c openbao`. Cleanup did not run.
       when: s5_active_check.rc != 0
 
     # The pod has no token: unauthenticated `bao list` 403s into EMPTY inventories (a
@@ -118,7 +119,7 @@
           - s5_compare_raw.rc == 0
         fail_msg: >-
           EQUIVALENCE CHECK FAILED ({{ verification_level }}): {{ _result }}
-          {{ _diff }}. Source Vault intact.
+          {{ _diff }}. Cleanup did not run; source Vault intact.
         success_msg: >-
           EQUIVALENCE CHECK PASS: OpenBao inventory equivalent to the Phase 2 source over paths,
           policies+hashes, auth mounts, engine mounts, audit devices

@@ -6,7 +6,8 @@
 #
 """Clone the Vault data PV and make the clone the OpenBao data PVC.
 rebind clones (or adopts) the PV and binds it straight to the destination PVC,
-then hands it to OpenBao (reclaim Delete, relabelled). Original Vault
+then hands it to OpenBao (reclaim Delete, relabelled); prune-stale drops
+leftover unbound Retained clone PVs. Original Vault
 PVs are refused. Namespaces/names default from $VAULT_NAMESPACE, $VAULT_STS,
 $BAO_NAMESPACE, $CLONE_PVC. stdout: one JSON line. Exit: 0 ok / 2 usage / 3 refused / 4 read / 5 mutate."""
 import argparse
@@ -312,6 +313,31 @@ def rebind(kube: Kube, args: argparse.Namespace,
             "already_bound": False, "size": size, "storage_class": sc}
 
 
+# --- prune-stale ------------------------------------------------------------
+
+def prune_stale(kube: Kube, args: argparse.Namespace,
+                sleep: Sleep = time.sleep) -> Dict[str, Any]:
+    """Delete stale Retained clone PV objects; return the result dict.
+
+    Raises StepError on refusal, a failed read, or a failed delete.
+    """
+    labelled = get_json(kube, ["pv", "-l", CLONE_PV_LABEL]).get("items", [])
+    stale = [pv for pv in labelled
+             if phase(pv) != "Bound"
+             and pv["spec"].get("persistentVolumeReclaimPolicy") == "Retain"]
+    for pv in stale:
+        guard(kube, args, pv["metadata"]["name"])
+    records = []
+    for pv in stale:
+        name = pv["metadata"]["name"]
+        csi = pv["spec"].get("csi") or {}
+        mutate(kube, ["delete", "pv", name, "--ignore-not-found"])
+        records.append({"pv": name,
+                        "imageName": (csi.get("volumeAttributes") or {}).get("imageName", ""),
+                        "volumeHandle": csi.get("volumeHandle", "")})
+    return {"result": "PASS", "clone_pv": "", "stale": records}
+
+
 # --- CLI --------------------------------------------------------------------
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
@@ -339,6 +365,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
                     help="clone size when the source PVC does not state one")
     rb.add_argument("--fallback-sc", required=True,
                     help="storage class when the source/clone does not state one")
+    sub.add_parser("prune-stale", parents=[common])
     args = p.parse_args(argv)
     missing = [f for f in ("vault_ns", "vault_sts", "openbao_ns", "clone_pvc")
                if not getattr(args, f)]
@@ -354,7 +381,7 @@ def main(argv: List[str], kube: Kube = run_kubectl, sleep: Sleep = time.sleep) -
     except SystemExit as exc:
         return 2 if exc.code else 0
     try:
-        action = {"rebind": rebind}
+        action = {"rebind": rebind, "prune-stale": prune_stale}
         result = action[args.action](kube, args, sleep)
     except StepError as exc:
         err(str(exc))
