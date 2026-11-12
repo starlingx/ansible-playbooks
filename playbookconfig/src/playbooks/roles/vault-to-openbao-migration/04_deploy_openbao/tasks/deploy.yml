@@ -1,0 +1,122 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 4 — deploy OpenBao with the injector disabled and a single HA-raft
+# replica. The StatefulSet binds the pre-created PVC holding the copied Raft
+# store by its volumeClaimTemplate name.
+- name: "Probe current OpenBao application state (skip-if-done)"
+  include_tasks: "{{ role_path }}/../common/tasks/probes/app_state.yml"
+  vars:
+    probe_app_name: openbao
+    probe_app_halt_on_unknown: true
+    probe_app_halt_hint: >-
+      Fix the platform CLI, then resume with '--tags phase4'.
+- name: "Record OpenBao app state before deploy"
+  set_fact:
+    openbao_state_before: "{{ probe_app_state }}"
+# Phase 1 runs the same find, but a standalone --tags phase4 run skips Phase 1.
+- name: "Discover the staged OpenBao app tarball (glob)"
+  find:
+    paths: "{{ openbao_apps_dir }}"
+    patterns: "{{ openbao_tarball_glob }}"
+    file_type: file
+  register: openbao_tarball_find
+  check_mode: false
+- name: "Assert exactly one OpenBao app tarball is staged"
+  assert:
+    that:
+      - (openbao_tarball_find.files | default([]) | length) == 1
+    fail_msg: >-
+      Expected exactly one '{{ openbao_tarball_glob }}' under {{ openbao_apps_dir }},
+      found {{ openbao_tarball_find.files | default([]) | length }}.
+    quiet: true
+# Phase 2 normally creates the output dir; a standalone --tags phase4 run skips it.
+- name: "Write the migration override files"
+  when: not ansible_check_mode
+  block:
+    - name: "Ensure the migration output dir exists"
+      file:
+        path: "{{ gather_output_dir }}"
+        state: directory
+        mode: "0700"
+    # Copied file audit devices keep their Vault path (/vault/audit/...); mount the audit
+    # volume there or the server never becomes leader.
+    - name: "Write injector-disabled / replicas=1 helm override values"
+      copy:
+        dest: "{{ gather_output_dir }}/openbao-deploy-overrides.yaml"
+        mode: "0600"
+        content: |
+          injector:
+            enabled: false
+          server:
+            auditStorage:
+              mountPath: {{ vault_audit_mount }}
+            ha:
+              enabled: true
+              replicas: 1
+              raft:
+                enabled: true
+    # pause: 2 parks the manager at init.sh trap 2, after the server pod is up and
+    # before `exec baomon run`.
+    - name: "Write the manager pause helm override"
+      copy:
+        dest: "{{ gather_output_dir }}/openbao-manager-pause-overrides.yaml"
+        mode: "0600"
+        content: |
+          manager:
+            pause: 2
+- name: "Upload the OpenBao app and wait for it to reach 'uploaded'"
+  when: openbao_state_before == 'absent'
+  block:
+    - name: "Ensure the OpenBao app is uploaded"
+      command: system application-upload {{ (openbao_tarball_find.files | first).path }}
+      environment: "{{ openrc_env }}"
+    - name: "Wait for the OpenBao app to reach 'uploaded'"
+      include_tasks: "{{ role_path }}/../common/tasks/wait_app_state.yml"
+      vars:
+        wait_app_name: openbao
+        wait_app_accept: ['uploaded']
+        wait_app_retries: 30
+      when: not ansible_check_mode
+- name: "Apply the OpenBao helm overrides (user first, migration base last)"
+  command: >-
+    system helm-override-update openbao {{ item.chart }} openbao
+    --reuse-values --values {{ item.file }}
+  environment: "{{ openrc_env }}"
+  loop: >-
+    {{
+      [
+        {'chart': 'openbao',
+         'file': (openbao_user_overrides_file | default('') | string | trim)},
+        {'chart': 'openbao',
+         'file': (gather_output_dir ~ '/openbao-deploy-overrides.yaml')},
+        {'chart': 'openbao-manager',
+         'file': (openbao_manager_user_overrides_file | default('') | string | trim)},
+        {'chart': 'openbao-manager',
+         'file': (gather_output_dir ~ '/openbao-manager-pause-overrides.yaml')},
+      ] | selectattr('file', '!=', '') | list
+    }}
+  loop_control:
+    label: "{{ item.chart }}: {{ item.file | basename }}"
+# 'already' is tolerated when the app is already applying.
+- name: "Apply the OpenBao application (injector disabled, replicas=1)"
+  command: system application-apply openbao
+  environment: "{{ openrc_env }}"
+  register: app_apply
+  failed_when:
+    - app_apply.rc != 0
+    - "'already' not in (app_apply.stderr | default('') | lower)"
+# The app can stay 'applying' while the server is sealed, so wait for the pod, not 'applied'.
+- name: "Wait for the OpenBao StatefulSet pod to exist (HelmRelease reconciled)"
+  command: >-
+    kubectl get pod {{ openbao_pod }} -n {{ openbao_namespace }}
+    -o jsonpath={.metadata.name}
+  environment: "{{ openrc_env }}"
+  register: pod_exists
+  when: not ansible_check_mode
+  retries: 48
+  delay: 10
+  until: (pod_exists.stdout | trim) == openbao_pod

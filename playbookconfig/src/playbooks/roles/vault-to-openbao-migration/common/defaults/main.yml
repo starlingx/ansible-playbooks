@@ -47,6 +47,11 @@ openbao_tarball_glob: "openbao-*.tgz"
 # migrating onto an unexpected OpenBao release.
 expected_openbao_version: "2.2.0"
 
+# Optional user Helm overrides merged under the Phase 4 base overrides. The
+# migration enforces injector.enabled, replicas and manager.pause itself.
+openbao_user_overrides_file: ""
+openbao_manager_user_overrides_file: ""
+
 # What happens when the migration fails (the playbook's top-level rescue).
 #   auto   - automatically roll back the changes made so far (default)
 #   manual - stop and print the manual recovery steps, making no changes
@@ -84,6 +89,8 @@ vault_shard_secret_count: 5
 vault_statefulset: sva-vault
 openbao_statefulset: stx-openbao
 vault_data_pvc: "data-{{ vault_statefulset }}-0"
+# OpenBao server pod (ordinal 0; see TODO(duplex-ha-migration)).
+openbao_pod: "{{ openbao_statefulset }}-0"
 # Extra Vault workloads stopped when vault_final_state is 'suspended'.
 vault_manager_statefulset: "{{ vault_statefulset }}-manager-3"
 vault_injector_deployment: "{{ vault_statefulset }}-agent-injector"

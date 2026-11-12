@@ -35,3 +35,8 @@
       import_role:
         name: vault-to-openbao-migration/03_copy_vault_pv
       tags: [phase3]
+
+    - name: "Phase 4 — deploy OpenBao (injector disabled)"
+      import_role:
+        name: vault-to-openbao-migration/04_deploy_openbao
+      tags: [phase4]

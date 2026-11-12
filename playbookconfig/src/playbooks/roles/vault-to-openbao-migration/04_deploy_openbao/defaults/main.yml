@@ -1,0 +1,10 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 4 internal constants.
+# Copied file audit devices keep their Vault path, so the OpenBao audit volume is
+# mounted there (server.auditStorage.mountPath in deploy.yml).
+vault_audit_mount: /vault/audit

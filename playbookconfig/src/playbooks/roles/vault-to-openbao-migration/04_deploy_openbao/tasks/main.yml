@@ -1,0 +1,17 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 4 — deploy OpenBao with the injector disabled. Orchestration only (deploy).
+- name: "Announce Phase 4 (deploy)"
+  tags: [phase4]
+  debug:
+    msg: >-
+      Phase 4 deploy (system_mode={{ migration_system_mode }}).
+      {{ 'DRY-RUN: no changes will be made.' if ansible_check_mode else '' }}
+
+- name: "Deploy OpenBao (replicas=1, injector disabled) + PVC adoption"
+  import_tasks: deploy.yml
+  tags: [phase4]
