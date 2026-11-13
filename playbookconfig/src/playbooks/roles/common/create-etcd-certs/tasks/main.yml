@@ -20,22 +20,67 @@
     - "etcd-server"
     - "apiserver-etcd-client"
     - "etcd-client"
+    - "etcd-fixed-0"
 
-- name: Generate CSRs for etcd server and client
+# Per-member server certificates.
+#
+# Each etcd member is issued its own key pair whose SAN covers only the address
+# that member binds, so a certificate identifies exactly one member rather than
+# standing in for the whole cluster. The common name carries the etcd member
+# name. etcd is not configured to enforce it: peer-cert-allowed-cn is unset, so
+# ETCD_PEER_CLIENT_CERT_AUTH accepts any certificate signed by the CA. What the
+# split gives today is a key per member and a SAN that names one address.
+#
+# controller-1's key pair is deliberately absent here. It is generated on
+# controller-1 itself at unlock, by platform::etcd::membership in stx-puppet,
+# so the private key never crosses a host boundary.
+- name: Generate CSR for the floating etcd member
   openssl_csr:
-    path: "/etc/etcd/{{ item }}.csr"
-    privatekey_path: "/etc/etcd/{{ item }}.key"
-    common_name: "{{ item }}"
+    path: "/etc/etcd/etcd-server.csr"
+    privatekey_path: "/etc/etcd/etcd-server.key"
+    common_name: "controller"
     key_usage:
       - digitalSignature
       - keyEncipherment
     extended_key_usage:
       - serverAuth
       - clientAuth
-    # The fixed etcd instances bind the cluster-host unit addresses, so the
-    # certificates must carry them alongside the floating address. The unit
-    # addresses come from validate-config, which already collapses them to
-    # the floating address on simplex; unique() drops the resulting duplicate.
+    subject_alt_name: >-
+      {{ ['IP:' + cluster_floating_address,
+          'IP:127.0.0.1', 'IP:::1'] | unique }}
+    force: true
+
+- name: Generate CSR for the controller-0 fixed etcd member
+  openssl_csr:
+    path: "/etc/etcd/etcd-fixed-0.csr"
+    privatekey_path: "/etc/etcd/etcd-fixed-0.key"
+    common_name: "fixed-0"
+    key_usage:
+      - digitalSignature
+      - keyEncipherment
+    extended_key_usage:
+      - serverAuth
+      - clientAuth
+    subject_alt_name: >-
+      {{ ['IP:' + controller_0_cluster_host,
+          'IP:127.0.0.1', 'IP:::1'] | unique }}
+    force: true
+
+# The apiserver connects to every etcd endpoint, so its client certificate keeps
+# the full address set. SANs on a client certificate are not used to authorise
+# it -- the server matches on CN and extended key usage -- but they are retained
+# here to avoid changing apiserver behaviour in the same change.
+- name: Generate CSR for the apiserver etcd client
+  openssl_csr:
+    path: "/etc/etcd/apiserver-etcd-client.csr"
+    privatekey_path: "/etc/etcd/apiserver-etcd-client.key"
+    common_name: "apiserver-etcd-client"
+    key_usage:
+      - digitalSignature
+      - keyEncipherment
+    extended_key_usage:
+      - serverAuth
+      - clientAuth
     subject_alt_name: >-
       {{ (['IP:' + cluster_floating_address,
            'IP:' + controller_0_cluster_host]
@@ -43,9 +88,6 @@
              if system_mode != 'simplex' else [])
           + ['IP:127.0.0.1', 'IP:::1']) | unique }}
     force: true
-  loop:
-    - "etcd-server"
-    - "apiserver-etcd-client"
 
 - name: Generate CSRs for etcd root client
   openssl_csr:
@@ -131,3 +173,4 @@
     - "etcd-server"
     - "apiserver-etcd-client"
     - "etcd-client"
+    - "etcd-fixed-0"
