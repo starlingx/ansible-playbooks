@@ -600,6 +600,20 @@
             backup: "{{ backup | combine({'exclude': backup.exclude | difference(['/etc/udev/**', '/etc/udev'])}) }}"
       when: seediso_rules.stat.exists
 
+    # The SCST iSCSI gateway keeps SCSI-3 persistent reservation (APTPL) state
+    # here. It is not under any directory in the default target list, so
+    # without this a restore brings the gateway back with every reservation
+    # and registration gone. Present only where the gateway has been enabled.
+    - name: Check for SCST iSCSI gateway reservation state
+      stat:
+        path: "{{ platform_path }}/scst"
+      register: scst_state_dir
+
+    - name: Include SCST iSCSI gateway reservation state in backup targets
+      set_fact:
+        backup_targets: "{{ backup_targets + [platform_path + '/scst'] }}"
+      when: scst_state_dir.stat.exists
+
     - name: Set exclude targets
       set_fact:
         exclude_targets:

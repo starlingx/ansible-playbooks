@@ -326,6 +326,21 @@
     {{ ' '.join(restore_extra_items) }}
   when: restore_extra_items | length > 0
 
+- name: Restore SCST iSCSI gateway reservation state
+  block:
+    - name: Check if SCST iSCSI gateway reservation state was backed up
+      shell: >-
+        tar --use-compress-program=pigz -tf {{ restore_data_file }}
+        | grep '^opt/platform/scst/'
+      failed_when: false
+      register: scst_state_result
+
+    - name: Restore SCST iSCSI gateway reservation state if present
+      command: >-
+        tar --use-compress-program=pigz -C / -xpf {{ restore_data_file }}
+        --overwrite opt/platform/scst
+      when: scst_state_result.rc == 0
+
 - name: Look for the flag indicating that ceph is configured
   shell: "tar -tf {{ restore_data_file }} | grep '{{ archive_ceph_backend_flag }}'"
   failed_when: false
