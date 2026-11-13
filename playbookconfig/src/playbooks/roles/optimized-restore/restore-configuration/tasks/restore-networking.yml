@@ -10,6 +10,41 @@
 #   completing a typical bootstrapping, so that unlocking can
 #   be performed immediately after optimized restore is complete.
 
+# Interfaces brought up by ifupdown before the restore (for example the OAM
+# interface configured at installation) stay recorded in /run/network/ifstate
+# after their configuration files are removed below. If such an interface is
+# a bond slave in the restored configuration, the ifenslave hook treats it as
+# already up and does not enslave it when the bond comes up. The bond then
+# starts without it while the interface still holds its addresses, so on IPv6
+# the bond's address fails duplicate address detection and the network stays
+# unreachable until unlock. Bring only those interfaces down, with their
+# current configuration, so the bond can enslave them. Other interfaces are
+# left up, so their connectivity is not interrupted. Limited to optimized
+# restore of duplex and standard systems.
+- name: Bring down interfaces that become bond slaves
+  shell: |
+    set -o pipefail
+    up=$(/sbin/ifquery --state | cut -d= -f1 | grep -vx lo || true)
+    [ -z "$up" ] && exit 0
+    slaves=$(tar --use-compress-program=pigz -xOf {{ platform_backup_fqpn | quote }} \
+               --wildcards '{{ network_scripts.lstrip('/') }}/ifcfg-*' \
+             | awk '$1 == "iface" {i = $2} $1 == "bond-master" {print i}' | sort -u)
+    down=""
+    for i in $up; do
+      echo "$slaves" | grep -qx -- "$i" && down="$down $i"
+    done
+    [ -z "$down" ] && exit 0
+    echo "Bringing down:$down"
+    /sbin/ifdown --force $down
+  args:
+    executable: /bin/bash
+  register: ifdown_result
+  changed_when: "'Bringing down' in ifdown_result.stdout"
+  failed_when: false
+  when:
+    - system_mode != 'simplex'
+    - restore_mode | default('old') == 'optimized'
+
 - name: Remove network configuration files
   file:
     path: "{{ network_scripts }}"
