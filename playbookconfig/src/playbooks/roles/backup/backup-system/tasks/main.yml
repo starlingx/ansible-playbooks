@@ -52,11 +52,6 @@
     set_fact:
       openbao_tarball_encrypted: true
     when: '"openbao" in backup_encyption_include'
-
-  - name: Set Openbao platform tar encryption enabled
-    set_fact:
-      openbao_platform_tarball_encrypted: true
-    when: '"openbao_platform" in backup_encyption_include'
   when: backup_encryption_enabled|bool
 
 - name: Do StarlingX backup
@@ -916,7 +911,7 @@
           tasks_from: backup.yml
         vars:
           openbao_backup_dir: "{{ openbao_platform_dir.path }}"
-          openbao_encrypt: "{{ openbao_platform_tarball_encrypted|bool }}"
+          openbao_encrypt: "{{ platform_tarball_encrypted|bool }}"
           encrypt_openbao_secret: "{{ backup_encryption_passphrase }}"
 
       - name: Find result files

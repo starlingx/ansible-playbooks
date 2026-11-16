@@ -55,7 +55,7 @@
   when: openbao_snapshot_check.rc == 0
   vars:
     openbao_backup_path: "{{ openbao_tmp_dir }}/openbao-platform-snapshot.tar"
-    openbao_encrypt: "{{ backup_encryption_enabled|bool }}"
+    openbao_encrypt: "{{ platform_tarball_encrypted|bool }}"
     encrypt_openbao_secret: "{{ backup_encryption_passphrase | default('') }}"
 
 - name: Delete temporary openbao platform folder
