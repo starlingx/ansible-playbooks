@@ -80,12 +80,32 @@
     retries: "{{ ((restore_timeout | default(5400) | int) / 10) | int }}"
     delay: 10
     become: false
+    # Do not fail here. This result carries the whole nested restore output, and
+    # Ansible renders a failed task's result as JSON, so stdout arrives as a
+    # single escaped line with the embedded traceback escaped twice. The
+    # readable form is printed by the next task, and the explicit failure below
+    # reports the outcome without repeating the output.
+    failed_when: false
     vars:
       ansible_async_dir: /tmp/.ansible_async_{{ inventory_hostname }}
 
+  # Skipped when the result carries no output, which happens on an exhausted
+  # retry loop or an async timeout. The rescue prints the fetched log instead.
   - name: Print the output of platform restore playbook
     debug:
       msg: "{{ job_result.stdout_lines }}"
+    when: (job_result.stdout_lines | default([])) | length > 0
+
+  # 'finished' alone is not sufficient. When the async timeout kills the job,
+  # async_status reports finished with no rc at all, so rc has to default to a
+  # failure. Together the two conditions cover a non-zero exit, an exhausted
+  # retry loop and an async timeout.
+  - name: Fail if the platform restore playbook did not complete successfully
+    fail:
+      msg: >-
+        The platform restore playbook did not complete successfully on
+        {{ inventory_hostname }}. Its output is printed in the preceding task.
+    when: not (job_result.finished | bool) or (job_result.rc | default(1)) != 0
 
   - name: Reconfigure OAM network post factory restore
     block:
@@ -150,10 +170,16 @@
       register: subcloud_restore_log
       failed_when: false
 
+    # Only print the fetched log when the async result had nothing to print,
+    # which is the case for an exhausted retry loop, an async timeout, or a
+    # failure before the restore playbook was started. Otherwise the print task
+    # in the block above has already shown this same content.
     - name: Print subcloud restore playbook output
       debug:
         msg: "{{ subcloud_restore_log.stdout_lines }}"
-      when: subcloud_restore_log.stdout | default('') | length > 0
+      when:
+        - subcloud_restore_log.stdout | default('') | length > 0
+        - (job_result.stdout_lines | default([])) | length == 0
 
     - name: Fail with error message for password-related failures
       fail:

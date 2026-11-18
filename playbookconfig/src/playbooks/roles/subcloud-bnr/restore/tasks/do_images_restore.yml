@@ -24,10 +24,21 @@
       ansible-playbook /usr/share/ansible/stx-ansible/playbooks/restore_user_images.yml -e
       "@{{ subcloud_overrides }}"
     register: images_restore_output
+    # As in do_platform_restore.yml, a failure here would render the whole
+    # nested output as one escaped line. Report it through the explicit failure
+    # below instead, after the readable form has been printed.
+    failed_when: false
 
   - name: Print the output of user images restore playbook
     debug:
       msg: "{{ images_restore_output.stdout_lines }}"
+
+  - name: Fail if the user images restore playbook did not complete successfully
+    fail:
+      msg: >-
+        The user images restore playbook did not complete successfully on
+        {{ inventory_hostname }}. Its output is printed in the preceding task.
+    when: (images_restore_output.rc | default(1)) != 0
 
   always:
     - name: Remove subcloud overrides file on {{ inventory_hostname }}
