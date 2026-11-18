@@ -40,6 +40,13 @@
     dest: "{{ tmp_path }}/deploy-lvm/create_tag_partition.sh"
     mode: "0755"
 
+- name: Wait for sysinv-agent to be ready
+  wait_for:
+    path: /var/run/sysinv/.sysinv_reported
+    state: present
+    timeout: 300
+    msg: Timeout waiting for sysinv-agent to report inventory
+
 # A wiped disk only gets its available_mib refreshed by sysinv-agent once a
 # partition table exists, so host-disk-partition-add fails while it is still 0.
 - name: Wait for sysinv to report available space on partitioned disks
