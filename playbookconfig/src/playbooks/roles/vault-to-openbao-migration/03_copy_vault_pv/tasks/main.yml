@@ -4,17 +4,16 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Phase 3 — first mutating phase: resolve the source and destination PVCs and the
-# destination spec, shut Vault down per vault_final_state, clone the Raft PV and
-# bind the clone as the OpenBao data PVC, then copy the unseal secrets.
-# Orchestration only: shutdown, clone_rebind, copy_secrets.
+# Phase 3 — first mutating phase: shut Vault down per vault_final_state, clone the active
+# Vault pod's data PVC (clone_rebind) as the OpenBao data PVC, write raft/peers.json, then
+# copy the unseal secrets. Orchestration only. Vault must receive no writes while the
+# migration runs.
 
 - name: "Announce Phase 3 (first mutating phase)"
   tags: [phase3]
   debug:
     msg: >-
-      Phase 3 copy (system_mode={{ migration_system_mode }},
-      vault_final_state={{ vault_final_state }}).
+      Phase 3 copy (system_mode={{ migration_system_mode }}, vault_final_state={{ vault_final_state }}).
       {{ 'DRY-RUN: no changes will be made.' if ansible_check_mode else '' }}
 
 - name: "Resolve the source/destination PVCs and the destination spec"
@@ -22,11 +21,17 @@
   check_mode: false
   tags: [phase3]
   block:
+    # Clone the PVC of the active Vault pod that Phase 1 recorded. Without it (Phase 1 skipped,
+    # or Vault already stopped on a resume) clone ordinal 0.
+    - name: "Set source/destination PVC facts"
+      set_fact:
+        s3_source_pvc: "{{ ('data-' ~ s1_raft_leader) if (s1_raft_leader | default('')) != '' else vault_data_pvc }}"
+        s3_dest_pvc: "{{ openbao_data_pvc }}"
     # The destination PVC is the clone of the source volume, so its size and
     # storage class come from the clone; only the labels follow chart conventions.
     # The source size is the fallback size for the clone (clone_rebind.yml).
     - name: "Read the source Vault data PVC (empty if absent)"
-      command: kubectl get pvc {{ vault_data_pvc }} -n {{ vault_namespace }} -o json
+      command: kubectl get pvc {{ s3_source_pvc }} -n {{ vault_namespace }} -o json
       environment: "{{ openrc_env }}"
       register: s3_source_pvc_raw
       failed_when: false
@@ -48,11 +53,6 @@
             app.kubernetes.io/name: openbao
             component: server
 
-    # PVC names come from vault_data_pvc / openbao_data_pvc (common defaults).
-    - name: "Set source/destination PVC facts"
-      set_fact:
-        s3_source_pvc: "{{ vault_data_pvc }}"
-        s3_dest_pvc: "{{ openbao_data_pvc }}"
 
 - name: "Shut Vault down"
   import_tasks: shutdown.yml
@@ -62,6 +62,9 @@
   import_tasks: clone_rebind.yml
   tags: [phase3]
 
+- name: "Write raft/peers.json into the bound OpenBao data PVC"
+  import_tasks: peers_json.yml
+  tags: [phase3]
 - name: "Copy the legacy unseal secrets"
   import_tasks: copy_secrets.yml
   tags: [phase3]
@@ -69,8 +72,10 @@
 - name: "Phase 3 summary"
   vars:
     _secrets: "{{ s3_legacy_secret_names | default([]) | length }}"
+    _cloned: "{{ s3_source_pvc }}"
   debug:
     msg: >-
-      Phase 3 complete{{ ' (DRY-RUN)' if ansible_check_mode else '' }}: mode={{ migration_system_mode }},
-      final_state={{ vault_final_state }}, {{ s3_source_pvc }} -> {{ s3_dest_pvc }}, secrets={{ _secrets }}.
+      Phase 3 complete{{ ' (DRY-RUN)' if ansible_check_mode else '' }}:
+      mode={{ migration_system_mode }},
+      final_state={{ vault_final_state }}, clone source={{ _cloned }} -> {{ s3_dest_pvc }}, secrets={{ _secrets }}.
   tags: [phase3]

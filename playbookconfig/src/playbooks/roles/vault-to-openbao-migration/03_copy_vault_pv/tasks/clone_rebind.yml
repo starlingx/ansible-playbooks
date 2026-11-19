@@ -4,11 +4,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Phase 3 — clone the source Vault data PVC and bind the clone's PV straight to
-# the OpenBao data PVC (no second PVC, no copy). The clone is made in the vault
-# namespace (dataSource must be same-namespace) and its PV is rebound across
-# namespaces. The ORIGINAL source PVC/PV are only read — a ceph-csi RBD clone is a
-# fully independent image, so Vault's volume is never patched, deleted, or re-homed.
+# Phase 3 — clone the source Vault data PVC and bind the clone's PV straight to the OpenBao
+# data PVC. The clone is made in the vault namespace (dataSource must be same-namespace) and
+# its PV is rebound across namespaces. The original source PVC/PV are only read: a ceph-csi
+# RBD clone is an independent image.
 
 - name: "Ensure the openbao namespace and read the clone resume marker"
   environment: "{{ openrc_env }}"

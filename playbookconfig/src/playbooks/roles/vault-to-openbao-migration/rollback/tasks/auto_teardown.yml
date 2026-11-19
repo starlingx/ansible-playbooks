@@ -5,9 +5,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Ordered OpenBao teardown + Vault restore (rollback_mode auto): remove openbao and its
-# webhook (halt if it survives), delete the ns, release Phase 3 clone artifacts, restore
-# Vault by application-remove + application-apply (unsuspending first if suspended),
-# confirm the Vault PVCs are Bound and verify healthy. Runs only for a failure up to the
+# webhook (halt if it survives), delete the ns, confirm the Vault PVCs are Bound, release
+# Phase 3 clone artifacts, restore Vault by application-remove + application-apply
+# (unsuspending first if suspended) and verify healthy. Runs only for a failure up to the
 # Phase 5 equivalence check; later failures leave OpenBao in place. Only copied data is
 # destroyed, never the original Vault PVCs/PVs or cluster-key-*.
 - name: "rollback/auto — announce ordered teardown"
@@ -15,7 +15,7 @@
     msg: >-
       [ROLLBACK: auto]{{ ' DRY-RUN:' if ansible_check_mode else '' }} teardown + Vault restore
       (vault_final_state={{ vault_final_state }}): remove openbao → remove webhook → delete ns (and PVCs) →
-      remove vault (if still applied/suspended) → apply vault → verify healthy.
+      confirm Vault PVCs → remove vault (if still applied/suspended) → apply vault → verify healthy.
 
 # STEP 1 — application-remove openbao, then remove its injector webhook (after, since
 # the running injector recreates it; it cannot block removal). Only OpenBao's webhook
@@ -98,7 +98,47 @@
       delay: 5
       until: (rb_ns_phase.rc | default(0)) != 0 or (rb_ns_phase.stdout | default('') | trim) == ''
 
-# STEP 3 — restore Vault through the application framework: remove it if it is still
+# STEP 3 — before touching Vault, confirm the original Vault data PVCs are intact (they
+# survive application-remove, so the result does not depend on the order). A bad PVC halts
+# the rollback with Vault still in its starting state.
+- name: "rollback/auto — confirm every original Vault data PVC is Bound"
+  when: not ansible_check_mode
+  block:
+    # Read live: every data-<statefulset>-N claim in the Vault namespace, and at least
+    # vault_data_pvc, so a missing ordinal 0 halts instead of passing on an empty list.
+    - name: "rollback/auto — list the Vault data PVCs"
+      command: kubectl get pvc -n {{ vault_namespace }} -o jsonpath={.items[*].metadata.name}
+      environment: "{{ openrc_env }}"
+      register: rb_vault_pvc_names
+      check_mode: false
+    - name: "rollback/auto — probe that each original Vault data PVC is present and Bound"
+      command:
+        cmd: >-
+          kubectl get pvc {{ item }} -n {{ vault_namespace }}
+          -o jsonpath={.status.phase}
+      environment: "{{ openrc_env }}"
+      register: rb_vault_data_pvc_phase
+      failed_when: false
+      check_mode: false
+      loop: >-
+        {{ (rb_vault_pvc_names.stdout | split
+            | select('match', '^' ~ ('data-' ~ vault_statefulset ~ '-') | regex_escape ~ '[0-9]+$')
+            | list + [vault_data_pvc]) | unique | sort }}
+    - name: "rollback/auto — assert every original Vault data PVC is Bound (else halt)"
+      assert:
+        that:
+          - (item.stdout | default('') | trim) == 'Bound'
+        fail_msg: >-
+          ROLLBACK HALTED: Vault data PVC '{{ item.item }}' in '{{ vault_namespace }}' is
+          '{{ item.stdout | default('(missing)', true) | trim }}', expected 'Bound'
+          (changed outside the migration).
+          OpenBao teardown completed; Vault was not changed. Investigate before restoring Vault. No further changes made.
+        success_msg: "Original Vault data PVC {{ item.item }} is Bound — Vault will re-attach to its untouched Raft data."
+        quiet: true
+      loop: "{{ rb_vault_data_pvc_phase.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+# STEP 4 — restore Vault through the application framework: remove it if it is still
 # applied or suspended, then apply. The framework recreates the workloads and the
 # injector webhook; the original Vault PVCs and cluster-key-* secrets survive remove.
 - name: "rollback/auto — probe current Vault application state"
@@ -144,34 +184,8 @@
   command: "python3 {{ role_path }}/../common/files/clone-pv.py release"
   environment: "{{ openrc_env }}"
   register: rb_clone_release
-# STEP 4 — confirm the original Vault data PVCs are intact, then apply vault;
-# Vault re-attaches to its untouched data and auto-unseals from the surviving
-# cluster-key-* secrets.
-- name: "rollback/auto — confirm the original Vault data PVC is Bound"
-  when: not ansible_check_mode
-  block:
-    - name: "rollback/auto — probe that the original Vault data PVC is present and Bound"
-      command:
-        cmd: >-
-          kubectl get pvc {{ vault_data_pvc }} -n {{ vault_namespace }}
-          -o jsonpath={.status.phase}
-      environment: "{{ openrc_env }}"
-      register: rb_vault_data_pvc_phase
-      failed_when: false
-      check_mode: false
-
-    - name: "rollback/auto — assert the original Vault data PVC is Bound (else halt)"
-      assert:
-        that:
-          - (rb_vault_data_pvc_phase.stdout | default('') | trim) == 'Bound'
-        fail_msg: >-
-          ROLLBACK HALTED: Vault data PVC '{{ vault_data_pvc }}' in '{{ vault_namespace }}' is
-          '{{ rb_vault_data_pvc_phase.stdout | default('(missing)') | trim }}', expected 'Bound'
-          (changed outside the migration).
-          OpenBao teardown completed. Investigate before applying Vault. No further changes made.
-        success_msg: "Original Vault data PVC is Bound — Vault will re-attach to its untouched Raft data."
-        quiet: true
-
+# STEP 5 — apply vault; it re-attaches to its untouched data and auto-unseals from the
+# surviving cluster-key-* secrets.
 - name: "rollback/auto — apply Vault and wait for it to be applied"
   when: not ansible_check_mode
   block:

@@ -1,0 +1,130 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 3 — write raft/peers.json into the bound OpenBao data PVC before OpenBao first
+# starts, so the node (whose copied store lists unreachable Vault peers) is a one-voter
+# cluster at its new address. Skipped once the OpenBao StatefulSet exists. A helper pod
+# mounts the PVC, writes the file from the node-id stored in the data and reads it back.
+# A killed run leaves a writer pod that holds the PVC mount, so leftovers go first.
+- name: "Write raft/peers.json into the OpenBao data PVC"
+  when: not ansible_check_mode
+  tags: [phase3]
+  vars:
+    s3_peers_pod: peers-writer
+    s3_peers_pull_secret: default-registry-key
+  block:
+    - name: "Check whether the OpenBao StatefulSet exists"
+      command: kubectl get statefulset {{ openbao_statefulset }} -n {{ openbao_namespace }} -o name
+      environment: "{{ openrc_env }}"
+      register: s3_peers_sts
+      failed_when:
+        - s3_peers_sts.rc != 0
+        - "'NotFound' not in s3_peers_sts.stderr"
+    - name: "Write peers.json with a helper pod"
+      when: s3_peers_sts.rc != 0
+      block:
+        - name: "Assert the Raft address is host:port"
+          assert:
+            that: openbao_raft_address is match('^[A-Za-z0-9.-]+:[0-9]{1,5}$')
+            fail_msg: "openbao_raft_address must be host:port, got '{{ openbao_raft_address }}'."
+            quiet: true
+        - name: "Delete leftover peers-writer helper pods"
+          command: >-
+            kubectl delete pod -n {{ openbao_namespace }} -l app.kubernetes.io/name=vtom-peers-writer
+            --ignore-not-found --wait=true --timeout=60s
+          environment: "{{ openrc_env }}"
+        - name: "Look for the registry pull secret in {{ openbao_namespace }}"
+          command: kubectl get secret {{ s3_peers_pull_secret }} -n {{ openbao_namespace }} -o name
+          environment: "{{ openrc_env }}"
+          register: s3_peers_secret
+          failed_when:
+            - s3_peers_secret.rc != 0
+            - "'NotFound' not in s3_peers_secret.stderr"
+        - name: "Copy the pull secret from kube-system (application-remove deletes it)"
+          when: s3_peers_secret.rc != 0
+          block:
+            - name: "Read the kube-system pull secret"
+              command: kubectl get secret {{ s3_peers_pull_secret }} -n kube-system -o json
+              environment: "{{ openrc_env }}"
+              register: s3_peers_src
+              no_log: true
+            - name: "Create the pull secret in {{ openbao_namespace }}"
+              command: kubectl create -f -
+              args:
+                stdin: "{{ s3_peers_secret_doc | to_json }}"
+              vars:
+                s3_peers_secret_doc:
+                  apiVersion: v1
+                  kind: Secret
+                  type: kubernetes.io/dockerconfigjson
+                  metadata: { name: "{{ s3_peers_pull_secret }}", namespace: "{{ openbao_namespace }}" }
+                  data: "{{ (s3_peers_src.stdout | from_json).data }}"
+              environment: "{{ openrc_env }}"
+              no_log: true
+        - name: "Run the peers.json writer pod"
+          command: kubectl create -f -
+          args:
+            stdin: "{{ s3_peers_pod_doc | to_json }}"
+          vars:
+            s3_peers_pod_doc:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                name: "{{ s3_peers_pod }}"
+                namespace: "{{ openbao_namespace }}"
+                labels: { app.kubernetes.io/name: vtom-peers-writer }
+              spec:
+                restartPolicy: Never
+                imagePullSecrets: [{ name: "{{ s3_peers_pull_secret }}" }]
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 100
+                  runAsGroup: 1000
+                  fsGroup: 1000
+                  seccompProfile: { type: RuntimeDefault }
+                containers:
+                  - name: w
+                    image: "{{ migration_helper_image }}"
+                    env: [{ name: ADDRESS, value: "{{ openbao_raft_address }}" }]
+                    securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+                    volumeMounts: [{ name: d, mountPath: /data }]
+                    command: [sh, -eu, -c, "{{ s3_peers_script }}"]
+                volumes: [{ name: d, persistentVolumeClaim: { claimName: "{{ s3_dest_pvc }}" } }]
+            s3_peers_script: |
+              id=$(cat /data/node-id)
+              case "$id" in *[!0-9A-Za-z-]*) exit 1;; esac
+              case "$id" in ????????*) ;; *) exit 1;; esac
+              doc="[{\"id\":\"$id\",\"address\":\"$ADDRESS\",\"non_voter\":false}]"
+              umask 077
+              printf '%s' "$doc" > /data/raft/peers.json
+              [ "$(cat /data/raft/peers.json)" = "$doc" ]
+              echo "peers.json written for node $id"
+          environment: "{{ openrc_env }}"
+        - name: "Wait for the writer pod to finish"
+          command: kubectl get pod {{ s3_peers_pod }} -n {{ openbao_namespace }} -o jsonpath={.status.phase}
+          environment: "{{ openrc_env }}"
+          register: s3_peers_phase
+          retries: 60
+          delay: 3
+          until: s3_peers_phase.stdout in ['Succeeded', 'Failed']
+        - name: "Read the writer pod log"
+          command: kubectl logs {{ s3_peers_pod }} -n {{ openbao_namespace }}
+          environment: "{{ openrc_env }}"
+          register: s3_peers_log
+          failed_when: false
+      always:
+        - name: "Delete the writer pod"
+          command: kubectl delete pod {{ s3_peers_pod }} -n {{ openbao_namespace }} --ignore-not-found --timeout=60s
+          environment: "{{ openrc_env }}"
+    - name: "Assert peers.json was written"
+      assert:
+        that: s3_peers_phase.stdout == 'Succeeded'
+        fail_msg: >-
+          Could not write raft/peers.json into {{ s3_dest_pvc }} (writer pod {{ s3_peers_phase.stdout }}:
+          {{ s3_peers_log.stdout | default('') | trim }}). Without it the migrated node cannot elect itself.
+          Fix the cause (helper image {{ migration_helper_image }}) and resume Phase 3.
+        quiet: true
+      when: s3_peers_sts.rc != 0

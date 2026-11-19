@@ -17,7 +17,6 @@
 
 # StarlingX system layout: auto (read /etc/platform/platform.conf, default),
 # simplex (force AIO-SX) or duplex (force AIO-DX).
-# TODO - subjected to change upon further development of duplex migration
 system_mode: auto
 
 # Source Vault during Phase 3 (shutdown): removed (`system application-remove
@@ -94,8 +93,12 @@ openbao_statefulset: stx-openbao
 # namespace.
 openbao_generation_secret: openbao-unseal-gen-001
 vault_data_pvc: "data-{{ vault_statefulset }}-0"
-# OpenBao server pod (ordinal 0; see TODO(duplex-ha-migration)).
+# OpenBao bootstrap pod (ordinal 0). Not necessarily the active pod once more than one server
+# pod runs; find the active pod with wait-bao-state.py --pod auto.
 openbao_pod: "{{ openbao_statefulset }}-0"
+# Image of the short-lived helper pod that writes peers.json into a data PVC while no
+# server runs. Same address as the Vault chart's server image.
+migration_helper_image: "registry.local:9001/docker.io/hashicorp/vault:{{ vault_required_version }}"
 # Extra Vault workloads stopped when vault_final_state is 'suspended'.
 vault_manager_statefulset: "{{ vault_statefulset }}-manager-3"
 vault_injector_deployment: "{{ vault_statefulset }}-agent-injector"

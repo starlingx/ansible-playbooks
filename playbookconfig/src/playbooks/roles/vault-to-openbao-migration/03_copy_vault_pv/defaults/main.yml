@@ -7,3 +7,5 @@
 # Phase 3 internal constants.
 # Destination OpenBao data PVC (StatefulSet volumeClaimTemplate convention).
 openbao_data_pvc: "data-{{ openbao_statefulset }}-0"
+# Cluster address of the first OpenBao pod, written into peers.json (host:port).
+openbao_raft_address: "{{ openbao_statefulset }}-0.{{ openbao_statefulset }}-internal:8201"
