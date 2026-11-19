@@ -26,8 +26,9 @@
     # Active-leader pre-check: if the node is unsealed but not leading, the
     # collector's sys/* reads 500 into an empty inventory and fail every
     # dimension. Fail with a precise message instead.
-    - name: "Pre-check: OpenBao is the active Raft leader"
-      command: "python3 {{ role_path }}/../common/files/wait-bao-state.py --state active --probe"
+    # The active pod is not necessarily ordinal 0.
+    - name: "Pre-check: an OpenBao pod is the active Raft leader"
+      command: "python3 {{ role_path }}/../common/files/wait-bao-state.py --pod auto --state active --probe"
       environment: "{{ openrc_env }}"
       register: s5_active_check
       failed_when: false
@@ -37,8 +38,11 @@
         msg: >-
           EQUIVALENCE CHECK CANNOT RUN: OpenBao unsealed but not active leader
           ({{ s5_active_check.stderr | default('') | trim }}); reads would 500 into an empty inventory. Check
-          `kubectl logs {{ openbao_pod }} -c openbao`. Cleanup did not run.
+          `kubectl logs <pod> -c openbao` on each {{ openbao_statefulset }} pod. Cleanup did not run.
       when: s5_active_check.rc != 0
+    - name: "Record the active OpenBao pod"
+      set_fact:
+        s5_active_pod: "{{ (s5_active_check.stdout | from_json).pod }}"
 
     # The pod has no token: unauthenticated `bao list` 403s into EMPTY inventories (a
     # false-positive check). Load the root token (cluster-key-root, copied in Phase 3)
@@ -59,7 +63,7 @@
           - kubectl
           - exec
           - -i
-          - "{{ openbao_pod }}"
+          - "{{ s5_active_pod }}"
           - -n
           - "{{ openbao_namespace }}"
           - -c

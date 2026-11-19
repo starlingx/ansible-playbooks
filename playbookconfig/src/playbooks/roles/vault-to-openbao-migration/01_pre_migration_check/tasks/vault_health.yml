@@ -66,6 +66,18 @@
       loop_control:
         label: "{{ item.item }}"
 
+    # Informational: the active pod can change before Vault is shut down.
+    - name: "Record the active Vault pod (empty if none reports is_self or ha_mode active)"
+      set_fact:
+        s1_raft_leader: >-
+          {%- set ns = namespace(leader='') -%}
+          {%- for r in s1_vault_status_raw.results -%}
+          {%- if (r.stdout | default('') | trim) != '' and ((r.stdout | from_json).is_self | default(false)
+                 or ((r.stdout | from_json).ha_mode | default('') | lower) == 'active') -%}
+          {%- set ns.leader = r.item -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {{ ns.leader }}
     - name: "Assert every Vault pod reports raft storage"
       # Check each pod, not just the first: a raft HA cluster can be in a mixed
       # state (e.g. mid-upgrade), and the migration must refuse to proceed on it.

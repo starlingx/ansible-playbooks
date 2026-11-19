@@ -12,7 +12,6 @@
   check_mode: false
   when: verification_level != 'none'
   block:
-    # TODO(duplex-ha-migration): simplex only; on duplex vault_pod should be the Raft leader.
     # In-pod reads need auth: load the root token from the shard set, pass it on stdin.
     - name: "Load Vault root token"
       include_tasks: "{{ role_path }}/../common/tasks/load_root_token.yml"
