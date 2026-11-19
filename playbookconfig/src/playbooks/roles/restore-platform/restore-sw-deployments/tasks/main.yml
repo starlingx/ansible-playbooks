@@ -50,7 +50,11 @@
     - name: Normalize facts
       set_fact:
         sw_deployments_info: "{{ _sw_deployments_info }}"
-        sw_deployments_enabled: "{{ _sw_deployments_info.backup_patched }}"
+        sw_deployments_enabled: >-
+          {{
+            _sw_deployments_info.backup_patched and
+            (_sw_deployments_info.deployments_to_restore | default([]) | length > 0)
+          }}
         do_sw_deployments_prepare: "{{ not in_progress_flag.stat.exists }}"
         do_sw_deployments_restore: "{{ _sw_deployments_info.deployments_to_restore | default([]) | length > 0 }}"
         do_sw_deployments_begin: "{{ not rr_flag.stat.exists }}"
