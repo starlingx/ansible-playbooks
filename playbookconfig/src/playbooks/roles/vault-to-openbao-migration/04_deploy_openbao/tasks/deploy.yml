@@ -42,32 +42,35 @@
         path: "{{ gather_output_dir }}"
         state: directory
         mode: "0700"
-    # Copied file audit devices keep their Vault path (/vault/audit/...); mount the audit
-    # volume there or the server never becomes leader.
-    - name: "Write injector-disabled / replicas=1 helm override values"
+    # Once gen-001 exists a resumed run may have scaled out already (it re-enters here when
+    # every pod was sealed at entry). Writing replicas=1 and a paused manager then would be
+    # applied by the next Helm apply and undo the scale-out.
+    - name: "Assert the target replica count is known for a re-entered deploy"
+      assert:
+        that: openbao_replicas | default('') is match('^[1-9][0-9]*$')
+        fail_msg: >-
+          gen-001 exists but the OpenBao replica count cannot be derived (missing
+          {{ openbao_user_overrides_snapshot }} or unreadable system overrides). Nothing was changed.
+        quiet: true
+      when: gen_exists_at_entry | bool
+    - name: "Write injector-disabled helm override values (replicas=1 until gen-001 exists)"
       copy:
         dest: "{{ gather_output_dir }}/openbao-deploy-overrides.yaml"
         mode: "0600"
-        content: |
-          injector:
-            enabled: false
-          server:
-            auditStorage:
-              mountPath: {{ vault_audit_mount }}
-            ha:
-              enabled: true
-              replicas: 1
-              raft:
-                enabled: true
+        content: >-
+          {{ openbao_migration_overrides
+             | combine({'server': {'ha': {'replicas': (openbao_replicas | int)
+                                          if (gen_exists_at_entry | bool) else 1}}}, recursive=true)
+             | to_nice_yaml(indent=2) }}
     # pause: 2 parks the manager at init.sh trap 2, after the server pod is up and
     # before `exec baomon run`.
-    - name: "Write the manager pause helm override"
+    - name: "Write the manager pause helm override (paused until gen-001 exists)"
       copy:
         dest: "{{ gather_output_dir }}/openbao-manager-pause-overrides.yaml"
         mode: "0600"
         content: |
           manager:
-            pause: 2
+            pause: {{ '""' if (gen_exists_at_entry | bool) else 2 }}
 - name: "Upload the OpenBao app and wait for it to reach 'uploaded'"
   when: openbao_state_before == 'absent'
   block:
@@ -81,6 +84,26 @@
         wait_app_accept: ['uploaded']
         wait_app_retries: 30
       when: not ansible_check_mode
+# The scale-out rebuilds the chart's user overrides from this copy, so it is taken once, before
+# the migration's first write. A resume keeps the first copy.
+- name: "Save the openbao chart's user overrides before the migration writes any"
+  when: not ansible_check_mode
+  block:
+    - name: "Check for a saved copy"
+      stat:
+        path: "{{ openbao_user_overrides_snapshot }}"
+      register: user_overrides_saved
+    - name: "Read the openbao chart's user overrides"
+      command: python3 {{ role_path }}/../common/files/helm-overrides.py openbao openbao openbao user
+      environment: "{{ openrc_env }}"
+      register: user_overrides_now
+      when: not user_overrides_saved.stat.exists
+    - name: "Save them"
+      copy:
+        dest: "{{ openbao_user_overrides_snapshot }}"
+        mode: "0600"
+        content: "{{ user_overrides_now.stdout }}"
+      when: not user_overrides_saved.stat.exists
 - name: "Apply the OpenBao helm overrides (user first, migration base last)"
   command: >-
     system helm-override-update openbao {{ item.chart }} openbao

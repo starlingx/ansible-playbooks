@@ -1,0 +1,49 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Set openbao_replicas: the server replica count the openbao app runs once the migration's
+# replicas=1 is gone. A user value wins (openbao_user_overrides_file, then the chart's user
+# overrides saved before the migration's first write), else the app's system value. With
+# target_replicas_required false an unreadable source gives '' instead of failing. Reads only.
+- name: "Target replicas: read the saved user overrides"
+  slurp:
+    src: "{{ openbao_user_overrides_snapshot }}"
+  register: tr_saved
+  failed_when: false
+- name: "Target replicas: read the user overrides file"
+  slurp:
+    src: "{{ openbao_user_overrides_file }}"
+  register: tr_file
+  when: (openbao_user_overrides_file | default('') | string | trim) != ''
+- name: "Target replicas: read the openbao chart's system overrides"
+  command: python3 {{ role_path }}/../common/files/helm-overrides.py openbao openbao openbao system
+  environment: "{{ openrc_env }}"
+  register: tr_system
+  failed_when: false
+  check_mode: false
+- name: "Target replicas: pick the replica count"
+  vars:
+    _docs:
+      - "{{ tr_file.content | default('') | b64decode | from_yaml }}"
+      - "{{ tr_saved.content | default('') | b64decode | from_yaml }}"
+      - "{{ tr_system.stdout | default('') | from_yaml if tr_system.rc == 0 else none }}"
+    _values: >-
+      {{ _docs | map('default', {}, true) | map(attribute='server', default={})
+         | map('default', {}, true) | map(attribute='ha', default={})
+         | map('default', {}, true) | map(attribute='replicas', default='')
+         | map('string') | reject('equalto', '') | list }}
+  set_fact:
+    openbao_replicas: "{{ _values | first | default('') if (tr_saved.content is defined) else '' }}"
+- name: "Target replicas: assert the replica count is known"
+  assert:
+    that: openbao_replicas is match('^[1-9][0-9]*$')
+    fail_msg: >-
+      The OpenBao replica count cannot be derived: saved user overrides
+      {{ 'found' if tr_saved.content is defined else 'missing (' ~ openbao_user_overrides_snapshot ~ ')' }},
+      system overrides {{ 'read' if tr_system.rc == 0 else 'unreadable (' ~ (tr_system.stderr | default('') | trim) ~ ')' }},
+      value '{{ openbao_replicas }}'. Nothing was changed by this step.
+    quiet: true
+  when: target_replicas_required | bool

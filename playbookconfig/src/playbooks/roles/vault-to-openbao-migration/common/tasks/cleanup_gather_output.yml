@@ -16,8 +16,11 @@
     - source-inventory.json
     - source-data-checksums.json
     - openbao-deploy-overrides.yaml
+    - "{{ openbao_user_overrides_snapshot | basename }}"
     - openbao-manager-pause-overrides.yaml
     - openbao-injector-on-overrides.yaml
+    - openbao-scale-out-overrides.yaml
+    - openbao-manager-pause-clear-overrides.yaml
   when:
     - gather_output_cleanup | bool
     - not ansible_check_mode

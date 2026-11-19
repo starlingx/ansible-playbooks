@@ -1,0 +1,33 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Join one follower (follower) to the Raft cluster through the manager pod
+# (join_manager_pod). Skipped when the follower is already initialized: it joined earlier or
+# holds a store of its own (the voter check after the loop catches that). `baomon` prints a
+# harmless config-write warning on stderr (read-only ConfigMap), so success is judged by exit code.
+- name: "Wait for {{ follower }} to answer"
+  command: >-
+    python3 {{ role_path }}/../common/files/wait-bao-state.py
+    --pod {{ follower }} --state reachable
+  environment: "{{ openrc_env }}"
+- name: "Probe whether {{ follower }} is already initialized"
+  command: >-
+    python3 {{ role_path }}/../common/files/wait-bao-state.py
+    --pod {{ follower }} --state initialized --probe
+  environment: "{{ openrc_env }}"
+  register: follower_init
+  failed_when: false
+- name: "Join {{ follower }} to the Raft cluster (baomon joinRaft)"
+  command: >-
+    kubectl exec {{ join_manager_pod }} -n {{ openbao_namespace }} --
+    baomon --config {{ baomon_config_path }} joinRaft {{ follower }}
+    --raft-address https://{{ openbao_statefulset }}-active.{{ openbao_namespace }}.svc.cluster.local:8200
+  environment: "{{ openrc_env }}"
+  register: join_result
+  retries: "{{ (raft_join_attempts | int) - 1 }}"
+  delay: "{{ raft_join_delay }}"
+  until: join_result.rc == 0
+  when: follower_init.rc != 0

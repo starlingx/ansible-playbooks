@@ -1,0 +1,64 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Wait until the openbao-manager runs the Helm values the migration just applied: EARLY_PAUSE
+# cleared in its ConfigMap, the StatefulSet rolled out, and no pause file in any manager pod
+# (a paused manager leaves a restarted server sealed).
+# Polls for scale_out_wait_retries x 5 s; 0 checks once (the rollout wait gets 1 s, since
+# --timeout=0s waits forever). Fails when not settled. Reads only.
+- name: "Manager: read the pause setting"
+  vars:
+    _text: >-
+      {{ (mgr_cm.stdout | default('{"items": []}', true) | from_json)['items']
+         | map(attribute='data', default={}) | map('dict2items') | flatten
+         | map(attribute='value') | join('\n') }}
+    _pause: "{{ _text | regex_findall('(?m)^\\s*EARLY_PAUSE=(\\S*)\\s*$') }}"
+    _ok: "{{ (_pause | length) > 0 and not (_pause | select | list) }}"
+  block:
+    - name: "Manager: read the ConfigMap"
+      command: >-
+        kubectl get cm -n {{ openbao_namespace }} -l helm.toolkit.fluxcd.io/name=openbao-manager -o json
+      environment: "{{ openrc_env }}"
+      register: mgr_cm
+      failed_when: false
+      check_mode: false
+      retries: "{{ scale_out_wait_retries }}"
+      delay: 5
+      until: mgr_cm.rc == 0 and _ok | bool
+    - name: "Manager: assert the pause is cleared"
+      assert:
+        that: mgr_cm.rc == 0 and _ok | bool
+        fail_msg: >-
+          The manager ConfigMap has EARLY_PAUSE={{ _pause }}; the migration needs it empty
+          (kubectl rc={{ mgr_cm.rc }}).
+        quiet: true
+- name: "Manager: wait for the StatefulSet rollout"
+  command: >-
+    kubectl rollout status statefulset -n {{ openbao_namespace }} -l app.kubernetes.io/name=openbao-manager
+    --timeout={{ [(scale_out_wait_retries | int) * 5, 1] | max }}s
+  environment: "{{ openrc_env }}"
+  check_mode: false
+- name: "Manager: list the pods"
+  command: >-
+    kubectl get pods -n {{ openbao_namespace }} -l app.kubernetes.io/name=openbao-manager
+    -o jsonpath={.items[*].metadata.name}
+  environment: "{{ openrc_env }}"
+  register: mgr_pods
+  check_mode: false
+- name: "Manager: assert a manager pod exists"
+  assert:
+    that: (mgr_pods.stdout | trim) != ''
+    fail_msg: "No openbao-manager pod found in '{{ openbao_namespace }}'."
+    quiet: true
+- name: "Manager: assert no pause file"
+  command: kubectl exec {{ item }} -n {{ openbao_namespace }} -- test ! -e /workdir/pause_on_trap
+  environment: "{{ openrc_env }}"
+  check_mode: false
+  loop: "{{ mgr_pods.stdout | split }}"
+  register: mgr_pause
+  retries: "{{ scale_out_wait_retries }}"
+  delay: 5
+  until: mgr_pause.rc == 0

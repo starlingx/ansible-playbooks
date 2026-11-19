@@ -141,6 +141,9 @@ openbao_chart_path: /var/www/pages/helm_charts/stx-platform
 # outputs: the gathered source Vault inventory and the data-checksum manifest
 # JSON used to confirm the migration preserved every secret.
 gather_output_dir: /home/sysadmin/vault-migration-inventory
+# The openbao chart's user overrides as they were before the migration's first write (Phase 4
+# rebuilds the chart's overrides from it; an auto rollback restores it).
+openbao_user_overrides_snapshot: "{{ gather_output_dir }}/openbao-user-overrides-snapshot.yaml"
 
 # Delete the gather_output_dir files after Phase 5 or an auto rollback; re-running
 # Phase 5 alone needs source-inventory.json, so set false to keep them.

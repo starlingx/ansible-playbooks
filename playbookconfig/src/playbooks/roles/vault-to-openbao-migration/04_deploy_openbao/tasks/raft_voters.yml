@@ -1,0 +1,57 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Wait until `list-peers` shows exactly <statefulset>-0..N-1 (N = openbao_replicas), each once
+# and as a voter. A rejoined pod can briefly appear twice (its old node ID and the new one), which
+# must not count. A joined server becomes a voter only after autopilot's stabilization time.
+# Needs root_token. Polls for scale_out_wait_retries x 5 s; 0 checks once. Fails when not reached. Reads only.
+- name: "Raft voters: read list-peers"
+  vars:
+    _servers: >-
+      {{ ((raft_peers.stdout | from_json).get('data', {}).get('config', {}).get('servers', []))
+         if raft_peers.rc | default(1) == 0 and raft_peers.stdout | default('') != '' else [] }}
+    _pods: "{{ _servers | map(attribute='address') | map('split', '.') | map('first') | sort }}"
+    _expected: >-
+      {{ range(openbao_replicas | int) | map('string') | map('regex_replace', '^', openbao_statefulset ~ '-')
+         | sort }}
+    _ok: "{{ _pods == _expected and not (_servers | rejectattr('voter', 'equalto', true) | list) }}"
+  block:
+    - name: "Raft voters: query list-peers on {{ openbao_statefulset }}-0 (token on stdin)"
+      command:
+        argv:
+          - kubectl
+          - exec
+          - -i
+          - "{{ openbao_statefulset }}-0"
+          - -n
+          - "{{ openbao_namespace }}"
+          - -c
+          - openbao
+          - --
+          - sh
+          - -c
+          - read -r BAO_TOKEN; export BAO_TOKEN; bao operator raft list-peers -format=json
+        stdin: "{{ root_token }}"
+      environment: "{{ openrc_env }}"
+      register: raft_peers
+      failed_when: false
+      check_mode: false
+      no_log: true
+      retries: "{{ scale_out_wait_retries }}"
+      delay: 5
+      until: _ok | bool
+    - name: "Raft voters: assert the cluster has the expected voters"
+      assert:
+        that: _ok | bool
+        fail_msg: >-
+          Raft lists {{ _pods }}; it needs exactly {{ _expected }}, each once and as a voter. A missing
+          follower can be joined by hand: kubectl exec {{ scale_manager_pod.stdout | default('<manager pod>') | trim }}
+          -n {{ openbao_namespace }} -- baomon --config {{ baomon_config_path }} joinRaft
+          <pod> --raft-address https://{{ openbao_statefulset }}-active.{{ openbao_namespace }}.svc.cluster.local:8200
+          If that pod already reports initialized it holds a store of its own and the join is refused:
+          delete the pod and its PVC data-<pod> in '{{ openbao_namespace }}', let the StatefulSet recreate
+          it, then resume with --tags phase4.
+        quiet: true

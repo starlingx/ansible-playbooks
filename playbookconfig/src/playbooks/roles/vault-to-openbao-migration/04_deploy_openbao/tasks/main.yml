@@ -4,9 +4,9 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Phase 4 — deploy OpenBao, convert and unseal from the copied store, then cut over
-# the injector. Entry probes skip a run that already finished.
-- name: "Announce Phase 4 (deploy + recovery check + injector cutover)"
+# Phase 4 — deploy OpenBao, convert and unseal from the copied store, scale out to the
+# replica count the app and user overrides set, then cut over the injector. Entry probes skip a run that already finished.
+- name: "Announce Phase 4 (deploy + recovery check + scale-out + injector cutover)"
   tags: [phase4]
   debug:
     msg: >-
@@ -22,8 +22,8 @@
     - name: "Record gen-001 presence at entry"
       set_fact:
         gen_exists_at_entry: "{{ probe_gen_secret_exists | default(false) }}"
-    - name: "Probe OpenBao unseal state (skip-if-done)"
-      command: "python3 {{ role_path }}/../common/files/wait-bao-state.py --state unsealed --probe"
+    - name: "Probe OpenBao unseal state on any server pod (skip-if-done)"
+      command: "python3 {{ role_path }}/../common/files/wait-bao-state.py --pod auto --state unsealed --probe"
       environment: "{{ openrc_env }}"
       register: unseal_entry
       # rc 6 is "not unsealed"; any other rc is a usage error or a crash.
@@ -39,28 +39,48 @@
         injector_done_at_entry: >-
           {{ not (enable_openbao_injector | bool)
              or (injector_webhook_names | default('') | trim) != '' }}
-    # Done iff gen-001 exists, OpenBao is unsealed, and the injector cutover is done.
+    # '' before the first deploy saved the user overrides; the probe then reports not done.
+    - name: "Derive the target replica count at entry"
+      include_tasks: target_replicas.yml
+      vars:
+        target_replicas_required: false
+    # scale_out_done holds the entry value until raft_scale_out.yml probes again.
+    - name: "Probe the scale-out state at entry"
+      include_tasks: probe_scale_out.yml
+    # do_core (deploy, conversion, unseal) must not re-run once gen-001 exists and a server is
+    # unsealed: the deploy would re-apply the overrides mid scale-out. A run that
+    # does re-enter writes the real replica count (deploy.yml).
+    - name: "Compute the core-steps condition"
+      set_fact:
+        do_core: >-
+          {{ ansible_check_mode
+             or not ((gen_exists_at_entry | bool) and unseal_entry.rc == 0) }}
+    # Phase 4 is done iff gen-001 exists, every server pod is unsealed, the Raft cluster has all its
+    # voters with the manager unpaused, and the injector cutover is done.
     - name: "Compute the do-work condition"
       set_fact:
-        do_work: >-
-          {{ ansible_check_mode
-             or not (
-               (gen_exists_at_entry | bool)
-               and unseal_entry.rc == 0
-               and (injector_done_at_entry | bool)) }}
-- name: "Deploy, convert/unseal and cut over the injector (skipped when already done)"
-  when: do_work | bool
+        do_work: "{{ (do_core | bool) or not ((scale_out_done | bool) and (injector_done_at_entry | bool)) }}"
+- name: "Deploy (skipped once gen-001 exists and a server is unsealed)"
+  when: do_core | bool
   tags: [phase4]
   block:
     - import_tasks: deploy.yml
-    - import_tasks: convert_unseal.yml
+- name: "Convert + unseal from the copied store (recovery check)"
+  import_tasks: convert_unseal.yml
+  tags: [phase4]
+- name: "Scale out and cut over the injector (skipped when already done)"
+  when: do_work | bool
+  tags: [phase4]
+  block:
+    - import_tasks: raft_scale_out.yml
     - import_tasks: injector_post.yml
       when: enable_openbao_injector | bool
 - name: "Phase 4 summary"
   tags: [phase4]
   debug:
     msg: >-
-      Phase 4 complete{{ ' (DRY-RUN — no changes made)' if ansible_check_mode else '' }}: mode={{ migration_system_mode }},
+      Phase 4 complete{{ ' (DRY-RUN — no changes made)' if ansible_check_mode else '' }}:
+      mode={{ migration_system_mode }}, replicas={{ openbao_replicas }},
       openbao={{ s1_openbao_version | default('(not checked this run)') }}, gen-001={{ openbao_generation_secret }},
       recovery check={{ '(dry-run)' if ansible_check_mode else 'PASS' }},
       injector={{ 'enabled' if (enable_openbao_injector | bool) else 'left disabled' }}.

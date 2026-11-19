@@ -1,0 +1,69 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Probe whether the scale-out step is complete. Sets scale_settled (StatefulSet at
+# openbao_replicas replicas, manager rolled out and manager.pause cleared), voters_ok (exactly the
+# expected Raft voters) and scale_out_done (both, and every pod unsealed: a recreated pod can keep a
+# stale Raft entry and still be sealed and uninitialized). Read-only; a missing token or pod
+# counts as not done, and so does an unknown openbao_replicas.
+- name: "Probe the manager rollout (skip-if-done)"
+  block:
+    - name: "Check the manager once"
+      include_tasks: manager_settled.yml
+      vars:
+        scale_out_wait_retries: 0
+    - name: "Check the target replica count is known"
+      assert:
+        that: openbao_replicas | default('') is match('^[1-9][0-9]*$')
+        quiet: true
+    - name: "Check the OpenBao StatefulSet runs the target replica count"
+      command: kubectl get statefulset {{ openbao_statefulset }} -n {{ openbao_namespace }} -o jsonpath={.spec.replicas}
+      environment: "{{ openrc_env }}"
+      register: probe_sts
+      check_mode: false
+      failed_when: (probe_sts.stdout | trim) != (openbao_replicas | string)
+    - name: "Manager settled"
+      set_fact:
+        scale_settled: true
+  rescue:
+    - name: "Manager not settled"
+      set_fact:
+        scale_settled: false
+- name: "Probe the Raft voters (skip-if-done)"
+  block:
+    - name: "Load the OpenBao root token for the voter probe"
+      include_tasks: "{{ role_path }}/../common/tasks/load_root_token.yml"
+      vars:
+        token_secret_namespace: "{{ openbao_namespace }}"
+        token_secret_name: cluster-key-root
+    - name: "Check the Raft voters once"
+      include_tasks: raft_voters.yml
+      vars:
+        scale_out_wait_retries: 0
+    - name: "Voters ok"
+      set_fact:
+        voters_ok: true
+  rescue:
+    - name: "Voters not ok (no token, no pod or wrong voters)"
+      set_fact:
+        voters_ok: false
+- name: "Probe that every OpenBao pod is unsealed (skip-if-done)"
+  command: >-
+    python3 {{ role_path }}/../common/files/wait-bao-state.py
+    --pod {{ openbao_statefulset }}-{{ item }} --state unsealed --probe
+  environment: "{{ openrc_env }}"
+  register: probe_unsealed
+  failed_when: false
+  check_mode: false
+  loop: "{{ range(0, openbao_replicas | default(0, true) | int) | list }}"
+  loop_control:
+    label: "{{ openbao_statefulset }}-{{ item }}"
+- name: "Record the scale-out state"
+  set_fact:
+    scale_out_done: >-
+      {{ scale_settled and voters_ok
+         and (openbao_replicas | default(0, true) | int) >= 1
+         and (probe_unsealed.results | map(attribute='rc') | select('ne', 0) | list | length == 0) }}

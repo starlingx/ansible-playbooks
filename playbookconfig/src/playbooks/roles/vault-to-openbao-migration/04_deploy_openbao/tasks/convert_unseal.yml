@@ -8,7 +8,9 @@
 # unseal OpenBao from the copied store with the generation keys, and clear the
 # manager pause.
 - name: "Convert, unseal and clear the manager pause"
-  when: not ansible_check_mode
+  when:
+    - do_core | bool
+    - not ansible_check_mode
   vars:
     manager_pod: "{{ manager_pod_raw.stdout | trim }}"
   block:
@@ -69,9 +71,10 @@
       command: "python3 {{ role_path }}/../common/files/wait-bao-state.py --state unsealed"
       environment: "{{ openrc_env }}"
     # An unsealed node that never becomes active answers every sys/* read with HTTP 500,
-    # so Phase 5 would see an empty inventory.
-    - name: "Leadership gate: wait for OpenBao to become the active Raft leader"
-      command: "python3 {{ role_path }}/../common/files/wait-bao-state.py --state active"
+    # so Phase 5 would see an empty inventory. On a re-entry after the scale-out any server
+    # pod can win the election, so accept whichever leads.
+    - name: "Leadership gate: wait for an OpenBao server pod to become the active Raft leader"
+      command: "python3 {{ role_path }}/../common/files/wait-bao-state.py --pod auto --state active"
       environment: "{{ openrc_env }}"
     # While manager.pause stays set, every manager restart parks again (init.sh
     # re-seeds the pause file) and nothing unseals.

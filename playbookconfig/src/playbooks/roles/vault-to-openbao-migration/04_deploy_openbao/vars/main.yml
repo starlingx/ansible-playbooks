@@ -1,0 +1,20 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 4 openbao chart values the migration sets. The deploy adds replicas (1 until gen-001
+# exists); the scale-out writes these alone so the app and user overrides decide the replicas.
+# Copied file audit devices keep their Vault path (/vault/audit/...); mount the audit volume
+# there or the server never becomes leader.
+openbao_migration_overrides:
+  injector:
+    enabled: false
+  server:
+    auditStorage:
+      mountPath: "{{ vault_audit_mount }}"
+    ha:
+      enabled: true
+      raft:
+        enabled: true

@@ -8,3 +8,10 @@
 # Copied file audit devices keep their Vault path, so the OpenBao audit volume is
 # mounted there (server.auditStorage.mountPath in deploy.yml).
 vault_audit_mount: /vault/audit
+# Scale-out and Raft join (raft_scale_out.yml). A follower join is retried raft_join_attempts
+# times, raft_join_delay seconds apart; the voter count is then polled up to raft_voter_timeout
+# seconds (a joined server becomes a voter after autopilot's stabilization time, about 20 s).
+raft_join_attempts: 6
+raft_join_delay: 10
+raft_voter_timeout: 300
+raft_manager_timeout: 300

@@ -1,0 +1,111 @@
+---
+#
+# Copyright (c) 2026 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phase 4 — scale OpenBao to the replica count the app and user overrides set, and join the
+# followers. The openbao chart's user overrides are rebuilt from the copy saved before the
+# migration's first write, the user overrides file and the migration values without replicas,
+# so the deploy's replicas=1 goes away. When the scale-out is not settled, one Helm apply rolls
+# that out and clears manager.pause (a leftover pause parks every restart);
+# each uninitialized follower is then joined with `baomon joinRaft`. Every step probes its
+# own state, so a resumed run continues where it stopped.
+- name: "Scale OpenBao out to the target replica count and join the followers"
+  when: not ansible_check_mode
+  block:
+    - name: "Derive the target replica count"
+      include_tasks: target_replicas.yml
+      vars:
+        target_replicas_required: true
+    - name: "Probe the manager rollout"
+      include_tasks: probe_scale_out.yml
+    - name: "Ensure the migration output dir exists"
+      file:
+        path: "{{ gather_output_dir }}"
+        state: directory
+        mode: "0700"
+    - name: "Write the scale-out helm override values (no replicas)"
+      copy:
+        dest: "{{ gather_output_dir }}/openbao-scale-out-overrides.yaml"
+        mode: "0600"
+        content: "{{ openbao_migration_overrides | to_nice_yaml(indent=2) }}"
+    # Runs even when the scale-out is settled: on AIO-SX the deploy already runs the target
+    # count, and the deploy's replicas=1 must still go. The combined values then equal what is
+    # running, so no re-apply is needed. --reuse-values cannot drop a key, and
+    # --set replicas=null hides the app's value.
+    - name: "Rebuild the openbao chart's user overrides (saved copy, user file, migration values)"
+      command:
+        argv: >-
+          {{ ['system', 'helm-override-update', 'openbao', 'openbao', 'openbao', '--reset-values',
+              '--values', openbao_user_overrides_snapshot]
+             + (['--values', openbao_user_overrides_file]
+                if (openbao_user_overrides_file | default('') | string | trim) != '' else [])
+             + ['--values', gather_output_dir ~ '/openbao-scale-out-overrides.yaml'] }}
+      environment: "{{ openrc_env }}"
+    - name: "Clear manager.pause and roll out the replica count (one Helm apply)"
+      when: not (scale_settled | bool)
+      block:
+        - name: "Write the manager pause-clear helm override values"
+          copy:
+            dest: "{{ gather_output_dir }}/openbao-manager-pause-clear-overrides.yaml"
+            mode: "0600"
+            content: |
+              manager:
+                pause: ""
+        - name: "Clear manager.pause (merge onto the existing manager overrides)"
+          command: >-
+            system helm-override-update openbao openbao-manager openbao
+            --reuse-values --values {{ gather_output_dir }}/openbao-manager-pause-clear-overrides.yaml
+          environment: "{{ openrc_env }}"
+        - name: "Re-apply openbao to roll out the replica count and the unpaused manager"
+          command: system application-apply openbao
+          environment: "{{ openrc_env }}"
+          register: scale_apply
+          failed_when:
+            - scale_apply.rc != 0
+            - "'already' not in (scale_apply.stderr | default('') | lower)"
+    - name: "Wait for the manager to roll out the unpaused configuration"
+      include_tasks: manager_settled.yml
+      vars:
+        scale_out_wait_retries: "{{ (raft_manager_timeout | int) // 5 }}"
+    - name: "Resolve the stx-openbao-manager pod name"
+      command: >-
+        kubectl get pods -n {{ openbao_namespace }}
+        -l app.kubernetes.io/name=openbao-manager
+        -o jsonpath={.items[0].metadata.name}
+      environment: "{{ openrc_env }}"
+      register: scale_manager_pod
+    - name: "Join each uninitialized follower to the Raft cluster"
+      include_tasks: join_follower.yml
+      vars:
+        follower: "{{ openbao_statefulset }}-{{ item }}"
+        join_manager_pod: "{{ scale_manager_pod.stdout | trim }}"
+      loop: "{{ range(1, openbao_replicas | int) | list }}"
+      loop_control:
+        label: "{{ openbao_statefulset }}-{{ item }}"
+    - name: "Load the OpenBao root token for the voter check"
+      include_tasks: "{{ role_path }}/../common/tasks/load_root_token.yml"
+      vars:
+        token_secret_namespace: "{{ openbao_namespace }}"
+        token_secret_name: cluster-key-root
+    - name: "Wait for the expected Raft voters"
+      include_tasks: raft_voters.yml
+      vars:
+        scale_out_wait_retries: "{{ (raft_voter_timeout | int) // 5 }}"
+    - name: "Wait for every OpenBao pod to be unsealed (the manager unseals the followers)"
+      command: >-
+        python3 {{ role_path }}/../common/files/wait-bao-state.py
+        --pod {{ openbao_statefulset }}-{{ item }} --state unsealed
+      environment: "{{ openrc_env }}"
+      loop: "{{ range(0, openbao_replicas | int) | list }}"
+      loop_control:
+        label: "{{ openbao_statefulset }}-{{ item }}"
+    - name: "Wait for an OpenBao pod to be the active leader"
+      command: "python3 {{ role_path }}/../common/files/wait-bao-state.py --pod auto --state active"
+      environment: "{{ openrc_env }}"
+    - name: "Wait for the openbao application to settle at 'applied'"
+      include_tasks: "{{ role_path }}/../common/tasks/wait_app_state.yml"
+      vars:
+        wait_app_name: openbao
+        wait_app_accept: ['applied']

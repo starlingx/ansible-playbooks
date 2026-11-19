@@ -54,6 +54,23 @@
         wait_app_accept: ['uploaded', 'removed', 'absent']
       when: rb_openbao_state not in ['removed', 'absent', 'uploaded']
 
+# The migration rebuilt the openbao chart's user overrides; put back the copy saved before its
+# first write so a later run starts from the operator's overrides. Skipped when no copy exists.
+- name: "rollback/auto — restore the openbao chart's user overrides"
+  when: not ansible_check_mode
+  block:
+    - name: "rollback/auto — check for the saved user overrides"
+      stat:
+        path: "{{ openbao_user_overrides_snapshot }}"
+      register: rb_user_overrides_saved
+    - name: "rollback/auto — reset the openbao chart's user overrides to the saved copy"
+      command: >-
+        system helm-override-update openbao openbao openbao
+        --reset-values --values {{ openbao_user_overrides_snapshot }}
+      environment: "{{ openrc_env }}"
+      when:
+        - rb_user_overrides_saved.stat.exists
+        - rb_openbao_state != 'absent'
 # Injector-webhook removal + HALT gate. application-remove has torn the injector
 # down, so it can no longer recreate the config.
 - name: "rollback/auto — resolve and delete any surviving injector webhook by resolved resource name"
