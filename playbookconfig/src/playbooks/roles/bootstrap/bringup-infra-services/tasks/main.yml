@@ -182,6 +182,10 @@
       state: started
       enabled: true
 
+  - name: Resume pmon monitoring of etcd-fixed
+    command: pmon-start etcd-fixed
+    failed_when: false
+
   - name: Bring up Kubernetes master
     import_role:
       name: common/bringup-kubemaster

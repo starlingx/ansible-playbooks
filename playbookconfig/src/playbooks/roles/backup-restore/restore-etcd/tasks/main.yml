@@ -133,6 +133,10 @@
 # keeps serving the pre-restore cluster from its open file handles -- the
 # restored database is written to disk but never loaded, and the membership
 # check below reports the old cluster rather than the restored one.
+- name: Stop pmon monitoring of etcd-fixed before replacing its database
+  command: pmon-stop etcd-fixed
+  failed_when: false
+
 - name: Stop the etcd-fixed service before replacing its database
   systemd:
     name: etcd-fixed
@@ -257,6 +261,10 @@
     enabled: yes
     state: restarted
     daemon_reload: yes
+
+- name: Resume pmon monitoring of etcd-fixed after restore
+  command: pmon-start etcd-fixed
+  failed_when: false
 
 - name: Wait for the restored member to answer
   shell: |
