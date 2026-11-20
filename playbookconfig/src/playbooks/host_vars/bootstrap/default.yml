@@ -331,22 +331,18 @@ user_dns_host_records:
 # apiserver_extra_args:
 #   default-not-ready-toleration-seconds: "30"
 #   default-unreachable-toleration-seconds: "30"
-#   feature-gates: "TTLAfterFinished=true,RemoveSelfLink=false"
 #   event-ttl: "24h"
 #
 # controllermanager_extra_args:
 #   node-monitor-period: "2s"
 #   node-monitor-grace-period: "20s"
-#   pod-eviction-timeout: '30s'
-#   feature-gates: "TTLAfterFinished=true"
 #
-# scheduler_extra_args:
-#   feature-gates: "TTLAfterFinished=true"
+# scheduler_extra_args: {}
 #
 # kubelet_configurations: {}
 #   nodeStatusUpdateFrequency: "4s"
 #   featureGates:
-#     HugePageStorageMediumSize: true
+#     KubeletSeparateDiskGC: true
 #
 # networking_configurations:
 #   dnsDomain: 'cluster.local'

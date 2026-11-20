@@ -9,25 +9,21 @@ nodeRegistration:
   # taint "node-role.kubernetes.io/master:NoSchedule" to control plane nodes
   taints: {{ kubelet_taints }}
   kubeletExtraArgs:
-{% for key, value in kubelet_extra_args.items() %}
-    - name: "{{ key }}"
-      value: "{{ value }}"
+{% for item in kubelet_extra_args | dict2items(key_name='name', value_name='value') %}
+    - name: {{ item.name | string | to_json }}
+      value: {{ item.value | string | to_json }}
 {% endfor %}
 ---
 apiVersion: kubeadm.k8s.io/v1beta4
 kind: ClusterConfiguration
-{% if kubernetes_long_version is version('v1.34.0', '>=') %}
 encryptionAlgorithm: ECDSA-P384
-{% else %}
-encryptionAlgorithm: RSA-4096
-{% endif %}
 apiServer:
   certSANs:
   {{ apiserver_cert_list | to_nice_yaml(width=512) | indent(2, false) }}
   extraArgs:
-{% for key, value in apiserver_extra_args.items() %}
-    - name: "{{ key }}"
-      value: "{{ value }}"
+{% for item in apiserver_extra_args | dict2items(key_name='name', value_name='value') %}
+    - name: {{ item.name | string | to_json }}
+      value: {{ item.value | string | to_json }}
 {% endfor %}
   extraVolumes:
 {% for volume in apiserver_extra_volumes %}
@@ -48,9 +44,9 @@ apiServer:
 {% endfor %}
 controllerManager:
   extraArgs:
-{% for key, value in controllermanager_extra_args.items() %}
-    - name: "{{ key }}"
-      value: "{{ value }}"
+{% for item in controllermanager_extra_args | dict2items(key_name='name', value_name='value') %}
+    - name: {{ item.name | string | to_json }}
+      value: {{ item.value | string | to_json }}
 {% endfor %}
   extraVolumes:
 {% for volume in controllermanager_extra_volumes %}
@@ -71,9 +67,9 @@ controllerManager:
 {% endfor %}
 scheduler:
   extraArgs:
-{% for key, value in scheduler_extra_args.items() %}
-    - name: "{{ key }}"
-      value: "{{ value }}"
+{% for item in scheduler_extra_args | dict2items(key_name='name', value_name='value') %}
+    - name: {{ item.name | string | to_json }}
+      value: {{ item.value | string | to_json }}
 {% endfor %}
   extraVolumes:
 {% for volume in scheduler_extra_volumes %}
@@ -108,10 +104,8 @@ etcd:
     caFile: /etc/etcd/ca.crt
     certFile: /etc/kubernetes/pki/apiserver-etcd-client.crt
     keyFile: /etc/kubernetes/pki/apiserver-etcd-client.key
-{% if kubernetes_long_version is version('v1.24.4', '>') %}
 dns:
   imageRepository: {{ image_repository + '/coredns'}}
-{% endif %}
 imageRepository: {{ image_repository }}
 kubernetesVersion: {{ kubernetes_long_version }}
 networking:
