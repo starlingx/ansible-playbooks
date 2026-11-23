@@ -147,8 +147,37 @@ def check_if_backup_patched(backup_data):
     return rc == 0
 
 
-def get_deployments_to_restore(deployed_groups):
+def get_local_deployed_metapackages():
+    """Get the IDs of the metapackages deployed on the running system"""
+
+    output = subprocess.check_output(
+        ["software", "metapackage", "list", "--state", "deployed", "--all"],
+        text=True,
+    )
+    deployed = set()
+    for line in output.splitlines():
+        if not line.startswith("|"):
+            continue
+        release = line.strip("|").split("|")[0].strip()
+        if release and release != "Release":
+            deployed.add(release)
+    return deployed
+
+
+def is_group_already_deployed(group, local_deployed):
+    """Return if every metapackage of the group is already deployed locally.
+
+    This happens when the system was installed from a pre-patched ISO: the
+    group is part of the installed load and must not be deployed again.
+    """
+
+    return all(mp in local_deployed for mp in group["metapackages"])
+
+
+def get_deployments_to_restore(deployed_groups, local_deployed):
     """Get deployments to restore (everything after the base ISO group).
+
+    Groups that are already deployed on the running system are skipped.
 
     Returns a list of dicts with sw_version string and metapackage IDs.
     """
@@ -158,6 +187,8 @@ def get_deployments_to_restore(deployed_groups):
 
     result = []
     for group in deployed_groups[1:]:
+        if is_group_already_deployed(group, local_deployed):
+            continue
         result.append({
             "sw_version": ".".join(map(str, group["sw_version"])),
             "metapackages": group["metapackages"],
@@ -218,7 +249,9 @@ def collect_sw_deployments_info(backup_data):
     result["target_commit"] = get_target_commit(backup_data, deployed_groups)
 
     if result["backup_patched"]:
-        deployments_to_restore = get_deployments_to_restore(deployed_groups)
+        deployments_to_restore = get_deployments_to_restore(
+            deployed_groups, get_local_deployed_metapackages()
+        )
         result["deployments_to_restore"] = deployments_to_restore
         result["target_reboot_required"] = get_target_reboot_required(
             backup_data, deployments_to_restore
